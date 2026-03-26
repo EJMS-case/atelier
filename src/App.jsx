@@ -6,33 +6,33 @@ You are a world-class personal stylist. Your client has the following profile:
 
 COLOR ANALYSIS: Dark Winter (primary), Light Summer (secondary for late spring/summer)
 - Cool undertones only — warm clashes with her skin
-- Best colors: black, white, navy, deep jewel tones, christmas/cool reds, burgundy, deep teal, icy pastels, cobalt blue
-- Avoid: dark gray, warm browns as tops, any yellow, warm or muted tones
+- Best colors: black, navy, deep jewel tones, christmas/cool reds, burgundy, deep teal, icy pastels, cobalt blue, sapphire blue
+- Avoid: dark gray, warm browns as tops, yellow, warm or muted tones
 - Light gray is acceptable but not ideal
-- ALL blues must be cool-toned
+- ALL blues and pinks must be cool-toned
 - TOPS only follow strict color rules; bottoms can be any color
 - She owns brown tops she loves — when used, apply mitigation: silver/platinum jewelry, open neckline
 - Late spring/summer: shift to Light Summer — soft cool tones, dusty rose, soft lavender, cool blush, powder blue (yellow still banned)
 
-AESTHETIC: Quiet luxury / old money neutrals, Classic French effortless chic, Polished minimalist
-Think: The Row, Totême, Loro Piana energy. Elevated without trying hard.
+AESTHETIC: Luxury minimalist feminine style — tailored structure, sleek silhouettes, refined fabrics (crepe, silk, wool), clean lines, cool jewel tones and crisp neutrals. Polished, intelligent, understated sophistication with subtle statement pieces. Modern, high-end, curated, quietly powerful aesthetic. Luxury / old money, effortless chic, classically elegant and polished minimalist.
+Think: The Row, Totême, Loro Piana energy. Elevated without trying hard and incredibly chic.
 
 HARD RULES:
-- No sneakers ever (exception: she owns one pair for a specific work event only)
+- No sneakers (exception: she owns one pair for a specific event only)
 - No visible logos
 - Everything cool-toned
 - Less is more with jewelry
 
-JEWELRY (platinum): 3.5ct diamond ring, 5ct wedding band, 1ct Portuguese wave ring, tennis bracelet, 10-pavé necklace, 4ct diamond studs
+JEWELRY (platinum): 3.5ct diamond ring, 5ct wedding band, 1ct Portuguese wave ring, tennis bracelet, 10-pavé necklace, 4ct diamond studs (all platinum)
 JEWELRY (gold): Marc Jacobs bow studs, Kate Spade studs
 JEWELRY (silver): Jenny Bird small hoops, Jenny Bird medium hoops
 
 OCCASIONS:
-- Business Casual (default office): polished but relaxed. Elevated separates, smart knitwear, tailored trousers all work.
+- Business Casual (default office): polished, effortless, chic but relaxed. Elevated separates, smart knitwear, tailored trousers all work.
 - Executive / Interview: sharper and more structured. For high-stakes meetings, job interviews, or accompanying spouse to formal work events. Prioritize blazers, tailored trousers, understated luxury.
 - Dinner / Evening: chic and refined, can be more expressive with texture or color.
 - Travel: comfortable but never sloppy — still pulled-together, practical layering.
-- Casual: relaxed but always tasteful, never undone.
+- Casual: relaxed but always tasteful, fashionable, elegant, and effortless, never undone.
 
 CRITICAL RULE: Only ever suggest items that exist in the client's wardrobe inventory. Never suggest purchases or items not listed.
 
@@ -785,70 +785,124 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
   );
 }
 
-// ── LOOK CARD ─────────────────────────────────────────────────────────────────
+// ── LOOK CARD — EDITORIAL FLAT-LAY ───────────────────────────────────────────
 function LookCard({ look, items }) {
   const [expanded, setExpanded] = useState(false);
 
-  const order = ["Outerwear","Tops","Dresses","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
+  const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const lookItems = (look.items || [])
     .map(id => items.find(i => i.id === id))
     .filter(Boolean)
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
-  const large = lookItems.slice(0, 2);
-  const small = lookItems.slice(2);
+  // Assign editorial layout roles
+  const hero    = lookItems.slice(0, 2);   // large pieces: outerwear/dress/top + bottom
+  const support = lookItems.slice(2, 4);   // medium: shoes + bag
+  const accent  = lookItems.slice(4);      // small: accessories, belts, scarves
 
   return (
     <div style={s.lookCard}>
+      {/* ── Look name ── */}
       <div style={s.lookHeader}>
         <div>
           <div style={s.lookName}>{look.name}</div>
           <div style={s.lookOcc}>{look.occasion?.toUpperCase()}</div>
         </div>
         <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
-          {expanded?"Hide":"Details"}
+          {expanded ? "Hide" : "Details"}
         </button>
       </div>
 
-      {/* Collage */}
+      {/* ── Editorial flat-lay collage ── */}
       <div style={s.collage}>
-        <div style={s.collageLarge}>
-          {large.map((item,i) => (
-            <div key={item.id} style={{...s.collageSlotL, flex: i===0?"1.1":"0.9"}}>
+
+        {/* LEFT COLUMN — hero clothing items, tall */}
+        <div style={s.collageLeft}>
+          {hero.map((item, i) => (
+            <div key={item.id} style={{
+              ...s.collageHeroSlot,
+              flex: i === 0 ? "1.15" : "0.85",
+            }}>
               {item.image
-                ? <img src={item.image} alt={item.name} style={s.collageImg}/>
-                : <div style={s.collagePh}><span style={s.collagePhtxt}>{item.name}</span></div>}
-              <div style={s.collageLabel}>{item.name}</div>
+                ? <img src={item.image} alt={item.name} style={s.collageHeroImg}/>
+                : <div style={s.collagePh}>
+                    <span style={s.collageCat}>{item.category}</span>
+                    <span style={s.collageName}>{item.name}</span>
+                  </div>}
+              <div style={s.collageHeroLabel}>{item.name}</div>
             </div>
           ))}
+          {hero.length === 0 && (
+            <div style={{...s.collagePh, flex:1}}>
+              <span style={s.collageCat}>✦</span>
+            </div>
+          )}
         </div>
-        {small.length > 0 && (
-          <div style={s.collageSmall}>
-            {small.map(item => (
-              <div key={item.id} style={s.collageSlotS}>
+
+        {/* RIGHT COLUMN — shoes/bags stacked, then accents */}
+        {(support.length > 0 || accent.length > 0) && (
+          <div style={s.collageRight}>
+            {/* Support items (shoes + bag) — medium height */}
+            {support.map(item => (
+              <div key={item.id} style={s.collageSupportSlot}>
                 {item.image
-                  ? <img src={item.image} alt={item.name} style={s.collageImg}/>
-                  : <div style={s.collagePh}><span style={{...s.collagePhtxt,fontSize:9}}>{item.name}</span></div>}
-                <div style={s.collageLabelSm}>{item.name}</div>
+                  ? <img src={item.image} alt={item.name} style={s.collageSupportImg}/>
+                  : <div style={s.collagePh}>
+                      <span style={s.collageName}>{item.name}</span>
+                    </div>}
+                <div style={s.collageSupportLabel}>{item.name}</div>
               </div>
             ))}
+
+            {/* Accent items (belts, scarves, accessories) — small */}
+            {accent.length > 0 && (
+              <div style={s.collageAccentRow}>
+                {accent.map(item => (
+                  <div key={item.id} style={s.collageAccentSlot}>
+                    {item.image
+                      ? <img src={item.image} alt={item.name} style={s.collageAccentImg}/>
+                      : <div style={{...s.collagePh, minHeight:60}}>
+                          <span style={{...s.collageName, fontSize:8}}>{item.name}</span>
+                        </div>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Teaser */}
-      {!expanded && look.jewelry && (
-        <div style={s.teaser}>♦ {look.jewelry}</div>
+      {/* ── Jewelry teaser (always visible) ── */}
+      {look.jewelry && (
+        <div style={s.lookTeaser}>
+          <span style={s.teaserDiamond}>♦</span> {look.jewelry}
+        </div>
       )}
 
-      {/* Details */}
+      {/* ── Expandable details ── */}
       {expanded && (
         <div style={s.lookMeta}>
-          {look.accessories && <div style={s.metaRow}><span style={s.metaIcon}>✦</span>{look.accessories}</div>}
-          {look.jewelry     && <div style={s.metaRow}><span style={s.metaIcon}>♦</span>{look.jewelry}</div>}
-          {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"#6B5E54"}}>{look.why}</div>}
-          {look.colorNote   && <div style={{...s.metaRow,color:"#3D7A4E",fontSize:11}}>✓ {look.colorNote}</div>}
-          {look.flag        && <div style={{...s.metaRow,color:"#8B6914",fontSize:11}}>🏷 {look.flag}</div>}
+          {look.accessories && (
+            <div style={s.metaRow}>
+              <span style={s.metaIcon}>✦</span>
+              <span>{look.accessories}</span>
+            </div>
+          )}
+          {look.why && (
+            <div style={{...s.metaRow, fontStyle:"italic", color:"#6B5E54"}}>
+              {look.why}
+            </div>
+          )}
+          {look.colorNote && (
+            <div style={{...s.metaRow, color:"#3D7A4E", fontSize:11}}>
+              ✓ {look.colorNote}
+            </div>
+          )}
+          {look.flag && (
+            <div style={{...s.metaRow, color:"#8B6914", fontSize:11}}>
+              🏷 {look.flag}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -949,26 +1003,122 @@ const s = {
   rmbgNotice: { background:"#EFF7F1", border:"1px solid #B8D9C0", borderRadius:6, padding:"10px 14px", fontSize:12, color:"#3D7A4E", marginBottom:16, letterSpacing:"0.03em" },
   thumbOverlay: { position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(28,24,20,0.45)" },
 
-  // Looks
-  lookCard: { background:"#fff", borderRadius:10, border:"1px solid #E8E0D8", marginBottom:22, overflow:"hidden", boxShadow:"0 2px 10px rgba(0,0,0,0.05)", animation:"fadeIn 0.3s ease" },
-  lookHeader: { padding:"14px 18px 12px", borderBottom:"1px solid #F0E8E0", display:"flex", justifyContent:"space-between", alignItems:"center" },
-  lookName: { fontSize:19, fontWeight:400, letterSpacing:"0.04em", marginBottom:2 },
-  lookOcc: { fontSize:9, letterSpacing:"0.18em", color:"#9A8E84" },
-  expandBtn: { background:"none", border:"1px solid #E8E0D8", borderRadius:20, padding:"3px 11px", fontSize:11, color:"#6B5E54", cursor:"pointer", letterSpacing:"0.05em" },
+  // ── Look card
+  lookCard: {
+    background:"#fff", borderRadius:12, border:"1px solid #E8E0D8",
+    marginBottom:28, overflow:"hidden",
+    boxShadow:"0 4px 24px rgba(28,24,20,0.07)",
+    animation:"fadeIn 0.35s ease",
+  },
+  lookHeader: {
+    padding:"18px 22px 14px", borderBottom:"1px solid #F0E8E0",
+    display:"flex", justifyContent:"space-between", alignItems:"center",
+  },
+  lookName: { fontSize:20, fontWeight:400, letterSpacing:"0.04em", marginBottom:3 },
+  lookOcc:  { fontSize:9, letterSpacing:"0.2em", color:"#9A8E84" },
+  expandBtn: {
+    background:"none", border:"1px solid #DDD5CC", borderRadius:20,
+    padding:"4px 13px", fontSize:11, color:"#6B5E54", cursor:"pointer",
+    letterSpacing:"0.06em",
+  },
 
-  collage: { display:"flex", gap:2, background:"#F0EBE5", minHeight:320, padding:2 },
-  collageLarge: { display:"flex", flexDirection:"column", gap:2, flex:"0 0 56%" },
-  collageSlotL: { position:"relative", overflow:"hidden", background:"#EEEAE4", minHeight:150 },
-  collageSmall: { flex:1, display:"flex", flexDirection:"column", gap:2 },
-  collageSlotS: { flex:1, position:"relative", overflow:"hidden", background:"#EEEAE4", minHeight:75 },
-  collageImg: { width:"100%", height:"100%", objectFit:"contain", display:"block" },
-  collagePh: { width:"100%", height:"100%", minHeight:75, display:"flex", alignItems:"center", justifyContent:"center", padding:6 },
-  collagePhtxt: { fontSize:10, color:"#9A8E84", textAlign:"center", lineHeight:1.3 },
-  collageLabel: { position:"absolute", bottom:0, left:0, right:0, background:"rgba(28,24,20,0.52)", color:"#F5F1EC", fontSize:9, padding:"3px 7px", letterSpacing:"0.05em", lineHeight:1.3 },
-  collageLabelSm: { position:"absolute", bottom:0, left:0, right:0, background:"rgba(28,24,20,0.52)", color:"#F5F1EC", fontSize:8, padding:"2px 5px", letterSpacing:"0.04em", lineHeight:1.3 },
+  // ── Editorial flat-lay collage
+  collage: {
+    display:"flex", gap:3,
+    background:"#FAFAF8",  // near-white editorial bg
+    padding:16, minHeight:380,
+  },
 
-  teaser: { padding:"9px 18px 11px", fontSize:12, color:"#8B6E4E", borderTop:"1px solid #F0E8E0" },
-  lookMeta: { padding:"12px 18px 16px", display:"flex", flexDirection:"column", gap:7, borderTop:"1px solid #F0E8E0" },
-  metaRow: { fontSize:12, color:"#4A3E36", lineHeight:1.5, display:"flex", gap:7, alignItems:"flex-start" },
-  metaIcon: { flexShrink:0, color:"#C4A882" },
+  // Left column — hero clothing (tall)
+  collageLeft: {
+    display:"flex", flexDirection:"column", gap:3,
+    flex:"0 0 54%",
+  },
+  collageHeroSlot: {
+    position:"relative", overflow:"hidden",
+    background:"#fff",
+    borderRadius:4,
+    boxShadow:"0 2px 8px rgba(28,24,20,0.08)",
+    minHeight:160,
+  },
+  collageHeroImg: {
+    width:"100%", height:"100%",
+    objectFit:"contain", display:"block",
+  },
+  collageHeroLabel: {
+    position:"absolute", bottom:0, left:0, right:0,
+    background:"rgba(250,250,248,0.88)",
+    color:"#2A2420",
+    fontSize:9, padding:"4px 8px",
+    letterSpacing:"0.08em",
+    lineHeight:1.3,
+    backdropFilter:"blur(4px)",
+  },
+
+  // Right column
+  collageRight: {
+    flex:1, display:"flex", flexDirection:"column", gap:3,
+  },
+  collageSupportSlot: {
+    flex:1, position:"relative", overflow:"hidden",
+    background:"#fff", borderRadius:4,
+    boxShadow:"0 2px 8px rgba(28,24,20,0.08)",
+    minHeight:90,
+  },
+  collageSupportImg: {
+    width:"100%", height:"100%",
+    objectFit:"contain", display:"block",
+  },
+  collageSupportLabel: {
+    position:"absolute", bottom:0, left:0, right:0,
+    background:"rgba(250,250,248,0.88)",
+    color:"#2A2420",
+    fontSize:8, padding:"3px 6px",
+    letterSpacing:"0.07em",
+    lineHeight:1.3,
+    backdropFilter:"blur(4px)",
+  },
+
+  // Accent row (belts, scarves, etc.)
+  collageAccentRow: {
+    display:"flex", gap:3, height:72,
+  },
+  collageAccentSlot: {
+    flex:1, position:"relative", overflow:"hidden",
+    background:"#fff", borderRadius:4,
+    boxShadow:"0 2px 8px rgba(28,24,20,0.08)",
+  },
+  collageAccentImg: {
+    width:"100%", height:"100%",
+    objectFit:"contain", display:"block",
+  },
+
+  // Placeholder
+  collagePh: {
+    width:"100%", height:"100%", minHeight:100,
+    display:"flex", flexDirection:"column",
+    alignItems:"center", justifyContent:"center",
+    gap:4, padding:8, background:"#F5F1EC",
+  },
+  collageCat:  { fontSize:11, color:"#C8BFB4", letterSpacing:"0.1em" },
+  collageName: { fontSize:9, color:"#9A8E84", textAlign:"center", lineHeight:1.4 },
+
+  // Teaser + meta
+  lookTeaser: {
+    padding:"11px 22px 13px",
+    borderTop:"1px solid #F0E8E0",
+    fontSize:12, color:"#8B6E4E",
+    display:"flex", alignItems:"center", gap:7,
+  },
+  teaserDiamond: { color:"#C4A882", fontSize:14 },
+  lookMeta: {
+    padding:"14px 22px 18px",
+    display:"flex", flexDirection:"column", gap:8,
+    borderTop:"1px solid #F0E8E0",
+  },
+  metaRow: {
+    fontSize:12, color:"#4A3E36", lineHeight:1.6,
+    display:"flex", gap:8, alignItems:"flex-start",
+  },
+  metaIcon: { flexShrink:0, color:"#C4A882", marginTop:1 },
 };
