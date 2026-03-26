@@ -195,7 +195,72 @@ Generate 2-3 distinct looks. Only use item IDs from the wardrobe above. Each loo
   return JSON.parse(clean);
 }
 
-// ── ICON ─────────────────────────────────────────────────────────────────────
+// ── AI ELEVATION ─────────────────────────────────────────────────────────────
+async function generateElevation(look, lookItems, apiKey) {
+  const currentItems = lookItems.map(it =>
+    `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.notes ? ` — ${it.notes}` : ""}`
+  ).join("\n");
+
+  const prompt = `${STYLE_PROFILE}
+
+You are elevating an existing outfit for this client. Here is the current look:
+LOOK NAME: ${look.name}
+OCCASION: ${look.occasion}
+CURRENT ITEMS:
+${currentItems}
+
+Your task: Suggest 2-3 specific pieces to ADD or SWAP that would meaningfully elevate this look. These are PURCHASE SUGGESTIONS — real items the client could buy. Be specific with brand, item name, and description.
+
+Rules for suggestions:
+- Every suggestion must align with her Dark Winter color analysis and luxury minimalist aesthetic
+- Suggest specific brands she would love: The Row, Totême, Loro Piana, Brunello Cucinelli, Max Mara, Theory, Cos, Arket, Vince, St. John, Sandro, Maje, A.P.C., Khaite, Proenza Schouler, Ganni (for fun pieces)
+- One suggestion should be an investment piece, one should be more accessible
+- Explain precisely how each piece elevates the look and why it works for her coloring/aesthetic
+- For swaps, specify what it replaces and why the swap is an upgrade
+
+Respond ONLY with a valid JSON object. No markdown, no backticks:
+{
+  "elevations": [
+    {
+      "type": "add" or "swap",
+      "swapTarget": "name of item being replaced if type is swap, else null",
+      "category": "item category",
+      "item": "Brand + specific item name",
+      "description": "color, material, silhouette — 1 short sentence",
+      "price": "approximate price range e.g. $280–$340",
+      "why": "one sentence: why this elevates the look for her specifically",
+      "colorNote": "why this works for Dark Winter"
+    }
+  ],
+  "elevatedLookName": "new evocative name for the elevated look (2-4 words)",
+  "elevatedWhy": "one sentence on what makes the elevated version more powerful"
+}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-opus-4-5",
+      max_tokens: 1200,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.content?.map(b => b.text || "").join("") || "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
 const icons = {
   plus:    "M12 4v16m-8-8h16",
   trash:   "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
@@ -203,6 +268,7 @@ const icons = {
   key:     "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
   settings:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 0v3m0-12V3m9 9h-3M6 12H3m15.364-6.364l-2.121 2.121M8.757 15.243l-2.121 2.121m12.728 0l-2.121-2.121M8.757 8.757L6.636 6.636",
   edit:    "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+  elevate: "M5 15l7-7 7 7",
 };
 
 function Icon({ path, size = 18 }) {
@@ -441,7 +507,7 @@ export default function App() {
             </div>
           )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={i} look={look} items={items}/>
+            <LookCard key={i} look={look} items={items} apiKey={apiKey}/>
           ))}
           {!outfits && !styling && (
             <div style={s.empty}>
@@ -785,9 +851,81 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
   );
 }
 
+// ── ELEVATED COLLAGE — purchase suggestion placeholders ──────────────────────
+function ElevatedCollage({ look, lookItems, elevation }) {
+  const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
+
+  // Build the elevated item list: swaps replace originals, adds append
+  const swapTargets = elevation.elevations
+    .filter(e => e.type === "swap")
+    .map(e => e.swapTarget?.toLowerCase());
+
+  const baseItems = lookItems
+    .filter(it => !swapTargets.some(t => it.name.toLowerCase().includes(t)))
+    .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
+
+  const suggestionSlots = elevation.elevations.map(e => ({
+    ...e,
+    isSuggestion: true,
+    id: `sug-${e.item}`,
+  }));
+
+  const allSlots = [...baseItems, ...suggestionSlots]
+    .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
+
+  const hero    = allSlots.slice(0, 2);
+  const support = allSlots.slice(2, 4);
+  const accent  = allSlots.slice(4);
+
+  const renderSlot = (slot, style, labelStyle) => (
+    <div key={slot.id} style={style}>
+      {slot.isSuggestion ? (
+        <div style={s.elevSlotPh}>
+          <div style={s.elevSlotBrand}>{slot.item?.split(" ").slice(0,1).join(" ")}</div>
+          <div style={s.elevSlotItem}>{slot.item?.split(" ").slice(1).join(" ")}</div>
+          <div style={s.elevSlotPrice}>{slot.price}</div>
+          <div style={s.elevSlotBadge}>{slot.type === "swap" ? "SWAP" : "ADD"}</div>
+        </div>
+      ) : (
+        <>
+          {slot.image
+            ? <img src={slot.image} alt={slot.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block"}}/>
+            : <div style={s.collagePh}><span style={s.collageName}>{slot.name}</span></div>}
+          <div style={labelStyle}>{slot.name}</div>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={s.collage}>
+      <div style={s.collageLeft}>
+        {hero.map((slot, i) => renderSlot(
+          slot,
+          {...s.collageHeroSlot, flex: i===0?"1.15":"0.85"},
+          s.collageHeroLabel
+        ))}
+      </div>
+      {(support.length > 0 || accent.length > 0) && (
+        <div style={s.collageRight}>
+          {support.map(slot => renderSlot(slot, s.collageSupportSlot, s.collageSupportLabel))}
+          {accent.length > 0 && (
+            <div style={s.collageAccentRow}>
+              {accent.map(slot => renderSlot(slot, s.collageAccentSlot, {}))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── LOOK CARD — EDITORIAL FLAT-LAY ───────────────────────────────────────────
-function LookCard({ look, items }) {
-  const [expanded, setExpanded] = useState(false);
+function LookCard({ look, items, apiKey }) {
+  const [expanded,   setExpanded]   = useState(false);
+  const [elevating,  setElevating]  = useState(false);
+  const [elevation,  setElevation]  = useState(null);
+  const [elevErr,    setElevErr]    = useState("");
 
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const lookItems = (look.items || [])
@@ -795,10 +933,20 @@ function LookCard({ look, items }) {
     .filter(Boolean)
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
-  // Assign editorial layout roles
-  const hero    = lookItems.slice(0, 2);   // large pieces: outerwear/dress/top + bottom
-  const support = lookItems.slice(2, 4);   // medium: shoes + bag
-  const accent  = lookItems.slice(4);      // small: accessories, belts, scarves
+  const hero    = lookItems.slice(0, 2);
+  const support = lookItems.slice(2, 4);
+  const accent  = lookItems.slice(4);
+
+  const handleElevate = async () => {
+    if (!apiKey) { setElevErr("Add your Anthropic API key in Settings."); return; }
+    setElevating(true); setElevErr(""); setElevation(null);
+    try {
+      const result = await generateElevation(look, lookItems, apiKey);
+      setElevation(result);
+    } catch(e) {
+      setElevErr(e.message || "Elevation failed — try again.");
+    } finally { setElevating(false); }
+  };
 
   return (
     <div style={s.lookCard}>
@@ -813,16 +961,11 @@ function LookCard({ look, items }) {
         </button>
       </div>
 
-      {/* ── Editorial flat-lay collage ── */}
+      {/* ── Original collage ── */}
       <div style={s.collage}>
-
-        {/* LEFT COLUMN — hero clothing items, tall */}
         <div style={s.collageLeft}>
           {hero.map((item, i) => (
-            <div key={item.id} style={{
-              ...s.collageHeroSlot,
-              flex: i === 0 ? "1.15" : "0.85",
-            }}>
+            <div key={item.id} style={{...s.collageHeroSlot, flex: i===0?"1.15":"0.85"}}>
               {item.image
                 ? <img src={item.image} alt={item.name} style={s.collageHeroImg}/>
                 : <div style={s.collagePh}>
@@ -833,36 +976,27 @@ function LookCard({ look, items }) {
             </div>
           ))}
           {hero.length === 0 && (
-            <div style={{...s.collagePh, flex:1}}>
-              <span style={s.collageCat}>✦</span>
-            </div>
+            <div style={{...s.collagePh, flex:1}}><span style={s.collageCat}>✦</span></div>
           )}
         </div>
-
-        {/* RIGHT COLUMN — shoes/bags stacked, then accents */}
         {(support.length > 0 || accent.length > 0) && (
           <div style={s.collageRight}>
-            {/* Support items (shoes + bag) — medium height */}
             {support.map(item => (
               <div key={item.id} style={s.collageSupportSlot}>
                 {item.image
                   ? <img src={item.image} alt={item.name} style={s.collageSupportImg}/>
-                  : <div style={s.collagePh}>
-                      <span style={s.collageName}>{item.name}</span>
-                    </div>}
+                  : <div style={s.collagePh}><span style={s.collageName}>{item.name}</span></div>}
                 <div style={s.collageSupportLabel}>{item.name}</div>
               </div>
             ))}
-
-            {/* Accent items (belts, scarves, accessories) — small */}
             {accent.length > 0 && (
               <div style={s.collageAccentRow}>
                 {accent.map(item => (
                   <div key={item.id} style={s.collageAccentSlot}>
                     {item.image
                       ? <img src={item.image} alt={item.name} style={s.collageAccentImg}/>
-                      : <div style={{...s.collagePh, minHeight:60}}>
-                          <span style={{...s.collageName, fontSize:8}}>{item.name}</span>
+                      : <div style={{...s.collagePh,minHeight:60}}>
+                          <span style={{...s.collageName,fontSize:8}}>{item.name}</span>
                         </div>}
                   </div>
                 ))}
@@ -872,7 +1006,7 @@ function LookCard({ look, items }) {
         )}
       </div>
 
-      {/* ── Jewelry teaser (always visible) ── */}
+      {/* ── Jewelry teaser ── */}
       {look.jewelry && (
         <div style={s.lookTeaser}>
           <span style={s.teaserDiamond}>♦</span> {look.jewelry}
@@ -882,27 +1016,70 @@ function LookCard({ look, items }) {
       {/* ── Expandable details ── */}
       {expanded && (
         <div style={s.lookMeta}>
-          {look.accessories && (
-            <div style={s.metaRow}>
-              <span style={s.metaIcon}>✦</span>
-              <span>{look.accessories}</span>
-            </div>
-          )}
-          {look.why && (
-            <div style={{...s.metaRow, fontStyle:"italic", color:"#6B5E54"}}>
-              {look.why}
-            </div>
-          )}
-          {look.colorNote && (
-            <div style={{...s.metaRow, color:"#3D7A4E", fontSize:11}}>
-              ✓ {look.colorNote}
-            </div>
-          )}
-          {look.flag && (
-            <div style={{...s.metaRow, color:"#8B6914", fontSize:11}}>
-              🏷 {look.flag}
-            </div>
-          )}
+          {look.accessories && <div style={s.metaRow}><span style={s.metaIcon}>✦</span><span>{look.accessories}</span></div>}
+          {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"#6B5E54"}}>{look.why}</div>}
+          {look.colorNote   && <div style={{...s.metaRow,color:"#3D7A4E",fontSize:11}}>✓ {look.colorNote}</div>}
+          {look.flag        && <div style={{...s.metaRow,color:"#8B6914",fontSize:11}}>🏷 {look.flag}</div>}
+        </div>
+      )}
+
+      {/* ── Elevate button ── */}
+      {!elevation && (
+        <div style={s.elevateBar}>
+          {elevErr && <p style={{...s.err, marginBottom:6}}>{elevErr}</p>}
+          <button style={s.elevateBtn} onClick={handleElevate} disabled={elevating}>
+            {elevating
+              ? <><span style={{...s.spinnerSm, borderTopColor:"#1C1814", border:"2px solid #E8E0D8", borderTopWidth:2}}/> Elevating…</>
+              : <>✦ Elevate this Look</>}
+          </button>
+        </div>
+      )}
+
+      {/* ── Elevated section ── */}
+      {elevation && (
+        <div style={s.elevatedSection}>
+          {/* Divider */}
+          <div style={s.elevDivider}>
+            <div style={s.elevDividerLine}/>
+            <span style={s.elevDividerLabel}>ELEVATED</span>
+            <div style={s.elevDividerLine}/>
+          </div>
+
+          {/* Elevated look name + why */}
+          <div style={s.elevHeader}>
+            <div style={s.elevName}>{elevation.elevatedLookName}</div>
+            {elevation.elevatedWhy && (
+              <div style={s.elevWhy}>{elevation.elevatedWhy}</div>
+            )}
+          </div>
+
+          {/* Elevated collage */}
+          <ElevatedCollage look={look} lookItems={lookItems} elevation={elevation}/>
+
+          {/* Purchase suggestions */}
+          <div style={s.elevSuggestions}>
+            {elevation.elevations?.map((e, i) => (
+              <div key={i} style={s.elevSuggestionCard}>
+                <div style={s.elevSugHeader}>
+                  <span style={s.elevSugBadge(e.type)}>{e.type === "swap" ? "↔ SWAP" : "+ ADD"}</span>
+                  <span style={s.elevSugPrice}>{e.price}</span>
+                </div>
+                <div style={s.elevSugItem}>{e.item}</div>
+                <div style={s.elevSugDesc}>{e.description}</div>
+                {e.swapTarget && (
+                  <div style={s.elevSugSwap}>Replaces: {e.swapTarget}</div>
+                )}
+                <div style={s.elevSugWhy}>{e.why}</div>
+                <div style={s.elevSugColor}>✓ {e.colorNote}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Re-elevate button */}
+          <button style={{...s.elevateBtn, margin:"0 16px 16px", width:"calc(100% - 32px)"}}
+            onClick={handleElevate} disabled={elevating}>
+            {elevating ? "Elevating…" : "✦ Generate New Elevation"}
+          </button>
         </div>
       )}
     </div>
@@ -1121,4 +1298,78 @@ const s = {
     display:"flex", gap:8, alignItems:"flex-start",
   },
   metaIcon: { flexShrink:0, color:"#C4A882", marginTop:1 },
+
+  // ── Elevate feature
+  elevateBar: {
+    padding:"12px 18px 14px", borderTop:"1px solid #F0E8E0",
+  },
+  elevateBtn: {
+    width:"100%", background:"none",
+    border:"1.5px solid #1C1814", borderRadius:4,
+    padding:"10px 16px", fontSize:11, letterSpacing:"0.14em",
+    color:"#1C1814", cursor:"pointer",
+    display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+    fontFamily:"Georgia,serif",
+    transition:"all 0.2s",
+  },
+  elevatedSection: {
+    borderTop:"2px solid #1C1814",
+  },
+  elevDivider: {
+    display:"flex", alignItems:"center", gap:10,
+    padding:"14px 18px 10px",
+  },
+  elevDividerLine: { flex:1, height:1, background:"#E8E0D8" },
+  elevDividerLabel: {
+    fontSize:9, letterSpacing:"0.25em", color:"#9A8E84",
+    fontFamily:"sans-serif",
+  },
+  elevHeader: { padding:"0 18px 14px" },
+  elevName: { fontSize:18, fontWeight:400, letterSpacing:"0.04em", marginBottom:4 },
+  elevWhy: { fontSize:12, color:"#6B5E54", fontStyle:"italic", lineHeight:1.5 },
+
+  // Elevated collage suggestion placeholders
+  elevSlotPh: {
+    width:"100%", height:"100%", minHeight:100,
+    display:"flex", flexDirection:"column",
+    alignItems:"center", justifyContent:"center",
+    gap:4, padding:10,
+    background:"linear-gradient(135deg, #F5F1EC 0%, #EDE8E2 100%)",
+    border:"1.5px dashed #C8BFB4",
+    position:"relative",
+  },
+  elevSlotBrand: { fontSize:10, letterSpacing:"0.1em", color:"#6B5E54", fontWeight:600 },
+  elevSlotItem:  { fontSize:9, color:"#9A8E84", textAlign:"center", lineHeight:1.4 },
+  elevSlotPrice: { fontSize:10, color:"#C4A882", marginTop:2, letterSpacing:"0.06em" },
+  elevSlotBadge: {
+    position:"absolute", top:6, right:6,
+    background:"#1C1814", color:"#F5F1EC",
+    fontSize:7, letterSpacing:"0.1em",
+    padding:"2px 5px", borderRadius:2,
+    fontFamily:"sans-serif",
+  },
+
+  // Suggestion cards
+  elevSuggestions: {
+    display:"flex", flexDirection:"column", gap:10,
+    padding:"0 16px 16px",
+  },
+  elevSuggestionCard: {
+    background:"#FAFAF8", border:"1px solid #E8E0D8",
+    borderRadius:8, padding:"12px 14px",
+  },
+  elevSugHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 },
+  elevSugBadge: (type) => ({
+    fontSize:9, letterSpacing:"0.12em",
+    background: type==="swap" ? "#EDE8FF" : "#E8F5EC",
+    color: type==="swap" ? "#5B4E8E" : "#3D7A4E",
+    padding:"2px 7px", borderRadius:3,
+    fontFamily:"sans-serif",
+  }),
+  elevSugPrice:  { fontSize:11, color:"#C4A882", letterSpacing:"0.04em" },
+  elevSugItem:   { fontSize:14, fontWeight:400, letterSpacing:"0.03em", marginBottom:3 },
+  elevSugDesc:   { fontSize:11, color:"#6B5E54", marginBottom:4, lineHeight:1.5 },
+  elevSugSwap:   { fontSize:10, color:"#9A8E84", fontStyle:"italic", marginBottom:4 },
+  elevSugWhy:    { fontSize:12, color:"#4A3E36", lineHeight:1.5, marginBottom:4 },
+  elevSugColor:  { fontSize:10, color:"#3D7A4E", letterSpacing:"0.04em" },
 };
