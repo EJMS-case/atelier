@@ -352,18 +352,29 @@ export default function App() {
   const syncTimer = useRef(null);
 
   // ── On mount: pull latest from Supabase, merge with local images
+  // SAFE MERGE: never overwrite local items with empty Supabase response
   useEffect(() => {
     setSyncStatus("syncing");
     sb.fetchAll()
       .then(sbItems => {
         const local = loadLocalItems();
+        // If Supabase returns nothing but we have local items,
+        // keep local items and re-sync them up to Supabase
+        if ((!sbItems || sbItems.length === 0) && local.length > 0) {
+          setItems(local);
+          setSyncStatus("synced");
+          // Re-push local items to Supabase (recovery)
+          Promise.all(local.map(it => sb.upsert(it))).catch(() => {});
+          return;
+        }
+        // Normal case: merge Supabase metadata with local images
         const merged = mergeWithImages(sbItems, local);
         setItems(merged);
         saveLocalItems(merged);
         setSyncStatus("synced");
       })
       .catch(() => {
-        // Supabase unavailable — fall back to local silently
+        // Supabase unavailable — keep local items, show offline status
         setSyncStatus("error");
       });
   }, []);
