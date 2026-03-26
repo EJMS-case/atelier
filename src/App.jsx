@@ -133,41 +133,158 @@ async function removeBackground(base64DataUrl, rmbgKey) {
   });
 }
 
+// ── SHUFFLE ARRAY (for wardrobe variety) ─────────────────────────────────────
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
 async function generateOutfit(items, occasion, weather, request, apiKey) {
-  const inventory = items.map(it =>
+  // Shuffle within each category so AI doesn't always grab the same first items
+  const byCategory = {};
+  items.forEach(it => {
+    if (!byCategory[it.category]) byCategory[it.category] = [];
+    byCategory[it.category].push(it);
+  });
+  Object.keys(byCategory).forEach(cat => {
+    byCategory[cat] = shuffle(byCategory[cat]);
+  });
+  const shuffled = Object.values(byCategory).flat();
+
+  const inventory = shuffled.map(it =>
     `ID:${it.id} | ${it.category} | ${it.name}${it.color ? ` | Color: ${it.color}` : ""}${it.notes ? ` | Notes: ${it.notes}` : ""}`
   ).join("\n");
 
   const prompt = `${STYLE_PROFILE}
 
-CURRENT WARDROBE:
+You are building outfits for a client with a sophisticated, highly curated wardrobe. She is tired of obvious combinations — she wants looks that feel intentional, fashion-forward, and like a world-class stylist put them together. Surprise her.
+
+CURRENT WARDROBE (shuffled for variety):
 ${inventory}
 
-REQUEST: Create ${request || "a complete outfit"} for occasion: ${occasion}.
-Weather context: ${weather || "NYC, current season"}.
+OCCASION: ${occasion}
+WEATHER: ${weather || "NYC, current season — dress appropriately for temperature and practicality"}
+${request ? `SPECIFIC REQUEST: ${request}` : ""}
 
-ACCESSORIES GUIDANCE: If the client has belts, scarves, or other accessories in her wardrobe, always consider incorporating them into looks where they elevate the outfit.
-- Suggest a belt if it would define the silhouette or add polish
-- Suggest a scarf if weather or styling calls for it — always explain HOW to wear it (e.g. "tied loosely at the neck", "knotted on bag handle")
+WORLD-CLASS STYLIST RULES:
+1. THINK UNEXPECTEDLY. Don't pair the obvious blazer with the obvious trouser. Look for non-obvious combinations — a feminine top with a structured skirt, a chunky knit with sleek trousers, a bold color paired with something unexpected.
+2. CONSIDER PROPORTION AND CONTRAST. Mix volumes intentionally — oversized top with slim bottom, fitted top with wide-leg trouser. Contrast textures: matte with shine, structured with fluid.
+3. COLOR STORY. Each look should have a deliberate color story — monochromatic depth, tonal layering, or one bold contrast. Never random.
+4. ALWAYS include: a top or dress, a bottom (unless dress), shoes, AND a bag. Every single look must have a bag.
+5. USE THE FULL WARDROBE. Each look must use different pieces — no repeating items across looks. Dig into the full inventory.
+6. JEWELRY: Only note truly distinctive choices. Never mention the diamond ring or wedding band. Only call out a specific piece if it genuinely completes the look.
+7. ACCESSORIES: Include a belt or scarf only when it genuinely makes the look better — explain exactly how to style it.
+8. Each look should feel like a different mood or aesthetic chapter — not just the same vibe in different colors.
 
-Respond ONLY with a valid JSON object. No markdown, no backticks, no commentary:
+Respond ONLY with a valid JSON object — no markdown, no backticks, no text before or after:
 {
   "looks": [
     {
-      "name": "Look name (evocative, 2-4 words)",
-      "occasion": "occasion label",
-      "items": ["item ID 1", "item ID 2"],
-      "accessories": "accessory suggestion with how-to-wear, or null",
-      "jewelry": "specific jewelry from her collection",
-      "why": "one sentence on why it works stylistically",
-      "colorNote": "color analysis confirmation",
+      "name": "2-4 word evocative look name",
+      "occasion": "${occasion}",
+      "items": ["item-id-1", "item-id-2", "item-id-3", "item-id-4"],
+      "accessories": "specific styling instruction if applicable, otherwise null",
+      "jewelry": "specific jewelry only if distinctive, otherwise null",
+      "why": "one sentence on the intentional styling logic — what makes this combination interesting",
+      "colorNote": "the color story of this look",
       "flag": null
     }
   ]
 }
 
-Generate 2-3 distinct looks. Only use item IDs from the wardrobe above. Each look needs at minimum a top/dress, bottom (unless dress), and shoes.`;
+Generate 3 distinct looks with genuinely different aesthetics. Only use IDs from the wardrobe above.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-opus-4-5",
+      max_tokens: 2000,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.content?.map(b => b.text || "").join("") || "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
+// ── AI ELEVATION ─────────────────────────────────────────────────────────────
+async function generateElevation(look, lookItems, apiKey) {
+  const currentItems = lookItems.map(it =>
+    `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.notes ? ` — ${it.notes}` : ""}`
+  ).join("\n");
+
+  const prompt = `${STYLE_PROFILE}
+
+You are a world-class stylist elevating an existing outfit. Here is the current look:
+LOOK NAME: "${look.name}"
+OCCASION: ${look.occasion}
+CURRENT ITEMS:
+${currentItems}
+
+Your task: Suggest exactly 3 specific pieces to purchase that would meaningfully elevate this look. Be specific, shoppable, and direct.
+
+ELEVATION RULES:
+- Suggest pieces from brands she loves: The Row, Totême, Loro Piana, Brunello Cucinelli, Max Mara, Theory, COS, A.P.C., Khaite, Proenza Schouler, Vince, St. John, Zimmermann, Ganni
+- Include one investment piece ($500+), one mid-range ($150–$500), one accessible ($50–$150)
+- Every piece must work with her Dark Winter palette (cool, deep, jewel tones — no warm/muted)
+- Mix adds and swaps — don't only suggest additions
+- Be specific: "Totême double-breasted wool blazer in navy" not just "a navy blazer"
+
+You MUST respond with ONLY this exact JSON structure — no text before or after, no markdown:
+{
+  "elevatedLookName": "evocative 2-4 word name for the elevated version",
+  "elevatedWhy": "one sentence on why the elevated version is more powerful",
+  "elevations": [
+    {
+      "type": "add",
+      "swapTarget": null,
+      "category": "Outerwear",
+      "item": "Brand + specific item name",
+      "description": "one sentence: color, fabric, silhouette",
+      "price": "$XXX–$XXX",
+      "why": "why this specific piece elevates this specific look",
+      "colorNote": "why this works for Dark Winter coloring"
+    },
+    {
+      "type": "swap",
+      "swapTarget": "exact name of item being replaced",
+      "category": "Shoes",
+      "item": "Brand + specific item name",
+      "description": "one sentence: color, fabric, silhouette",
+      "price": "$XXX–$XXX",
+      "why": "why swapping this in is an upgrade",
+      "colorNote": "why this works for Dark Winter coloring"
+    },
+    {
+      "type": "add",
+      "swapTarget": null,
+      "category": "Accessories",
+      "item": "Brand + specific item name",
+      "description": "one sentence: color, fabric, silhouette",
+      "price": "$XXX–$XXX",
+      "why": "why this accessory completes the look",
+      "colorNote": "why this works for Dark Winter coloring"
+    }
+  ]
+}`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -192,74 +309,11 @@ Generate 2-3 distinct looks. Only use item IDs from the wardrobe above. Each loo
   const data = await res.json();
   const text = data.content?.map(b => b.text || "").join("") || "";
   const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
-}
 
-// ── AI ELEVATION ─────────────────────────────────────────────────────────────
-async function generateElevation(look, lookItems, apiKey) {
-  const currentItems = lookItems.map(it =>
-    `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.notes ? ` — ${it.notes}` : ""}`
-  ).join("\n");
-
-  const prompt = `${STYLE_PROFILE}
-
-You are elevating an existing outfit for this client. Here is the current look:
-LOOK NAME: ${look.name}
-OCCASION: ${look.occasion}
-CURRENT ITEMS:
-${currentItems}
-
-Your task: Suggest 2-3 specific pieces to ADD or SWAP that would meaningfully elevate this look. These are PURCHASE SUGGESTIONS — real items the client could buy. Be specific with brand, item name, and description.
-
-Rules for suggestions:
-- Every suggestion must align with her Dark Winter color analysis and luxury minimalist aesthetic
-- Suggest specific brands she would love: The Row, Totême, Loro Piana, Brunello Cucinelli, Max Mara, Theory, Cos, Arket, Vince, St. John, Sandro, Maje, A.P.C., Khaite, Proenza Schouler, Ganni (for fun pieces)
-- One suggestion should be an investment piece, one should be more accessible
-- Explain precisely how each piece elevates the look and why it works for her coloring/aesthetic
-- For swaps, specify what it replaces and why the swap is an upgrade
-
-Respond ONLY with a valid JSON object. No markdown, no backticks:
-{
-  "elevations": [
-    {
-      "type": "add" or "swap",
-      "swapTarget": "name of item being replaced if type is swap, else null",
-      "category": "item category",
-      "item": "Brand + specific item name",
-      "description": "color, material, silhouette — 1 short sentence",
-      "price": "approximate price range e.g. $280–$340",
-      "why": "one sentence: why this elevates the look for her specifically",
-      "colorNote": "why this works for Dark Winter"
-    }
-  ],
-  "elevatedLookName": "new evocative name for the elevated look (2-4 words)",
-  "elevatedWhy": "one sentence on what makes the elevated version more powerful"
-}`;
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-opus-4-5",
-      max_tokens: 1200,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
-  }
-
-  const data = await res.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  // Extra safety: find JSON object in response if there's any surrounding text
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No valid JSON in elevation response");
+  return JSON.parse(jsonMatch[0]);
 }
 const icons = {
   plus:    "M12 4v16m-8-8h16",
@@ -851,81 +905,123 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
   );
 }
 
-// ── ELEVATED COLLAGE — purchase suggestion placeholders ──────────────────────
-function ElevatedCollage({ look, lookItems, elevation }) {
+// ── EDITORIAL FLAT-LAY COLLAGE ────────────────────────────────────────────────
+// Positions pieces as floating, slightly overlapping items on a clean background
+// Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
+function EditorialCollage({ lookItems, suggestionSlots = [] }) {
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
-
-  // Build the elevated item list: swaps replace originals, adds append
-  const swapTargets = elevation.elevations
-    .filter(e => e.type === "swap")
-    .map(e => e.swapTarget?.toLowerCase());
-
-  const baseItems = lookItems
-    .filter(it => !swapTargets.some(t => it.name.toLowerCase().includes(t)))
+  const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
-  const suggestionSlots = elevation.elevations.map(e => ({
-    ...e,
-    isSuggestion: true,
-    id: `sug-${e.item}`,
-  }));
-
-  const allSlots = [...baseItems, ...suggestionSlots]
-    .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
-
-  const hero    = allSlots.slice(0, 2);
-  const support = allSlots.slice(2, 4);
-  const accent  = allSlots.slice(4);
-
-  const renderSlot = (slot, style, labelStyle) => (
-    <div key={slot.id} style={style}>
-      {slot.isSuggestion ? (
-        <div style={s.elevSlotPh}>
-          <div style={s.elevSlotBrand}>{slot.item?.split(" ").slice(0,1).join(" ")}</div>
-          <div style={s.elevSlotItem}>{slot.item?.split(" ").slice(1).join(" ")}</div>
-          <div style={s.elevSlotPrice}>{slot.price}</div>
-          <div style={s.elevSlotBadge}>{slot.type === "swap" ? "SWAP" : "ADD"}</div>
-        </div>
-      ) : (
-        <>
-          {slot.image
-            ? <img src={slot.image} alt={slot.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block"}}/>
-            : <div style={s.collagePh}><span style={s.collageName}>{slot.name}</span></div>}
-          <div style={labelStyle}>{slot.name}</div>
-        </>
-      )}
-    </div>
-  );
+  // Assign editorial positions based on category and count
+  // Each slot: { item, x, y, w, h, rotate, zIndex }
+  const slots = buildCollageLayout(sorted, suggestionSlots);
 
   return (
-    <div style={s.collage}>
-      <div style={s.collageLeft}>
-        {hero.map((slot, i) => renderSlot(
-          slot,
-          {...s.collageHeroSlot, flex: i===0?"1.15":"0.85"},
-          s.collageHeroLabel
-        ))}
-      </div>
-      {(support.length > 0 || accent.length > 0) && (
-        <div style={s.collageRight}>
-          {support.map(slot => renderSlot(slot, s.collageSupportSlot, s.collageSupportLabel))}
-          {accent.length > 0 && (
-            <div style={s.collageAccentRow}>
-              {accent.map(slot => renderSlot(slot, s.collageAccentSlot, {}))}
+    <div style={s.collageCanvas}>
+      {slots.map((slot, i) => (
+        <div key={slot.id || i} style={{
+          position: "absolute",
+          left: `${slot.x}%`,
+          top: `${slot.y}%`,
+          width: `${slot.w}%`,
+          height: `${slot.h}%`,
+          transform: `rotate(${slot.rotate}deg)`,
+          zIndex: slot.zIndex,
+          borderRadius: 4,
+          overflow: "hidden",
+          boxShadow: "0 4px 16px rgba(28,24,20,0.12), 0 1px 4px rgba(28,24,20,0.08)",
+          background: "#fff",
+        }}>
+          {slot.isSuggestion ? (
+            <div style={s.elevSlotPh}>
+              <div style={s.elevSlotBrand}>{slot.item?.split(" ").slice(0,2).join(" ")}</div>
+              <div style={s.elevSlotItem}>{slot.item?.split(" ").slice(2).join(" ")}</div>
+              <div style={s.elevSlotPrice}>{slot.price}</div>
+              <div style={s.elevSlotBadge}>{slot.type === "swap" ? "SWAP" : "ADD"}</div>
+            </div>
+          ) : slot.image ? (
+            <img src={slot.image} alt={slot.name}
+              style={{width:"100%", height:"100%", objectFit:"contain", display:"block", background:"#fff"}}/>
+          ) : (
+            <div style={{...s.collagePh, height:"100%"}}>
+              <span style={s.collageCat}>{slot.category?.[0]}</span>
+              <span style={s.collageName}>{slot.name}</span>
             </div>
           )}
+          {/* Item label */}
+          <div style={{
+            position:"absolute", bottom:0, left:0, right:0,
+            background:"rgba(250,250,248,0.9)",
+            fontSize:8, padding:"3px 6px",
+            letterSpacing:"0.07em", color:"#2A2420",
+            backdropFilter:"blur(4px)",
+            lineHeight:1.3,
+          }}>{slot.name}</div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
 
+// Build layout positions based on item categories
+function buildCollageLayout(items, suggestionSlots = []) {
+  const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
+
+  // Define positional templates per role
+  // Canvas is 100x100 units, items overlap slightly
+  const layouts = {
+    0: [ // 1 item
+      {x:20, y:10, w:60, h:80, rotate:0, zIndex:2},
+    ],
+    1: [ // 2 items
+      {x:2,  y:5,  w:52, h:88, rotate:-1, zIndex:2},
+      {x:46, y:8,  w:52, h:82, rotate:1,  zIndex:3},
+    ],
+    2: [ // 3 items
+      {x:2,  y:5,  w:50, h:82, rotate:-1.5, zIndex:2},
+      {x:44, y:3,  w:50, h:72, rotate:1,    zIndex:3},
+      {x:28, y:62, w:44, h:35, rotate:-0.5, zIndex:4},
+    ],
+    3: [ // 4 items
+      {x:2,  y:4,  w:46, h:70, rotate:-1.5, zIndex:2},
+      {x:44, y:2,  w:46, h:62, rotate:1.5,  zIndex:3},
+      {x:2,  y:62, w:42, h:35, rotate:0.5,  zIndex:4},
+      {x:48, y:58, w:42, h:38, rotate:-1,   zIndex:5},
+    ],
+    4: [ // 5 items
+      {x:1,  y:4,  w:44, h:66, rotate:-1.5, zIndex:2},
+      {x:43, y:2,  w:44, h:58, rotate:1.5,  zIndex:3},
+      {x:1,  y:60, w:40, h:35, rotate:0.5,  zIndex:4},
+      {x:44, y:55, w:40, h:38, rotate:-1,   zIndex:5},
+      {x:22, y:68, w:28, h:28, rotate:2,    zIndex:6},
+    ],
+    5: [ // 6 items
+      {x:1,  y:3,  w:42, h:62, rotate:-1.5, zIndex:2},
+      {x:42, y:2,  w:42, h:56, rotate:1.5,  zIndex:3},
+      {x:1,  y:58, w:38, h:36, rotate:0.5,  zIndex:4},
+      {x:42, y:53, w:38, h:38, rotate:-1,   zIndex:5},
+      {x:18, y:66, w:26, h:28, rotate:2,    zIndex:6},
+      {x:60, y:68, w:26, h:26, rotate:-2,   zIndex:7},
+    ],
+  };
+
+  const count = Math.min(all.length - 1, 5);
+  const positions = layouts[count] || layouts[5];
+
+  return all.slice(0, 6).map((item, i) => ({
+    ...item,
+    id: item.id || `slot-${i}`,
+    ...(positions[i] || positions[positions.length - 1]),
+  }));
+}
+
 // ── LOOK CARD — EDITORIAL FLAT-LAY ───────────────────────────────────────────
 function LookCard({ look, items, apiKey }) {
-  const [expanded,   setExpanded]   = useState(false);
-  const [elevating,  setElevating]  = useState(false);
-  const [elevation,  setElevation]  = useState(null);
-  const [elevErr,    setElevErr]    = useState("");
+  const [expanded,  setExpanded]  = useState(false);
+  const [elevating, setElevating] = useState(false);
+  const [elevation, setElevation] = useState(null);
+  const [elevErr,   setElevErr]   = useState("");
 
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const lookItems = (look.items || [])
@@ -933,9 +1029,104 @@ function LookCard({ look, items, apiKey }) {
     .filter(Boolean)
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
-  const hero    = lookItems.slice(0, 2);
-  const support = lookItems.slice(2, 4);
-  const accent  = lookItems.slice(4);
+  const handleElevate = async () => {
+    if (!apiKey) { setElevErr("Add your Anthropic API key in Settings."); return; }
+    setElevating(true); setElevErr(""); setElevation(null);
+    try {
+      const result = await generateElevation(look, lookItems, apiKey);
+      setElevation(result);
+    } catch(e) {
+      setElevErr(e.message || "Elevation failed — try again.");
+    } finally { setElevating(false); }
+  };
+
+  const elevatedItems = elevation ? (() => {
+    const swapTargets = elevation.elevations
+      .filter(e => e.type === "swap")
+      .map(e => e.swapTarget?.toLowerCase());
+    const base = lookItems.filter(it =>
+      !swapTargets.some(t => it.name.toLowerCase().includes(t))
+    );
+    const suggestions = elevation.elevations.map(e => ({
+      ...e, isSuggestion:true, id:`sug-${e.item}`, category: e.category,
+    }));
+    return { base, suggestions };
+  })() : null;
+
+  return (
+    <div style={s.lookCard}>
+      <div style={s.lookHeader}>
+        <div>
+          <div style={s.lookName}>{look.name}</div>
+          <div style={s.lookOcc}>{look.occasion?.toUpperCase()}</div>
+        </div>
+        <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
+          {expanded ? "Hide" : "Details"}
+        </button>
+      </div>
+
+      <EditorialCollage lookItems={lookItems}/>
+
+      {look.jewelry && (
+        <div style={s.lookTeaser}>
+          <span style={s.teaserDiamond}>♦</span> {look.jewelry}
+        </div>
+      )}
+
+      {expanded && (
+        <div style={s.lookMeta}>
+          {look.accessories && <div style={s.metaRow}><span style={s.metaIcon}>✦</span><span>{look.accessories}</span></div>}
+          {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"#6B5E54"}}>{look.why}</div>}
+          {look.colorNote   && <div style={{...s.metaRow,color:"#3D7A4E",fontSize:11}}>✓ {look.colorNote}</div>}
+          {look.flag        && <div style={{...s.metaRow,color:"#8B6914",fontSize:11}}>🏷 {look.flag}</div>}
+        </div>
+      )}
+
+      {!elevation && (
+        <div style={s.elevateBar}>
+          {elevErr && <p style={{...s.err,marginBottom:6}}>{elevErr}</p>}
+          <button style={s.elevateBtn} onClick={handleElevate} disabled={elevating}>
+            {elevating ? <><span style={s.spinnerElevate}/> Elevating…</> : <>✦ Elevate this Look</>}
+          </button>
+        </div>
+      )}
+
+      {elevation && (
+        <div style={s.elevatedSection}>
+          <div style={s.elevDivider}>
+            <div style={s.elevDividerLine}/>
+            <span style={s.elevDividerLabel}>ELEVATED</span>
+            <div style={s.elevDividerLine}/>
+          </div>
+          <div style={s.elevHeader}>
+            <div style={s.elevName}>{elevation.elevatedLookName}</div>
+            {elevation.elevatedWhy && <div style={s.elevWhy}>{elevation.elevatedWhy}</div>}
+          </div>
+          <EditorialCollage lookItems={elevatedItems.base} suggestionSlots={elevatedItems.suggestions}/>
+          <div style={s.elevSuggestions}>
+            {elevation.elevations?.map((e, i) => (
+              <div key={i} style={s.elevSuggestionCard}>
+                <div style={s.elevSugHeader}>
+                  <span style={s.elevSugBadge(e.type)}>{e.type==="swap" ? "↔ SWAP" : "+ ADD"}</span>
+                  <span style={s.elevSugPrice}>{e.price}</span>
+                </div>
+                <div style={s.elevSugItem}>{e.item}</div>
+                <div style={s.elevSugDesc}>{e.description}</div>
+                {e.swapTarget && <div style={s.elevSugSwap}>Replaces: {e.swapTarget}</div>}
+                <div style={s.elevSugWhy}>{e.why}</div>
+                <div style={s.elevSugColor}>✓ {e.colorNote}</div>
+              </div>
+            ))}
+          </div>
+          <button style={{...s.elevateBtn,margin:"0 16px 16px",width:"calc(100% - 32px)"}}
+            onClick={handleElevate} disabled={elevating}>
+            {elevating ? "Elevating…" : "✦ Generate New Elevation"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
   const handleElevate = async () => {
     if (!apiKey) { setElevErr("Add your Anthropic API key in Settings."); return; }
@@ -1137,6 +1328,7 @@ const s = {
   // Spinners
   spinner: { display:"inline-block", width:28, height:28, border:"2px solid #E8E0D8", borderTop:"2px solid #1C1814", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
   spinnerSm: { display:"inline-block", width:13, height:13, border:"2px solid rgba(255,255,255,0.3)", borderTop:"2px solid #fff", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
+  spinnerElevate: { display:"inline-block", width:11, height:11, border:"1.5px solid #C8BFB4", borderTop:"1.5px solid #1C1814", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
 
   // Style panel
   stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid #E8E0D8", padding:"14px 20px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)" },
@@ -1199,85 +1391,25 @@ const s = {
     letterSpacing:"0.06em",
   },
 
-  // ── Editorial flat-lay collage
-  collage: {
-    display:"flex", gap:3,
-    background:"#FAFAF8",  // near-white editorial bg
-    padding:16, minHeight:380,
+  // ── Editorial collage canvas
+  collageCanvas: {
+    position:"relative",
+    width:"100%",
+    paddingBottom:"75%", // 4:3 aspect ratio
+    background:"#F8F7F5",
+    overflow:"hidden",
+    margin:"0",
   },
 
-  // Left column — hero clothing (tall)
-  collageLeft: {
-    display:"flex", flexDirection:"column", gap:3,
-    flex:"0 0 54%",
-  },
-  collageHeroSlot: {
-    position:"relative", overflow:"hidden",
-    background:"#fff",
-    borderRadius:4,
-    boxShadow:"0 2px 8px rgba(28,24,20,0.08)",
-    minHeight:160,
-  },
-  collageHeroImg: {
-    width:"100%", height:"100%",
-    objectFit:"contain", display:"block",
-  },
-  collageHeroLabel: {
-    position:"absolute", bottom:0, left:0, right:0,
-    background:"rgba(250,250,248,0.88)",
-    color:"#2A2420",
-    fontSize:9, padding:"4px 8px",
-    letterSpacing:"0.08em",
-    lineHeight:1.3,
-    backdropFilter:"blur(4px)",
-  },
-
-  // Right column
-  collageRight: {
-    flex:1, display:"flex", flexDirection:"column", gap:3,
-  },
-  collageSupportSlot: {
-    flex:1, position:"relative", overflow:"hidden",
-    background:"#fff", borderRadius:4,
-    boxShadow:"0 2px 8px rgba(28,24,20,0.08)",
-    minHeight:90,
-  },
-  collageSupportImg: {
-    width:"100%", height:"100%",
-    objectFit:"contain", display:"block",
-  },
-  collageSupportLabel: {
-    position:"absolute", bottom:0, left:0, right:0,
-    background:"rgba(250,250,248,0.88)",
-    color:"#2A2420",
-    fontSize:8, padding:"3px 6px",
-    letterSpacing:"0.07em",
-    lineHeight:1.3,
-    backdropFilter:"blur(4px)",
-  },
-
-  // Accent row (belts, scarves, etc.)
-  collageAccentRow: {
-    display:"flex", gap:3, height:72,
-  },
-  collageAccentSlot: {
-    flex:1, position:"relative", overflow:"hidden",
-    background:"#fff", borderRadius:4,
-    boxShadow:"0 2px 8px rgba(28,24,20,0.08)",
-  },
-  collageAccentImg: {
-    width:"100%", height:"100%",
-    objectFit:"contain", display:"block",
-  },
-
-  // Placeholder
+  // Placeholders inside canvas
   collagePh: {
-    width:"100%", height:"100%", minHeight:100,
+    width:"100%", height:"100%",
     display:"flex", flexDirection:"column",
     alignItems:"center", justifyContent:"center",
-    gap:4, padding:8, background:"#F5F1EC",
+    gap:4, padding:8,
+    background:"#F0EBE4",
   },
-  collageCat:  { fontSize:11, color:"#C8BFB4", letterSpacing:"0.1em" },
+  collageCat:  { fontSize:10, color:"#C8BFB4", letterSpacing:"0.1em" },
   collageName: { fontSize:9, color:"#9A8E84", textAlign:"center", lineHeight:1.4 },
 
   // Teaser + meta
