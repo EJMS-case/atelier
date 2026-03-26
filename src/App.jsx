@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -46,12 +46,54 @@ const STORAGE_KEY    = "atelier-wardrobe-v1";
 const API_KEY_STORE  = "atelier-api-key";
 const RMBG_KEY_STORE = "atelier-rmbg-key";
 
-// ── STORAGE ──────────────────────────────────────────────────────────────────
-function loadWardrobe() {
+// ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://ljcwsrfmojbjdveefoqa.supabase.co";
+const SUPABASE_KEY = "sb_publishable_E5Cx7TlcIzJv6245MwFbLQ_e6Sg_ZlL";
+const SB_HEADERS   = {
+  "Content-Type": "application/json",
+  "apikey": SUPABASE_KEY,
+  "Authorization": `Bearer ${SUPABASE_KEY}`,
+  "Prefer": "return=representation",
+};
+
+// ── SUPABASE HELPERS ──────────────────────────────────────────────────────────
+const sb = {
+  async fetchAll() {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?select=*&order=created_at.asc`, {
+      headers: SB_HEADERS
+    });
+    if (!res.ok) throw new Error("Fetch failed");
+    return res.json();
+  },
+  async upsert(item) {
+    // Store image separately to avoid row size limits — keep in localStorage only
+    const { image, ...rest } = item;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(rest),
+    });
+    if (!res.ok) throw new Error("Upsert failed");
+    return res.json();
+  },
+  async remove(id) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`, {
+      method: "DELETE",
+      headers: SB_HEADERS,
+    });
+    if (!res.ok) throw new Error("Delete failed");
+  },
+};
+
+// ── LOCAL STORAGE ─────────────────────────────────────────────────────────────
+// localStorage stores full items including images (base64)
+// Supabase stores metadata only (no images — too large)
+// On load: fetch metadata from Supabase, merge images from localStorage
+function loadLocalItems() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
   catch { return []; }
 }
-function saveWardrobe(items) {
+function saveLocalItems(items) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 function loadApiKey()   { return localStorage.getItem(API_KEY_STORE)  || ""; }
@@ -59,28 +101,29 @@ function saveApiKey(k)  { localStorage.setItem(API_KEY_STORE, k); }
 function loadRmbgKey()  { return localStorage.getItem(RMBG_KEY_STORE) || ""; }
 function saveRmbgKey(k) { localStorage.setItem(RMBG_KEY_STORE, k); }
 
+// Merge Supabase metadata with local images
+function mergeWithImages(sbItems, localItems) {
+  const imageMap = {};
+  localItems.forEach(it => { if (it.image) imageMap[it.id] = it.image; });
+  return sbItems.map(it => ({ ...it, image: imageMap[it.id] || null }));
+}
+
 // ── BACKGROUND REMOVAL ───────────────────────────────────────────────────────
 async function removeBackground(base64DataUrl, rmbgKey) {
-  // Strip the data:image/...;base64, prefix to get raw base64
   const base64 = base64DataUrl.split(",")[1];
-
   const formData = new FormData();
   formData.append("image_file_b64", base64);
   formData.append("size", "auto");
-  formData.append("bg_color", "ffffff"); // white background
-
+  formData.append("bg_color", "ffffff");
   const res = await fetch("https://api.remove.bg/v1.0/removebg", {
     method: "POST",
     headers: { "X-Api-Key": rmbgKey },
     body: formData,
   });
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.errors?.[0]?.title || `Remove.bg error ${res.status}`);
   }
-
-  // Response is raw PNG bytes — convert to base64 data URL
   const blob = await res.blob();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -173,7 +216,7 @@ function Icon({ path, size = 18 }) {
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [items,      setItems]      = useState(() => loadWardrobe());
+  const [items,      setItems]      = useState(() => loadLocalItems());
   const [view,       setView]       = useState("closet");
   const [filter,     setFilter]     = useState("All");
   const [outfits,    setOutfits]    = useState(null);
@@ -184,28 +227,70 @@ export default function App() {
   const [request,    setRequest]    = useState("");
   const [apiKey,     setApiKey]     = useState(() => loadApiKey());
   const [rmbgKey,    setRmbgKey]    = useState(() => loadRmbgKey());
-  const [saveFlash,  setSaveFlash]  = useState("");
+  const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const [editItem,   setEditItem]   = useState(null);
+  const syncTimer = useRef(null);
 
-  // Persist items to localStorage on every change
-  useEffect(() => { saveWardrobe(items); }, [items]);
-
-  const addItems = useCallback((newItems) => {
-    setItems(prev => {
-      const updated = [...prev, ...newItems];
-      return updated;
-    });
-    setSaveFlash("saved");
-    setTimeout(() => setSaveFlash(""), 2500);
+  // ── On mount: pull latest from Supabase, merge with local images
+  useEffect(() => {
+    setSyncStatus("syncing");
+    sb.fetchAll()
+      .then(sbItems => {
+        const local = loadLocalItems();
+        const merged = mergeWithImages(sbItems, local);
+        setItems(merged);
+        saveLocalItems(merged);
+        setSyncStatus("synced");
+      })
+      .catch(() => {
+        // Supabase unavailable — fall back to local silently
+        setSyncStatus("error");
+      });
   }, []);
 
-  const updateItem = useCallback((id, fields) => {
-    setItems(prev => prev.map(it => it.id === id ? {...it, ...fields} : it));
+  // ── Flash sync status briefly
+  const flashSync = (status) => {
+    setSyncStatus(status);
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => setSyncStatus("idle"), 3000);
+  };
+
+  // ── Persist to both localStorage and Supabase
+  const persistItems = useCallback((updated) => {
+    saveLocalItems(updated);
+    setItems(updated);
   }, []);
 
-  const deleteItem = useCallback((id) => {
-    setItems(prev => prev.filter(it => it.id !== id));
-  }, []);
+  const addItems = useCallback(async (newItems) => {
+    const updated = [...items, ...newItems];
+    persistItems(updated);
+    flashSync("syncing");
+    try {
+      await Promise.all(newItems.map(it => sb.upsert(it)));
+      flashSync("synced");
+    } catch { flashSync("error"); }
+  }, [items, persistItems]);
+
+  const updateItem = useCallback(async (id, fields) => {
+    const updated = items.map(it => it.id === id ? {...it, ...fields} : it);
+    persistItems(updated);
+    flashSync("syncing");
+    try {
+      const item = updated.find(it => it.id === id);
+      await sb.upsert(item);
+      flashSync("synced");
+    } catch { flashSync("error"); }
+  }, [items, persistItems]);
+
+  const deleteItem = useCallback(async (id) => {
+    const updated = items.filter(it => it.id !== id);
+    persistItems(updated);
+    flashSync("syncing");
+    try {
+      await sb.remove(id);
+      flashSync("synced");
+    } catch { flashSync("error"); }
+  }, [items, persistItems]);
 
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
@@ -222,6 +307,14 @@ export default function App() {
   };
 
   const filtered = filter === "All" ? items : items.filter(i => i.category === filter);
+
+  // Sync status indicator
+  const syncLabel = syncStatus === "syncing" ? "⟳ syncing"
+    : syncStatus === "synced"  ? "✓ saved"
+    : syncStatus === "error"   ? "⚠ offline"
+    : null;
+  const syncColor = syncStatus === "error" ? "#C0392B"
+    : syncStatus === "synced" ? "#3D7A4E" : "#C4A882";
 
   return (
     <div style={s.app}>
@@ -240,7 +333,9 @@ export default function App() {
           <div style={s.brand}>
             <span style={s.brandMark}>✦</span>
             <span style={s.brandName}>ATELIER</span>
-            {saveFlash && <span style={s.savedPill}>✓ saved</span>}
+            {syncLabel && (
+              <span style={{...s.savedPill, background: syncColor}}>{syncLabel}</span>
+            )}
           </div>
           <nav style={s.nav}>
             {[["closet","Closet"],["style","Looks"]].map(([v,label]) => (
