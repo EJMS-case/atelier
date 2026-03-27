@@ -252,32 +252,6 @@ Respond ONLY with valid JSON — no markdown, no backticks, nothing else:
   return JSON.parse(jsonMatch[0]);
 }
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-opus-4-5",
-      max_tokens: 2000,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
-  }
-
-  const data = await res.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
-}
-
 // ── AI ELEVATION ─────────────────────────────────────────────────────────────
 async function generateElevation(look, lookItems, apiKey) {
   const currentItems = lookItems.map(it =>
