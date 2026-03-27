@@ -48,7 +48,7 @@ const RMBG_KEY_STORE = "atelier-rmbg-key";
 
 // ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://ljcwsrfmojbjdveefoqa.supabase.co";
-const SUPABASE_KEY = "sb_publishable_E5Cx7TlcIzJv6245MwFbLQ_e6Sg_ZlL";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dzcmZtb2piamR2ZWVmb3FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0ODM1NDksImV4cCI6MjA5MDA1OTU0OX0.3LLv6JdwOvq_7woz3LUO8wnaoH8lSawiQJqk2Wmk4QE";
 const SB_HEADERS   = {
   "Content-Type": "application/json",
   "apikey": SUPABASE_KEY,
@@ -143,9 +143,20 @@ function shuffle(arr) {
   return a;
 }
 
+// ── MOOD ARCHETYPES — rotated randomly to force variety ──────────────────────
+const MOODS = [
+  { name: "Off-Duty Parisian", brief: "Looks like she just walked out of a gallery in the Marais. Effortless, slightly undone, always a surprising fabric or silhouette choice. Never trying." },
+  { name: "Quiet Power", brief: "Every piece is intentional and slightly intimidating. Monochromatic or deep tonal. Sleek, architectural, zero unnecessary detail. The kind of woman who doesn't raise her voice." },
+  { name: "Modern Minimalist", brief: "The Row aesthetic. Extreme restraint. One interesting texture or silhouette detail does all the work. Nothing decorative, everything intentional." },
+  { name: "Italian Edit", brief: "Slightly oversized blazer, fluid trouser, effortless bag. Looks expensive without looking like she tried. Relaxed tailoring, beautiful fabric, confident proportion." },
+  { name: "After Hours", brief: "Dinner-ready but not costume-y. Unexpected fabric (silk, satin, velvet) mixed with something grounded. Feels like a woman who has somewhere better to be." },
+  { name: "Editorial", brief: "The kind of outfit that would stop a street style photographer. One unexpected pairing — a juxtaposition of proportion, texture, or color that shouldn't work but does." },
+  { name: "Uptown Undone", brief: "Polished pieces worn casually — like she threw on the blazer last minute and it works perfectly. High-low tension. Never precious." },
+];
+
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
-async function generateOutfit(items, occasion, weather, request, apiKey) {
-  // Shuffle within each category so AI doesn't always grab the same first items
+async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = []) {
+  // Shuffle wardrobe so AI sees different items first each time
   const byCategory = {};
   items.forEach(it => {
     if (!byCategory[it.category]) byCategory[it.category] = [];
@@ -160,44 +171,86 @@ async function generateOutfit(items, occasion, weather, request, apiKey) {
     `ID:${it.id} | ${it.category} | ${it.name}${it.color ? ` | Color: ${it.color}` : ""}${it.notes ? ` | Notes: ${it.notes}` : ""}`
   ).join("\n");
 
+  // Pick 3 random distinct moods
+  const selectedMoods = shuffle(MOODS).slice(0, 3);
+
+  // Build list of previously used item combos to avoid repeats
+  const usedCombos = previousLooks.map(l => (l.items || []).sort().join(",")).join(" | ");
+
   const prompt = `${STYLE_PROFILE}
 
-You are building outfits for a client with a sophisticated, highly curated wardrobe. She is tired of obvious combinations — she wants looks that feel intentional, fashion-forward, and like a world-class stylist put them together. Surprise her.
+You are Celine — a Parisian-trained stylist with an obsessive eye for proportion, texture, and the unexpected combination. You have strong opinions. You find obvious outfits boring. You believe the most interesting looks come from juxtaposition: feminine with structured, oversized with sleek, luxurious with casual.
 
-CURRENT WARDROBE (shuffled for variety):
+Your client has a sophisticated wardrobe. She is tired of safe outfits. She wants to look genuinely chic and effortless — the kind of woman other women notice and study.
+
+WARDROBE (shuffled):
 ${inventory}
 
 OCCASION: ${occasion}
-WEATHER: ${weather || "NYC, current season — dress appropriately for temperature and practicality"}
-${request ? `SPECIFIC REQUEST: ${request}` : ""}
+WEATHER: ${weather || "NYC — late March, transitional, 50s°F, layer accordingly"}
+${request ? `CLIENT REQUEST: ${request}` : ""}
+${usedCombos ? `PREVIOUSLY SHOWN (DO NOT REPEAT THESE COMBINATIONS): ${usedCombos}` : ""}
 
-WORLD-CLASS STYLIST RULES:
-1. THINK UNEXPECTEDLY. Don't pair the obvious blazer with the obvious trouser. Look for non-obvious combinations — a feminine top with a structured skirt, a chunky knit with sleek trousers, a bold color paired with something unexpected.
-2. CONSIDER PROPORTION AND CONTRAST. Mix volumes intentionally — oversized top with slim bottom, fitted top with wide-leg trouser. Contrast textures: matte with shine, structured with fluid.
-3. COLOR STORY. Each look should have a deliberate color story — monochromatic depth, tonal layering, or one bold contrast. Never random.
-4. ALWAYS include: a top or dress, a bottom (unless dress), shoes, AND a bag. Every single look must have a bag.
-5. USE THE FULL WARDROBE. Each look must use different pieces — no repeating items across looks. Dig into the full inventory.
-6. JEWELRY: Only note truly distinctive choices. Never mention the diamond ring or wedding band. Only call out a specific piece if it genuinely completes the look.
-7. ACCESSORIES: Include a belt or scarf only when it genuinely makes the look better — explain exactly how to style it.
-8. Each look should feel like a different mood or aesthetic chapter — not just the same vibe in different colors.
+YOUR ASSIGNMENT: Create exactly 3 looks, each with a distinct mood. You have been assigned these moods — commit to each one fully:
 
-Respond ONLY with a valid JSON object — no markdown, no backticks, no text before or after:
+LOOK 1 MOOD: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
+LOOK 2 MOOD: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
+LOOK 3 MOOD: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
+
+CELINE'S NON-NEGOTIABLE RULES:
+1. FORBIDDEN: The obvious blazer-with-matching-trouser. The safe black-everything. The predictable. If a combination is the first thing anyone would think of, reject it and try again.
+2. REQUIRED: One unexpected pairing per look. A chunky knit with a silk slip skirt. A structured blazer with wide-leg trousers and a delicate top underneath. An oversized coat with a mini. Find the tension.
+3. PROPORTION IS EVERYTHING. Deliberately mix volumes. Never two fitted pieces or two oversized pieces without intention.
+4. TEXTURE CONTRAST. Matte + shine. Structured + fluid. Knit + silk. At least one textural conversation per look.
+5. EVERY look needs: top/dress + bottom (unless dress) + shoes + BAG. Non-negotiable.
+6. USE THE FULL WARDROBE. No item appears in more than one look. Dig deep — the interesting pieces are rarely the first ones listed.
+7. JEWELRY: Only mention if genuinely distinctive. Never mention rings or wedding band. Silence is better than generic.
+8. COLOR: Every look needs a deliberate color story — name it in the "why" field. Monochromatic depth, cool contrast, or tonal layering.
+
+Respond ONLY with valid JSON — no markdown, no backticks, nothing else:
 {
   "looks": [
     {
-      "name": "2-4 word evocative look name",
+      "name": "evocative 2-4 word name",
+      "mood": "${selectedMoods[0].name}",
       "occasion": "${occasion}",
-      "items": ["item-id-1", "item-id-2", "item-id-3", "item-id-4"],
-      "accessories": "specific styling instruction if applicable, otherwise null",
-      "jewelry": "specific jewelry only if distinctive, otherwise null",
-      "why": "one sentence on the intentional styling logic — what makes this combination interesting",
-      "colorNote": "the color story of this look",
+      "items": ["id1", "id2", "id3", "id4", "id5"],
+      "accessories": "specific styling instruction with HOW to wear it, or null",
+      "jewelry": "specific piece only if genuinely elevating, or null",
+      "why": "the intentional styling logic — what unexpected tension makes this interesting",
+      "colorNote": "the color story",
       "flag": null
     }
   ]
-}
+}`;
 
-Generate 3 distinct looks with genuinely different aesthetics. Only use IDs from the wardrobe above.`;
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-opus-4-5",
+      max_tokens: 2000,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.content?.map(b => b.text || "").join("") || "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No valid JSON in response");
+  return JSON.parse(jsonMatch[0]);
+}
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -340,6 +393,7 @@ export default function App() {
   const [view,       setView]       = useState("closet");
   const [filter,     setFilter]     = useState("All");
   const [outfits,    setOutfits]    = useState(null);
+  const [allLooks,   setAllLooks]   = useState([]); // history of all generated looks for anti-repeat
   const [styling,    setStyling]    = useState(false);
   const [styleErr,   setStyleErr]   = useState("");
   const [occasion,   setOccasion]   = useState("Business Casual");
@@ -351,40 +405,41 @@ export default function App() {
   const [editItem,   setEditItem]   = useState(null);
   const syncTimer = useRef(null);
 
-  // ── On mount: pull latest from Supabase, merge with local images
-  // SAFE MERGE: never overwrite local items with empty Supabase response
-  useEffect(() => {
-    setSyncStatus("syncing");
-    sb.fetchAll()
-      .then(sbItems => {
-        const local = loadLocalItems();
-        // If Supabase returns nothing but we have local items,
-        // keep local items and re-sync them up to Supabase
-        if ((!sbItems || sbItems.length === 0) && local.length > 0) {
-          setItems(local);
-          setSyncStatus("synced");
-          // Re-push local items to Supabase (recovery)
-          Promise.all(local.map(it => sb.upsert(it))).catch(() => {});
-          return;
-        }
-        // Normal case: merge Supabase metadata with local images
-        const merged = mergeWithImages(sbItems, local);
-        setItems(merged);
-        saveLocalItems(merged);
-        setSyncStatus("synced");
-      })
-      .catch(() => {
-        // Supabase unavailable — keep local items, show offline status
-        setSyncStatus("error");
-      });
-  }, []);
-
   // ── Flash sync status briefly
   const flashSync = (status) => {
     setSyncStatus(status);
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => setSyncStatus("idle"), 3000);
   };
+
+  // ── On mount: pull from Supabase, merge with local images
+  // SAFE: never overwrite local items with empty/failed Supabase response
+  useEffect(() => {
+    const local = loadLocalItems();
+    if (local.length > 0) setItems(local);
+
+    setSyncStatus("syncing");
+    sb.fetchAll()
+      .then(sbItems => {
+        const freshLocal = loadLocalItems();
+        if (!sbItems || sbItems.length === 0) {
+          if (freshLocal.length > 0) {
+            setItems(freshLocal);
+            Promise.all(freshLocal.map(it => sb.upsert(it)))
+              .then(() => flashSync("synced"))
+              .catch(() => flashSync("error"));
+          } else {
+            setSyncStatus("idle");
+          }
+          return;
+        }
+        const merged = mergeWithImages(sbItems, freshLocal);
+        setItems(merged);
+        saveLocalItems(merged);
+        flashSync("synced");
+      })
+      .catch(() => setSyncStatus("error"));
+  }, []);
 
   // ── Persist to both localStorage and Supabase
   const persistItems = useCallback((updated) => {
@@ -428,8 +483,10 @@ export default function App() {
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null);
     try {
-      const result = await generateOutfit(items, occasion, weather, request, apiKey);
+      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks);
       setOutfits(result.looks);
+      // Accumulate look history so next generation avoids repeats
+      setAllLooks(prev => [...prev, ...result.looks].slice(-12)); // keep last 12
       setView("style");
     } catch(e) {
       setStyleErr(e.message || "Styling failed — check your API key.");
@@ -1069,7 +1126,10 @@ function LookCard({ look, items, apiKey }) {
       <div style={s.lookHeader}>
         <div>
           <div style={s.lookName}>{look.name}</div>
-          <div style={s.lookOcc}>{look.occasion?.toUpperCase()}</div>
+          <div style={s.lookOcc}>
+            {look.occasion?.toUpperCase()}
+            {look.mood && <span style={s.lookMood}> · {look.mood.toUpperCase()}</span>}
+          </div>
         </div>
         <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
           {expanded ? "Hide" : "Details"}
@@ -1247,6 +1307,7 @@ const s = {
   },
   lookName: { fontSize:20, fontWeight:400, letterSpacing:"0.04em", marginBottom:3 },
   lookOcc:  { fontSize:9, letterSpacing:"0.2em", color:"#9A8E84" },
+  lookMood: { color:"#C4A882" },
   expandBtn: {
     background:"none", border:"1px solid #DDD5CC", borderRadius:20,
     padding:"4px 13px", fontSize:11, color:"#6B5E54", cursor:"pointer",
