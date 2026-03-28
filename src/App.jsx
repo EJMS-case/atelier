@@ -56,6 +56,29 @@ const SB_HEADERS   = {
   "Prefer": "return=representation",
 };
 
+// ── IMAGE COMPRESSION ────────────────────────────────────────────────────────
+// Compress base64 images to max 400px and JPEG 0.6 for Supabase storage (~20-40KB)
+function compressImage(dataUrl, maxDim = 400, quality = 0.6) {
+  return new Promise((resolve) => {
+    if (!dataUrl) { resolve(null); return; }
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else       { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => resolve(dataUrl); // fallback to original
+    img.src = dataUrl;
+  });
+}
+
 // ── SUPABASE HELPERS ──────────────────────────────────────────────────────────
 const sb = {
   async fetchAll() {
@@ -66,12 +89,13 @@ const sb = {
     return res.json();
   },
   async upsert(item) {
-    // Store image separately to avoid row size limits — keep in localStorage only
-    const { image, ...rest } = item;
+    // Compress image before storing in Supabase to keep row size small
+    const compressed = item.image ? await compressImage(item.image) : null;
+    const payload = { ...item, image: compressed };
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
       method: "POST",
       headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify(rest),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error("Upsert failed");
     return res.json();
@@ -101,11 +125,23 @@ function saveApiKey(k)  { localStorage.setItem(API_KEY_STORE, k); }
 function loadRmbgKey()  { return localStorage.getItem(RMBG_KEY_STORE) || ""; }
 function saveRmbgKey(k) { localStorage.setItem(RMBG_KEY_STORE, k); }
 
-// Merge Supabase metadata with local images
-function mergeWithImages(sbItems, localItems) {
-  const imageMap = {};
-  localItems.forEach(it => { if (it.image) imageMap[it.id] = it.image; });
-  return sbItems.map(it => ({ ...it, image: imageMap[it.id] || null }));
+// Two-way merge: Supabase is source of truth for metadata,
+// but preserves local-only items and prefers higher-quality local images
+function mergeItems(sbItems, localItems) {
+  const sbMap = {};
+  sbItems.forEach(it => { sbMap[it.id] = it; });
+  const localMap = {};
+  localItems.forEach(it => { localMap[it.id] = it; });
+
+  // Start with all Supabase items, overlaying local images when available
+  const merged = sbItems.map(it => ({
+    ...it,
+    image: localMap[it.id]?.image || it.image || null,
+  }));
+
+  // Add any local-only items (not yet in Supabase) — these need uploading
+  const localOnly = localItems.filter(it => !sbMap[it.id]);
+  return { merged: [...merged, ...localOnly], localOnly };
 }
 
 // ── BACKGROUND REMOVAL ───────────────────────────────────────────────────────
@@ -497,30 +533,58 @@ export default function App() {
     syncTimer.current = setTimeout(() => setSyncStatus("idle"), 3000);
   };
 
-  // ── On mount: pull from Supabase, merge with local images
-  // SAFE: never overwrite local items with empty/failed Supabase response
+  // ── On mount: pull from Supabase, two-way merge with local data
+  // Supabase is source of truth; local-only items get uploaded; images sync both ways
   useEffect(() => {
     const local = loadLocalItems();
-    if (local.length > 0) setItems(local);
+    if (local.length > 0) setItems(local); // show local immediately while fetching
 
     setSyncStatus("syncing");
     sb.fetchAll()
-      .then(sbItems => {
+      .then(async (sbItems) => {
         const freshLocal = loadLocalItems();
+
         if (!sbItems || sbItems.length === 0) {
+          // Supabase empty → push all local items up
           if (freshLocal.length > 0) {
             setItems(freshLocal);
-            Promise.all(freshLocal.map(it => sb.upsert(it)))
-              .then(() => flashSync("synced"))
-              .catch(() => flashSync("error"));
+            try {
+              await Promise.all(freshLocal.map(it => sb.upsert(it)));
+              flashSync("synced");
+            } catch { flashSync("error"); }
           } else {
             setSyncStatus("idle");
           }
           return;
         }
-        const merged = mergeWithImages(sbItems, freshLocal);
+
+        // Two-way merge
+        const { merged, localOnly } = mergeItems(sbItems, freshLocal);
         setItems(merged);
         saveLocalItems(merged);
+
+        // Upload local-only items to Supabase
+        if (localOnly.length > 0) {
+          try {
+            await Promise.all(localOnly.map(it => sb.upsert(it)));
+          } catch { /* non-critical — they'll sync next time */ }
+        }
+
+        // Migrate: push local images to Supabase for items that have local images but no Supabase image
+        const localMap = {};
+        freshLocal.forEach(l => { localMap[l.id] = l; });
+        const needsImageSync = sbItems.filter(sbi => {
+          const loc = localMap[sbi.id];
+          return loc?.image && !sbi.image;
+        });
+        if (needsImageSync.length > 0) {
+          try {
+            await Promise.all(needsImageSync.map(sbi =>
+              sb.upsert({ ...sbi, image: localMap[sbi.id].image })
+            ));
+          } catch { /* non-critical — images will sync eventually */ }
+        }
+
         flashSync("synced");
       })
       .catch(() => setSyncStatus("error"));
