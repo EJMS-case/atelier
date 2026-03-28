@@ -342,6 +342,116 @@ You MUST respond with ONLY this exact JSON structure — no text before or after
   if (!jsonMatch) throw new Error("No valid JSON in elevation response");
   return JSON.parse(jsonMatch[0]);
 }
+// ── OUTFIT LOGS FETCH ─────────────────────────────────────────────────────────
+const sbLogs = {
+  async fetchAll() {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=*&order=worn_date.desc`, {
+      headers: SB_HEADERS
+    });
+    if (!res.ok) return [];
+    return res.json();
+  },
+};
+
+// ── STYLE INSIGHTS ANALYSIS ──────────────────────────────────────────────────
+function analyzeWardrobe(items, outfitLogs) {
+  const results = {};
+
+  // ── Category Gaps
+  const coreCats = ["Tops", "Bottoms", "Dresses", "Shoes"];
+  const catCounts = {};
+  items.forEach(it => { catCounts[it.category] = (catCounts[it.category] || 0) + 1; });
+  const maxCore = Math.max(...coreCats.map(c => catCounts[c] || 0), 1);
+  results.categoryGaps = coreCats
+    .filter(c => (catCounts[c] || 0) < 3 && (catCounts[c] || 0) < maxCore * 0.4)
+    .map(c => ({ category: c, count: catCounts[c] || 0, maxCategory: coreCats.reduce((a, b) => (catCounts[a] || 0) > (catCounts[b] || 0) ? a : b), maxCount: maxCore }));
+  results.catCounts = catCounts;
+
+  // ── Underutilized Items (no last_worn or > 30 days ago)
+  const now = Date.now();
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  results.underutilized = items.filter(it => {
+    if (it.is_active_rotation === false) return false;
+    if (!it.last_worn) return true;
+    return (now - new Date(it.last_worn).getTime()) > thirtyDays;
+  }).slice(0, 8);
+
+  // ── Color Pair Frequency (from outfit_logs)
+  const pairMap = {};
+  outfitLogs.forEach(log => {
+    const ids = log.garment_ids || [];
+    const logItems = ids.map(id => items.find(it => it.id === id)).filter(Boolean);
+    const colors = [...new Set(logItems.map(it => it.color_family || it.color).filter(Boolean))];
+    for (let i = 0; i < colors.length; i++) {
+      for (let j = i + 1; j < colors.length; j++) {
+        const key = [colors[i], colors[j]].sort().join(" + ");
+        pairMap[key] = (pairMap[key] || 0) + 1;
+      }
+    }
+  });
+  results.colorPairs = Object.entries(pairMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([pair, count]) => ({ pair, count }));
+
+  // ── Signature Patterns (color pairs 3+ times, items worn 5+ times)
+  results.signaturePairs = results.colorPairs.filter(p => p.count >= 3);
+  const wearCounts = {};
+  outfitLogs.forEach(log => {
+    (log.garment_ids || []).forEach(id => { wearCounts[id] = (wearCounts[id] || 0) + 1; });
+  });
+  results.wardrobeAnchors = Object.entries(wearCounts)
+    .filter(([, c]) => c >= 5)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, count]) => ({ item: items.find(it => it.id === id), count }))
+    .filter(a => a.item);
+
+  results.totalOutfits = outfitLogs.length;
+  return results;
+}
+
+// ── AI MONTHLY STYLE PROFILE ─────────────────────────────────────────────────
+async function generateStyleProfile(items, outfitLogs, analysis, apiKey) {
+  const month = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const catDist = Object.entries(analysis.catCounts).map(([c, n]) => `${c}: ${n}`).join(", ");
+  const colorPairs = analysis.colorPairs.map(p => `${p.pair} (${p.count}x)`).join(", ") || "none yet";
+  const anchors = analysis.wardrobeAnchors.map(a => `${a.item.name} (${a.count}x)`).join(", ") || "none yet";
+  const underutil = analysis.underutilized.slice(0, 3).map(it => it.name).join(", ") || "none";
+  const recentLogs = outfitLogs.slice(0, 10).map(l => {
+    const logItems = (l.garment_ids || []).map(id => items.find(it => it.id === id)).filter(Boolean);
+    return `${l.worn_date}: ${logItems.map(it => `${it.category}:${it.name}`).join(", ")} (${l.occasion || "casual"})`;
+  }).join("\n");
+
+  const prompt = `Write a 2-3 sentence monthly style profile for this wardrobe user based on their outfit data. Tone: editorial, personal, observational — like a stylist describing their client's current aesthetic. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized category or piece worth exploring.
+
+Data for ${month}:
+Category distribution: ${catDist}
+Top color pairs: ${colorPairs}
+Wardrobe anchors: ${anchors}
+Underutilized pieces: ${underutil}
+Recent outfits:
+${recentLogs || "No outfit logs yet — base profile on wardrobe composition only."}
+Total outfits this period: ${analysis.totalOutfits}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 300,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  if (!res.ok) throw new Error("Profile generation failed");
+  const data = await res.json();
+  return data.content?.map(b => b.text || "").join("") || "";
+}
+
 const icons = {
   plus:    "M12 4v16m-8-8h16",
   trash:   "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
@@ -350,6 +460,7 @@ const icons = {
   settings:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 0v3m0-12V3m9 9h-3M6 12H3m15.364-6.364l-2.121 2.121M8.757 15.243l-2.121 2.121m12.728 0l-2.121-2.121M8.757 8.757L6.636 6.636",
   edit:    "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
   elevate: "M5 15l7-7 7 7",
+  insights:"M3 3v18h18M7 16V9m4 7v-4m4 4V7m4 9v-2",
 };
 
 function Icon({ path, size = 18 }) {
@@ -482,6 +593,7 @@ export default function App() {
     <div style={s.app}>
       {/* GLOBAL KEYFRAMES */}
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
@@ -500,7 +612,7 @@ export default function App() {
             )}
           </div>
           <nav style={s.nav}>
-            {[["closet","Closet"],["style","Looks"]].map(([v,label]) => (
+            {[["closet","Closet"],["style","Looks"],["insights","Insights"]].map(([v,label]) => (
               <button key={v} onClick={() => setView(v)}
                 style={{...s.navBtn, ...(view===v ? s.navActive : {})}}>
                 {label}
@@ -611,6 +723,11 @@ export default function App() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── INSIGHTS ── */}
+      {view === "insights" && (
+        <StyleInsightsView items={items} apiKey={apiKey} onBack={() => setView("closet")}/>
       )}
 
       {/* ── SETTINGS ── */}
@@ -1173,6 +1290,247 @@ function LookCard({ look, items, apiKey }) {
   );
 }
 
+// ── STYLE INSIGHTS VIEW ───────────────────────────────────────────────────
+function StyleInsightsView({ items, apiKey, onBack }) {
+  const [loading, setLoading] = useState(true);
+  const [analysis, setAnalysis] = useState(null);
+  const [outfitLogs, setOutfitLogs] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileErr, setProfileErr] = useState("");
+  const [dismissed, setDismissed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("atelier-insights-dismissed") || "[]"); }
+    catch { return []; }
+  });
+
+  const dismiss = (key) => {
+    const next = [...dismissed, key];
+    setDismissed(next);
+    localStorage.setItem("atelier-insights-dismissed", JSON.stringify(next));
+  };
+  const isDismissed = (key) => dismissed.includes(key);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const logs = await sbLogs.fetchAll().catch(() => []);
+      if (cancelled) return;
+      setOutfitLogs(logs);
+      const result = analyzeWardrobe(items, logs);
+      setAnalysis(result);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [items]);
+
+  const handleGenerateProfile = async () => {
+    if (!apiKey) { setProfileErr("Add your Anthropic API key in Settings."); return; }
+    setProfileLoading(true); setProfileErr("");
+    try {
+      const text = await generateStyleProfile(items, outfitLogs, analysis, apiKey);
+      setProfile(text);
+    } catch (e) {
+      setProfileErr(e.message || "Failed to generate profile.");
+    } finally { setProfileLoading(false); }
+  };
+
+  if (loading) {
+    return (
+      <div style={s.page}>
+        <div style={s.pageHeader}>
+          <button style={s.backBtn} onClick={onBack}>← Back</button>
+          <h2 style={s.pageTitle}>Style Intelligence</h2>
+        </div>
+        <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Analyzing your wardrobe…</p></div>
+      </div>
+    );
+  }
+
+  const hasData = items.length > 0;
+  const hasLogs = outfitLogs.length > 0;
+
+  if (!hasData) {
+    return (
+      <div style={s.page}>
+        <div style={s.pageHeader}>
+          <button style={s.backBtn} onClick={onBack}>← Back</button>
+          <h2 style={s.pageTitle}>Style Intelligence</h2>
+        </div>
+        <div style={s.empty}>
+          <div style={{fontSize:42,color:"#DDD5CC",marginBottom:8}}>✦</div>
+          <p style={{...s.emptyText,maxWidth:280}}>Wear more outfits to unlock your style intelligence</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={s.page}>
+      <div style={s.pageHeader}>
+        <button style={s.backBtn} onClick={onBack}>← Back</button>
+        <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Style Intelligence</h2>
+      </div>
+
+      {/* ── Monthly Style Profile ── */}
+      {!isDismissed("profile") && (
+        <div style={si.profileCard}>
+          <div style={si.cardDismiss} onClick={() => dismiss("profile")}>✕</div>
+          <div style={si.sectionLabel}>MONTHLY PROFILE</div>
+          {profile ? (
+            <div style={si.profileText}>{profile}</div>
+          ) : (
+            <p style={si.profilePlaceholder}>
+              {apiKey ? "Generate an AI-written style profile based on your wardrobe data." : "Add your Anthropic API key in Settings to unlock AI style profiles."}
+            </p>
+          )}
+          {profileErr && <p style={s.err}>{profileErr}</p>}
+          <button style={si.profileBtn} onClick={handleGenerateProfile} disabled={profileLoading || !apiKey}>
+            {profileLoading ? <><span style={s.spinnerSm}/> Writing…</> : profile ? "✦ Regenerate" : "✦ Generate Profile"}
+          </button>
+        </div>
+      )}
+
+      {/* ── Signature Patterns ── */}
+      {hasLogs && analysis.signaturePairs.length > 0 && !isDismissed("signatures") && (
+        <div style={si.card}>
+          <div style={si.cardDismiss} onClick={() => dismiss("signatures")}>✕</div>
+          <div style={si.sectionHeader}>Signature Patterns</div>
+          {analysis.signaturePairs.map((p, i) => (
+            <div key={i} style={si.insightRow}>
+              <div style={si.swatchPair}>
+                <span style={{...si.swatchDot, background:colorHex(p.pair.split(" + ")[0])}}/>
+                <span style={{...si.swatchDot, background:colorHex(p.pair.split(" + ")[1])}}/>
+              </div>
+              <div style={si.insightText}>
+                You've worn <strong>{p.pair}</strong> together {p.count} times — it's clearly a signature.
+              </div>
+            </div>
+          ))}
+          {analysis.wardrobeAnchors.length > 0 && (
+            <>
+              <div style={si.divider}/>
+              <div style={{...si.sectionLabel,marginBottom:8}}>WARDROBE ANCHORS</div>
+              {analysis.wardrobeAnchors.map((a, i) => (
+                <div key={i} style={si.insightRow}>
+                  <div style={si.anchorThumb}>
+                    {a.item.image ? <img src={a.item.image} alt="" style={si.anchorImg}/> : <span style={{color:"#C8BFB4"}}>{a.item.category?.[0]}</span>}
+                  </div>
+                  <div style={si.insightText}>
+                    <strong>{a.item.name}</strong> — worn {a.count} times. This piece is a wardrobe anchor.
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Category Gaps ── */}
+      {!isDismissed("gaps") && (
+        <div style={si.card}>
+          <div style={si.cardDismiss} onClick={() => dismiss("gaps")}>✕</div>
+          <div style={si.sectionHeader}>Category Breakdown</div>
+          <div style={si.barContainer}>
+            {CATEGORIES.map(cat => {
+              const count = analysis.catCounts[cat] || 0;
+              const max = Math.max(...Object.values(analysis.catCounts), 1);
+              return (
+                <div key={cat} style={si.barRow}>
+                  <div style={si.barLabel}>{cat}</div>
+                  <div style={si.barTrack}>
+                    <div style={{...si.barFill, width: `${Math.max((count / max) * 100, 2)}%`}}/>
+                  </div>
+                  <div style={si.barCount}>{count}</div>
+                </div>
+              );
+            })}
+          </div>
+          {analysis.categoryGaps.length > 0 && (
+            <>
+              <div style={si.divider}/>
+              {analysis.categoryGaps.map((g, i) => (
+                <div key={i} style={si.gapAlert}>
+                  You have {analysis.catCounts[g.maxCategory] || 0} {g.maxCategory.toLowerCase()} but only {g.count} {g.count === 1 ? {Tops:"top",Bottoms:"bottom",Dresses:"dress",Shoes:"shoe"}[g.category] || g.category.toLowerCase() : g.category.toLowerCase()} — consider filling this gap.
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Underutilized Items ── */}
+      {analysis.underutilized.length > 0 && !isDismissed("underutilized") && (
+        <div style={si.card}>
+          <div style={si.cardDismiss} onClick={() => dismiss("underutilized")}>✕</div>
+          <div style={si.sectionHeader}>Underutilized Pieces</div>
+          <p style={si.subtleNote}>Active items you haven't worn in 30+ days</p>
+          <div style={si.underutilGrid}>
+            {analysis.underutilized.map(item => {
+              const days = item.last_worn ? Math.floor((Date.now() - new Date(item.last_worn).getTime()) / 86400000) : null;
+              return (
+                <div key={item.id} style={si.underutilCard}>
+                  <div style={si.underutilImg}>
+                    {item.image ? <img src={item.image} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{color:"#C8BFB4",fontSize:22}}>{item.category?.[0]}</span>}
+                  </div>
+                  <div style={si.underutilMeta}>
+                    <div style={{fontSize:10,letterSpacing:"0.1em",color:"#9A8E84"}}>{item.category}</div>
+                    <div style={{fontSize:12,marginTop:2}}>{item.name}</div>
+                    <div style={{fontSize:10,color:"#C4A882",marginTop:3}}>{days ? `${days} days ago` : "Never worn"}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Color Pair Frequency ── */}
+      {hasLogs && analysis.colorPairs.length > 0 && !isDismissed("colorpairs") && (
+        <div style={si.card}>
+          <div style={si.cardDismiss} onClick={() => dismiss("colorpairs")}>✕</div>
+          <div style={si.sectionHeader}>Color Pair Frequency</div>
+          <div style={si.pairGrid}>
+            {analysis.colorPairs.map((p, i) => {
+              const [a, b] = p.pair.split(" + ");
+              return (
+                <div key={i} style={si.pairChip}>
+                  <span style={{...si.swatchDot, background:colorHex(a), width:18, height:18}}/>
+                  <span style={{fontSize:10,color:"#9A8E84"}}>+</span>
+                  <span style={{...si.swatchDot, background:colorHex(b), width:18, height:18}}/>
+                  <span style={{fontSize:11,marginLeft:4}}>{p.count}×</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── No Logs Yet ── */}
+      {!hasLogs && (
+        <div style={si.card}>
+          <div style={{...si.sectionLabel,marginBottom:8}}>OUTFIT DATA</div>
+          <p style={si.subtleNote}>Log outfits from the Looks tab to unlock signature patterns, color pair analysis, and AI style profiles based on what you actually wear.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Approximate color hex for swatch rendering
+function colorHex(name) {
+  const map = {
+    "Black":"#1C1814","Navy":"#1B2A4A","Burgundy":"#722F37","White":"#F5F1EC",
+    "Cream":"#F5E6C8","Camel":"#C4A882","Brown":"#6B4226","Espresso":"#3C2415",
+    "Red":"#B22234","Cool Red":"#C41E3A","Gray":"#8B8680","Charcoal":"#36454F",
+    "Blush":"#DE98A0","Pink":"#E8A0BF","Teal":"#2A6B6B","Cobalt":"#0047AB",
+    "Sapphire":"#0F52BA","Emerald":"#046307","Lavender":"#B4A7D6","Ivory":"#FFFFF0",
+    "Olive":"#556B2F","Taupe":"#8B7D6B","Forest":"#014421","Pewter":"#8E9093",
+  };
+  if (!name) return "#C8BFB4";
+  const key = Object.keys(map).find(k => name.toLowerCase().includes(k.toLowerCase()));
+  return key ? map[key] : "#C8BFB4";
+}
+
 // ── STYLES ────────────────────────────────────────────────────────────────────
 const s = {
   app: { minHeight:"100vh", background:"#F5F1EC", fontFamily:"Georgia,'Times New Roman',serif", color:"#1C1814" },
@@ -1401,4 +1759,103 @@ const s = {
   elevSugSwap:   { fontSize:10, color:"#9A8E84", fontStyle:"italic", marginBottom:4 },
   elevSugWhy:    { fontSize:12, color:"#4A3E36", lineHeight:1.5, marginBottom:4 },
   elevSugColor:  { fontSize:10, color:"#3D7A4E", letterSpacing:"0.04em" },
+};
+
+// ── STYLE INSIGHTS STYLES ────────────────────────────────────────────────────
+const si = {
+  card: {
+    background:"#fff", borderRadius:10, border:"1px solid #E8E0D8",
+    padding:"22px 24px", marginBottom:20, position:"relative",
+    animation:"fadeIn 0.35s ease",
+  },
+  profileCard: {
+    background:"linear-gradient(135deg, #1C1814 0%, #2A2420 100%)",
+    borderRadius:12, padding:"26px 26px 22px", marginBottom:20,
+    position:"relative", color:"#F5F1EC",
+    animation:"fadeIn 0.4s ease",
+  },
+  cardDismiss: {
+    position:"absolute", top:12, right:14, cursor:"pointer",
+    color:"#9A8E84", fontSize:14, lineHeight:1, padding:4,
+    opacity:0.5, transition:"opacity 0.2s",
+  },
+  sectionLabel: {
+    fontSize:9, letterSpacing:"0.22em", color:"#9A8E84",
+    marginBottom:14, fontFamily:"sans-serif",
+  },
+  sectionHeader: {
+    fontSize:18, fontFamily:"'DM Serif Display',Georgia,serif",
+    fontWeight:400, letterSpacing:"0.02em", marginBottom:16, color:"#1C1814",
+  },
+  profileText: {
+    fontSize:15, lineHeight:1.7, fontStyle:"italic",
+    color:"#E8E0D8", marginBottom:16, fontFamily:"Georgia,serif",
+  },
+  profilePlaceholder: {
+    fontSize:13, color:"#6B5E54", lineHeight:1.6, marginBottom:16,
+  },
+  profileBtn: {
+    background:"none", border:"1.5px solid rgba(196,168,130,0.5)",
+    borderRadius:4, padding:"9px 18px", fontSize:11,
+    letterSpacing:"0.12em", color:"#C4A882", cursor:"pointer",
+    display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+    fontFamily:"Georgia,serif", width:"100%",
+  },
+  divider: {
+    height:1, background:"#F0E8E0", margin:"16px 0",
+  },
+  insightRow: {
+    display:"flex", gap:12, alignItems:"center",
+    padding:"8px 0", borderBottom:"1px solid #F8F5F0",
+  },
+  insightText: {
+    fontSize:13, color:"#4A3E36", lineHeight:1.5, flex:1,
+  },
+  swatchPair: {
+    display:"flex", gap:3, flexShrink:0,
+  },
+  swatchDot: {
+    width:14, height:14, borderRadius:"50%",
+    border:"1px solid rgba(0,0,0,0.08)", display:"inline-block",
+  },
+  anchorThumb: {
+    width:36, height:36, borderRadius:6, overflow:"hidden",
+    background:"#F5F1EC", flexShrink:0,
+    display:"flex", alignItems:"center", justifyContent:"center",
+  },
+  anchorImg: { width:"100%", height:"100%", objectFit:"contain" },
+  barContainer: { display:"flex", flexDirection:"column", gap:6 },
+  barRow: { display:"flex", alignItems:"center", gap:10 },
+  barLabel: { width:80, fontSize:11, color:"#6B5E54", textAlign:"right", flexShrink:0 },
+  barTrack: { flex:1, height:6, background:"#F0EBE4", borderRadius:3, overflow:"hidden" },
+  barFill: { height:"100%", background:"#1C1814", borderRadius:3, transition:"width 0.6s ease" },
+  barCount: { width:24, fontSize:11, color:"#9A8E84", textAlign:"right" },
+  gapAlert: {
+    fontSize:13, color:"#8B6914", lineHeight:1.6,
+    padding:"10px 14px", background:"#FFF8EC",
+    borderRadius:6, border:"1px solid #E8D5A0", marginTop:8,
+  },
+  subtleNote: {
+    fontSize:12, color:"#9A8E84", lineHeight:1.5, marginBottom:14, marginTop:0,
+  },
+  underutilGrid: {
+    display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10,
+  },
+  underutilCard: {
+    background:"#FAFAF8", borderRadius:8, border:"1px solid #F0E8E0",
+    overflow:"hidden",
+  },
+  underutilImg: {
+    height:100, background:"#F5F1EC",
+    display:"flex", alignItems:"center", justifyContent:"center",
+  },
+  underutilMeta: { padding:"8px 10px 10px" },
+  pairGrid: {
+    display:"flex", flexWrap:"wrap", gap:10,
+  },
+  pairChip: {
+    display:"flex", alignItems:"center", gap:5,
+    background:"#FAFAF8", borderRadius:20,
+    padding:"6px 14px", border:"1px solid #F0E8E0",
+  },
 };
