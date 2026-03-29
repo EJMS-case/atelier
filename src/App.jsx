@@ -2281,16 +2281,20 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
 function buildCollageLayout(items, suggestionSlots = []) {
   const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
 
-  // Assign each item a visual role based on category/subcategory
+  // Bag detection: subcategory may be L3 ("Shoulder","Tote") instead of L2 ("Bags")
+  // so also check name for common bag keywords
+  const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote"]);
+  const BAG_NAMES = /\b(bag|purse|tote|clutch|handbag|satchel|hobo)\b/i;
+
   const getRole = (item) => {
     const cat = item.category || "";
     const sub = item.subcategory || "";
+    const name = item.name || "";
     if (cat === "Outerwear") return "outer";
     if (cat === "Bottoms") return "bottom";
     if (cat === "Shoes") return "shoes";
-    if (cat === "Accessories" && sub === "Bags") return "bag";
+    if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_NAMES.test(name))) return "bag";
     if (cat === "Accessories") return "accessory";
-    // Everything else (Tops, Knits, Dresses, Jumpsuits, Sets, Occasionwear, Loungewear, Athleisure)
     return "clothing";
   };
 
@@ -2298,49 +2302,56 @@ function buildCollageLayout(items, suggestionSlots = []) {
   all.forEach(item => { const r = getRole(item); if (groups[r]) groups[r].push(item); });
 
   const slots = [];
-  const hasOuter   = groups.outer.length > 0;
-  const hasBottom  = groups.bottom.length > 0;
+  const hasOuter  = groups.outer.length > 0;
+  const hasBag    = groups.bag.length > 0;
+  const hasShoes  = groups.shoes.length > 0;
 
-  // ── Outerwear: large, back-left, tilted left
+  // Canvas zones (all percentages of 100×100 canvas):
+  //  Clothing: upper-left/center   Outer: back-left large
+  //  Bottom: behind clothing, legs visible below
+  //  Shoes: bottom-left            Bag: bottom-right
+  //  Accessories: small, top-right corner
+
+  // ── Outerwear: back-left, large, angled
   groups.outer.forEach((item, i) => {
-    slots.push({ ...item, x: 0, y: 2, w: 48, h: 68, rotate: -3, zIndex: 2 + i });
+    slots.push({ ...item, x: 0, y: 1, w: 50, h: 70, rotate: -2.5, zIndex: 2 });
   });
 
-  // ── Main clothing (tops, dresses, etc.): center-upper, large
-  const cBaseX = hasOuter ? 26 : 10;
+  // ── Main clothing: center-upper; shift right if outerwear present
+  const cX = hasOuter ? 30 : 6;
   groups.clothing.forEach((item, i) => {
     slots.push({ ...item,
-      x: cBaseX + i * 5,
-      y: 2 + i * 2,
-      w: 50,
-      h: 66,
+      x: cX + i * 4, y: 2 + i * 2,
+      w: 48, h: 62,
       rotate: i % 2 === 0 ? 1.5 : -1.5,
       zIndex: 4 + i,
     });
   });
 
-  // ── Bottoms: overlap below clothing
-  const bBaseX = hasOuter ? 24 : 8;
+  // ── Bottoms: start lower so legs show beneath clothing
+  // Offset x so right pant-leg peeks out; low zIndex so top sits on top
+  const bX = hasOuter ? 22 : 16;
   groups.bottom.forEach((item, i) => {
-    slots.push({ ...item, x: bBaseX, y: 42, w: 48, h: 52, rotate: -0.5, zIndex: 3 + i });
+    slots.push({ ...item, x: bX, y: 30, w: 52, h: 68, rotate: 0.5, zIndex: 2 });
   });
 
-  // ── Shoes: bottom-left
+  // ── Shoes: bottom-left; squeeze up if no bag so they don't cut off
+  const shoesY = hasBag ? 72 : 74;
   groups.shoes.forEach((item, i) => {
-    slots.push({ ...item, x: 2 + i * 4, y: 71 - i * 3, w: 38, h: 27, rotate: -2 + i, zIndex: 9 + i });
+    slots.push({ ...item, x: 2, y: shoesY, w: 42, h: 26, rotate: -1.5, zIndex: 9 });
   });
 
   // ── Bag: bottom-right
+  const bagX = hasShoes ? 54 : 30;
   groups.bag.forEach((item, i) => {
-    slots.push({ ...item, x: 56 - i * 4, y: 66, w: 40, h: 32, rotate: 2 - i, zIndex: 8 + i });
+    slots.push({ ...item, x: bagX, y: 68, w: 42, h: 30, rotate: 2, zIndex: 8 });
   });
 
-  // ── Accessories (jewelry, scarves, etc.): small, top-right corner
+  // ── Accessories: small, stacked top-right corner
   const accPositions = [
-    { x: 75, y: 2,  w: 20, h: 20, rotate:  5 },
-    { x: 71, y: 24, w: 17, h: 17, rotate: -3 },
-    { x: 77, y: 44, w: 15, h: 15, rotate:  2 },
-    { x: 70, y: 62, w: 16, h: 16, rotate: -2 },
+    { x: 76, y: 2,  w: 20, h: 20, rotate:  5 },
+    { x: 72, y: 24, w: 17, h: 17, rotate: -3 },
+    { x: 78, y: 43, w: 15, h: 15, rotate:  2 },
   ];
   groups.accessory.forEach((item, i) => {
     if (i >= accPositions.length) return;
