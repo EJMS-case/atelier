@@ -288,7 +288,7 @@ const sb = {
 };
 
 // ── IMAGE COMPRESSION ────────────────────────────────────────────────────────
-function compressImage(dataUrl, maxDim = 400, quality = 0.6) {
+function compressImage(dataUrl, maxDim = 400, quality = 0.6, transparent = false) {
   return new Promise((resolve) => {
     if (!dataUrl) { resolve(null); return; }
     const img = new Image();
@@ -302,7 +302,7 @@ function compressImage(dataUrl, maxDim = 400, quality = 0.6) {
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", quality));
+      resolve(transparent ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
@@ -352,7 +352,7 @@ async function removeBackground(base64DataUrl, rmbgKey) {
   const formData = new FormData();
   formData.append("image_file_b64", base64);
   formData.append("size", "auto");
-  formData.append("bg_color", "ffffff");
+  formData.append("format", "png");
   const res = await fetch("https://api.remove.bg/v1.0/removebg", {
     method: "POST",
     headers: { "X-Api-Key": rmbgKey },
@@ -451,6 +451,8 @@ NON-NEGOTIABLE RULES:
 3. Mix volumes deliberately. Never two fitted or two oversized without reason.
 4. Texture contrast in every look: matte + shine, structured + fluid, knit + silk.
 5. MANDATORY: Every look MUST include shoes AND a bag from the wardrobe. No exceptions. A look without shoes or a bag is incomplete.
+6. NEVER combine a Dresses, Jumpsuits, or Sets item with a separate Bottoms item (pants/trousers/skirts). A dress or jumpsuit is already a complete garment.
+7. Color story must be internally consistent. Do not mix warm and cool tones in the same look unless it's an intentional approved exception (warm browns/reds).
 6. No item in more than one look. Use the full wardrobe — the best pieces aren't always listed first.
 7. If a Knits piece is included and a Wrist Cuff accessory is available, consider it as a finishing detail.
 8. Jewelry: only if genuinely distinctive. Never mention diamond rings or wedding band.
@@ -518,8 +520,8 @@ ${currentItems}
 Your task: Suggest exactly 3 specific pieces to purchase that would meaningfully elevate this look. Be specific, shoppable, and direct.
 
 ELEVATION RULES:
-- Suggest pieces from brands she loves: The Row, Totême, Loro Piana, Brunello Cucinelli, Max Mara, Theory, COS, A.P.C., Khaite, Proenza Schouler, Vince, St. John, Zimmermann, Ganni
-- Include one investment piece ($500+), one mid-range ($150–$500), one accessible ($50–$150)
+- Suggest pieces from these brands: Totême, Max Mara, Theory, COS, A.P.C., Khaite, Vince, Club Monaco, Banana Republic, Reformation, Sezane, Mango, & Other Stories, Arket, Massimo Dutti, Ganni, Zimmermann
+- Include one splurge piece ($150–$350), one mid-range ($75–$175), one accessible ($30–$100)
 - Every piece must work with her Dark Winter palette (cool, deep, jewel tones — no warm/muted)
 - Mix adds and swaps — don't only suggest additions
 - Be specific: "Totême double-breasted wool blazer in navy" not just "a navy blazer"
@@ -1763,7 +1765,8 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           setProcessing(p => ({...p, [id]: "removing"}));
           try {
             const cleaned = await removeBackground(rawImage, rmbgKey);
-            setQueue(q => q.map(i => i.id === id ? {...i, image: cleaned} : i));
+            const compressed = await compressImage(cleaned, 600, 0.9, true);
+            setQueue(q => q.map(i => i.id === id ? {...i, image: compressed} : i));
             setProcessing(p => ({...p, [id]: "done"}));
           } catch(err) {
             console.error("BG removal failed:", err);
@@ -2241,10 +2244,7 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
           height: `${slot.h}%`,
           transform: `rotate(${slot.rotate}deg)`,
           zIndex: slot.zIndex,
-          borderRadius: 4,
-          overflow: "hidden",
-          boxShadow: "0 4px 16px rgba(28,24,20,0.12), 0 1px 4px rgba(28,24,20,0.08)",
-          background: "#fff",
+          filter: "drop-shadow(0 4px 14px rgba(28,24,20,0.18))",
         }}>
           {slot.isSuggestion ? (
             <div style={s.elevSlotPh}>
@@ -2255,7 +2255,7 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
             </div>
           ) : slot.image ? (
             <img src={slot.image} alt={slot.name}
-              style={{width:"100%", height:"100%", objectFit:"contain", display:"block", background:"#fff"}}/>
+              style={{width:"100%", height:"100%", objectFit:"contain", display:"block"}}/>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
               <span style={s.collageCat}>{slot.category?.[0]}</span>
@@ -2473,6 +2473,11 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
                 {e.swapTarget && <div style={s.elevSugSwap}>Replaces: {e.swapTarget}</div>}
                 <div style={s.elevSugWhy}>{e.why}</div>
                 <div style={s.elevSugColor}>✓ {e.colorNote}</div>
+                <a href={`https://www.google.com/search?q=${encodeURIComponent(e.item)}`}
+                  target="_blank" rel="noreferrer"
+                  style={{display:"inline-block",marginTop:8,fontSize:11,color:"#1C1814",fontWeight:500,letterSpacing:"0.05em",textDecoration:"none",borderBottom:"1px solid #1C1814"}}>
+                  Search this item →
+                </a>
               </div>
             ))}
           </div>
