@@ -32,6 +32,22 @@ CRITICAL RULE: Only ever suggest items that exist in the client's wardrobe inven
 LOCATION: NYC. Always consider current season and weather when styling.
 `;
 
+// ── STYLING PRINCIPLES — injected into outfit + shopping prompts ──────────
+const STYLING_PRINCIPLES = `
+STYLING PRINCIPLES (apply to every recommendation):
+1. Proportion first — every outfit starts with silhouette tension (fitted + voluminous, cropped + wide, slim + oversized)
+2. One hero piece per look — the most interesting item leads, everything else supports
+3. Color math — max 3 colors per look, always with intentional relationship (monochromatic / tonal / complementary pair)
+4. Texture must earn its place — no two items in same fabric family unless it's a tonal monochromatic moment
+5. The edit — what you remove is as important as what you include. Fewer pieces, more intention.
+6. Footwear responds to the hem and the mood, not just the color story
+7. The bag is the punctuation mark — it finishes the look, never repeats it
+8. Outerwear is part of the look in cooler months — never an afterthought
+9. Never match when you can coordinate — analogous always beats identical
+10. Jewelry should feel intentional — if it's there, the look feels unfinished without it
+11. Occasion is a starting point, not a ceiling — style across and above
+`;
+
 // ── STYLE PREFERENCES — injected into every generation prompt ──────────────
 const STYLE_PREFS = {
   colorPairs: [
@@ -249,6 +265,26 @@ const sb = {
     });
     if (!res.ok) throw new Error("Update last_worn failed");
   },
+  // ── User Settings (API key sync) ──
+  async getSettings() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.api_keys&select=value`, {
+        headers: SB_HEADERS,
+      });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+    } catch { return null; }
+  },
+  async saveSettings(settings) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "api_keys", value: JSON.stringify(settings) }),
+      });
+    } catch { /* fallback to localStorage only */ }
+  },
 };
 
 // ── IMAGE COMPRESSION ────────────────────────────────────────────────────────
@@ -357,7 +393,7 @@ const MOODS = [
 ];
 
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
-async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS) {
+async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}) {
   // Shuffle wardrobe so AI sees different items first each time
   const byCategory = {};
   items.forEach(it => {
@@ -382,6 +418,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const colorPairsList = stylePrefs.colorPairs.map(p => `  - ${p}`).join("\n");
 
   const prompt = `${STYLE_PROFILE}
+${STYLING_PRINCIPLES}
 
 You are building outfits for a woman who wants to look like an effortless it-girl. Style direction: ${STYLE_PREFS.direction}.
 
@@ -391,6 +428,8 @@ ${inventory}
 OCCASION CONTEXT: ${occasion} — treat as a vibe, not a constraint. Any piece from any category can work for any occasion.
 WEATHER: ${weather || "NYC — current season, dress accordingly"}
 ${request ? `CLIENT NOTE: ${request}` : ""}
+${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY CONTEXT: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
+${aboutMe.ageRange || aboutMe.professionalContext ? `LIFE CONTEXT: ${[aboutMe.ageRange, aboutMe.professionalContext].filter(Boolean).join("; ")}` : ""}
 ${usedCombos ? `DO NOT REPEAT THESE ITEM COMBINATIONS: ${usedCombos}` : ""}
 
 STYLE PREFERENCES (inject into every look):
@@ -604,8 +643,8 @@ async function analyzeColorAI(imgStr, apiKey, wardrobeItems = null) {
 
   const wardrobeContext = wardrobeItems?.length
     ? `\n\nWARDROBE (for pairing analysis):\n${wardrobeItems.map(it =>
-        `ID:${it.id} | ${it.name} | Color: ${it.color || "unknown"}`
-      ).join("\n")}\n\nIdentify up to 5 wardrobe item IDs that would pair well with this piece. Return as pairingItemIds array.`
+        `ID:${it.id} | ${it.name} | Color: ${it.color || "unknown"} | Category: ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}`
+      ).join("\n")}\n\nFor this shopping piece, analyze all 7 dimensions below and identify up to 5 wardrobe item IDs that pair well.`
     : "";
 
   const prompt = `You are a professional color analyst specializing in seasonal color analysis for fashion.
@@ -624,7 +663,18 @@ Respond ONLY with valid JSON, no markdown:
   "confidence": "High" | "Medium" | "Low",
   "darkWinterMatch": "Strong match" | "Borderline" | "Avoid" | "Warm Exception",
   "reasoning": "1-2 sentences explaining the undertone observation and palette verdict",
-  "colorDescription": "what color this actually is, e.g. 'dusty blush with peach undertones'"${wardrobeItems ? `,\n  "pairingCount": 0,\n  "pairingItemIds": []` : ""}
+  "colorDescription": "what color this actually is, e.g. 'dusty blush with peach undertones'"${wardrobeItems ? `,
+  "pairingCount": 0,
+  "pairingItemIds": [],
+  "dimensions": {
+    "undertoneScore": {"score": "Pass or Fail or Exception", "note": "one sentence"},
+    "visualCohesion": {"score": "High or Medium or Low", "note": "one sentence on how it works with owned pieces"},
+    "colorPaletteFit": {"score": "Strong or Borderline or Avoid", "note": "one sentence"},
+    "textureFabric": {"score": "Excellent or Good or Poor", "note": "one sentence on fabric suitability"},
+    "layeringPotential": {"score": "High or Medium or Low", "note": "one sentence"},
+    "practicality": {"score": "High or Medium or Low", "note": "one sentence on versatility"},
+    "similarityFlag": {"flagged": false, "note": "does this duplicate something already owned?"}
+  }` : ""}
 }`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -637,7 +687,7 @@ Respond ONLY with valid JSON, no markdown:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 600,
+      max_tokens: 900,
       messages: [{ role: "user", content: [
         { type: "image", source },
         { type: "text", text: prompt },
@@ -687,6 +737,46 @@ function ColorResultCard({ result }) {
   );
 }
 
+// ── SHOPPING DIMENSIONS CARD ──────────────────────────────────────────────────
+function ShoppingDimensionsCard({ dimensions }) {
+  if (!dimensions) return null;
+  const scoreColor = (score) => {
+    if (["Pass","High","Excellent","Strong"].includes(score)) return "#3D7A4E";
+    if (["Medium","Good","Borderline","Exception"].includes(score)) return "#8B6914";
+    return "#C0392B";
+  };
+  const rows = [
+    { key: "undertoneScore",     label: "Undertone" },
+    { key: "visualCohesion",     label: "Visual Cohesion" },
+    { key: "colorPaletteFit",    label: "Palette Fit" },
+    { key: "textureFabric",      label: "Texture & Fabric" },
+    { key: "layeringPotential",  label: "Layering Potential" },
+    { key: "practicality",       label: "Practicality" },
+    { key: "similarityFlag",     label: "Similarity" },
+  ];
+  return (
+    <div style={{marginTop:16, border:"1px solid #E8E0D8", borderRadius:8, overflow:"hidden"}}>
+      <div style={{padding:"10px 14px", background:"#F8F4F0", borderBottom:"1px solid #E8E0D8", fontSize:11, fontWeight:500, letterSpacing:"0.06em", color:"#9A8E84", textTransform:"uppercase"}}>
+        Styling Analysis
+      </div>
+      {rows.map(({key, label}) => {
+        const dim = dimensions[key];
+        if (!dim) return null;
+        const score = dim.score ?? (dim.flagged ? "Flagged" : "Clear");
+        return (
+          <div key={key} style={{padding:"10px 14px", borderBottom:"1px solid #F0EBE4", display:"flex", gap:12, alignItems:"flex-start"}}>
+            <div style={{minWidth:120, fontSize:11, fontWeight:500, color:"#9A8E84", paddingTop:1}}>{label}</div>
+            <div style={{flex:1}}>
+              <span style={{fontSize:11, fontWeight:600, color:scoreColor(score), marginRight:8}}>{score}</span>
+              {dim.note && <span style={{fontSize:11, color:"#6B5E57"}}>{dim.note}</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── COLOR ADVISOR VIEW ────────────────────────────────────────────────────────
 function ColorAdvisorView({ items, apiKey }) {
   const [mode, setMode]           = useState("analyze");
@@ -724,7 +814,8 @@ function ColorAdvisorView({ items, apiKey }) {
 
   const handleAudit = async () => {
     if (!apiKey) { setErr("Add your Anthropic API key in Settings."); return; }
-    const toAudit = items.filter(it => it.image);
+    const UNDERTONE_CATEGORIES = ["Tops", "Knits", "Dresses", "Outerwear", "Jumpsuits", "Ocasionwear", "Occasionwear"];
+    const toAudit = items.filter(it => it.image && UNDERTONE_CATEGORIES.includes(it.category));
     if (!toAudit.length) { setErr("No items with photos found."); return; }
     setAuditRunning(true); setAuditItems([]); setDismissed(new Set());
     setAuditProgress({ done: 0, total: toAudit.length });
@@ -792,6 +883,9 @@ function ColorAdvisorView({ items, apiKey }) {
           </button>
 
           <ColorResultCard result={result}/>
+          {result && mode === "shopping" && result.dimensions && (
+            <ShoppingDimensionsCard dimensions={result.dimensions}/>
+          )}
 
           {result && mode === "shopping" && result.pairingItemIds?.length > 0 && (
             <div style={s.pairingSection}>
@@ -821,7 +915,7 @@ function ColorAdvisorView({ items, apiKey }) {
       {mode === "audit" && (
         <div>
           <div style={s.advisorNote}>
-            Analyzes all wardrobe items with photos for undertone + Dark Winter compatibility. Browns and warm reds are never flagged. One API call per item.
+            Analyzes tops, knits, dresses, and outerwear for undertone + Dark Winter compatibility. Browns and warm reds are never flagged. Bottoms, shoes, and accessories are excluded. One API call per item.
           </div>
           {err && <p style={s.err}>{err}</p>}
 
@@ -829,7 +923,7 @@ function ColorAdvisorView({ items, apiKey }) {
             <button style={{...s.btnPrimary, width:"100%", marginBottom:20}}
               onClick={handleAudit} disabled={auditRunning}>
               <Icon path={icons.sparkle} size={15}/>
-              {auditItems.length > 0 ? "Re-run Audit" : `Run Audit (${items.filter(i=>i.image).length} items with photos)`}
+              {auditItems.length > 0 ? "Re-run Audit" : `Run Audit (${items.filter(i=>i.image && ["Tops","Knits","Dresses","Outerwear","Jumpsuits","Occasionwear"].includes(i.category)).length} garments)`}
             </button>
           )}
 
@@ -968,6 +1062,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const [editItem,   setEditItem]   = useState(null);
   const [favorites,  setFavorites]  = useState([]);
+  const [dismissedSimilarity, setDismissedSimilarity] = useState(new Set());
   const syncTimer = useRef(null);
 
   // ── Flash sync status briefly
@@ -986,6 +1081,18 @@ export default function App() {
     // Ensure bucket exists (idempotent)
     sb.ensureBucket().catch(() => {});
     sb.fetchFavorites().then(setFavorites).catch(() => {});
+
+    // Try to load API keys from Supabase (cross-device sync)
+    sb.getSettings().then(settings => {
+      if (settings?.anthropicKey && !loadApiKey()) {
+        saveApiKey(settings.anthropicKey);
+        setApiKey(settings.anthropicKey);
+      }
+      if (settings?.rmbgKey && !loadRmbgKey()) {
+        saveRmbgKey(settings.rmbgKey);
+        setRmbgKey(settings.rmbgKey);
+      }
+    }).catch(() => {});
 
     setSyncStatus("syncing");
     sb.fetchAll()
@@ -1109,7 +1216,7 @@ export default function App() {
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null);
     try {
-      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs());
+      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe());
       setOutfits(result.looks);
       // Accumulate look history so next generation avoids repeats
       setAllLooks(prev => [...prev, ...result.looks].slice(-12)); // keep last 12
@@ -1142,6 +1249,22 @@ export default function App() {
       ));
     }
     return isSetView ? [] : base;
+  })();
+
+  // Compute similarity flags: 4+ items with same subcategory + color_family, excluding non-color categories
+  const SIMILARITY_EXCLUDED = ["Accessories", "Shoes", "Jewelry"];
+  const similarityGroups = (() => {
+    const groups = {};
+    items.forEach(it => {
+      if (SIMILARITY_EXCLUDED.includes(it.category)) return;
+      if (!it.subcategory || !it.color_family) return;
+      const key = `${it.subcategory}||${it.color_family}`;
+      if (!groups[key]) groups[key] = { subcategory: it.subcategory, color_family: it.color_family, count: 0 };
+      groups[key].count++;
+    });
+    return Object.entries(groups)
+      .filter(([k, g]) => g.count >= 4 && !dismissedSimilarity.has(k))
+      .map(([k, g]) => ({ key: k, ...g }));
   })();
 
   // Sync status indicator
@@ -1220,6 +1343,23 @@ export default function App() {
               </div>
             )
           )}
+
+          {/* Similarity flags */}
+          {!isSetView && similarityGroups.map(group => (
+            <div key={group.key} style={{background:"#FDF8F0", border:"1px solid #E8D9BE", borderRadius:8, padding:"10px 14px", marginBottom:10, display:"flex", alignItems:"flex-start", gap:10}}>
+              <span style={{fontSize:14, flexShrink:0}}>⚠️</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12, fontWeight:500, color:"#6B4E1A", marginBottom:2}}>
+                  You own {group.count} similar pieces
+                </div>
+                <div style={{fontSize:11, color:"#8B6914"}}>
+                  {group.count} {group.color_family} {group.subcategory} items — consider whether they're all earning their place.
+                </div>
+              </div>
+              <button onClick={() => setDismissedSimilarity(s => new Set([...s, group.key]))}
+                style={{background:"none", border:"none", color:"#C4A882", cursor:"pointer", fontSize:13, padding:"0 4px", flexShrink:0}}>✕</button>
+            </div>
+          ))}
 
           {/* Regular grid */}
           {!isSetView && (filtered.length === 0 ? (
@@ -1382,6 +1522,7 @@ export default function App() {
           onSave={(k, rk) => {
             saveApiKey(k);  setApiKey(k);
             saveRmbgKey(rk); setRmbgKey(rk);
+            sb.saveSettings({ anthropicKey: k, rmbgKey: rk }).catch(() => {});
             setView("closet");
           }}
           onBack={() => setView("closet")}/>
@@ -1926,15 +2067,25 @@ function loadStylePrefs() {
 }
 function saveStylePrefsLocal(prefs) { localStorage.setItem(STYLE_PREFS_KEY, JSON.stringify(prefs)); }
 
+const ABOUT_ME_KEY = "atelier-about-me-v1";
+function loadAboutMe() {
+  try { return JSON.parse(localStorage.getItem(ABOUT_ME_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveAboutMe(data) { localStorage.setItem(ABOUT_ME_KEY, JSON.stringify(data)); }
+
 function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
-  const [key,     setKey]     = useState(apiKey);
-  const [rmbg,    setRmbg]    = useState(rmbgKey);
-  const [showK,   setShowK]   = useState(false);
-  const [showR,   setShowR]   = useState(false);
-  const [prefs,   setPrefs]   = useState(() => loadStylePrefs());
-  const [newPair, setNewPair] = useState("");
+  const [key,          setKey]          = useState(apiKey);
+  const [rmbg,         setRmbg]         = useState(rmbgKey);
+  const [showK,        setShowK]        = useState(false);
+  const [showR,        setShowR]        = useState(false);
+  const [prefs,        setPrefs]        = useState(() => loadStylePrefs());
+  const [newPair,      setNewPair]      = useState("");
+  const [aboutMe,      setAboutMe]      = useState(() => loadAboutMe());
+  const [aboutMeOpen,  setAboutMeOpen]  = useState(false);
 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefsLocal(updated); };
+  const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
   const removePair  = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
   const addPair     = () => {
     if (!newPair.trim()) return;
@@ -2014,6 +2165,42 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
             {label}
           </label>
         ))}
+      </div>
+
+      {/* About Me */}
+      <div style={s.settingsCard}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}} onClick={() => setAboutMeOpen(v => !v)}>
+          <div style={s.settingsTitle}>✦ About Me</div>
+          <span style={{fontSize:12, color:"#9A8E84"}}>{aboutMeOpen ? "▲ Collapse" : "▼ Expand"}</span>
+        </div>
+        <p style={s.settingsSub}>Body descriptors + life context injected into outfit generation. Optional — add what's relevant.</p>
+        {aboutMeOpen && (
+          <div style={{marginTop:12}}>
+            <div style={s.fieldLabel}>Height</div>
+            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. 5'7&quot;"
+              value={aboutMe.height || ""} onChange={e => updateAboutMe({...aboutMe, height: e.target.value})}/>
+
+            <div style={s.fieldLabel}>Torso length</div>
+            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Long torso, short legs"
+              value={aboutMe.torsoLength || ""} onChange={e => updateAboutMe({...aboutMe, torsoLength: e.target.value})}/>
+
+            <div style={s.fieldLabel}>Fit notes</div>
+            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Prefer relaxed shoulders, avoid cropped"
+              value={aboutMe.fitNotes || ""} onChange={e => updateAboutMe({...aboutMe, fitNotes: e.target.value})}/>
+
+            <div style={s.fieldLabel}>Proportions</div>
+            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Narrow shoulders, fuller hips"
+              value={aboutMe.proportions || ""} onChange={e => updateAboutMe({...aboutMe, proportions: e.target.value})}/>
+
+            <div style={s.fieldLabel}>Age range</div>
+            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Late 30s"
+              value={aboutMe.ageRange || ""} onChange={e => updateAboutMe({...aboutMe, ageRange: e.target.value})}/>
+
+            <div style={s.fieldLabel}>Professional context</div>
+            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Creative director, client-facing, WFH 3 days/week"
+              value={aboutMe.professionalContext || ""} onChange={e => updateAboutMe({...aboutMe, professionalContext: e.target.value})}/>
+          </div>
+        )}
       </div>
 
       <button style={{...s.btnPrimary,width:"100%"}}
@@ -2786,6 +2973,7 @@ async function generateShoppingRecs(items, apiKey, mode, selectedIds = []) {
     ).join("\n");
 
     prompt = `${STYLE_PROFILE}
+${STYLING_PRINCIPLES}
 
 You are a wardrobe strategist analyzing gaps in this client's wardrobe.
 
@@ -2824,6 +3012,7 @@ Respond ONLY with valid JSON:
     ).join("\n");
 
     prompt = `${STYLE_PROFILE}
+${STYLING_PRINCIPLES}
 
 You are completing an outfit. The client has selected these pieces:
 
