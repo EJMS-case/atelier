@@ -450,7 +450,7 @@ NON-NEGOTIABLE RULES:
 2. One unexpected pairing per look — find the tension (chunky knit + silk skirt; oversized blazer + mini; structured top + fluid trouser).
 3. Mix volumes deliberately. Never two fitted or two oversized without reason.
 4. Texture contrast in every look: matte + shine, structured + fluid, knit + silk.
-5. Every look: top or dress + bottom (unless dress/jumpsuit) + shoes + bag.
+5. MANDATORY: Every look MUST include shoes AND a bag from the wardrobe. No exceptions. A look without shoes or a bag is incomplete.
 6. No item in more than one look. Use the full wardrobe — the best pieces aren't always listed first.
 7. If a Knits piece is included and a Wrist Cuff accessory is available, consider it as a finishing detail.
 8. Jewelry: only if genuinely distinctive. Never mention diamond rings or wedding band.
@@ -2281,52 +2281,73 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
 function buildCollageLayout(items, suggestionSlots = []) {
   const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
 
-  // Define positional templates per role
-  // Canvas is 100x100 units, items overlap slightly
-  const layouts = {
-    0: [ // 1 item
-      {x:20, y:10, w:60, h:80, rotate:0, zIndex:2},
-    ],
-    1: [ // 2 items
-      {x:2,  y:5,  w:52, h:88, rotate:-1, zIndex:2},
-      {x:46, y:8,  w:52, h:82, rotate:1,  zIndex:3},
-    ],
-    2: [ // 3 items
-      {x:2,  y:5,  w:50, h:82, rotate:-1.5, zIndex:2},
-      {x:44, y:3,  w:50, h:72, rotate:1,    zIndex:3},
-      {x:28, y:62, w:44, h:35, rotate:-0.5, zIndex:4},
-    ],
-    3: [ // 4 items
-      {x:2,  y:4,  w:46, h:70, rotate:-1.5, zIndex:2},
-      {x:44, y:2,  w:46, h:62, rotate:1.5,  zIndex:3},
-      {x:2,  y:62, w:42, h:35, rotate:0.5,  zIndex:4},
-      {x:48, y:58, w:42, h:38, rotate:-1,   zIndex:5},
-    ],
-    4: [ // 5 items
-      {x:1,  y:4,  w:44, h:66, rotate:-1.5, zIndex:2},
-      {x:43, y:2,  w:44, h:58, rotate:1.5,  zIndex:3},
-      {x:1,  y:60, w:40, h:35, rotate:0.5,  zIndex:4},
-      {x:44, y:55, w:40, h:38, rotate:-1,   zIndex:5},
-      {x:22, y:68, w:28, h:28, rotate:2,    zIndex:6},
-    ],
-    5: [ // 6 items
-      {x:1,  y:3,  w:42, h:62, rotate:-1.5, zIndex:2},
-      {x:42, y:2,  w:42, h:56, rotate:1.5,  zIndex:3},
-      {x:1,  y:58, w:38, h:36, rotate:0.5,  zIndex:4},
-      {x:42, y:53, w:38, h:38, rotate:-1,   zIndex:5},
-      {x:18, y:66, w:26, h:28, rotate:2,    zIndex:6},
-      {x:60, y:68, w:26, h:26, rotate:-2,   zIndex:7},
-    ],
+  // Assign each item a visual role based on category/subcategory
+  const getRole = (item) => {
+    const cat = item.category || "";
+    const sub = item.subcategory || "";
+    if (cat === "Outerwear") return "outer";
+    if (cat === "Bottoms") return "bottom";
+    if (cat === "Shoes") return "shoes";
+    if (cat === "Accessories" && sub === "Bags") return "bag";
+    if (cat === "Accessories") return "accessory";
+    // Everything else (Tops, Knits, Dresses, Jumpsuits, Sets, Occasionwear, Loungewear, Athleisure)
+    return "clothing";
   };
 
-  const count = Math.min(all.length - 1, 5);
-  const positions = layouts[count] || layouts[5];
+  const groups = { outer: [], clothing: [], bottom: [], shoes: [], bag: [], accessory: [] };
+  all.forEach(item => { const r = getRole(item); if (groups[r]) groups[r].push(item); });
 
-  return all.slice(0, 6).map((item, i) => ({
-    ...item,
-    id: item.id || `slot-${i}`,
-    ...(positions[i] || positions[positions.length - 1]),
-  }));
+  const slots = [];
+  const hasOuter   = groups.outer.length > 0;
+  const hasBottom  = groups.bottom.length > 0;
+
+  // ── Outerwear: large, back-left, tilted left
+  groups.outer.forEach((item, i) => {
+    slots.push({ ...item, x: 0, y: 2, w: 48, h: 68, rotate: -3, zIndex: 2 + i });
+  });
+
+  // ── Main clothing (tops, dresses, etc.): center-upper, large
+  const cBaseX = hasOuter ? 26 : 10;
+  groups.clothing.forEach((item, i) => {
+    slots.push({ ...item,
+      x: cBaseX + i * 5,
+      y: 2 + i * 2,
+      w: 50,
+      h: 66,
+      rotate: i % 2 === 0 ? 1.5 : -1.5,
+      zIndex: 4 + i,
+    });
+  });
+
+  // ── Bottoms: overlap below clothing
+  const bBaseX = hasOuter ? 24 : 8;
+  groups.bottom.forEach((item, i) => {
+    slots.push({ ...item, x: bBaseX, y: 42, w: 48, h: 52, rotate: -0.5, zIndex: 3 + i });
+  });
+
+  // ── Shoes: bottom-left
+  groups.shoes.forEach((item, i) => {
+    slots.push({ ...item, x: 2 + i * 4, y: 71 - i * 3, w: 38, h: 27, rotate: -2 + i, zIndex: 9 + i });
+  });
+
+  // ── Bag: bottom-right
+  groups.bag.forEach((item, i) => {
+    slots.push({ ...item, x: 56 - i * 4, y: 66, w: 40, h: 32, rotate: 2 - i, zIndex: 8 + i });
+  });
+
+  // ── Accessories (jewelry, scarves, etc.): small, top-right corner
+  const accPositions = [
+    { x: 75, y: 2,  w: 20, h: 20, rotate:  5 },
+    { x: 71, y: 24, w: 17, h: 17, rotate: -3 },
+    { x: 77, y: 44, w: 15, h: 15, rotate:  2 },
+    { x: 70, y: 62, w: 16, h: 16, rotate: -2 },
+  ];
+  groups.accessory.forEach((item, i) => {
+    if (i >= accPositions.length) return;
+    slots.push({ ...item, ...accPositions[i], zIndex: 11 + i });
+  });
+
+  return slots.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
 }
 
 // ── LOOK CARD — EDITORIAL FLAT-LAY ───────────────────────────────────────────
@@ -3294,8 +3315,8 @@ const s = {
   collageCanvas: {
     position:"relative",
     width:"100%",
-    paddingBottom:"75%", // 4:3 aspect ratio
-    background:"#F8F7F5",
+    paddingBottom:"95%",
+    background:"#FFFFFF",
     overflow:"hidden",
     margin:"0",
   },
