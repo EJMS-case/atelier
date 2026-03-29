@@ -347,6 +347,20 @@ function mergeItems(sbItems, localItems) {
 }
 
 // ── BACKGROUND REMOVAL ───────────────────────────────────────────────────────
+// Convert any image (URL or data URL) to base64 data URL
+async function imageToBase64(src) {
+  if (!src) return null;
+  if (src.startsWith("data:")) return src;
+  const res = await fetch(src);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function removeBackground(base64DataUrl, rmbgKey) {
   const base64 = base64DataUrl.split(",")[1];
   const formData = new FormData();
@@ -1521,6 +1535,8 @@ export default function App() {
         <SettingsView
           apiKey={apiKey}
           rmbgKey={rmbgKey}
+          items={items}
+          onUpdateItem={updateItem}
           onSave={(k, rk) => {
             saveApiKey(k);  setApiKey(k);
             saveRmbgKey(rk); setRmbgKey(rk);
@@ -2077,7 +2093,7 @@ function loadAboutMe() {
 }
 function saveAboutMe(data) { localStorage.setItem(ABOUT_ME_KEY, JSON.stringify(data)); }
 
-function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
+function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem }) {
   const [key,          setKey]          = useState(apiKey);
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
@@ -2086,9 +2102,36 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
   const [newPair,      setNewPair]      = useState("");
   const [aboutMe,      setAboutMe]      = useState(() => loadAboutMe());
   const [aboutMeOpen,  setAboutMeOpen]  = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchProgress,setBatchProgress]= useState({ done: 0, total: 0, errors: 0 });
+  const [batchDone,    setBatchDone]    = useState(false);
+  const batchStop = useRef(false);
 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefsLocal(updated); };
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
+
+  const handleBatchBgRemoval = async () => {
+    if (!rmbg) return;
+    const toProcess = items.filter(it => it.image);
+    if (!toProcess.length) return;
+    batchStop.current = false;
+    setBatchRunning(true); setBatchDone(false);
+    setBatchProgress({ done: 0, total: toProcess.length, errors: 0 });
+    let errors = 0;
+    for (let i = 0; i < toProcess.length; i++) {
+      if (batchStop.current) break;
+      const item = toProcess[i];
+      try {
+        const base64 = await imageToBase64(item.image);
+        const cleaned = await removeBackground(base64, rmbg);
+        const compressed = await compressImage(cleaned, 600, 0.9, true);
+        const url = await sb.uploadImage(item.id, compressed);
+        if (onUpdateItem) await onUpdateItem(item.id, { image: url });
+      } catch { errors++; }
+      setBatchProgress({ done: i + 1, total: toProcess.length, errors });
+    }
+    setBatchRunning(false); setBatchDone(true);
+  };
   const removePair  = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
   const addPair     = () => {
     if (!newPair.trim()) return;
@@ -2202,6 +2245,45 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack }) {
             <div style={s.fieldLabel}>Professional context</div>
             <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Creative director, client-facing, WFH 3 days/week"
               value={aboutMe.professionalContext || ""} onChange={e => updateAboutMe({...aboutMe, professionalContext: e.target.value})}/>
+          </div>
+        )}
+      </div>
+
+      {/* Batch Background Removal */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>✦ Retroactive Background Removal</div>
+        <p style={s.settingsSub}>
+          Re-processes all {items.filter(it=>it.image).length} wardrobe photos through Remove.bg to get transparent PNG backgrounds for cleaner collages. Uses 1 credit per item.
+        </p>
+        {!batchRunning && !batchDone && (
+          <button style={{...s.btnPrimary, width:"100%"}} onClick={handleBatchBgRemoval}
+            disabled={!rmbg || items.filter(it=>it.image).length === 0}>
+            {!rmbg ? "Add Remove.bg key above first" : `Process All ${items.filter(it=>it.image).length} Photos`}
+          </button>
+        )}
+        {batchRunning && (
+          <div>
+            <div style={{...s.auditProgressTrack, marginBottom:8}}>
+              <div style={{...s.auditProgressBar, width:`${(batchProgress.done/batchProgress.total)*100}%`}}/>
+            </div>
+            <div style={{fontSize:11, color:"#6B5E54", marginBottom:8}}>
+              {batchProgress.done} / {batchProgress.total} done
+              {batchProgress.errors > 0 && ` · ${batchProgress.errors} skipped`}
+            </div>
+            <button style={{...s.btnPrimary, background:"#C0392B", width:"100%"}}
+              onClick={() => { batchStop.current = true; }}>
+              Stop
+            </button>
+          </div>
+        )}
+        {batchDone && (
+          <div style={{fontSize:12, color:"#3D7A4E", fontWeight:500}}>
+            ✓ Done — {batchProgress.done - batchProgress.errors} updated
+            {batchProgress.errors > 0 && `, ${batchProgress.errors} skipped`}
+            <button style={{...s.btnPrimary, width:"100%", marginTop:8}}
+              onClick={() => { setBatchDone(false); setBatchProgress({done:0,total:0,errors:0}); }}>
+              Run Again
+            </button>
           </div>
         )}
       </div>
