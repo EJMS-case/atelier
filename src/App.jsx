@@ -1127,7 +1127,7 @@ export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
   const [view,       setView]       = useState("closet");
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
-  const [activeFilters, setActiveFilters] = useState({ category: [], color: [], brand: [] });
+  const [activeFilters, setActiveFilters] = useState({ category: [], color: [], brand: [], subcategory: [] });
   const [outfits,    setOutfits]    = useState(null);
   const [allLooks,   setAllLooks]   = useState([]); // history of all generated looks for anti-repeat
   const [styling,    setStyling]    = useState(false);
@@ -1396,6 +1396,7 @@ export default function App() {
     let base = items;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
+    if (activeFilters.subcategory?.length) base = base.filter(it => activeFilters.subcategory.includes(it.subcategory));
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
       base = base.filter(it => it.color && activeFilters.color.some(c =>
@@ -1697,9 +1698,10 @@ export default function App() {
 
 // ── FILTER BAR ────────────────────────────────────────────────────────────────
 function FilterBar({ items, activeFilters, onChange }) {
-  const [expandedColor, setExpandedColor] = useState(null); // color family name being expanded
+  const [expandedColor, setExpandedColor] = useState(null);
   const [showBrand, setShowBrand] = useState(false);
   const [brandSearch, setBrandSearch] = useState("");
+  const [showSubcat, setShowSubcat] = useState(false);
 
   const toggle = (type, value) => {
     const current = activeFilters[type] || [];
@@ -1710,12 +1712,19 @@ function FilterBar({ items, activeFilters, onChange }) {
   };
 
   const isActive = (type, value) => (activeFilters[type] || []).includes(value);
-  const clearAll = () => onChange({ category: [], color: [], brand: [] });
+  const clearAll = () => onChange({ category: [], color: [], brand: [], subcategory: [] });
   const hasActive = Object.values(activeFilters).some(v => v?.length > 0);
 
   // Unique brands from wardrobe
   const brands = [...new Set(items.map(it => it.brand).filter(Boolean))].sort();
   const filteredBrands = brands.filter(b => b.toLowerCase().includes(brandSearch.toLowerCase()));
+
+  // Subcategories: scoped to selected categories if any, otherwise all
+  const selectedCats = activeFilters.category?.filter(c => c !== "Sets") || [];
+  const subcatSource = selectedCats.length > 0
+    ? items.filter(it => selectedCats.includes(it.category))
+    : items;
+  const subcats = [...new Set(subcatSource.map(it => it.subcategory).filter(Boolean))].sort();
 
   return (
     <div style={s.filterBar}>
@@ -1780,6 +1789,29 @@ function FilterBar({ items, activeFilters, onChange }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Subcategory filter */}
+      <div style={s.filterSection}>
+        <button style={s.filterToggleBtn} onClick={() => setShowSubcat(v => !v)}>
+          Subcategory {activeFilters.subcategory?.length > 0 ? `(${activeFilters.subcategory.length})` : ""} {showSubcat ? "▲" : "▼"}
+        </button>
+        {showSubcat && (
+          <div style={s.brandPanel}>
+            <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
+              {subcats.map(sub => (
+                <button key={sub}
+                  onClick={() => toggle("subcategory", sub)}
+                  style={{...s.chip, ...(isActive("subcategory", sub) ? s.chipActive : {}), fontSize:10}}>
+                  {sub}
+                </button>
+              ))}
+              {subcats.length === 0 && (
+                <span style={{fontSize:11, color:"#9A8E84"}}>No subcategories found</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Brand filter */}
