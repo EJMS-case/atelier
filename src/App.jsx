@@ -1092,28 +1092,8 @@ export default function App() {
     syncTimer.current = setTimeout(() => setSyncStatus("idle"), 3000);
   };
 
-  // ── On mount: ensure Storage bucket exists, pull from Supabase, merge with local
-  // SAFE: never overwrites local items with empty/failed Supabase response
-  useEffect(() => {
-    const local = loadLocalItems();
-    if (local.length > 0) setItems(local);
-
-    // Ensure bucket exists (idempotent)
-    sb.ensureBucket().catch(() => {});
-    sb.fetchFavorites().then(setFavorites).catch(() => {});
-
-    // Try to load API keys from Supabase (cross-device sync)
-    sb.getSettings().then(settings => {
-      if (settings?.anthropicKey && !loadApiKey()) {
-        saveApiKey(settings.anthropicKey);
-        setApiKey(settings.anthropicKey);
-      }
-      if (settings?.rmbgKey && !loadRmbgKey()) {
-        saveRmbgKey(settings.rmbgKey);
-        setRmbgKey(settings.rmbgKey);
-      }
-    }).catch(() => {});
-
+  // ── Pull from Supabase and merge — callable on mount AND as a manual retry
+  const reloadFromSupabase = useCallback(() => {
     setSyncStatus("syncing");
     sb.fetchAll()
       .then(async sbItems => {
@@ -1121,7 +1101,6 @@ export default function App() {
         if (!sbItems || sbItems.length === 0) {
           if (freshLocal.length > 0) {
             setItems(freshLocal);
-            // Push local items to Supabase, uploading images to Storage first
             migrateAndSync(freshLocal, setItems, flashSync);
           } else {
             setSyncStatus("idle");
@@ -1149,6 +1128,29 @@ export default function App() {
       })
       .catch(() => setSyncStatus("error"));
   }, []);
+
+  // ── On mount: ensure Storage bucket exists, pull from Supabase, merge with local
+  useEffect(() => {
+    const local = loadLocalItems();
+    if (local.length > 0) setItems(local);
+
+    sb.ensureBucket().catch(() => {});
+    sb.fetchFavorites().then(setFavorites).catch(() => {});
+
+    // Try to load API keys from Supabase (cross-device sync)
+    sb.getSettings().then(settings => {
+      if (settings?.anthropicKey && !loadApiKey()) {
+        saveApiKey(settings.anthropicKey);
+        setApiKey(settings.anthropicKey);
+      }
+      if (settings?.rmbgKey && !loadRmbgKey()) {
+        saveRmbgKey(settings.rmbgKey);
+        setRmbgKey(settings.rmbgKey);
+      }
+    }).catch(() => {});
+
+    reloadFromSupabase();
+  }, [reloadFromSupabase]);
 
   // ── Persist to both localStorage and Supabase
   const persistItems = useCallback((updated) => {
@@ -1314,7 +1316,11 @@ export default function App() {
             <span style={s.brandMark}>✦</span>
             <span style={s.brandName}>ATELIER</span>
             {syncLabel && (
-              <span style={{...s.savedPill, background: syncColor}}>{syncLabel}</span>
+              <span
+                style={{...s.savedPill, background: syncColor, cursor: syncStatus === "error" ? "pointer" : "default"}}
+                title={syncStatus === "error" ? "Tap to retry loading your wardrobe" : undefined}
+                onClick={syncStatus === "error" ? reloadFromSupabase : undefined}
+              >{syncStatus === "error" ? "⚠ offline — tap to retry" : syncLabel}</span>
             )}
           </div>
           <nav style={s.nav}>
@@ -2343,7 +2349,7 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
             </div>
           ) : slot.image ? (
             <img src={slot.image} alt={slot.name}
-              style={{width:"100%", height:"100%", objectFit:"cover", objectPosition:"center top", display:"block"}}/>
+              style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
               <span style={s.collageCat}>{slot.category?.[0]}</span>
@@ -2387,68 +2393,67 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
   // ── SCENARIO A: Dress (no separate bottom)
   if (hasDress && !hasBottom) {
-    // Dress full-height center; outerwear overlaps left edge; clothing layers behind dress
     if (hasOuter) {
-      g.outer.forEach(item => slots.push({ ...item, x:0, y:2, w:44, h:70, rotate:-2, zIndex:5 }));
-      g.dress.forEach((item,i) => slots.push({ ...item, x:28, y:2, w:48, h:88, rotate:i%2?1:-1, zIndex:4 }));
+      // Coat slightly behind-left; dress center-right
+      g.outer.forEach(item => slots.push({ ...item, x:2,  y:2, w:40, h:68, rotate:-2,   zIndex:3 }));
+      g.dress.forEach((item,i) => slots.push({ ...item, x:30, y:2, w:44, h:84, rotate:i%2?1:-1, zIndex:4 }));
     } else {
-      g.dress.forEach((item,i) => slots.push({ ...item, x:10, y:2, w:52, h:88, rotate:i%2?1:-1, zIndex:4 }));
+      // Dress centered, leaves room for bag right + shoes bottom-left
+      g.dress.forEach((item,i) => slots.push({ ...item, x:14, y:1, w:46, h:84, rotate:i%2?1:-1, zIndex:4 }));
     }
-    // Any separate top (e.g. layering under dress) goes behind at slight offset
-    g.clothing.forEach((item,i) => slots.push({ ...item, x:4+i*6, y:2, w:50, h:58, rotate:-2+i, zIndex:2+i }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2, y:74, w:36, h:24, rotate:-1.5, zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:44, w:34, h:38, rotate:2,   zIndex:7 }));
+    g.clothing.forEach((item,i) => slots.push({ ...item, x:4+i*5, y:2, w:38, h:50, rotate:-2+i, zIndex:2+i }));
+    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:74, w:30, h:22, rotate:-2,   zIndex:8 }));
+    g.bag.forEach(item   => slots.push({ ...item, x:64, y:40, w:30, h:34, rotate:2.5,  zIndex:7 }));
 
   // ── SCENARIO B: Outerwear present
   } else if (hasOuter) {
-    // Jacket dominates left; clothing clearly to the RIGHT of jacket; pants legs below both
+    // Coat left side; clothing/top clearly right; pants legs visible below both
     g.outer.forEach(item =>
-      slots.push({ ...item, x:0, y:2, w:46, h:72, rotate:-2.5, zIndex:5 })
+      slots.push({ ...item, x:2, y:2, w:42, h:66, rotate:-2, zIndex:5 })
     );
-    // Clothing starts at x:42 — clears the jacket boundary, slight shoulder overlap only
     g.clothing.forEach((item, i) =>
-      slots.push({ ...item, x:42+i*3, y:4+i*3, w:44, h:56, rotate:1.5-i, zIndex:4-i })
+      slots.push({ ...item, x:44+i*2, y:4+i*2, w:38, h:48, rotate:1.5-i, zIndex:4-i })
     );
-    g.dress.forEach(item => slots.push({ ...item, x:40, y:4, w:46, h:86, rotate:1, zIndex:4 }));
-    // Pants start at y:24 so legs show clearly below jacket bottom (y:72)
-    g.bottom.forEach(item => slots.push({ ...item, x:22, y:24, w:44, h:74, rotate:0.5, zIndex:2 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:74, w:36, h:24, rotate:-1.5, zIndex:8 }));
-    // Bag sits mid-right, below clothing zone
-    g.bag.forEach(item   => slots.push({ ...item, x:60, y:56, w:36, h:38, rotate:2,   zIndex:7 }));
+    g.dress.forEach(item => slots.push({ ...item, x:40, y:2, w:42, h:82, rotate:1, zIndex:4 }));
+    // Pants start mid-way so legs show clearly below outerwear hem
+    g.bottom.forEach(item => slots.push({ ...item, x:20, y:26, w:42, h:72, rotate:0.5, zIndex:2 }));
+    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:20, rotate:-1.5, zIndex:8 }));
+    g.bag.forEach(item   => slots.push({ ...item, x:62, y:52, w:30, h:34, rotate:2,   zIndex:7 }));
 
   // ── SCENARIO C: Top + Bottom (most common)
   } else {
-    // Pants behind, full height; top overlaps upper portion
+    // Pants: narrower, starts at waist level so legs show clearly below the top
     g.bottom.forEach(item =>
-      slots.push({ ...item, x:16, y:12, w:50, h:86, rotate:0.5, zIndex:2 })
+      slots.push({ ...item, x:20, y:30, w:40, h:68, rotate:0.5, zIndex:2 })
     );
-    // Single top: center. Two tops: layer left-behind / right-front
+    // Top: sits in upper zone, doesn't overpower
     if (g.clothing.length > 1) {
+      // Two tops: stack with clear offset
       g.clothing.forEach((item, i) =>
         slots.push({ ...item,
-          x: i===0 ? 2  : 22,
-          y: i===0 ? 2  : 6,
-          w: i===0 ? 52 : 46,
-          h: i===0 ? 62 : 56,
+          x: i===0 ? 4  : 24,
+          y: i===0 ? 2  : 8,
+          w: i===0 ? 44 : 40,
+          h: i===0 ? 52 : 46,
           rotate: i===0 ? -2 : 2,
           zIndex: i===0 ? 4 : 6,
         })
       );
     } else {
       g.clothing.forEach(item =>
-        slots.push({ ...item, x:6, y:2, w:52, h:62, rotate:-1.5, zIndex:5 })
+        slots.push({ ...item, x:10, y:2, w:42, h:46, rotate:-1, zIndex:5 })
       );
     }
-    g.dress.forEach(item => slots.push({ ...item, x:8, y:2, w:50, h:86, rotate:1, zIndex:4 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:74, w:36, h:24, rotate:-1.5, zIndex:8 }));
-    // Bag right side, mid-height — clearly in the right zone, not competing with tops
-    g.bag.forEach(item   => slots.push({ ...item, x:60, y:42, w:36, h:40, rotate:2,   zIndex:7 }));
+    g.dress.forEach(item => slots.push({ ...item, x:10, y:2, w:44, h:82, rotate:1, zIndex:4 }));
+    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:22, rotate:-1.5, zIndex:8 }));
+    // Bag: right side, clear of the top zone
+    g.bag.forEach(item   => slots.push({ ...item, x:62, y:44, w:30, h:36, rotate:2,   zIndex:7 }));
   }
 
   // ── Accessories: top-right corner, small
   const accPos = [
-    { x:74, y:3,  w:22, h:22, rotate: 5 },
-    { x:71, y:27, w:18, h:18, rotate:-3 },
+    { x:74, y:2,  w:20, h:20, rotate: 5 },
+    { x:72, y:24, w:17, h:17, rotate:-3 },
   ];
   g.accessory.forEach((item, i) => {
     if (i >= accPos.length) return;
@@ -2557,7 +2562,7 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
             <div style={s.elevName}>{elevation.elevatedLookName}</div>
             {elevation.elevatedWhy && <div style={s.elevWhy}>{elevation.elevatedWhy}</div>}
           </div>
-          <EditorialCollage lookItems={elevatedItems.base} suggestionSlots={elevatedItems.suggestions}/>
+          <EditorialCollage lookItems={elevatedItems.base}/>
           <div style={s.elevSuggestions}>
             {elevation.elevations?.map((e, i) => (
               <div key={i} style={s.elevSuggestionCard}>
