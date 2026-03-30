@@ -528,6 +528,7 @@ HARD CONSTRAINTS:
 — No warm/cool color mixing unless it's an approved warm brown/red exception
 — Jewelry only if it genuinely elevates — never mention diamond rings or wedding band
 — Look NAME must directly reference actual colors, fabrics, or silhouettes IN the look. No invented moods that don't exist in the garments.
+— ATHLEISURE & LOUNGEWEAR RULE: Items from the Athleisure or Loungewear categories may ONLY appear in looks for these occasions: Athleisure, Activity, Travel, Lounge. For Lunch/Brunch, an Athleisure or Loungewear piece may appear ONLY if the overall look is unmistakably elevated — structured outerwear, sleek footwear, polished bag, no casual reads. For all other occasions (Executive, Work, Dinner, Dinner Party, Daytime, Event) — Athleisure and Loungewear items are strictly off-limits.
 
 Respond ONLY with valid JSON, no markdown:
 {
