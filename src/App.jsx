@@ -163,18 +163,32 @@ const sb = {
     return res.json();
   },
 
-  // Store image URL in DB (never base64 — too large)
+  // Store image URL in DB — self-healing: if Supabase rejects a column (PGRST204),
+  // automatically strip it and retry so unknown localStorage fields never block saves.
   async upsert(item) {
-    // Strip fields not in the Supabase schema to prevent PGRST204 errors
-    const { image, description, _subcatL2, ...rest } = item;
-    const payload = image && !image.startsWith("data:") ? { ...rest, image } : rest;
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error("Upsert failed");
-    return res.json();
+    const { image, ...rest } = item;
+    // Start with image stripped if it's base64 (too large for DB row)
+    let payload = image && !image.startsWith("data:") ? { ...rest, image } : { ...rest };
+
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`Upsert failed ${res.status}`); }
+
+      // PGRST204 = column doesn't exist in schema — strip it and retry
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(`Upsert failed: ${err.message || res.status}`);
+    }
+    throw new Error("Upsert failed after stripping unknown columns");
   },
 
   async remove(id) {
