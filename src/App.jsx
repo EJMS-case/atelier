@@ -1079,11 +1079,12 @@ async function migrateImages(items, setItemsFn, saveLocalFn) {
   }
 }
 
-// Upload images + push metadata to Supabase for a list of items
+// Upload images + push metadata to Supabase — processes sequentially to avoid rate limits
 async function migrateAndSync(items, setItemsFn, flashSyncFn) {
   flashSyncFn("syncing");
-  try {
-    await Promise.all(items.map(async (item) => {
+  let failed = 0;
+  for (const item of items) {
+    try {
       let toSave = item;
       if (item.image?.startsWith("data:")) {
         try {
@@ -1092,12 +1093,14 @@ async function migrateAndSync(items, setItemsFn, flashSyncFn) {
           if (setItemsFn) {
             setItemsFn(prev => prev.map(it => it.id === item.id ? toSave : it));
           }
-        } catch { /* keep base64 */ }
+        } catch { /* keep base64 in state, upsert without image */ }
       }
       await sb.upsert(toSave);
-    }));
-    flashSyncFn("synced");
-  } catch { flashSyncFn("error"); }
+    } catch { failed++; }
+    // Small pause between items to avoid rate limits
+    await new Promise(r => setTimeout(r, 150));
+  }
+  failed > 0 ? flashSyncFn("error") : flashSyncFn("synced");
 }
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
@@ -1203,33 +1206,44 @@ export default function App() {
   }, []);
 
   const addItems = useCallback(async (newItems) => {
+    // Add to state immediately so UI feels fast
+    const optimistic = [...items, ...newItems];
+    setItems(optimistic);
+    saveLocalItems(optimistic);
     flashSync("syncing");
-    try {
-      // 1. Upload images to Supabase Storage first
-      const withUrls = await Promise.all(newItems.map(async (item) => {
-        if (item.image?.startsWith("data:")) {
-          try {
-            const url = await sb.uploadImage(item.id, item.image);
-            return { ...item, image: url };
-          } catch { return item; }
+
+    // Process in batches of 5 to avoid rate limits
+    const BATCH = 5;
+    const saved = [...items];
+    let anyFailed = false;
+
+    for (let i = 0; i < newItems.length; i += BATCH) {
+      const batch = newItems.slice(i, i + BATCH);
+      await Promise.all(batch.map(async (item) => {
+        try {
+          let toSave = item;
+          if (item.image?.startsWith("data:")) {
+            try {
+              const url = await sb.uploadImage(item.id, item.image);
+              toSave = { ...item, image: url };
+            } catch { /* keep base64 in memory, upsert without image url */ }
+          }
+          await sb.upsert(toSave);
+          saved.push(toSave);
+          // Update state incrementally so images appear as they upload
+          setItems(prev => prev.map(it => it.id === toSave.id ? toSave : it));
+        } catch(e) {
+          console.error("Failed to save item to Supabase:", item.name, e);
+          saved.push(item); // keep in state even if Supabase failed
+          anyFailed = true;
         }
-        return item;
       }));
-      // 2. Upsert to Supabase — this is now the source of truth
-      await Promise.all(withUrls.map(it => sb.upsert(it)));
-      // 3. Update local state + localStorage cache (metadata only, no base64)
-      const updated = [...items, ...withUrls];
-      setItems(updated);
-      saveLocalItems(updated);
-      flashSync("synced");
-    } catch(e) {
-      console.error("Failed to save to Supabase:", e);
-      // Still show items locally so user doesn't lose work, but flag the error
-      const updated = [...items, ...newItems];
-      setItems(updated);
-      saveLocalItems(updated);
-      flashSync("error");
+      // Pause between batches
+      if (i + BATCH < newItems.length) await new Promise(r => setTimeout(r, 300));
     }
+
+    saveLocalItems(saved);
+    anyFailed ? flashSync("error") : flashSync("synced");
   }, [items]);
 
   const updateItem = useCallback(async (id, fields) => {
@@ -1253,6 +1267,35 @@ export default function App() {
       flashSync("error");
     }
   }, [items, persistItems]);
+
+  // Force-sync ALL items currently in React state to Supabase — used after bulk upload failures
+  // Reads from live state (has base64 images), uploads them, saves URLs back
+  const forceSyncAll = useCallback(async (onProgress) => {
+    flashSync("syncing");
+    let done = 0, failed = 0;
+    const updated = [...items];
+    for (let i = 0; i < updated.length; i++) {
+      const item = updated[i];
+      try {
+        let toSave = item;
+        if (item.image?.startsWith("data:")) {
+          try {
+            const url = await sb.uploadImage(item.id, item.image);
+            toSave = { ...item, image: url };
+            updated[i] = toSave;
+            setItems(prev => prev.map(it => it.id === toSave.id ? toSave : it));
+          } catch { /* upload failed, upsert metadata only */ }
+        }
+        await sb.upsert(toSave);
+        done++;
+      } catch { failed++; }
+      if (onProgress) onProgress(i + 1, updated.length, failed);
+      await new Promise(r => setTimeout(r, 150));
+    }
+    saveLocalItems(updated);
+    failed > 0 ? flashSync("error") : flashSync("synced");
+    return { done, failed };
+  }, [items]);
 
   const deleteItem = useCallback(async (id) => {
     const updated = items.filter(it => it.id !== id);
@@ -1603,6 +1646,7 @@ export default function App() {
             setView("closet");
           }}
           onAddItems={addItems}
+          onForceSync={forceSyncAll}
           onBack={() => setView("closet")}/>
       )}
     </div>
@@ -2184,7 +2228,7 @@ function loadAboutMe() {
 }
 function saveAboutMe(data) { localStorage.setItem(ABOUT_ME_KEY, JSON.stringify(data)); }
 
-function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems }) {
+function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync }) {
   const [key,          setKey]          = useState(apiKey);
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
@@ -2562,6 +2606,40 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
           </div>
         )}
       </div>
+
+      {/* ── Force Sync ── */}
+      {onForceSync && (() => {
+        const [syncRunning, setSyncRunning] = React.useState(false);
+        const [syncProg,    setSyncProg]    = React.useState(null);
+        const [syncDone,    setSyncDone]    = React.useState(null);
+        const handleForceSync = async () => {
+          setSyncRunning(true); setSyncDone(null); setSyncProg({ done: 0, total: items.length, failed: 0 });
+          const result = await onForceSync((done, total, failed) => setSyncProg({ done, total, failed }));
+          setSyncRunning(false); setSyncDone(result);
+        };
+        return (
+          <div style={{...s.settingsCard, marginTop:16, borderColor: syncDone?.failed > 0 ? "#C0392B" : syncDone ? "#3D7A4E" : "#E8DDD5"}}>
+            <div style={s.settingsTitle}>Sync Wardrobe to Cloud</div>
+            <p style={s.settingsSub}>
+              If items uploaded but didn't save to Supabase, tap this to force-sync all {items.length} items now. Do this while still on the page — don't refresh first.
+            </p>
+            {syncProg && (
+              <div style={{marginBottom:10}}>
+                <div style={{height:6, background:"#F0E8E0", borderRadius:3, overflow:"hidden", marginBottom:6}}>
+                  <div style={{height:"100%", width:`${(syncProg.done/syncProg.total)*100}%`, background: syncProg.failed > 0 ? "#C0392B" : "#8B6F5E", borderRadius:3, transition:"width 0.3s"}}/>
+                </div>
+                <div style={{fontSize:11, color:"#6B6460"}}>
+                  {syncRunning ? `Syncing ${syncProg.done} / ${syncProg.total}…` : `Done — ${syncDone?.done} synced${syncDone?.failed ? `, ${syncDone.failed} failed` : ""}`}
+                </div>
+              </div>
+            )}
+            <button style={{...s.settingsBtn, background: syncDone && !syncDone.failed ? "#3D7A4E" : "#8B6F5E"}}
+              onClick={handleForceSync} disabled={syncRunning}>
+              {syncRunning ? <><span style={s.spinnerSm}/> Syncing…</> : syncDone ? (syncDone.failed ? "⚠ Retry Sync" : "✓ All Synced") : `Sync All ${items.length} Items to Supabase`}
+            </button>
+          </div>
+        );
+      })()}
 
       <div style={{...s.settingsCard, marginTop:16}}>
         <div style={s.settingsTitle}>About Atelier</div>
