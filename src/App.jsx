@@ -2238,6 +2238,9 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
   const [aboutMe,      setAboutMe]      = useState(() => loadAboutMe());
   const [aboutMeOpen,  setAboutMeOpen]  = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
+  const [fSyncRunning, setFSyncRunning] = useState(false);
+  const [fSyncProg,    setFSyncProg]    = useState(null);
+  const [fSyncDone,    setFSyncDone]    = useState(null);
   const [batchProgress,setBatchProgress]= useState({ done: 0, total: 0, errors: 0 });
   const [batchDone,    setBatchDone]    = useState(false);
   const batchStop = useRef(false);
@@ -2608,38 +2611,43 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
       </div>
 
       {/* ── Force Sync ── */}
-      {onForceSync && (() => {
-        const [syncRunning, setSyncRunning] = React.useState(false);
-        const [syncProg,    setSyncProg]    = React.useState(null);
-        const [syncDone,    setSyncDone]    = React.useState(null);
-        const handleForceSync = async () => {
-          setSyncRunning(true); setSyncDone(null); setSyncProg({ done: 0, total: items.length, failed: 0 });
-          const result = await onForceSync((done, total, failed) => setSyncProg({ done, total, failed }));
-          setSyncRunning(false); setSyncDone(result);
-        };
-        return (
-          <div style={{...s.settingsCard, marginTop:16, borderColor: syncDone?.failed > 0 ? "#C0392B" : syncDone ? "#3D7A4E" : "#E8DDD5"}}>
-            <div style={s.settingsTitle}>Sync Wardrobe to Cloud</div>
-            <p style={s.settingsSub}>
-              If items uploaded but didn't save to Supabase, tap this to force-sync all {items.length} items now. Do this while still on the page — don't refresh first.
-            </p>
-            {syncProg && (
-              <div style={{marginBottom:10}}>
-                <div style={{height:6, background:"#F0E8E0", borderRadius:3, overflow:"hidden", marginBottom:6}}>
-                  <div style={{height:"100%", width:`${(syncProg.done/syncProg.total)*100}%`, background: syncProg.failed > 0 ? "#C0392B" : "#8B6F5E", borderRadius:3, transition:"width 0.3s"}}/>
-                </div>
-                <div style={{fontSize:11, color:"#6B6460"}}>
-                  {syncRunning ? `Syncing ${syncProg.done} / ${syncProg.total}…` : `Done — ${syncDone?.done} synced${syncDone?.failed ? `, ${syncDone.failed} failed` : ""}`}
-                </div>
+      {onForceSync && (
+        <div style={{...s.settingsCard, marginTop:16, borderColor: fSyncDone?.failed > 0 ? "#C0392B" : fSyncDone ? "#3D7A4E" : "#E8DDD5"}}>
+          <div style={s.settingsTitle}>Sync Wardrobe to Cloud</div>
+          <p style={s.settingsSub}>
+            Saves all {items.length} items from this browser directly to Supabase — use this after a bulk upload or if items aren't appearing on other devices. Do this before refreshing.
+          </p>
+          {fSyncProg && (
+            <div style={{marginBottom:10}}>
+              <div style={{height:6, background:"#F0E8E0", borderRadius:3, overflow:"hidden", marginBottom:6}}>
+                <div style={{height:"100%", width:`${Math.round((fSyncProg.done/fSyncProg.total)*100)}%`,
+                  background: fSyncProg.failed > 0 ? "#C0392B" : "#8B6F5E", borderRadius:3, transition:"width 0.3s"}}/>
               </div>
-            )}
-            <button style={{...s.settingsBtn, background: syncDone && !syncDone.failed ? "#3D7A4E" : "#8B6F5E"}}
-              onClick={handleForceSync} disabled={syncRunning}>
-              {syncRunning ? <><span style={s.spinnerSm}/> Syncing…</> : syncDone ? (syncDone.failed ? "⚠ Retry Sync" : "✓ All Synced") : `Sync All ${items.length} Items to Supabase`}
-            </button>
-          </div>
-        );
-      })()}
+              <div style={{fontSize:11, color:"#6B6460"}}>
+                {fSyncRunning
+                  ? `Syncing ${fSyncProg.done} / ${fSyncProg.total}…`
+                  : `Done — ${fSyncDone?.done} synced${fSyncDone?.failed ? `, ${fSyncDone.failed} failed` : " ✓"}`}
+              </div>
+            </div>
+          )}
+          <button style={{...s.settingsBtn, background: fSyncDone && !fSyncDone.failed ? "#3D7A4E" : "#8B6F5E"}}
+            onClick={async () => {
+              setFSyncRunning(true); setFSyncDone(null);
+              setFSyncProg({ done: 0, total: items.length, failed: 0 });
+              const result = await onForceSync((done, total, failed) =>
+                setFSyncProg({ done, total, failed })
+              );
+              setFSyncRunning(false); setFSyncDone(result);
+            }}
+            disabled={fSyncRunning}>
+            {fSyncRunning
+              ? <><span style={s.spinnerSm}/> Syncing…</>
+              : fSyncDone
+                ? (fSyncDone.failed ? "⚠ Some failed — tap to retry" : "✓ All Synced to Supabase")
+                : `Sync All ${items.length} Items to Supabase`}
+          </button>
+        </div>
+      )}
 
       <div style={{...s.settingsCard, marginTop:16}}>
         <div style={s.settingsTitle}>About Atelier</div>
