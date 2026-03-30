@@ -466,11 +466,13 @@ FOR EACH LOOK, follow this exact sequence:
 
 HARD CONSTRAINTS:
 — Every look needs: top-half garment + shoes + bag. Non-negotiable.
-— Shoes and bag must share the look's color story (not a random color from the wardrobe)
-— Never dress + separate pants/skirt/trousers
+— Shoes and bag MUST be in the same color family as the rest of the look. Not a random color.
+— NEVER combine a Dresses item with a separate Tops or Knits item. A dress stands alone.
+— NEVER combine a Dresses item with a separate Bottoms item (pants/skirt/trousers).
 — No item appears in more than one look
-— No warm/cool mixing unless it's an approved warm brown/red exception
+— No warm/cool color mixing unless it's an approved warm brown/red exception
 — Jewelry only if it genuinely elevates — never mention diamond rings or wedding band
+— Look NAME must directly reference actual colors, fabrics, or silhouettes IN the look. No invented moods that don't exist in the garments.
 
 Respond ONLY with valid JSON, no markdown:
 {
@@ -2337,7 +2339,7 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
             </div>
           ) : slot.image ? (
             <img src={slot.image} alt={slot.name}
-              style={{width:"100%", height:"100%", objectFit:"contain", display:"block"}}/>
+              style={{width:"100%", height:"100%", objectFit:"cover", objectPosition:"center top", display:"block"}}/>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
               <span style={s.collageCat}>{slot.category?.[0]}</span>
@@ -2381,13 +2383,15 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
   // ── SCENARIO A: Dress (no separate bottom)
   if (hasDress && !hasBottom) {
-    // Dress full-height center; outerwear overlaps left edge
+    // Dress full-height center; outerwear overlaps left edge; clothing layers behind dress
     if (hasOuter) {
       g.outer.forEach(item => slots.push({ ...item, x:0, y:2, w:44, h:70, rotate:-2, zIndex:5 }));
       g.dress.forEach((item,i) => slots.push({ ...item, x:28, y:2, w:48, h:88, rotate:i%2?1:-1, zIndex:4 }));
     } else {
       g.dress.forEach((item,i) => slots.push({ ...item, x:10, y:2, w:52, h:88, rotate:i%2?1:-1, zIndex:4 }));
     }
+    // Any separate top (e.g. layering under dress) goes behind at slight offset
+    g.clothing.forEach((item,i) => slots.push({ ...item, x:4+i*6, y:2, w:50, h:58, rotate:-2+i, zIndex:2+i }));
     g.shoes.forEach(item => slots.push({ ...item, x:2, y:74, w:36, h:24, rotate:-1.5, zIndex:8 }));
     g.bag.forEach(item   => slots.push({ ...item, x:62, y:44, w:34, h:38, rotate:2,   zIndex:7 }));
 
