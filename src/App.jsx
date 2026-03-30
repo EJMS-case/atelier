@@ -1160,6 +1160,18 @@ export default function App() {
           sbItems = sbItems.filter(it => !/^t\d+$/.test(it.id));
         }
 
+        // Remove Supabase-Storage-hosted items — these were restored duplicates, not real wardrobe entries.
+        // Real items all use Cloudinary URLs. Storage items crept in from a one-time recovery script.
+        const storageItems = sbItems.filter(it =>
+          it.image && (it.image.includes("supabase") || it.image.includes("ljcwsrfm")) && !it.image.includes("cloudinary")
+        );
+        if (storageItems.length > 0) {
+          await Promise.all(storageItems.map(it => sb.remove(it.id).catch(() => {})));
+          sbItems = sbItems.filter(it =>
+            !(it.image && (it.image.includes("supabase") || it.image.includes("ljcwsrfm")) && !it.image.includes("cloudinary"))
+          );
+        }
+
         const freshLocal = loadLocalItems();
         if (!sbItems || sbItems.length === 0) {
           if (freshLocal.length > 0) {
