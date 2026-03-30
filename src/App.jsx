@@ -70,10 +70,10 @@ const CATEGORY_ORDER = [
 
 // Subcategories per main category
 const TAXONOMY = {
-  Tops:         ["Blouses","Button-Downs","Button-Ups","Lightweight Knits","T-Shirts"],
+  Tops:         ["Blouses","Shirts","Tops","Lightweight Knits","T-Shirts","Tanks","Polos"],
   Knits:        ["Cardigans","Pullovers"],
-  Bottoms:      ["Pants","Skirts","Trousers"],
-  Dresses:      ["Maxi","Midi","Mini"],
+  Bottoms:      ["Pants","Skirts","Shorts"],
+  Dresses:      ["Maxi","Midi","Mini","Sweater Dress"],
   Sets:         ["Day Sets","Night Sets"],
   Jumpsuits:    [],
   Loungewear:   ["Hoodies / Sweatshirts","Pants","Tops"],
@@ -86,6 +86,8 @@ const TAXONOMY = {
 
 // Third-level options for select subcategories
 const SUBCATEGORY_L3 = {
+  "Pants":              ["Jeans","Satin/Silk","Trousers","Ponte"],
+  "Skirts":             ["Mini","Midi","Maxi"],
   "Boots":              ["Ankle","Knee-High","Over-the-Knee"],
   "Heels":              ["Block","Kitten","Stiletto"],
   "Bags":               ["Clutch","Crossbody","Shoulder","Tote"],
@@ -1463,11 +1465,13 @@ export default function App() {
                 await sb.saveOutfitLog(log);
                 const dateWorn = log.date_worn;
                 const ids = log.garment_ids || [];
-                await Promise.all(ids.map(id => sb.updateItemLastWorn(id, dateWorn)));
-                const updated = items.map(it =>
-                  ids.includes(it.id) ? {...it, last_worn: dateWorn} : it
-                );
-                persistItems(updated);
+                if (dateWorn) {
+                  await Promise.all(ids.map(id => sb.updateItemLastWorn(id, dateWorn)));
+                  const updated = items.map(it =>
+                    ids.includes(it.id) ? {...it, last_worn: dateWorn} : it
+                  );
+                  persistItems(updated);
+                }
                 flashSync("synced");
               }}/>
           ))}
@@ -2587,6 +2591,7 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
 // ── SAVE LOOK MODAL ──────────────────────────────────────────────────────────
 function SaveLookModal({ look, lookItems, onSave, onClose }) {
   const today = new Date().toISOString().slice(0, 10);
+  const [notWorn,  setNotWorn]  = useState(false);
   const [dateWorn, setDateWorn] = useState(today);
   const [occasion, setOccasion] = useState(look.occasion || "Work");
   const [notes,    setNotes]    = useState("");
@@ -2598,7 +2603,7 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
     try {
       await onSave({
         garment_ids: (look.items || []),
-        date_worn: dateWorn,
+        date_worn: notWorn ? null : dateWorn,
         occasion,
         notes: notes.trim() || null,
         collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, why: look.why }),
@@ -2630,9 +2635,18 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
               <div style={s.modalLookPieces}>{lookItems.map(it => it.name).join(" · ")}</div>
             </div>
             <div style={s.modalField}>
-              <label style={s.modalLabel}>DATE WORN</label>
-              <input type="date" value={dateWorn} onChange={e => setDateWorn(e.target.value)} style={s.modalInput}/>
+              <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:11, letterSpacing:"0.08em", color:"#6B6460", fontWeight:500 }}>
+                <input type="checkbox" checked={notWorn} onChange={e => setNotWorn(e.target.checked)}
+                  style={{ width:14, height:14, accentColor:"#8B6F5E", cursor:"pointer" }}/>
+                I haven't worn this yet — save without date
+              </label>
             </div>
+            {!notWorn && (
+              <div style={s.modalField}>
+                <label style={s.modalLabel}>DATE WORN</label>
+                <input type="date" value={dateWorn} onChange={e => setDateWorn(e.target.value)} style={s.modalInput}/>
+              </div>
+            )}
             <div style={s.modalField}>
               <label style={s.modalLabel}>OCCASION</label>
               <select value={occasion} onChange={e => setOccasion(e.target.value)} style={s.modalInput}>
