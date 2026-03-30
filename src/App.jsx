@@ -267,6 +267,17 @@ const sb = {
     });
     if (!res.ok) throw new Error("Update last_worn failed");
   },
+  async listStorageImages() {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/wardrobe-images`, {
+      method: "POST",
+      headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ prefix: "", limit: 500, offset: 0 }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.map(f => f.name).filter(Boolean);
+  },
+
   // ── User Settings (API key sync) ──
   async getSettings() {
     try {
@@ -1110,6 +1121,13 @@ export default function App() {
     setSyncStatus("syncing");
     sb.fetchAll()
       .then(async sbItems => {
+        // Remove test placeholder items (t1-t10) that were never real wardrobe entries
+        const testIds = sbItems.filter(it => /^t\d+$/.test(it.id)).map(it => it.id);
+        if (testIds.length > 0) {
+          await Promise.all(testIds.map(id => sb.remove(id).catch(() => {})));
+          sbItems = sbItems.filter(it => !/^t\d+$/.test(it.id));
+        }
+
         const freshLocal = loadLocalItems();
         if (!sbItems || sbItems.length === 0) {
           if (freshLocal.length > 0) {
@@ -1173,12 +1191,9 @@ export default function App() {
   }, []);
 
   const addItems = useCallback(async (newItems) => {
-    // Optimistically add with base64 so UI is immediate
-    const updated = [...items, ...newItems];
-    persistItems(updated);
     flashSync("syncing");
     try {
-      // Upload images to Storage, then upsert with URLs
+      // 1. Upload images to Supabase Storage first
       const withUrls = await Promise.all(newItems.map(async (item) => {
         if (item.image?.startsWith("data:")) {
           try {
@@ -1188,19 +1203,22 @@ export default function App() {
         }
         return item;
       }));
-      // Update state with URLs (replaces base64)
-      setItems(prev => {
-        const next = prev.map(it => {
-          const w = withUrls.find(u => u.id === it.id);
-          return w || it;
-        });
-        saveLocalItems(next);
-        return next;
-      });
+      // 2. Upsert to Supabase — this is now the source of truth
       await Promise.all(withUrls.map(it => sb.upsert(it)));
+      // 3. Update local state + localStorage cache (metadata only, no base64)
+      const updated = [...items, ...withUrls];
+      setItems(updated);
+      saveLocalItems(updated);
       flashSync("synced");
-    } catch { flashSync("error"); }
-  }, [items, persistItems]);
+    } catch(e) {
+      console.error("Failed to save to Supabase:", e);
+      // Still show items locally so user doesn't lose work, but flag the error
+      const updated = [...items, ...newItems];
+      setItems(updated);
+      saveLocalItems(updated);
+      flashSync("error");
+    }
+  }, [items]);
 
   const updateItem = useCallback(async (id, fields) => {
     let resolvedFields = { ...fields };
@@ -1218,7 +1236,10 @@ export default function App() {
       const item = updated.find(it => it.id === id);
       await sb.upsert(item);
       flashSync("synced");
-    } catch { flashSync("error"); }
+    } catch(e) {
+      console.error("Failed to update item in Supabase:", e);
+      flashSync("error");
+    }
   }, [items, persistItems]);
 
   const deleteItem = useCallback(async (id) => {
@@ -1569,6 +1590,7 @@ export default function App() {
             sb.saveSettings({ anthropicKey: k, rmbgKey: rk }).catch(() => {});
             setView("closet");
           }}
+          onAddItems={addItems}
           onBack={() => setView("closet")}/>
       )}
     </div>
@@ -2119,7 +2141,7 @@ function loadAboutMe() {
 }
 function saveAboutMe(data) { localStorage.setItem(ABOUT_ME_KEY, JSON.stringify(data)); }
 
-function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem }) {
+function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems }) {
   const [key,          setKey]          = useState(apiKey);
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
@@ -2132,6 +2154,114 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
   const [batchProgress,setBatchProgress]= useState({ done: 0, total: 0, errors: 0 });
   const [batchDone,    setBatchDone]    = useState(false);
   const batchStop = useRef(false);
+
+  // ── Recover Lost Items state
+  const [recoverOpen,    setRecoverOpen]    = useState(false);
+  const [orphans,        setOrphans]        = useState([]);
+  const [scanRunning,    setScanRunning]    = useState(false);
+  const [scanDone,       setScanDone]       = useState(false);
+  const [orphanMeta,     setOrphanMeta]     = useState({}); // { [imageId]: { name, category, subcategory, color_family } }
+  const [aiCatRunning,   setAiCatRunning]   = useState(false);
+
+  const handleScanStorage = async () => {
+    setScanRunning(true); setScanDone(false); setOrphans([]);
+    try {
+      const [allImages, dbItems] = await Promise.all([sb.listStorageImages(), sb.fetchAll()]);
+      const dbIds = new Set(dbItems.map(it => it.id));
+      const found = allImages.filter(name => !dbIds.has(name));
+      setOrphans(found);
+      const initialMeta = {};
+      found.forEach(id => { initialMeta[id] = { name: "Item", category: "Tops", subcategory: "", color_family: "" }; });
+      setOrphanMeta(initialMeta);
+    } catch(e) {
+      console.error("Scan failed:", e);
+    }
+    setScanRunning(false); setScanDone(true);
+  };
+
+  const handleAiCategorize = async () => {
+    if (!apiKey || orphans.length === 0) return;
+    setAiCatRunning(true);
+    for (const imageId of orphans) {
+      const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/wardrobe-images/${imageId}`;
+      try {
+        let base64 = null;
+        try {
+          const resp = await fetch(imageUrl);
+          const blob = await resp.blob();
+          base64 = await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(",")[1]);
+            reader.readAsDataURL(blob);
+          });
+        } catch { /* skip if image can't be fetched */ }
+        if (!base64) continue;
+        const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
+          body: JSON.stringify({
+            model: "claude-opus-4-5",
+            max_tokens: 256,
+            messages: [{
+              role: "user",
+              content: [
+                { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
+                { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: Tops/Knits/Bottoms/Dresses/Sets/Jumpsuits/Loungewear/Athleisure/Outerwear/Occasionwear/Shoes/Accessories), subcategory (specific type), color_family (main color). Return only valid JSON.` },
+              ],
+            }],
+          }),
+        });
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const text = aiData.content?.[0]?.text || "";
+          const match = text.match(/\{[\s\S]*\}/);
+          if (match) {
+            try {
+              const parsed = JSON.parse(match[0]);
+              setOrphanMeta(prev => ({ ...prev, [imageId]: {
+                name: parsed.name || "Item",
+                category: parsed.category || "Tops",
+                subcategory: parsed.subcategory || "",
+                color_family: parsed.color_family || "",
+              }}));
+            } catch { /* bad JSON, skip */ }
+          }
+        }
+      } catch(e) {
+        console.error("AI categorize failed for", imageId, e);
+      }
+    }
+    setAiCatRunning(false);
+  };
+
+  const handleAddOrphan = async (imageId) => {
+    const meta = orphanMeta[imageId] || {};
+    const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/wardrobe-images/${imageId}`;
+    const newItem = {
+      id: imageId,
+      name: meta.name || "Item",
+      category: meta.category || "Tops",
+      subcategory: meta.subcategory || "",
+      color_family: meta.color_family || "",
+      image: imageUrl,
+      created_at: new Date().toISOString(),
+    };
+    try {
+      if (onAddItems) {
+        await onAddItems([newItem]);
+      } else {
+        await sb.upsert(newItem);
+      }
+      setOrphans(prev => prev.filter(id => id !== imageId));
+    } catch(e) {
+      console.error("Failed to add orphan item:", e);
+    }
+  };
 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefsLocal(updated); };
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
@@ -2319,10 +2449,81 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
         Save Settings
       </button>
 
+      {/* Recover Lost Items */}
+      <div style={{...s.settingsCard, marginTop:16}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}} onClick={() => setRecoverOpen(v => !v)}>
+          <div style={s.settingsTitle}>✦ Recover Lost Items</div>
+          <span style={{fontSize:12, color:"#9A8E84"}}>{recoverOpen ? "▲ Collapse" : "▼ Expand"}</span>
+        </div>
+        <p style={s.settingsSub}>Scan Supabase Storage for photos that aren't linked to any wardrobe item.</p>
+        {recoverOpen && (
+          <div style={{marginTop:14}}>
+            <div style={{display:"flex", gap:8, marginBottom:12, flexWrap:"wrap"}}>
+              <button style={{...s.btnPrimary, flex:1}} onClick={handleScanStorage} disabled={scanRunning}>
+                {scanRunning ? (
+                  <><span style={s.spinnerSm}/>  Scanning...</>
+                ) : "Scan Storage"}
+              </button>
+              {orphans.length > 0 && (
+                <button style={{...s.btnPrimary, flex:1, background: aiCatRunning ? "#6B5E54" : "#1C1814"}}
+                  onClick={handleAiCategorize} disabled={aiCatRunning || !apiKey}>
+                  {aiCatRunning ? (
+                    <><span style={s.spinnerSm}/>  Categorizing...</>
+                  ) : apiKey ? "AI Categorize All" : "Add API key above"}
+                </button>
+              )}
+            </div>
+            {scanDone && orphans.length === 0 && (
+              <div style={{fontSize:12, color:"#3D7A4E", fontWeight:500, marginBottom:8}}>
+                No orphaned photos found — all storage images are linked to wardrobe items.
+              </div>
+            )}
+            {orphans.length > 0 && (
+              <div>
+                <div style={{fontSize:12, color:"#6B5E54", marginBottom:10}}>
+                  Found {orphans.length} unlinked photo{orphans.length !== 1 ? "s" : ""}. Fill in details and add to wardrobe.
+                </div>
+                <div style={{display:"flex", flexDirection:"column", gap:14}}>
+                  {orphans.map(imageId => {
+                    const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/wardrobe-images/${imageId}`;
+                    const meta = orphanMeta[imageId] || { name: "Item", category: "Tops" };
+                    return (
+                      <div key={imageId} style={{display:"flex", gap:12, alignItems:"flex-start", background:"#F5F1EC", borderRadius:8, padding:12}}>
+                        <img src={imageUrl} alt="orphan"
+                          style={{width:72, height:90, objectFit:"contain", borderRadius:5, background:"#fff", flexShrink:0, border:"1px solid #E8E0D8"}}/>
+                        <div style={{flex:1, display:"flex", flexDirection:"column", gap:6}}>
+                          <div style={s.fieldLabel}>Name</div>
+                          <input style={{...s.input, width:"100%", boxSizing:"border-box", fontSize:12}}
+                            value={meta.name}
+                            onChange={e => setOrphanMeta(prev => ({...prev, [imageId]: {...meta, name: e.target.value}}))}/>
+                          <div style={s.fieldLabel}>Category</div>
+                          <select style={{...s.input, width:"100%", boxSizing:"border-box", fontSize:12}}
+                            value={meta.category}
+                            onChange={e => setOrphanMeta(prev => ({...prev, [imageId]: {...meta, category: e.target.value}}))}>
+                            {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          {meta.color_family && (
+                            <div style={{fontSize:11, color:"#9A8E84"}}>Color: {meta.color_family}</div>
+                          )}
+                          <button style={{...s.btnPrimary, marginTop:4, fontSize:11, padding:"7px 14px"}}
+                            onClick={() => handleAddOrphan(imageId)}>
+                            Add to Wardrobe
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div style={{...s.settingsCard, marginTop:16}}>
         <div style={s.settingsTitle}>About Atelier</div>
         <p style={s.settingsSub}>
-          Your wardrobe is stored in your browser's localStorage. Photos are stored as base64 data and never leave your device, except item names and details which are sent to Claude for styling suggestions.
+          Your wardrobe is stored in Supabase. Photos are stored in Supabase Storage and synced across devices. Item names and details are sent to Claude for styling suggestions.
         </p>
       </div>
     </div>
