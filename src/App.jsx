@@ -528,6 +528,7 @@ HARD CONSTRAINTS:
 — No warm/cool color mixing unless it's an approved warm brown/red exception
 — Jewelry only if it genuinely elevates — never mention diamond rings or wedding band
 — Look NAME must directly reference actual colors, fabrics, or silhouettes IN the look. No invented moods that don't exist in the garments.
+— BLAZER RULE: Any look featuring a Blazer (from Outerwear) MUST include a top (from Tops or Knits) to wear underneath it. A blazer is never worn as the sole upper garment — always layer it over something.
 — ATHLEISURE & LOUNGEWEAR RULE: Items from the Athleisure or Loungewear categories may ONLY appear in looks for these occasions: Athleisure, Activity, Travel, Lounge. For Lunch/Brunch, an Athleisure or Loungewear piece may appear ONLY if the overall look is unmistakably elevated — structured outerwear, sleek footwear, polished bag, no casual reads. For all other occasions (Executive, Work, Dinner, Dinner Party, Daytime, Event) — Athleisure and Loungewear items are strictly off-limits.
 
 Respond ONLY with valid JSON, no markdown:
@@ -2751,9 +2752,9 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
 function buildCollageLayout(items, suggestionSlots = []) {
   const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
 
-  // Robust bag detection — catches L2 "Bags", all L3 subtypes, and name keywords incl "pouch"
-  const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
-  const BAG_RE   = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette)\b/i;
+  // Robust bag detection — catches L2 "Bags", all L3 subtypes, and name keywords
+  const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette","Mini Bag","Belt Bag","Bucket"]);
+  const BAG_RE   = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette|bucket|loulou|envelope|mini bag|crossbody|shoulder)\b/i;
 
   const getRole = (item) => {
     const cat  = item.category    || "";
@@ -2763,13 +2764,19 @@ function buildCollageLayout(items, suggestionSlots = []) {
     if (cat === "Bottoms")   return "bottom";
     if (cat === "Shoes")     return "shoes";
     if (cat === "Dresses" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
-    if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name))) return "bag";
+    if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name) || BAG_RE.test(sub))) return "bag";
     if (cat === "Accessories") return "accessory";
     return "clothing";
   };
 
   const g = { outer:[], clothing:[], dress:[], bottom:[], shoes:[], bag:[], accessory:[] };
   all.forEach(item => { const r = getRole(item); if (g[r]) g[r].push(item); });
+
+  // Fallback: if no bag detected but accessories exist, promote the first one to bag role
+  // (catches items like "YSL Loulou" that don't have explicit bag keywords)
+  if (g.bag.length === 0 && g.accessory.length > 0) {
+    g.bag.push(g.accessory.shift());
+  }
 
   const slots = [];
   const hasOuter  = g.outer.length > 0;
@@ -2792,18 +2799,20 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
   // ── SCENARIO B: Outerwear present
   } else if (hasOuter) {
-    // Coat left side; clothing/top clearly right; pants legs visible below both
+    // Blazer/coat anchors left; top peeks from behind/under it on the right; bottom below both
     g.outer.forEach(item =>
-      slots.push({ ...item, x:2, y:2, w:42, h:66, rotate:-2, zIndex:5 })
+      slots.push({ ...item, x:2, y:2, w:44, h:68, rotate:-1, zIndex:5 })
     );
+    // Top layers behind the blazer — offset right so it peeks out, lower zIndex
     g.clothing.forEach((item, i) =>
-      slots.push({ ...item, x:44+i*2, y:4+i*2, w:38, h:48, rotate:1.5-i, zIndex:4-i })
+      slots.push({ ...item, x:30+i*4, y:3+i*2, w:36, h:48, rotate:1.5, zIndex:3 })
     );
-    g.dress.forEach(item => slots.push({ ...item, x:40, y:2, w:42, h:82, rotate:1, zIndex:4 }));
-    // Pants start mid-way so legs show clearly below outerwear hem
-    g.bottom.forEach(item => slots.push({ ...item, x:20, y:26, w:42, h:72, rotate:0.5, zIndex:2 }));
-    g.shoes.slice(0,1).forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:20, rotate:-1.5, zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:58, y:44, w:38, h:46, rotate:2,   zIndex:7 }));
+    g.dress.forEach(item => slots.push({ ...item, x:36, y:2, w:42, h:82, rotate:1, zIndex:4 }));
+    // Bottom centered below, legs clearly visible below outerwear hem
+    g.bottom.forEach(item => slots.push({ ...item, x:18, y:34, w:42, h:64, rotate:0.5, zIndex:2 }));
+    g.shoes.slice(0,1).forEach(item => slots.push({ ...item, x:2, y:76, w:28, h:22, rotate:-1.5, zIndex:8 }));
+    // Bag: right side, large and clear
+    g.bag.forEach(item => slots.push({ ...item, x:60, y:28, w:36, h:46, rotate:2, zIndex:7 }));
 
   // ── SCENARIO C: Top + Bottom (most common)
   } else {
