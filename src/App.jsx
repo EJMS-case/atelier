@@ -70,7 +70,7 @@ const CATEGORY_ORDER = [
 
 // Subcategories per main category
 const TAXONOMY = {
-  Tops:         ["Blouses","Shirts","Tops","Lightweight Knits","T-Shirts","Tanks","Polos"],
+  Tops:         ["Blouses","Bodysuits","Shirts","Tops","Lightweight Knits","T-Shirts","Tanks","Polos"],
   Knits:        ["Cardigans","Pullovers"],
   Bottoms:      ["Pants","Skirts","Shorts"],
   Dresses:      ["Maxi","Midi","Mini","Sweater Dress"],
