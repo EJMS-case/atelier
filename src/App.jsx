@@ -165,7 +165,8 @@ const sb = {
 
   // Store image URL in DB (never base64 — too large)
   async upsert(item) {
-    const { image, ...rest } = item;
+    // Strip fields not in the Supabase schema to prevent PGRST204 errors
+    const { image, description, _subcatL2, ...rest } = item;
     const payload = image && !image.startsWith("data:") ? { ...rest, image } : rest;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
       method: "POST",
