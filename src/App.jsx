@@ -1160,16 +1160,27 @@ export default function App() {
           sbItems = sbItems.filter(it => !/^t\d+$/.test(it.id));
         }
 
-        // Remove Supabase-Storage-hosted items — these were restored duplicates, not real wardrobe entries.
-        // Real items all use Cloudinary URLs. Storage items crept in from a one-time recovery script.
-        const storageItems = sbItems.filter(it =>
-          it.image && (it.image.includes("supabase") || it.image.includes("ljcwsrfm")) && !it.image.includes("cloudinary")
-        );
-        if (storageItems.length > 0) {
-          await Promise.all(storageItems.map(it => sb.remove(it.id).catch(() => {})));
-          sbItems = sbItems.filter(it =>
-            !(it.image && (it.image.includes("supabase") || it.image.includes("ljcwsrfm")) && !it.image.includes("cloudinary"))
+        // One-time cleanup: remove Storage-hosted duplicates that have a Cloudinary twin by name.
+        // This only runs once (flagged in localStorage) so it never touches new items you add.
+        if (!localStorage.getItem("atelier-storage-cleanup-v1")) {
+          const cloudinaryNames = new Set(
+            sbItems
+              .filter(it => it.image?.includes("cloudinary"))
+              .map(it => it.name?.trim().toLowerCase())
+              .filter(Boolean)
           );
+          const storageDups = sbItems.filter(it =>
+            it.image &&
+            (it.image.includes("supabase") || it.image.includes("ljcwsrfm")) &&
+            !it.image.includes("cloudinary") &&
+            cloudinaryNames.has(it.name?.trim().toLowerCase())
+          );
+          if (storageDups.length > 0) {
+            await Promise.all(storageDups.map(it => sb.remove(it.id).catch(() => {})));
+            const dupIds = new Set(storageDups.map(it => it.id));
+            sbItems = sbItems.filter(it => !dupIds.has(it.id));
+          }
+          localStorage.setItem("atelier-storage-cleanup-v1", "done");
         }
 
         const freshLocal = loadLocalItems();
