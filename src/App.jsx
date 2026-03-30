@@ -478,8 +478,11 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`
   ).join("\n");
 
-  // Pick 3 random distinct moods
-  const selectedMoods = shuffle(MOODS).slice(0, 3);
+  // Pick 3 random distinct moods — filter out nightlife-leaning moods for professional occasions
+  const workOccasions = new Set(["Work", "Executive"]);
+  const nightMoods = new Set(["After Hours"]);
+  const moodPool = workOccasions.has(occasion) ? MOODS.filter(m => !nightMoods.has(m.name)) : MOODS;
+  const selectedMoods = shuffle(moodPool).slice(0, 3);
 
   // Build list of previously used item combos to avoid repeats
   const usedCombos = previousLooks.map(l => (l.items || []).sort().join(",")).join(" | ");
@@ -489,7 +492,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const prompt = `${STYLE_PROFILE}
 ${STYLING_PRINCIPLES}
 
-OCCASION: ${occasion} — a vibe, not a filter. Any piece can work.
+OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — office-appropriate and polished. Layering expected. This is NOT a loose vibe — respect the context.' : ' — a vibe, not a filter. Any piece can work.'}
 WEATHER: ${weather || "NYC — current season"}
 ${request ? `CLIENT REQUEST: ${request}` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
@@ -514,7 +517,7 @@ FOR EACH LOOK, follow this exact sequence:
 1. ANCHOR: Pick the single most interesting piece in the wardrobe for this mood. This drives everything.
 2. COLOR STORY: Define it now — monochromatic / tonal / one approved pair. Every other item must fit it.
 3. SECOND GARMENT: Picks the piece that creates the best silhouette tension with the anchor (volume contrast, texture contrast, or length surprise).
-4. BOTTOM or DRESS RULE: If anchor is a top/knit/outerwear → add a bottom. If anchor is a dress/jumpsuit → NO separate bottom. Never both.
+4. BOTTOM or DRESS RULE: If anchor is a top/knit → add a bottom. If anchor is outerwear (blazer, coat, jacket) → add BOTH a top underneath AND a bottom. If anchor is a dress/jumpsuit → NO separate bottom. Never both dress + bottom.
 5. SHOES: Must belong to the color story. Respond to the hem and the mood — not just "match."
 6. BAG: Must belong to the color story. Finish the sentence — don't repeat it.
 7. EDIT: Remove anything that doesn't actively improve the look. Fewer intentional pieces beat more random ones.
@@ -528,6 +531,8 @@ HARD CONSTRAINTS:
 — No warm/cool color mixing unless it's an approved warm brown/red exception
 — Jewelry only if it genuinely elevates — never mention diamond rings or wedding band
 — Look NAME must directly reference actual colors, fabrics, or silhouettes IN the look. No invented moods that don't exist in the garments.
+— Look NAME must suit the requested occasion. For Work or Executive occasions, names should convey polish and professionalism, not nightlife or casual vibes.
+— If Outerwear is included, a separate top/knit/blouse MUST also be included underneath. A blazer or coat alone is not a complete top-half.
 
 Respond ONLY with valid JSON, no markdown:
 {
@@ -2751,70 +2756,68 @@ function buildCollageLayout(items, suggestionSlots = []) {
   const hasOuter  = g.outer.length > 0;
   const hasBottom = g.bottom.length > 0;
   const hasDress  = g.dress.length > 0;
+  const nClothing = g.clothing.length;
 
-  // ── SCENARIO A: Dress (no separate bottom)
+  // ── Magazine-grid layout — clean, no overlap, no rotation ──
+  // Matches editorial flat-lay reference: top center, bottom left-tall,
+  // bag right-center, shoes center-bottom, accessories in corners.
+
   if (hasDress && !hasBottom) {
+    // ── SCENARIO A: Dress (± outerwear)
     if (hasOuter) {
-      // Coat slightly behind-left; dress center-right
-      g.outer.forEach(item => slots.push({ ...item, x:2,  y:2, w:40, h:68, rotate:-2,   zIndex:3 }));
-      g.dress.forEach((item,i) => slots.push({ ...item, x:30, y:2, w:44, h:84, rotate:i%2?1:-1, zIndex:4 }));
+      g.outer.forEach(item => slots.push({ ...item, x:2, y:1, w:38, h:60, rotate:0, zIndex:3 }));
+      g.dress.forEach(item => slots.push({ ...item, x:42, y:1, w:36, h:74, rotate:0, zIndex:4 }));
     } else {
-      // Dress centered, leaves room for bag right + shoes bottom-left
-      g.dress.forEach((item,i) => slots.push({ ...item, x:14, y:1, w:46, h:84, rotate:i%2?1:-1, zIndex:4 }));
+      g.dress.forEach(item => slots.push({ ...item, x:14, y:1, w:42, h:80, rotate:0, zIndex:4 }));
     }
-    g.clothing.forEach((item,i) => slots.push({ ...item, x:4+i*5, y:2, w:38, h:50, rotate:-2+i, zIndex:2+i }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:74, w:30, h:22, rotate:-2,   zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:64, y:40, w:30, h:34, rotate:2.5,  zIndex:7 }));
+    g.shoes.forEach(item => slots.push({ ...item, x:36, y:72, w:26, h:24, rotate:0, zIndex:8 }));
+    g.bag.forEach(item   => slots.push({ ...item, x:58, y:34, w:34, h:36, rotate:0, zIndex:7 }));
 
-  // ── SCENARIO B: Outerwear present
-  } else if (hasOuter) {
-    // Coat left side; clothing/top clearly right; pants legs visible below both
-    g.outer.forEach(item =>
-      slots.push({ ...item, x:2, y:2, w:42, h:66, rotate:-2, zIndex:5 })
-    );
-    g.clothing.forEach((item, i) =>
-      slots.push({ ...item, x:44+i*2, y:4+i*2, w:38, h:48, rotate:1.5-i, zIndex:4-i })
-    );
-    g.dress.forEach(item => slots.push({ ...item, x:40, y:2, w:42, h:82, rotate:1, zIndex:4 }));
-    // Pants start mid-way so legs show clearly below outerwear hem
-    g.bottom.forEach(item => slots.push({ ...item, x:20, y:26, w:42, h:72, rotate:0.5, zIndex:2 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:20, rotate:-1.5, zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:52, w:30, h:34, rotate:2,   zIndex:7 }));
+  } else if (hasOuter && nClothing > 0) {
+    // ── SCENARIO D: Outerwear + top + bottom (layered)
+    // Outer left-top, top right-top, pants left-below, bag right-mid, shoes center-bottom
+    g.outer.forEach(item    => slots.push({ ...item, x:2, y:1, w:38, h:38, rotate:0, zIndex:5 }));
+    g.clothing.forEach(item => slots.push({ ...item, x:42, y:1, w:36, h:34, rotate:0, zIndex:4 }));
+    g.bottom.forEach(item   => slots.push({ ...item, x:2, y:32, w:36, h:62, rotate:0, zIndex:2 }));
+    g.shoes.forEach(item    => slots.push({ ...item, x:36, y:72, w:26, h:24, rotate:0, zIndex:8 }));
+    g.bag.forEach(item      => slots.push({ ...item, x:54, y:34, w:34, h:36, rotate:0, zIndex:7 }));
 
-  // ── SCENARIO C: Top + Bottom (most common)
+  } else if (hasOuter && !nClothing) {
+    // ── SCENARIO B: Outerwear + bottom only
+    g.outer.forEach(item  => slots.push({ ...item, x:16, y:1, w:42, h:38, rotate:0, zIndex:5 }));
+    g.bottom.forEach(item => slots.push({ ...item, x:2, y:32, w:36, h:62, rotate:0, zIndex:2 }));
+    g.shoes.forEach(item  => slots.push({ ...item, x:36, y:72, w:26, h:24, rotate:0, zIndex:8 }));
+    g.bag.forEach(item    => slots.push({ ...item, x:54, y:34, w:34, h:36, rotate:0, zIndex:7 }));
+
+  } else if (nClothing > 1) {
+    // ── SCENARIO E: Two tops + bottom
+    // Top1 left-upper, top2 right-upper, pants left-below
+    g.clothing.forEach((item, i) => slots.push({ ...item,
+      x: i === 0 ? 2 : 42,
+      y: 1,
+      w: i === 0 ? 38 : 36,
+      h: i === 0 ? 36 : 34,
+      rotate: 0,
+      zIndex: i === 0 ? 4 : 5,
+    }));
+    g.bottom.forEach(item => slots.push({ ...item, x:2, y:32, w:36, h:62, rotate:0, zIndex:2 }));
+    g.shoes.forEach(item  => slots.push({ ...item, x:36, y:72, w:26, h:24, rotate:0, zIndex:8 }));
+    g.bag.forEach(item    => slots.push({ ...item, x:54, y:34, w:34, h:36, rotate:0, zIndex:7 }));
+
   } else {
-    // Pants: narrower, starts at waist level so legs show clearly below the top
-    g.bottom.forEach(item =>
-      slots.push({ ...item, x:20, y:30, w:40, h:68, rotate:0.5, zIndex:2 })
-    );
-    // Top: sits in upper zone, doesn't overpower
-    if (g.clothing.length > 1) {
-      // Two tops: stack with clear offset
-      g.clothing.forEach((item, i) =>
-        slots.push({ ...item,
-          x: i===0 ? 4  : 24,
-          y: i===0 ? 2  : 8,
-          w: i===0 ? 44 : 40,
-          h: i===0 ? 52 : 46,
-          rotate: i===0 ? -2 : 2,
-          zIndex: i===0 ? 4 : 6,
-        })
-      );
-    } else {
-      g.clothing.forEach(item =>
-        slots.push({ ...item, x:10, y:2, w:42, h:46, rotate:-1, zIndex:5 })
-      );
-    }
-    g.dress.forEach(item => slots.push({ ...item, x:10, y:2, w:44, h:82, rotate:1, zIndex:4 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:22, rotate:-1.5, zIndex:8 }));
-    // Bag: right side, clear of the top zone
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:44, w:30, h:36, rotate:2,   zIndex:7 }));
+    // ── SCENARIO C: Single top + bottom (most common)
+    // Top center-upper, pants left-tall, bag right-center, shoes center-bottom
+    g.clothing.forEach(item => slots.push({ ...item, x:26, y:1, w:38, h:36, rotate:0, zIndex:5 }));
+    g.dress.forEach(item   => slots.push({ ...item, x:14, y:1, w:42, h:80, rotate:0, zIndex:4 }));
+    g.bottom.forEach(item  => slots.push({ ...item, x:2, y:30, w:36, h:64, rotate:0, zIndex:2 }));
+    g.shoes.forEach(item   => slots.push({ ...item, x:36, y:72, w:26, h:24, rotate:0, zIndex:8 }));
+    g.bag.forEach(item     => slots.push({ ...item, x:54, y:32, w:34, h:36, rotate:0, zIndex:7 }));
   }
 
-  // ── Accessories: top-right corner, small
+  // ── Accessories: top-left and top-right corners (necklace / earrings style)
   const accPos = [
-    { x:74, y:2,  w:20, h:20, rotate: 5 },
-    { x:72, y:24, w:17, h:17, rotate:-3 },
+    { x:2,  y:1,  w:20, h:26, rotate:0 },
+    { x:72, y:1,  w:18, h:16, rotate:0 },
   ];
   g.accessory.forEach((item, i) => {
     if (i >= accPos.length) return;
