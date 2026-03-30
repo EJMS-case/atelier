@@ -102,6 +102,18 @@ const SUBCATEGORY_L3 = {
 // Flat list for legacy compatibility (AI inventory, sort, etc.)
 const CATEGORIES = CATEGORY_ORDER;
 
+// Given a category + subcategory value (may be L2 or L3), find the L2 parent
+function getSubcatL2(category, subcategory) {
+  if (!subcategory) return "";
+  const taxonomy = TAXONOMY[category] || [];
+  if (taxonomy.includes(subcategory)) return subcategory; // it's already an L2
+  // check if it's an L3 value nested under one of the L2s
+  for (const l2 of taxonomy) {
+    if (SUBCATEGORY_L3[l2]?.includes(subcategory)) return l2;
+  }
+  return "";
+}
+
 // ── DARK WINTER COLOR SWATCHES ────────────────────────────────────────────────
 // Each family has a display hex + shade expansion
 const COLOR_FAMILIES = [
@@ -1948,13 +1960,27 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                         onChange={e => handleCategoryChange(item.id, e.target.value, item.image)}>
                         {CATEGORY_ORDER.map(c=><option key={c}>{c}</option>)}
                       </select>
-                      {TAXONOMY[item.category]?.length > 0 && item.category !== "Knits" && (
-                        <select style={{...s.select,...s.queueSelect}} value={item.subcategory}
-                          onChange={e=>update(item.id,"subcategory",e.target.value)}>
-                          <option value="">Subcategory</option>
-                          {TAXONOMY[item.category].map(s=><option key={s}>{s}</option>)}
-                        </select>
-                      )}
+                      {TAXONOMY[item.category]?.length > 0 && item.category !== "Knits" && (() => {
+                        const l2 = getSubcatL2(item.category, item.subcategory);
+                        const l3Options = SUBCATEGORY_L3[l2] || [];
+                        const l3Val = (l2 && l2 !== item.subcategory) ? item.subcategory : "";
+                        return (
+                          <>
+                            <select style={{...s.select,...s.queueSelect}} value={l2}
+                              onChange={e => update(item.id, "subcategory", e.target.value)}>
+                              <option value="">Subcategory</option>
+                              {TAXONOMY[item.category].map(opt => <option key={opt}>{opt}</option>)}
+                            </select>
+                            {l3Options.length > 0 && (
+                              <select style={{...s.select,...s.queueSelect}} value={l3Val}
+                                onChange={e => update(item.id, "subcategory", e.target.value)}>
+                                <option value="">— Type —</option>
+                                {l3Options.map(opt => <option key={opt}>{opt}</option>)}
+                              </select>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                     {/* Knit classification prompt */}
                     {item.category === "Knits" && (() => {
@@ -2078,16 +2104,33 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack }) {
             {CATEGORY_ORDER.map(c=><option key={c}>{c}</option>)}
           </select>
         </div>
-        {TAXONOMY[form.category]?.length > 0 && (
-          <div>
-            <div style={s.fieldLabel}>Subcategory</div>
-            <select style={{...s.select,width:"100%"}} value={form.subcategory}
-              onChange={e=>setForm(f=>({...f,subcategory:e.target.value}))}>
-              <option value="">— Select subcategory —</option>
-              {TAXONOMY[form.category].map(c=><option key={c}>{c}</option>)}
-            </select>
-          </div>
-        )}
+        {TAXONOMY[form.category]?.length > 0 && (() => {
+          const l2 = getSubcatL2(form.category, form.subcategory);
+          const l3Options = SUBCATEGORY_L3[l2] || [];
+          const l3Val = (l2 && l2 !== form.subcategory) ? form.subcategory : "";
+          return (
+            <>
+              <div>
+                <div style={s.fieldLabel}>Subcategory</div>
+                <select style={{...s.select,width:"100%"}} value={l2}
+                  onChange={e => setForm(f => ({...f, subcategory: e.target.value, category: f.category}))}>
+                  <option value="">— Select subcategory —</option>
+                  {TAXONOMY[form.category].map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              {l3Options.length > 0 && (
+                <div>
+                  <div style={s.fieldLabel}>Type</div>
+                  <select style={{...s.select,width:"100%"}} value={l3Val}
+                    onChange={e => setForm(f => ({...f, subcategory: e.target.value}))}>
+                    <option value="">— Select type —</option>
+                    {l3Options.map(opt => <option key={opt}>{opt}</option>)}
+                  </select>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Set linking */}
