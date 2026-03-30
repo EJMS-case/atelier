@@ -420,7 +420,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const shuffled = Object.values(byCategory).flat();
 
   const inventory = shuffled.map(it =>
-    `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | Color: ${it.color}` : ""}${it.brand ? ` | Brand: ${it.brand}` : ""}${it.notes ? ` | Notes: ${it.notes}` : ""}`
+    `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`
   ).join("\n");
 
   // Pick 3 random distinct moods
@@ -434,46 +434,44 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const prompt = `${STYLE_PROFILE}
 ${STYLING_PRINCIPLES}
 
-You are building outfits for a woman who wants to look like an effortless it-girl. Style direction: ${STYLE_PREFS.direction}.
+OCCASION: ${occasion} — a vibe, not a filter. Any piece can work.
+WEATHER: ${weather || "NYC — current season"}
+${request ? `CLIENT REQUEST: ${request}` : ""}
+${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
+${aboutMe.ageRange || aboutMe.professionalContext ? `CONTEXT: ${[aboutMe.ageRange, aboutMe.professionalContext].filter(Boolean).join("; ")}` : ""}
+${usedCombos ? `ALREADY USED — DO NOT REPEAT: ${usedCombos}` : ""}
 
-WARDROBE (shuffled for variety — pull from across the full list):
+APPROVED COLOR PAIRS (use deliberately):
+${colorPairsList}
+Monochromatic and tonal builds are encouraged. Warm browns + warm reds are FULLY APPROVED exceptions.
+
+WARDROBE:
 ${inventory}
 
-OCCASION CONTEXT: ${occasion} — treat as a vibe, not a constraint. Any piece from any category can work for any occasion.
-WEATHER: ${weather || "NYC — current season, dress accordingly"}
-${request ? `CLIENT NOTE: ${request}` : ""}
-${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY CONTEXT: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
-${aboutMe.ageRange || aboutMe.professionalContext ? `LIFE CONTEXT: ${[aboutMe.ageRange, aboutMe.professionalContext].filter(Boolean).join("; ")}` : ""}
-${usedCombos ? `DO NOT REPEAT THESE ITEM COMBINATIONS: ${usedCombos}` : ""}
+━━━ BUILD 3 LOOKS ━━━
 
-STYLE PREFERENCES (inject into every look):
-- Favorite color-blocking pairs (use these deliberately):
-${colorPairsList}
-- Monochromatic looks: encouraged
-- Tonal pairing (e.g., navy + powder blue, burgundy + blush): encouraged
-- Warm browns and warm reds in the wardrobe are FULLY APPROVED — never avoid them
+LOOK 1 MOOD: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
+LOOK 2 MOOD: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
+LOOK 3 MOOD: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-YOUR ASSIGNMENT: Create exactly 3 looks, each with a distinct mood:
+FOR EACH LOOK, follow this exact sequence:
+1. ANCHOR: Pick the single most interesting piece in the wardrobe for this mood. This drives everything.
+2. COLOR STORY: Define it now — monochromatic / tonal / one approved pair. Every other item must fit it.
+3. SECOND GARMENT: Picks the piece that creates the best silhouette tension with the anchor (volume contrast, texture contrast, or length surprise).
+4. BOTTOM or DRESS RULE: If anchor is a top/knit/outerwear → add a bottom. If anchor is a dress/jumpsuit → NO separate bottom. Never both.
+5. SHOES: Must belong to the color story. Respond to the hem and the mood — not just "match."
+6. BAG: Must belong to the color story. Finish the sentence — don't repeat it.
+7. EDIT: Remove anything that doesn't actively improve the look. Fewer intentional pieces beat more random ones.
 
-LOOK 1: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
-LOOK 2: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
-LOOK 3: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
+HARD CONSTRAINTS:
+— Every look needs: top-half garment + shoes + bag. Non-negotiable.
+— Shoes and bag must share the look's color story (not a random color from the wardrobe)
+— Never dress + separate pants/skirt/trousers
+— No item appears in more than one look
+— No warm/cool mixing unless it's an approved warm brown/red exception
+— Jewelry only if it genuinely elevates — never mention diamond rings or wedding band
 
-NON-NEGOTIABLE RULES:
-1. No predictable combinations. If it's the first thing anyone would think of, reject it.
-2. One unexpected pairing per look — find the tension (chunky knit + silk skirt; oversized blazer + mini; structured top + fluid trouser).
-3. Mix volumes deliberately. Never two fitted or two oversized without reason.
-4. Texture contrast in every look: matte + shine, structured + fluid, knit + silk.
-5. MANDATORY: Every look MUST include shoes AND a bag from the wardrobe. No exceptions. A look without shoes or a bag is incomplete.
-6. MANDATORY: Every look MUST include a top-half garment — a Tops, Knits, Outerwear, Dresses, Jumpsuits, or Occasionwear item. Never build a look around only Bottoms + accessories.
-7. NEVER combine a Dresses, Jumpsuits, or Sets item with a separate Bottoms item (pants/trousers/skirts). A dress or jumpsuit is already a complete garment.
-8. Color story must be internally consistent. Do not mix warm and cool tones in the same look unless it's an intentional approved exception (warm browns/reds).
-6. No item in more than one look. Use the full wardrobe — the best pieces aren't always listed first.
-7. If a Knits piece is included and a Wrist Cuff accessory is available, consider it as a finishing detail.
-8. Jewelry: only if genuinely distinctive. Never mention diamond rings or wedding band.
-9. Every look needs a deliberate color story — use the client's favorite pairs when possible.
-
-Respond ONLY with valid JSON — no markdown, no backticks:
+Respond ONLY with valid JSON, no markdown:
 {
   "looks": [
     {
@@ -481,10 +479,10 @@ Respond ONLY with valid JSON — no markdown, no backticks:
       "mood": "${selectedMoods[0].name}",
       "occasion": "${occasion}",
       "items": ["id1", "id2", "id3", "id4", "id5"],
-      "accessories": "specific styling instruction with HOW to wear it, or null",
+      "accessories": "specific HOW-to styling note, or null",
       "jewelry": "specific piece only if genuinely elevating, or null",
-      "why": "the intentional styling logic — what unexpected tension makes this interesting",
-      "colorNote": "the color story — reference specific color pairs if used",
+      "why": "the anchor piece + the tension that makes this look interesting",
+      "colorNote": "the color story — what structure was used and which pair/family",
       "flag": null
     }
   ]
