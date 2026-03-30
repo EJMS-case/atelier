@@ -320,7 +320,20 @@ function loadLocalItems() {
   catch { return []; }
 }
 function saveLocalItems(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  // Strip base64 images before saving to localStorage — images belong in Supabase Storage,
+  // not localStorage. This prevents QuotaExceededError silently wiping all data.
+  try {
+    const safe = items.map(it =>
+      it.image?.startsWith("data:") ? { ...it, image: null } : it
+    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
+  } catch (e) {
+    // Last resort: strip ALL images and try again
+    try {
+      const stripped = items.map(it => ({ ...it, image: null }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
+    } catch { /* Storage completely unavailable — Supabase is the source of truth */ }
+  }
 }
 function loadApiKey()   { return localStorage.getItem(API_KEY_STORE)  || ""; }
 function saveApiKey(k)  { localStorage.setItem(API_KEY_STORE, k); }
@@ -1111,11 +1124,12 @@ export default function App() {
         setItems(merged);
         saveLocalItems(merged);
 
-        // Push any local-only items (with image migration)
+        // Push ALL local items that are missing from Supabase (aggressive sync)
         const sbIds = new Set(sbItems.map(it => it.id));
         const localOnly = freshLocal.filter(it => !sbIds.has(it.id));
         if (localOnly.length > 0) {
-          migrateAndSync(localOnly, null, () => {});
+          // Batch upsert local-only items to Supabase (this backfills missing data)
+          migrateAndSync(localOnly, setItems, flashSync);
         }
 
         // Migrate any base64 images in the merged set to Storage
