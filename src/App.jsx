@@ -169,6 +169,8 @@ const sb = {
     const { image, ...rest } = item;
     // Start with image stripped if it's base64 (too large for DB row)
     let payload = image && !image.startsWith("data:") ? { ...rest, image } : { ...rest };
+    // UUID columns reject empty strings — convert to null
+    if (payload.set_id === "") payload.set_id = null;
 
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
