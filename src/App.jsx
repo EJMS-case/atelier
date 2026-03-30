@@ -2786,8 +2786,8 @@ function buildCollageLayout(items, suggestionSlots = []) {
       g.dress.forEach((item,i) => slots.push({ ...item, x:14, y:1, w:46, h:84, rotate:i%2?1:-1, zIndex:4 }));
     }
     g.clothing.forEach((item,i) => slots.push({ ...item, x:4+i*5, y:2, w:38, h:50, rotate:-2+i, zIndex:2+i }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:74, w:30, h:22, rotate:-2,   zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:64, y:40, w:30, h:34, rotate:2.5,  zIndex:7 }));
+    g.shoes.slice(0,1).forEach(item => slots.push({ ...item, x:2,  y:74, w:30, h:22, rotate:-2,   zIndex:8 }));
+    g.bag.forEach(item   => slots.push({ ...item, x:60, y:38, w:36, h:44, rotate:2.5,  zIndex:7 }));
 
   // ── SCENARIO B: Outerwear present
   } else if (hasOuter) {
@@ -2801,8 +2801,8 @@ function buildCollageLayout(items, suggestionSlots = []) {
     g.dress.forEach(item => slots.push({ ...item, x:40, y:2, w:42, h:82, rotate:1, zIndex:4 }));
     // Pants start mid-way so legs show clearly below outerwear hem
     g.bottom.forEach(item => slots.push({ ...item, x:20, y:26, w:42, h:72, rotate:0.5, zIndex:2 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:20, rotate:-1.5, zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:52, w:30, h:34, rotate:2,   zIndex:7 }));
+    g.shoes.slice(0,1).forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:20, rotate:-1.5, zIndex:8 }));
+    g.bag.forEach(item   => slots.push({ ...item, x:58, y:44, w:38, h:46, rotate:2,   zIndex:7 }));
 
   // ── SCENARIO C: Top + Bottom (most common)
   } else {
@@ -2829,9 +2829,9 @@ function buildCollageLayout(items, suggestionSlots = []) {
       );
     }
     g.dress.forEach(item => slots.push({ ...item, x:10, y:2, w:44, h:82, rotate:1, zIndex:4 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:22, rotate:-1.5, zIndex:8 }));
-    // Bag: right side, clear of the top zone
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:44, w:30, h:36, rotate:2,   zIndex:7 }));
+    g.shoes.slice(0,1).forEach(item => slots.push({ ...item, x:2,  y:76, w:28, h:22, rotate:-1.5, zIndex:8 }));
+    // Bag: right side, close to the outfit, large enough to read clearly
+    g.bag.forEach(item   => slots.push({ ...item, x:60, y:38, w:36, h:46, rotate:2,   zIndex:7 }));
   }
 
   // ── Accessories: top-right corner, small
@@ -2890,10 +2890,6 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
       <div style={s.lookHeader}>
         <div>
           <div style={s.lookName}>{look.name}</div>
-          <div style={s.lookOcc}>
-            {look.occasion?.toUpperCase()}
-            {look.mood && <span style={s.lookMood}> · {look.mood.toUpperCase()}</span>}
-          </div>
         </div>
         <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
           {expanded ? "Hide" : "Details"}
