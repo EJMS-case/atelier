@@ -441,9 +441,10 @@ ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportio
 ${aboutMe.ageRange || aboutMe.professionalContext ? `CONTEXT: ${[aboutMe.ageRange, aboutMe.professionalContext].filter(Boolean).join("; ")}` : ""}
 ${usedCombos ? `ALREADY USED — DO NOT REPEAT: ${usedCombos}` : ""}
 
-APPROVED COLOR PAIRS (use deliberately):
+APPROVED COLOR PAIRS (use deliberately — max 2 color families per look):
 ${colorPairsList}
-Monochromatic and tonal builds are encouraged. Warm browns + warm reds are FULLY APPROVED exceptions.
+Monochromatic and tonal builds are strongly encouraged. Warm browns + warm reds are FULLY APPROVED exceptions.
+CRITICAL: Shoes and bag MUST belong to the same color family as the clothing — not a random contrasting color.
 
 WARDROBE:
 ${inventory}
@@ -2380,39 +2381,60 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
   // ── SCENARIO A: Dress (no separate bottom)
   if (hasDress && !hasBottom) {
-    g.dress.forEach((item, i) =>
-      slots.push({ ...item, x:12, y:2, w:50, h:88, rotate:i%2?1:-1, zIndex:4 })
-    );
-    if (hasOuter) g.outer.forEach(item =>
-      slots.push({ ...item, x:0, y:2, w:46, h:72, rotate:-2.5, zIndex:5 })
-    );
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:73, w:38, h:25, rotate:-1.5, zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:36, w:34, h:42, rotate:2,    zIndex:7 }));
+    // Dress full-height center; outerwear overlaps left edge
+    if (hasOuter) {
+      g.outer.forEach(item => slots.push({ ...item, x:0, y:2, w:44, h:70, rotate:-2, zIndex:5 }));
+      g.dress.forEach((item,i) => slots.push({ ...item, x:28, y:2, w:48, h:88, rotate:i%2?1:-1, zIndex:4 }));
+    } else {
+      g.dress.forEach((item,i) => slots.push({ ...item, x:10, y:2, w:52, h:88, rotate:i%2?1:-1, zIndex:4 }));
+    }
+    g.shoes.forEach(item => slots.push({ ...item, x:2, y:74, w:36, h:24, rotate:-1.5, zIndex:8 }));
+    g.bag.forEach(item   => slots.push({ ...item, x:62, y:44, w:34, h:38, rotate:2,   zIndex:7 }));
 
   // ── SCENARIO B: Outerwear present
   } else if (hasOuter) {
+    // Jacket dominates left; clothing clearly to the RIGHT of jacket; pants legs below both
     g.outer.forEach(item =>
-      slots.push({ ...item, x:0, y:2, w:48, h:74, rotate:-2.5, zIndex:5 })
+      slots.push({ ...item, x:0, y:2, w:46, h:72, rotate:-2.5, zIndex:5 })
     );
+    // Clothing starts at x:42 — clears the jacket boundary, slight shoulder overlap only
     g.clothing.forEach((item, i) =>
-      slots.push({ ...item, x:30+i*4, y:4+i*2, w:44, h:58, rotate:1.5, zIndex:3+i })
+      slots.push({ ...item, x:42+i*3, y:4+i*3, w:44, h:56, rotate:1.5-i, zIndex:4-i })
     );
-    g.dress.forEach(item => slots.push({ ...item, x:28, y:4, w:46, h:86, rotate:1, zIndex:3 }));
-    g.bottom.forEach(item => slots.push({ ...item, x:20, y:20, w:46, h:78, rotate:0.5, zIndex:2 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:73, w:38, h:25, rotate:-1.5, zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:38, w:34, h:40, rotate:2,    zIndex:7 }));
+    g.dress.forEach(item => slots.push({ ...item, x:40, y:4, w:46, h:86, rotate:1, zIndex:4 }));
+    // Pants start at y:24 so legs show clearly below jacket bottom (y:72)
+    g.bottom.forEach(item => slots.push({ ...item, x:22, y:24, w:44, h:74, rotate:0.5, zIndex:2 }));
+    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:74, w:36, h:24, rotate:-1.5, zIndex:8 }));
+    // Bag sits mid-right, below clothing zone
+    g.bag.forEach(item   => slots.push({ ...item, x:60, y:56, w:36, h:38, rotate:2,   zIndex:7 }));
 
   // ── SCENARIO C: Top + Bottom (most common)
   } else {
+    // Pants behind, full height; top overlaps upper portion
     g.bottom.forEach(item =>
-      slots.push({ ...item, x:18, y:14, w:48, h:84, rotate:0.5, zIndex:2 })
+      slots.push({ ...item, x:16, y:12, w:50, h:86, rotate:0.5, zIndex:2 })
     );
-    g.clothing.forEach((item, i) =>
-      slots.push({ ...item, x:4+i*4, y:2, w:52, h:60, rotate:i%2?1.5:-1.5, zIndex:5+i })
-    );
-    g.dress.forEach(item => slots.push({ ...item, x:6, y:2, w:52, h:86, rotate:1, zIndex:4 }));
-    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:73, w:38, h:25, rotate:-1.5, zIndex:8 }));
-    g.bag.forEach(item   => slots.push({ ...item, x:62, y:32, w:34, h:42, rotate:2,    zIndex:7 }));
+    // Single top: center. Two tops: layer left-behind / right-front
+    if (g.clothing.length > 1) {
+      g.clothing.forEach((item, i) =>
+        slots.push({ ...item,
+          x: i===0 ? 2  : 22,
+          y: i===0 ? 2  : 6,
+          w: i===0 ? 52 : 46,
+          h: i===0 ? 62 : 56,
+          rotate: i===0 ? -2 : 2,
+          zIndex: i===0 ? 4 : 6,
+        })
+      );
+    } else {
+      g.clothing.forEach(item =>
+        slots.push({ ...item, x:6, y:2, w:52, h:62, rotate:-1.5, zIndex:5 })
+      );
+    }
+    g.dress.forEach(item => slots.push({ ...item, x:8, y:2, w:50, h:86, rotate:1, zIndex:4 }));
+    g.shoes.forEach(item => slots.push({ ...item, x:2,  y:74, w:36, h:24, rotate:-1.5, zIndex:8 }));
+    // Bag right side, mid-height — clearly in the right zone, not competing with tops
+    g.bag.forEach(item   => slots.push({ ...item, x:60, y:42, w:36, h:40, rotate:2,   zIndex:7 }));
   }
 
   // ── Accessories: top-right corner, small
