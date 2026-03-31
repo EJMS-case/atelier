@@ -1194,7 +1194,7 @@ export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
   const [view,       setView]       = useState("closet");
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
-  const [activeFilters, setActiveFilters] = useState({ category: [], color: [], brand: [] });
+  const [activeFilters, setActiveFilters] = useState({ category: [], color: [], brand: [], occasion: [], season: [], sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
   const [allLooks,   setAllLooks]   = useState([]); // history of all generated looks for anti-repeat
   const [styling,    setStyling]    = useState(false);
@@ -1445,6 +1445,34 @@ export default function App() {
       base = base.filter(it => it.color && activeFilters.color.some(c =>
         it.color.toLowerCase().includes(c.toLowerCase())
       ));
+    }
+    // Occasion filter
+    if (activeFilters.occasion?.length) {
+      base = base.filter(it => it.occasion && activeFilters.occasion.some(o =>
+        (Array.isArray(it.occasion) ? it.occasion : [it.occasion]).includes(o)
+      ));
+    }
+    // Season filter
+    if (activeFilters.season) {
+      base = base.filter(it => {
+        if (activeFilters.season === "All Season") return it.season === "All Season";
+        if (activeFilters.season === "Spring/Summer") return it.season === "Spring/Summer" || it.season === "All Season";
+        if (activeFilters.season === "Fall/Winter") return it.season === "Fall/Winter" || it.season === "All Season";
+        return true;
+      });
+    }
+    // Sets filter
+    if (activeFilters.sets === "Sets Only") base = base.filter(it => it.set_id);
+    if (activeFilters.sets === "Separates Only") base = base.filter(it => !it.set_id);
+    if (activeFilters.sets === "Part of a Set") base = base.filter(it => it.set_id && it.is_separable);
+    // Last Worn filter
+    if (activeFilters.lastWorn) {
+      const now = new Date();
+      const days = parseInt(activeFilters.lastWorn);
+      if (days > 0) {
+        const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+        base = base.filter(it => !it.last_worn || new Date(it.last_worn) < cutoff);
+      }
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
   })();
@@ -1741,9 +1769,10 @@ export default function App() {
 
 // ── FILTER BAR ────────────────────────────────────────────────────────────────
 function FilterBar({ items, activeFilters, onChange }) {
-  const [expandedColor, setExpandedColor] = useState(null); // color family name being expanded
+  const [expandedColor, setExpandedColor] = useState(null);
   const [showBrand, setShowBrand] = useState(false);
   const [brandSearch, setBrandSearch] = useState("");
+  const [showMore, setShowMore] = useState(false);
 
   const toggle = (type, value) => {
     const current = activeFilters[type] || [];
@@ -1753,9 +1782,13 @@ function FilterBar({ items, activeFilters, onChange }) {
     onChange({ ...activeFilters, [type]: next });
   };
 
+  const setSingle = (type, value) => {
+    onChange({ ...activeFilters, [type]: activeFilters[type] === value ? "" : value });
+  };
+
   const isActive = (type, value) => (activeFilters[type] || []).includes(value);
-  const clearAll = () => onChange({ category: [], color: [], brand: [] });
-  const hasActive = Object.values(activeFilters).some(v => v?.length > 0);
+  const clearAll = () => onChange({ category: [], color: [], brand: [], occasion: [], season: "", sets: "", lastWorn: "" });
+  const hasActive = Object.values(activeFilters).some(v => Array.isArray(v) ? v.length > 0 : !!v);
 
   // Unique brands from wardrobe
   const brands = [...new Set(items.map(it => it.brand).filter(Boolean))].sort();
@@ -1852,18 +1885,96 @@ function FilterBar({ items, activeFilters, onChange }) {
         )}
       </div>
 
+      {/* Expandable filters row */}
+      <div style={s.filterSection}>
+        <button style={s.filterToggleBtn} onClick={() => setShowMore(v => !v)}>
+          More Filters {showMore ? "▲" : "▼"}
+        </button>
+      </div>
+
+      {showMore && (
+        <>
+          {/* Occasion multi-select */}
+          <div style={s.filterSection}>
+            <div style={s.filterSectionLabel}>Occasion</div>
+            <div style={s.filterRow}>
+              {OCCASIONS.map(occ => (
+                <button key={occ}
+                  onClick={() => toggle("occasion", occ)}
+                  style={{...s.chip, fontSize:10, ...(isActive("occasion", occ) ? s.chipActive : {})}}>
+                  {occ}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Season */}
+          <div style={s.filterSection}>
+            <div style={s.filterSectionLabel}>Season</div>
+            <div style={s.filterRow}>
+              {["Spring/Summer","Fall/Winter","All Season"].map(season => (
+                <button key={season}
+                  onClick={() => setSingle("season", season)}
+                  style={{...s.chip, fontSize:10, ...(activeFilters.season === season ? s.chipActive : {})}}>
+                  {season}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sets toggle */}
+          <div style={s.filterSection}>
+            <div style={s.filterSectionLabel}>Sets</div>
+            <div style={s.filterRow}>
+              {["Sets Only","Separates Only","Part of a Set"].map(opt => (
+                <button key={opt}
+                  onClick={() => setSingle("sets", opt)}
+                  style={{...s.chip, fontSize:10, ...(activeFilters.sets === opt ? s.chipActive : {})}}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Last Worn */}
+          <div style={s.filterSection}>
+            <div style={s.filterSectionLabel}>Last Worn</div>
+            <div style={s.filterRow}>
+              {[{label:"Not worn in 30 days", val:"30"},{label:"60 days", val:"60"},{label:"90 days", val:"90"}].map(opt => (
+                <button key={opt.val}
+                  onClick={() => setSingle("lastWorn", opt.val)}
+                  style={{...s.chip, fontSize:10, ...(activeFilters.lastWorn === opt.val ? s.chipActive : {})}}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Active filter pills + clear */}
       {hasActive && (
         <div style={s.activePills}>
-          {Object.entries(activeFilters).flatMap(([type, values]) =>
-            (values || []).map(val => (
-              <button key={`${type}-${val}`}
-                onClick={() => toggle(type, val)}
-                style={s.activePill}>
-                {val} ✕
-              </button>
-            ))
-          )}
+          {Object.entries(activeFilters).flatMap(([type, values]) => {
+            if (Array.isArray(values)) {
+              return values.map(val => (
+                <button key={`${type}-${val}`}
+                  onClick={() => toggle(type, val)}
+                  style={s.activePill}>
+                  {val} ✕
+                </button>
+              ));
+            } else if (values) {
+              return [(
+                <button key={`${type}-${values}`}
+                  onClick={() => setSingle(type, values)}
+                  style={s.activePill}>
+                  {type === "lastWorn" ? `Not worn ${values}d` : values} ✕
+                </button>
+              )];
+            }
+            return [];
+          })}
           <button onClick={clearAll} style={s.clearAllBtn}>Clear all</button>
         </div>
       )}
