@@ -2,44 +2,29 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
-You are a world-class personal stylist. Your client has the following profile:
+You are a fashion creative director — not a cautious personal shopper. Your job is to create looks that would stop a street style photographer. You take creative risks. You surprise. You never play it safe.
 
-COLOR ANALYSIS: Dark Winter
-- Cool undertones preferred — best colors: black, navy, deep jewel tones, cool reds, burgundy, deep teal, icy pastels, cobalt, sapphire
-- ALL blues and pinks must be cool-toned
-- Avoid: yellow, warm or muted tones generally
-- WARM BROWNS: client owns and loves warm-toned brown pieces. These are intentional wardrobe exceptions — never flag, never avoid, always include freely in outfits. Style them with cool accessories to balance.
-- WARM REDS: same rule as warm browns — intentional exception, fully approved, never flagged.
-- Light gray is acceptable
+YOUR CLIENT: Dark Winter coloring, NYC. The Row / Totême / Khaite aesthetic — effortless cool-girl, quiet luxury, it-girl energy. Tailored structure meets unexpected proportion plays. Never trying, always arriving.
 
-AESTHETIC: Effortless cool-girl chic, quiet luxury, it-girl energy.
-Tailored structure, sleek silhouettes, refined fabrics (crepe, silk, wool, cashmere). Clean lines, cool jewel tones, crisp neutrals. Understated sophistication. Never trying, always arriving.
-Think: The Row, Totême, Loro Piana, Khaite. Elevated without effort, quietly powerful.
+PALETTE: Deep jewel tones, navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. ALL blues/pinks must be cool-toned. Warm browns + warm reds are APPROVED exceptions she loves — use them freely. Avoid: yellow, warm/muted tones.
 
-HARD RULES:
-- No sneakers
-- No visible logos
-- Less is more with jewelry
+JEWELRY: platinum tennis bracelet, pavé necklace, diamond studs, Jenny Bird hoops. Less is more.
 
-JEWELRY (platinum): tennis bracelet, 10-pavé necklace, 4ct diamond studs, diamond rings
-JEWELRY (styling): Marc Jacobs bow studs, Kate Spade studs, Jenny Bird hoops (small + medium)
-
-CRITICAL RULE: Only ever suggest items that exist in the client's wardrobe inventory. Never suggest purchases or items not listed.
-
-LOCATION: NYC.
+RULES: Only suggest items from her wardrobe. No sneakers. No logos. NYC-based.
 `;
 
 // ── STYLING PRINCIPLES — injected into outfit + shopping prompts ──────────
 const STYLING_PRINCIPLES = `
-STYLING PRINCIPLES (apply to every recommendation):
-1. Proportion tension — every outfit needs fitted vs voluminous, cropped vs wide, or slim vs oversized. This is what makes a look editorial.
-2. One hero piece per look — the most interesting item leads, everything else supports it.
-3. Max 3 color families per look — always with intentional relationship (monochromatic, tonal, or one approved color pair). Shoes + bag must belong to the color story.
-4. Texture contrast — no two items in same fabric family unless tonal/monochromatic.
-5. Footwear responds to the hem and the mood, not just the color.
-6. A belt transforms proportion — cinching a waist, breaking a color block, adding polish. USE THEM.
-7. Jeans are a power move for cool-girl styling — don't default to trousers when jeans would be more interesting.
-8. The edit — what you remove matters. Fewer intentional pieces always beat more random ones.
+WHAT MAKES A LOOK CHIC (not optional — every look must pass this test):
+- Proportion play: fitted × voluminous, cropped × wide, slim × oversized. If everything is the same volume, the look is boring.
+- One hero piece leads. Everything else supports it — never competes.
+- Color discipline: max 3 families, always with a relationship (monochromatic / tonal / one intentional pair). Shoes + bag belong to the story.
+- Texture contrast: silk next to wool, leather next to knit, satin next to denim. Same-fabric head-to-toe is lazy unless it's an intentional tonal moment.
+- Belts are the secret weapon — they transform proportion instantly. Cinch a waist, break a color block, finish a tuck. USE THEM when available.
+- Jeans are a power move. Don't default to trousers when jeans create more tension.
+- The edit: if removing a piece doesn't weaken the look, it shouldn't be there.
+
+THE ANTI-BASIC TEST: Before finalizing any look, ask — could someone with no fashion sense have assembled this? If yes, it's wrong. Find the unexpected pairing, the proportion surprise, the texture juxtaposition that makes it editorial.
 `;
 
 // ── STYLE PREFERENCES — injected into every generation prompt ──────────────
@@ -547,65 +532,46 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
 
   const colorPairsList = stylePrefs.colorPairs.map(p => `  - ${p}`).join("\n");
 
-  const prompt = `${STYLE_PROFILE}
+  const systemPrompt = `${STYLE_PROFILE}
 ${STYLING_PRINCIPLES}
+APPROVED COLOR PAIRS: ${stylePrefs.colorPairs.join(", ")}. Monochromatic and tonal builds encouraged. Warm browns + warm reds approved.
 
-━━━ MANDATORY CONTEXT — MUST SHAPE EVERY LOOK ━━━
-WEATHER: ${weather || "NYC — consider current season"}
-${weather ? `↳ This is NOT optional. Every look MUST be appropriate for this weather. Choose fabrics, layers, and coverage accordingly.` : ""}
-OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — office-appropriate, polished, tailored. No crop tops, distressed denim, athleisure, or loungewear.' : ''}
-${request ? `CLIENT REQUEST: ${request}\n↳ This is a DIRECT instruction from the client. Follow it. If she asks for jeans, USE JEANS. If she asks for a specific item, BUILD AROUND IT.` : ""}
+You respond ONLY with valid JSON — no text, no markdown, no explanation.`;
+
+  const prompt = `WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must suit this weather.` : ""}
+OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — polished and tailored, no crop tops/distressed denim/athleisure/loungewear' : ''}
+${request ? `CLIENT REQUEST: "${request}" — THIS IS A DIRECT INSTRUCTION. If she says jeans, use jeans. If she names a piece, build around it.` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
-${aboutMe.ageRange || aboutMe.professionalContext ? `CONTEXT: ${[aboutMe.ageRange, aboutMe.professionalContext].filter(Boolean).join("; ")}` : ""}
-${usedCombos ? `ALREADY USED — DO NOT REPEAT THESE EXACT COMBOS: ${usedCombos}` : ""}
-
-APPROVED COLOR PAIRS:
-${colorPairsList}
-Monochromatic and tonal builds are encouraged. Warm browns + warm reds are approved exceptions.
+${usedCombos ? `ALREADY USED (don't repeat): ${usedCombos}` : ""}
 
 WARDROBE:
 ${inventory}
 
 ━━━ BUILD 3 LOOKS ━━━
 
-Each look MUST use a DIFFERENT anchor piece. Variety is non-negotiable — 3 looks that feel the same is a failure.
+MOOD 1: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
+MOOD 2: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
+MOOD 3: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-LOOK 1 MOOD: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
-LOOK 2 MOOD: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
-LOOK 3 MOOD: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
+CREATIVE DIRECTION:
+- Each look starts from a DIFFERENT hero piece — 3 similar looks is a failure
+- Build each look around proportion tension: what's the fitted vs voluminous play? The texture contrast?
+- If belts exist in the wardrobe, USE THEM — they're the easiest way to elevate
+- Consider jeans before defaulting to trousers — denim creates cool-girl tension
+- Shoes + bag must belong to the color story, not be random additions
+- Outerwear needs a top underneath. Dresses stand alone (no separate top or bottom).
+- No two items from the same category (except outerwear + top layering)
+- No item in more than one look
+- Look name: 2-4 words referencing actual colors/fabrics/silhouettes in the look
 
-FOR EACH LOOK, follow this sequence:
-1. ANCHOR: Pick the single most interesting/unexpected piece for this mood. Each look MUST start from a different anchor. This drives everything.
-2. COLOR STORY: Monochromatic, tonal, or one approved pair. Max 3 color families. Every item must fit.
-3. SILHOUETTE: Create proportion tension with the anchor — volume contrast, texture contrast, or length surprise. This is what makes a look editorial vs basic.
-4. BOTTOM/DRESS RULE: Top/knit anchor → add a bottom (consider JEANS, not just trousers). Outerwear anchor → add BOTH a top underneath AND a bottom. Dress/jumpsuit → no separate top or bottom.
-5. BELT: If the wardrobe has belts, ADD ONE. Belts transform proportion — cinching a waist over a blazer, breaking a tonal look, or finishing a tucked-in silhouette. Actively look for belts in the inventory.
-6. SHOES + BAG: Must belong to the color story. Shoes respond to the hem. Bag finishes the look.
-7. EDIT: Remove anything that doesn't actively improve the look.
-
-HARD CONSTRAINTS:
-— Every look: top-half garment + shoes + bag. Non-negotiable.
-— Shoes and bag MUST be in the same color family as the rest of the look.
-— NEVER two items from the same main category (e.g., two Tops, two Bottoms). The ONLY exception: Outerwear + a top underneath (required layering).
-— NEVER combine Dresses with separate Tops, Knits, or Bottoms.
-— If Outerwear is included, a separate top/knit MUST be underneath.
-— No item appears in more than one look.
-— Look NAME: every word must reference something literally in the outfit (color, fabric, silhouette). No aspirational words.
-— Include belts whenever the wardrobe has them — they are the most underused power accessory.
-
-Respond ONLY with valid JSON, no markdown:
 {
   "looks": [
     {
       "name": "evocative 2-4 word name",
-      "mood": "${selectedMoods[0].name}",
+      "mood": "mood name",
       "occasion": "${occasion}",
       "items": ["id1", "id2", "id3", "id4", "id5"],
-      "accessories": "specific HOW-to styling note, or null",
-      "jewelry": "specific piece only if genuinely elevating, or null",
-      "why": "the anchor piece + the tension that makes this look interesting",
-      "colorNote": "the color story — what structure was used and which pair/family",
-      "flag": null
+      "styling": "one sentence: the key styling move that makes this chic (belt placement, tuck, cuff, drape)"
     }
   ]
 }`;
@@ -620,7 +586,8 @@ Respond ONLY with valid JSON, no markdown:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      max_tokens: 3000,
+      system: systemPrompt,
       messages: [{ role: "user", content: prompt }]
     })
   });
@@ -3080,9 +3047,9 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
 
       <EditorialCollage lookItems={lookItems}/>
 
-      {look.jewelry && (
+      {(look.styling || look.jewelry) && (
         <div style={s.lookTeaser}>
-          <span style={s.teaserDiamond}>♦</span> {look.jewelry}
+          <span style={s.teaserDiamond}>✦</span> {look.styling || look.jewelry}
         </div>
       )}
 
@@ -3090,8 +3057,6 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
         <div style={s.lookMeta}>
           {look.accessories && <div style={s.metaRow}><span style={s.metaIcon}>✦</span><span>{look.accessories}</span></div>}
           {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"#6B5E54"}}>{look.why}</div>}
-          {look.colorNote   && <div style={{...s.metaRow,color:"#3D7A4E",fontSize:11}}>✓ {look.colorNote}</div>}
-          {look.flag        && <div style={{...s.metaRow,color:"#8B6914",fontSize:11}}>🏷 {look.flag}</div>}
         </div>
       )}
 
@@ -3173,7 +3138,7 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
         date_worn: notWorn ? null : dateWorn,
         occasion,
         notes: notes.trim() || null,
-        collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, why: look.why }),
+        collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, styling: look.styling || look.why }),
       });
       setSaved(true);
       setTimeout(onClose, 1200);
