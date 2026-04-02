@@ -24,28 +24,22 @@ HARD RULES:
 JEWELRY (platinum): tennis bracelet, 10-pavé necklace, 4ct diamond studs, diamond rings
 JEWELRY (styling): Marc Jacobs bow studs, Kate Spade studs, Jenny Bird hoops (small + medium)
 
-OCCASIONS (treat as soft context — never a hard constraint):
-Occasion is a vibe suggestion, not a filter. A casual piece can anchor a dinner look. An evening top can go to lunch. An athleisure skirt can work for daytime. Build the outfit; the occasion is just a starting point.
-
 CRITICAL RULE: Only ever suggest items that exist in the client's wardrobe inventory. Never suggest purchases or items not listed.
 
-LOCATION: NYC. Always consider current season and weather when styling.
+LOCATION: NYC.
 `;
 
 // ── STYLING PRINCIPLES — injected into outfit + shopping prompts ──────────
 const STYLING_PRINCIPLES = `
 STYLING PRINCIPLES (apply to every recommendation):
-1. Proportion first — every outfit starts with silhouette tension (fitted + voluminous, cropped + wide, slim + oversized)
-2. One hero piece per look — the most interesting item leads, everything else supports
-3. Color math — max 3 colors per look, always with intentional relationship (monochromatic / tonal / complementary pair)
-4. Texture must earn its place — no two items in same fabric family unless it's a tonal monochromatic moment
-5. The edit — what you remove is as important as what you include. Fewer pieces, more intention.
-6. Footwear responds to the hem and the mood, not just the color story
-7. The bag is the punctuation mark — it finishes the look, never repeats it
-8. Outerwear is part of the look in cooler months — never an afterthought
-9. Never match when you can coordinate — analogous always beats identical
-10. Jewelry should feel intentional — if it's there, the look feels unfinished without it
-11. Occasion is a starting point, not a ceiling — style across and above
+1. Proportion tension — every outfit needs fitted vs voluminous, cropped vs wide, or slim vs oversized. This is what makes a look editorial.
+2. One hero piece per look — the most interesting item leads, everything else supports it.
+3. Max 3 color families per look — always with intentional relationship (monochromatic, tonal, or one approved color pair). Shoes + bag must belong to the color story.
+4. Texture contrast — no two items in same fabric family unless tonal/monochromatic.
+5. Footwear responds to the hem and the mood, not just the color.
+6. A belt transforms proportion — cinching a waist, breaking a color block, adding polish. USE THEM.
+7. Jeans are a power move for cool-girl styling — don't default to trousers when jeans would be more interesting.
+8. The edit — what you remove matters. Fewer intentional pieces always beat more random ones.
 `;
 
 // ── STYLE PREFERENCES — injected into every generation prompt ──────────────
@@ -556,48 +550,48 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const prompt = `${STYLE_PROFILE}
 ${STYLING_PRINCIPLES}
 
-OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — office-appropriate and polished. Layering expected. This is NOT a loose vibe — respect the context.' : ' — a vibe, not a filter. Any piece can work.'}
-WEATHER: ${weather || "NYC — current season"}
-${request ? `CLIENT REQUEST: ${request}` : ""}
+━━━ MANDATORY CONTEXT — MUST SHAPE EVERY LOOK ━━━
+WEATHER: ${weather || "NYC — consider current season"}
+${weather ? `↳ This is NOT optional. Every look MUST be appropriate for this weather. Choose fabrics, layers, and coverage accordingly.` : ""}
+OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — office-appropriate, polished, tailored. No crop tops, distressed denim, athleisure, or loungewear.' : ''}
+${request ? `CLIENT REQUEST: ${request}\n↳ This is a DIRECT instruction from the client. Follow it. If she asks for jeans, USE JEANS. If she asks for a specific item, BUILD AROUND IT.` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
 ${aboutMe.ageRange || aboutMe.professionalContext ? `CONTEXT: ${[aboutMe.ageRange, aboutMe.professionalContext].filter(Boolean).join("; ")}` : ""}
-${usedCombos ? `ALREADY USED — DO NOT REPEAT: ${usedCombos}` : ""}
+${usedCombos ? `ALREADY USED — DO NOT REPEAT THESE EXACT COMBOS: ${usedCombos}` : ""}
 
-APPROVED COLOR PAIRS (use deliberately — max 2 color families per look):
+APPROVED COLOR PAIRS:
 ${colorPairsList}
-Monochromatic and tonal builds are strongly encouraged. Warm browns + warm reds are FULLY APPROVED exceptions.
-CRITICAL: Shoes and bag MUST belong to the same color family as the clothing — not a random contrasting color.
+Monochromatic and tonal builds are encouraged. Warm browns + warm reds are approved exceptions.
 
 WARDROBE:
 ${inventory}
 
 ━━━ BUILD 3 LOOKS ━━━
 
+Each look MUST use a DIFFERENT anchor piece. Variety is non-negotiable — 3 looks that feel the same is a failure.
+
 LOOK 1 MOOD: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
 LOOK 2 MOOD: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
 LOOK 3 MOOD: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-FOR EACH LOOK, follow this exact sequence:
-1. ANCHOR: Pick the single most interesting piece in the wardrobe for this mood. This drives everything.
-2. COLOR STORY: Define it now — monochromatic / tonal / one approved pair. Every other item must fit it.
-3. SECOND GARMENT: Picks the piece that creates the best silhouette tension with the anchor (volume contrast, texture contrast, or length surprise).
-4. BOTTOM or DRESS RULE: If anchor is a top/knit → add a bottom. If anchor is outerwear (blazer, coat, jacket) → add BOTH a top underneath AND a bottom. If anchor is a dress/jumpsuit → NO separate bottom. Never both dress + bottom.
-5. SHOES: Must belong to the color story. Respond to the hem and the mood — not just "match."
-6. BAG: Must belong to the color story. Finish the sentence — don't repeat it.
-7. EDIT: Remove anything that doesn't actively improve the look. Fewer intentional pieces beat more random ones.
+FOR EACH LOOK, follow this sequence:
+1. ANCHOR: Pick the single most interesting/unexpected piece for this mood. Each look MUST start from a different anchor. This drives everything.
+2. COLOR STORY: Monochromatic, tonal, or one approved pair. Max 3 color families. Every item must fit.
+3. SILHOUETTE: Create proportion tension with the anchor — volume contrast, texture contrast, or length surprise. This is what makes a look editorial vs basic.
+4. BOTTOM/DRESS RULE: Top/knit anchor → add a bottom (consider JEANS, not just trousers). Outerwear anchor → add BOTH a top underneath AND a bottom. Dress/jumpsuit → no separate top or bottom.
+5. BELT: If the wardrobe has belts, ADD ONE. Belts transform proportion — cinching a waist over a blazer, breaking a tonal look, or finishing a tucked-in silhouette. Actively look for belts in the inventory.
+6. SHOES + BAG: Must belong to the color story. Shoes respond to the hem. Bag finishes the look.
+7. EDIT: Remove anything that doesn't actively improve the look.
 
 HARD CONSTRAINTS:
-— Every look needs: top-half garment + shoes + bag. Non-negotiable.
-— Shoes and bag MUST be in the same color family as the rest of the look. Not a random color.
-— NEVER combine a Dresses item with a separate Tops or Knits item. A dress stands alone.
-— NEVER combine a Dresses item with a separate Bottoms item (pants/skirt/trousers).
-— No item appears in more than one look
-— No warm/cool color mixing unless it's an approved warm brown/red exception
-— Jewelry only if it genuinely elevates — never mention diamond rings or wedding band
-— Look NAME must directly reference actual colors, fabrics, or silhouettes IN the look. Every word in the name must correspond to something literally present in the outfit. If you say "Navy" the look MUST contain a navy item. If you say "Silk" there must be a silk piece. No aspirational or invented references.
-— Look NAME must suit the requested occasion. For Work or Executive occasions, names should convey polish and professionalism, not nightlife or casual vibes.
-— If Outerwear is included, a separate top/knit/blouse MUST also be included underneath. A blazer or coat alone is not a complete top-half.
-— For Work or Executive occasions: NO crop tops, NO distressed denim, NO athleisure, NO loungewear. Every piece must be office-appropriate. Stick to tailored, polished pieces.
+— Every look: top-half garment + shoes + bag. Non-negotiable.
+— Shoes and bag MUST be in the same color family as the rest of the look.
+— NEVER two items from the same main category (e.g., two Tops, two Bottoms). The ONLY exception: Outerwear + a top underneath (required layering).
+— NEVER combine Dresses with separate Tops, Knits, or Bottoms.
+— If Outerwear is included, a separate top/knit MUST be underneath.
+— No item appears in more than one look.
+— Look NAME: every word must reference something literally in the outfit (color, fabric, silhouette). No aspirational words.
+— Include belts whenever the wardrobe has them — they are the most underused power accessory.
 
 Respond ONLY with valid JSON, no markdown:
 {
@@ -2921,11 +2915,12 @@ function buildCollageLayout(items, suggestionSlots = []) {
     if (cat === "Shoes")     return "shoes";
     if (cat === "Dresses" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
     if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name))) return "bag";
+    if (cat === "Accessories" && (sub === "Belts" || /\bbelt\b/i.test(name))) return "belt";
     if (cat === "Accessories") return "accessory";
     return "clothing";
   };
 
-  const g = { outer:[], clothing:[], dress:[], bottom:[], shoes:[], bag:[], accessory:[] };
+  const g = { outer:[], clothing:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], accessory:[] };
   all.forEach(item => { const r = getRole(item); if (g[r]) g[r].push(item); });
 
   const slots = [];
@@ -2998,6 +2993,23 @@ function buildCollageLayout(items, suggestionSlots = []) {
     g.bottom.forEach(item  => slots.push({ ...item, x:3,  y:46, w:44, h:50, rotate:0, zIndex:2 }));
     g.bag.forEach(item     => slots.push({ ...item, x:54, y:46, w:38, h:30, rotate:0, zIndex:7 }));
     g.shoes.forEach(item   => slots.push({ ...item, x:56, y:78, w:28, h:18, rotate:0, zIndex:8 }));
+  }
+
+  // ── Belt: horizontal strip at the waist junction ──
+  // Dress scenarios: belt overlays dress at waist (higher zIndex, intentional visual overlay)
+  // Other scenarios: belt in gap between top row and bottom row (zero overlap)
+  if (g.belt.length > 0) {
+    let beltPos;
+    if (hasDress && !hasBottom) {
+      beltPos = hasOuter
+        ? { x:58, y:34, w:32, h:6 }   // on dress in right column
+        : { x:22, y:36, w:36, h:6 };   // on centered dress
+    } else {
+      // Gap belt: must end before bottom starts (y48 for B/D/E, y46 for C)
+      const beltY = (!hasOuter && nClothing <= 1) ? 43 : 45;
+      beltPos = { x:20, y:beltY, w:26, h:2 };
+    }
+    g.belt.forEach(item => slots.push({ ...item, ...beltPos, rotate:0, zIndex:10 }));
   }
 
   // ── Accessories: small, tucked into top corners
