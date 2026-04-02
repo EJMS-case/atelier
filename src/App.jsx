@@ -495,13 +495,13 @@ function shuffle(arr) {
 
 // ── MOOD ARCHETYPES — rotated randomly to force variety ──────────────────────
 const MOODS = [
-  { name: "Off-Duty Parisian", brief: "Looks like she just walked out of a gallery in the Marais. Effortless, slightly undone, always a surprising fabric or silhouette choice. Never trying." },
-  { name: "Quiet Power", brief: "Every piece is intentional and slightly intimidating. Monochromatic or deep tonal. Sleek, architectural, zero unnecessary detail. The kind of woman who doesn't raise her voice." },
-  { name: "Modern Minimalist", brief: "The Row aesthetic. Extreme restraint. One interesting texture or silhouette detail does all the work. Nothing decorative, everything intentional." },
-  { name: "Italian Edit", brief: "Slightly oversized blazer, fluid trouser, effortless bag. Looks expensive without looking like she tried. Relaxed tailoring, beautiful fabric, confident proportion." },
-  { name: "After Hours", brief: "Dinner-ready but not costume-y. Unexpected fabric (silk, satin, velvet) mixed with something grounded. Feels like a woman who has somewhere better to be." },
-  { name: "Editorial", brief: "The kind of outfit that would stop a street style photographer. One unexpected pairing — a juxtaposition of proportion, texture, or color that shouldn't work but does." },
-  { name: "Uptown Undone", brief: "Polished pieces worn casually — like she threw on the blazer last minute and it works perfectly. High-low tension. Never precious." },
+  { name: "Off-Duty Parisian", brief: "Gallery-exit energy. One piece is slightly undone — a sleeve pushed up, a shirt half-tucked. Pair something structured with something fluid. A silk blouse with straight-leg jeans and a belt. A knit over a midi skirt with flat boots." },
+  { name: "Quiet Power", brief: "Monochromatic or deep tonal — one color family in 2-3 textures. Sleek, architectural. Wool blazer over silk cami with tailored trousers. Head-to-toe navy in three fabrics. A belt cinching a tonal look is the move here." },
+  { name: "Modern Minimalist", brief: "The Row energy. Max 4 pieces. One texture surprise does all the work — leather against cashmere, satin against denim. Everything else disappears. If there's a belt, it's the accent." },
+  { name: "Italian Edit", brief: "Relaxed tailoring with confident proportion. Oversized blazer + slim bottom, or fluid trouser + fitted knit. The bag is the quiet flex. Brown leather accessories ground cool tones beautifully here." },
+  { name: "After Hours", brief: "Dinner-ready: unexpected fabric (silk, satin, velvet) mixed with something grounded (denim, structured wool, leather). Satin cami + jeans + heels. Silk blouse + leather skirt. A woman who has somewhere better to be." },
+  { name: "Editorial", brief: "The street-style-photographer stopper. One unexpected pairing that shouldn't work but does — proportion clash (oversized × slim), texture clash (chunky knit × delicate skirt), or a color pair that creates visual tension." },
+  { name: "Uptown Undone", brief: "Polished pieces worn casually. Blazer thrown over a simple tee + trousers. Cashmere tucked into jeans with heeled boots. The trick: one expensive piece styled down, or one casual piece styled up. Belt optional but effective." },
 ];
 
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
@@ -553,16 +553,20 @@ MOOD 1: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
 MOOD 2: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
 MOOD 3: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-CREATIVE DIRECTION:
-- Each look starts from a DIFFERENT hero piece — 3 similar looks is a failure
-- Build each look around proportion tension: what's the fitted vs voluminous play? The texture contrast?
-- If belts exist in the wardrobe, USE THEM — they're the easiest way to elevate
-- Consider jeans before defaulting to trousers — denim creates cool-girl tension
-- Shoes + bag must belong to the color story, not be random additions
-- Outerwear needs a top underneath. Dresses stand alone (no separate top or bottom).
-- No two items from the same category (except outerwear + top layering)
+HOW TO BUILD EACH LOOK:
+1. Pick a DIFFERENT hero piece for each look — if 3 looks feel similar, start over
+2. What's the PROPORTION PLAY? (fitted×voluminous? cropped×wide? slim×oversized?) Name it.
+3. What's the TEXTURE CONTRAST? (silk×wool? leather×knit? satin×denim?) Name it.
+4. Add a belt if the wardrobe has any — cinch a waist, break a color block, finish a tuck
+5. Consider jeans before trousers — denim mixed with elevated pieces is cool-girl, not casual
+6. Shoes + bag belong to the color story. Not random.
+7. Remove anything that doesn't make the look stronger
+
+RULES:
+- Outerwear needs a top underneath. Dresses stand alone (no separate top/bottom).
+- No two items from same category (except outerwear + top layering)
 - No item in more than one look
-- Look name: 2-4 words referencing actual colors/fabrics/silhouettes in the look
+- Look name: 2-4 words referencing actual colors/fabrics/silhouettes in the outfit
 
 {
   "looks": [
@@ -571,7 +575,7 @@ CREATIVE DIRECTION:
       "mood": "mood name",
       "occasion": "${occasion}",
       "items": ["id1", "id2", "id3", "id4", "id5"],
-      "styling": "one sentence: the key styling move that makes this chic (belt placement, tuck, cuff, drape)"
+      "styling": "the key styling move (e.g. 'belt cinching the blazer at the waist over the silk cami' or 'oversized knit half-tucked into the leather skirt')"
     }
   ]
 }`;
@@ -587,6 +591,7 @@ CREATIVE DIRECTION:
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
       max_tokens: 3000,
+      temperature: 1,
       system: systemPrompt,
       messages: [{ role: "user", content: prompt }]
     })
@@ -2964,17 +2969,20 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
   // ── Belt: horizontal strip at the waist junction ──
   // Dress scenarios: belt overlays dress at waist (higher zIndex, intentional visual overlay)
-  // Other scenarios: belt in gap between top row and bottom row (zero overlap)
+  // Other scenarios: belt sits between top and bottom rows
   if (g.belt.length > 0) {
     let beltPos;
     if (hasDress && !hasBottom) {
+      // Belt overlays the dress at waist height
       beltPos = hasOuter
-        ? { x:58, y:34, w:32, h:6 }   // on dress in right column
-        : { x:22, y:36, w:36, h:6 };   // on centered dress
+        ? { x:56, y:32, w:38, h:10 }   // on dress in right column
+        : { x:20, y:34, w:40, h:10 };   // on centered dress
     } else {
-      // Gap belt: must end before bottom starts (y48 for B/D/E, y46 for C)
-      const beltY = (!hasOuter && nClothing <= 1) ? 43 : 45;
-      beltPos = { x:20, y:beltY, w:26, h:2 };
+      // Belt in the gap row between top and bottom sections
+      // Scenario C: top ends y42, bottom starts y46 → belt at y42, h4
+      // Scenario B/D/E: items end y44, bottom starts y48 → belt at y44, h4
+      const beltY = (!hasOuter && nClothing <= 1) ? 42 : 44;
+      beltPos = { x:10, y:beltY, w:36, h:4 };
     }
     g.belt.forEach(item => slots.push({ ...item, ...beltPos, rotate:0, zIndex:10 }));
   }
