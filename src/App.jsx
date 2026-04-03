@@ -2,29 +2,30 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
-You are a fashion creative director — not a cautious personal shopper. Your job is to create looks that would stop a street style photographer. You take creative risks. You surprise. You never play it safe.
+You style like a creative director at The Row crossed with a Parisian it-girl. Every look you build should feel like it belongs in a Totême or Khaite lookbook — polished but never precious, layered but never cluttered, cool but never cold.
 
-YOUR CLIENT: Dark Winter coloring, NYC. The Row / Totême / Khaite aesthetic — effortless cool-girl, quiet luxury, it-girl energy. Tailored structure meets unexpected proportion plays. Never trying, always arriving.
-
-PALETTE: Deep jewel tones, navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. ALL blues/pinks must be cool-toned. Warm browns + warm reds are APPROVED exceptions she loves — use them freely. Avoid: yellow, warm/muted tones.
-
+CLIENT: Dark Winter coloring, NYC-based.
+PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm browns + warm reds are approved exceptions. No yellow, no warm/muted tones.
 JEWELRY: platinum tennis bracelet, pavé necklace, diamond studs, Jenny Bird hoops. Less is more.
-
-RULES: Only suggest items from her wardrobe. No sneakers. No logos. NYC-based.
+ONLY suggest items from her wardrobe inventory. No sneakers, no logos.
 `;
 
 // ── STYLING PRINCIPLES — injected into outfit + shopping prompts ──────────
 const STYLING_PRINCIPLES = `
-WHAT MAKES A LOOK CHIC (not optional — every look must pass this test):
-- Proportion play: fitted × voluminous, cropped × wide, slim × oversized. If everything is the same volume, the look is boring.
-- One hero piece leads. Everything else supports it — never competes.
-- Color discipline: max 3 families, always with a relationship (monochromatic / tonal / one intentional pair). Shoes + bag belong to the story.
-- Texture contrast: silk next to wool, leather next to knit, satin next to denim. Same-fabric head-to-toe is lazy unless it's an intentional tonal moment.
-- Belts are the secret weapon — they transform proportion instantly. Cinch a waist, break a color block, finish a tuck. USE THEM when available.
-- Jeans are a power move. Don't default to trousers when jeans create more tension.
-- The edit: if removing a piece doesn't weaken the look, it shouldn't be there.
+LAYERING IS NON-NEGOTIABLE for fall/winter/spring — a top alone with pants is not a look. Layer: blazer over blouse, cardigan over tee, coat over knit. Even in warm weather, a light layer (open blazer, draped cardigan) elevates.
 
-THE ANTI-BASIC TEST: Before finalizing any look, ask — could someone with no fashion sense have assembled this? If yes, it's wrong. Find the unexpected pairing, the proportion surprise, the texture juxtaposition that makes it editorial.
+OUTFIT STRUCTURE (every look must have this):
+- A clear silhouette story: fitted top + wide bottom, OR oversized top + slim bottom, OR a dress with structured outerwear. Same-volume head-to-toe is lazy.
+- Texture mixing: silk × wool, leather × knit, denim × cashmere, satin × cotton. If every piece is the same fabric weight, the look is flat.
+- A belt when available — cinching a blazer, breaking a tonal outfit, or defining a waist over a tucked-in top.
+- Shoes + bag that belong to the color story (not random).
+
+WHAT MAKES IT CHIC vs BASIC:
+- Basic: black top + black pants + black shoes. Chic: navy silk blouse + black wide-leg trousers + burgundy belt + black pointed-toe heels + dark crossbody.
+- Basic: dress + heels. Chic: slip dress + oversized blazer + belt cinching the blazer + ankle boots.
+- Basic: sweater + jeans. Chic: chunky cream knit half-tucked into dark straight-leg jeans + slim belt + leather bag + heeled boots.
+
+Use jeans freely — they're not casual when styled with structure and elevated accessories.
 `;
 
 // ── STYLE PREFERENCES — injected into every generation prompt ──────────────
@@ -44,7 +45,7 @@ const STYLE_PREFS = {
 // ── CATEGORY TAXONOMY ─────────────────────────────────────────────────────────
 const CATEGORY_ORDER = [
   "Tops","Knits","Bottoms","Dresses","Sets","Jumpsuits",
-  "Loungewear","Athleisure","Outerwear","Occasionwear","Shoes","Accessories",
+  "Loungewear","Athleisure","Swim","Outerwear","Occasionwear","Shoes","Accessories",
 ];
 
 // Subcategories per main category
@@ -57,6 +58,7 @@ const TAXONOMY = {
   Jumpsuits:    [],
   Loungewear:   ["Hoodies / Sweatshirts","Pants","Tops"],
   Athleisure:   ["Bra/Crop Top","Dresses","Long Sleeve","Pants","Short Sleeve","Shorts","Skirts"],
+  Swim:         ["Swimsuits","Cover-Ups"],
   Outerwear:    ["Blazers","Coats","Jackets"],
   Occasionwear: ["Cocktail Dresses","Evening Accessories","Formal Separates","Gowns"],
   Shoes:        ["Boots","Flats","Heels","Loafers","Sandals"],
@@ -506,9 +508,21 @@ const MOODS = [
 
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
 async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}) {
+  // ── Pre-filter: remove categories that make no sense for this occasion ──
+  const OCCASION_EXCLUDE = {
+    Activity:    new Set(["Occasionwear","Loungewear","Swim"]),
+    Athleisure:  new Set(["Occasionwear","Swim"]),
+    Executive:   new Set(["Athleisure","Loungewear","Swim","Occasionwear"]),
+    Work:        new Set(["Athleisure","Loungewear","Swim","Occasionwear"]),
+    Lounge:      new Set(["Occasionwear","Swim"]),
+    Travel:      new Set(["Occasionwear","Swim"]),
+  };
+  const excluded = OCCASION_EXCLUDE[occasion] || new Set();
+  const filtered = items.filter(it => !excluded.has(it.category));
+
   // Shuffle wardrobe so AI sees different items first each time
   const byCategory = {};
-  items.forEach(it => {
+  filtered.forEach(it => {
     if (!byCategory[it.category]) byCategory[it.category] = [];
     byCategory[it.category].push(it);
   });
@@ -527,8 +541,11 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const moodPool = workOccasions.has(occasion) ? MOODS.filter(m => !nightMoods.has(m.name)) : MOODS;
   const selectedMoods = shuffle(moodPool).slice(0, 3);
 
-  // Build list of previously used item combos to avoid repeats
-  const usedCombos = previousLooks.map(l => (l.items || []).sort().join(",")).join(" | ");
+  // Build list of recently used individual item IDs to discourage repeats
+  const recentItemIds = [...new Set(previousLooks.flatMap(l => l.items || []))];
+  const usedItemsNote = recentItemIds.length > 0
+    ? `RECENTLY USED ITEMS (strongly avoid reusing these — pick DIFFERENT pieces): ${recentItemIds.join(", ")}`
+    : "";
 
   const colorPairsList = stylePrefs.colorPairs.map(p => `  - ${p}`).join("\n");
 
@@ -538,44 +555,43 @@ APPROVED COLOR PAIRS: ${stylePrefs.colorPairs.join(", ")}. Monochromatic and ton
 
 You respond ONLY with valid JSON — no text, no markdown, no explanation.`;
 
-  const prompt = `WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must suit this weather.` : ""}
-OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — polished and tailored, no crop tops/distressed denim/athleisure/loungewear' : ''}
-${request ? `CLIENT REQUEST: "${request}" — THIS IS A DIRECT INSTRUCTION. If she says jeans, use jeans. If she names a piece, build around it.` : ""}
+  const prompt = `WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must be weather-appropriate.` : ""}
+OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — tailored and polished only' : ''}${occasion === 'Activity' ? ' — casual, comfortable, movement-friendly' : ''}${occasion === 'Athleisure' ? ' — sporty-chic, athleisure pieces preferred' : ''}
+${request ? `CLIENT REQUEST: "${request}" — FOLLOW THIS. If she says jeans, USE JEANS. If she names an item, BUILD AROUND IT.` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
-${usedCombos ? `ALREADY USED (don't repeat): ${usedCombos}` : ""}
+${usedItemsNote}
 
 WARDROBE:
 ${inventory}
 
-━━━ BUILD 3 LOOKS ━━━
+BUILD 3 LOOKS — each with a different mood and different hero piece.
 
 MOOD 1: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
 MOOD 2: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
 MOOD 3: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-HOW TO BUILD EACH LOOK:
-1. Pick a DIFFERENT hero piece for each look — if 3 looks feel similar, start over
-2. What's the PROPORTION PLAY? (fitted×voluminous? cropped×wide? slim×oversized?) Name it.
-3. What's the TEXTURE CONTRAST? (silk×wool? leather×knit? satin×denim?) Name it.
-4. Add a belt if the wardrobe has any — cinch a waist, break a color block, finish a tuck
-5. Consider jeans before trousers — denim mixed with elevated pieces is cool-girl, not casual
-6. Shoes + bag belong to the color story. Not random.
-7. Remove anything that doesn't make the look stronger
+EACH LOOK MUST HAVE:
+- 4-7 items minimum. A top + bottom + shoes + bag is the BARE MINIMUM. Layer on top of that: outerwear, belt, second layer.
+- A clear silhouette contrast (fitted × wide, slim × oversized, structured × fluid)
+- At least one layer beyond the base (blazer, cardigan, coat, jacket) unless it's hot weather
+- A belt if belts exist in the wardrobe
+- Shoes + bag that match the color story
 
 RULES:
-- Outerwear needs a top underneath. Dresses stand alone (no separate top/bottom).
-- No two items from same category (except outerwear + top layering)
+- Outerwear REQUIRES a top underneath (blazer needs a blouse/cami/tee under it)
+- Dresses stand alone — no separate top or bottom with a dress (but outerwear + belt over a dress = great)
+- No two items from the same category (Outerwear + Tops layering is the only exception)
 - No item in more than one look
-- Look name: 2-4 words referencing actual colors/fabrics/silhouettes in the outfit
+- Each look must use a COMPLETELY different anchor piece — 3 similar looks is a failure
 
 {
   "looks": [
     {
-      "name": "evocative 2-4 word name",
+      "name": "2-4 words referencing actual colors/fabrics in the look",
       "mood": "mood name",
       "occasion": "${occasion}",
-      "items": ["id1", "id2", "id3", "id4", "id5"],
-      "styling": "the key styling move (e.g. 'belt cinching the blazer at the waist over the silk cami' or 'oversized knit half-tucked into the leather skirt')"
+      "items": ["id1", "id2", "id3", "id4", "id5", "id6"],
+      "styling": "the specific styling move: how items are worn together (e.g. 'blazer open over tucked silk cami, belt cinching at waist, wide trousers breaking at the ankle boot')"
     }
   ]
 }`;
@@ -2874,7 +2890,6 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
 function buildCollageLayout(items, suggestionSlots = []) {
   const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
 
-  // Robust bag detection — catches L2 "Bags", all L3 subtypes, and name keywords incl "pouch"
   const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
   const BAG_RE   = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette)\b/i;
 
@@ -2900,102 +2915,84 @@ function buildCollageLayout(items, suggestionSlots = []) {
   const hasBottom = g.bottom.length > 0;
   const hasDress  = g.dress.length > 0;
   const nClothing = g.clothing.length;
+  const hasBelt   = g.belt.length > 0;
 
-  // ── Clean editorial flat-lay grid — ZERO overlap ──
-  // Strict 2-column layout. Every bounding box mathematically verified non-overlapping.
-  //
-  //   LEFT COL:  x 3%→47%     RIGHT COL: x 54%→92%
-  //   TOP ROW:   y 2%→44%     BOT ROW:   y 48%→96%
-  //   Right-bot split: bag y 48%→78%, shoes y 80%→98%
+  // ── Tight editorial flat-lay — magazine-style grid ──
+  // 3-column layout: LEFT (0-32%), CENTER (34-66%), RIGHT (68-100%)
+  // Tighter gaps, bigger accessories, proportional sizing
 
   if (hasDress && !hasBottom) {
-    // ── SCENARIO A: Dress (± outerwear)
     if (hasOuter) {
-      g.outer.forEach(item => slots.push({ ...item, x:3,  y:2,  w:43, h:50, rotate:0, zIndex:3 }));
-      g.dress.forEach(item => slots.push({ ...item, x:54, y:2,  w:43, h:62, rotate:0, zIndex:4 }));
-      g.shoes.forEach(item => slots.push({ ...item, x:3,  y:72, w:30, h:24, rotate:0, zIndex:8 }));
-      g.bag.forEach(item   => slots.push({ ...item, x:54, y:68, w:38, h:28, rotate:0, zIndex:7 }));
+      // Dress + outerwear: outer left, dress center-right
+      g.outer.forEach(item => slots.push({ ...item, x:2,  y:2,  w:42, h:52, rotate:0, zIndex:3 }));
+      g.dress.forEach(item => slots.push({ ...item, x:48, y:2,  w:48, h:60, rotate:0, zIndex:4 }));
+      g.shoes.forEach(item => slots.push({ ...item, x:2,  y:58, w:32, h:28, rotate:0, zIndex:8 }));
+      g.bag.forEach(item   => slots.push({ ...item, x:58, y:66, w:36, h:30, rotate:0, zIndex:7 }));
     } else {
-      g.dress.forEach(item => slots.push({ ...item, x:18, y:2,  w:44, h:64, rotate:0, zIndex:4 }));
-      g.shoes.forEach(item => slots.push({ ...item, x:3,  y:72, w:30, h:24, rotate:0, zIndex:8 }));
-      g.bag.forEach(item   => slots.push({ ...item, x:54, y:70, w:38, h:28, rotate:0, zIndex:7 }));
+      // Dress solo: centered large, shoes+bag bottom row
+      g.dress.forEach(item => slots.push({ ...item, x:20, y:1,  w:48, h:62, rotate:0, zIndex:4 }));
+      g.shoes.forEach(item => slots.push({ ...item, x:2,  y:66, w:34, h:30, rotate:0, zIndex:8 }));
+      g.bag.forEach(item   => slots.push({ ...item, x:58, y:66, w:36, h:30, rotate:0, zIndex:7 }));
     }
 
   } else if (hasOuter && nClothing > 0) {
-    // ── SCENARIO D: Outerwear + top + bottom (layered)
-    // outer: 3→46, 2→44 | top: 54→97, 2→42 | bottom: 3→47, 48→96
-    // bag: 54→92, 48→78 | shoes: 56→84, 80→98
-    g.outer.forEach(item    => slots.push({ ...item, x:3,  y:2,  w:43, h:42, rotate:0, zIndex:5 }));
-    g.clothing.forEach(item => slots.push({ ...item, x:54, y:2,  w:43, h:40, rotate:0, zIndex:4 }));
-    g.bottom.forEach(item   => slots.push({ ...item, x:3,  y:48, w:44, h:48, rotate:0, zIndex:2 }));
-    g.bag.forEach(item      => slots.push({ ...item, x:54, y:48, w:38, h:30, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item    => slots.push({ ...item, x:56, y:80, w:28, h:18, rotate:0, zIndex:8 }));
+    // ── Layered look: outer + top + bottom — the power layout
+    // Top row: outerwear (left-center, large) with top peeking from right
+    // Bottom row: bottom (left), bag (center-right), shoes (right)
+    g.outer.forEach(item    => slots.push({ ...item, x:2,  y:1,  w:46, h:46, rotate:0, zIndex:5 }));
+    g.clothing.forEach(item => slots.push({ ...item, x:52, y:1,  w:44, h:42, rotate:0, zIndex:4 }));
+    g.bottom.forEach(item   => slots.push({ ...item, x:2,  y:50, w:42, h:46, rotate:0, zIndex:2 }));
+    g.bag.forEach(item      => slots.push({ ...item, x:48, y:50, w:32, h:26, rotate:0, zIndex:7 }));
+    g.shoes.forEach(item    => slots.push({ ...item, x:48, y:78, w:32, h:20, rotate:0, zIndex:8 }));
 
   } else if (hasOuter && !nClothing) {
-    // ── SCENARIO B: Outerwear + bottom (no separate top)
-    // outer: 14→58, 2→44 | bottom: 3→47, 48→96
-    // bag: 54→92, 48→78 | shoes: 56→84, 80→98
-    g.outer.forEach(item  => slots.push({ ...item, x:14, y:2,  w:44, h:42, rotate:0, zIndex:5 }));
-    g.bottom.forEach(item => slots.push({ ...item, x:3,  y:48, w:44, h:48, rotate:0, zIndex:2 }));
-    g.bag.forEach(item    => slots.push({ ...item, x:54, y:48, w:38, h:30, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item  => slots.push({ ...item, x:56, y:80, w:28, h:18, rotate:0, zIndex:8 }));
+    // Outer + bottom only
+    g.outer.forEach(item  => slots.push({ ...item, x:14, y:1,  w:52, h:46, rotate:0, zIndex:5 }));
+    g.bottom.forEach(item => slots.push({ ...item, x:2,  y:50, w:42, h:46, rotate:0, zIndex:2 }));
+    g.bag.forEach(item    => slots.push({ ...item, x:48, y:50, w:32, h:26, rotate:0, zIndex:7 }));
+    g.shoes.forEach(item  => slots.push({ ...item, x:48, y:78, w:32, h:20, rotate:0, zIndex:8 }));
 
   } else if (nClothing > 1) {
-    // ── SCENARIO E: Two tops + bottom
-    // top1: 3→46, 2→44 | top2: 54→97, 2→44
-    // bottom: 3→47, 48→96 | bag: 54→92, 48→78 | shoes: 56→84, 80→98
+    // Two tops/layers + bottom
     g.clothing.forEach((item, i) => slots.push({ ...item,
-      x: i === 0 ? 3 : 54,
-      y: 2,
-      w: 43,
-      h: 42,
-      rotate: 0,
-      zIndex: i === 0 ? 4 : 5,
+      x: i === 0 ? 2 : 52, y: 1, w: 44, h: 44, rotate: 0, zIndex: i === 0 ? 4 : 5,
     }));
-    g.bottom.forEach(item => slots.push({ ...item, x:3,  y:48, w:44, h:48, rotate:0, zIndex:2 }));
-    g.bag.forEach(item    => slots.push({ ...item, x:54, y:48, w:38, h:30, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item  => slots.push({ ...item, x:56, y:80, w:28, h:18, rotate:0, zIndex:8 }));
+    g.bottom.forEach(item => slots.push({ ...item, x:2,  y:48, w:42, h:48, rotate:0, zIndex:2 }));
+    g.bag.forEach(item    => slots.push({ ...item, x:48, y:48, w:32, h:26, rotate:0, zIndex:7 }));
+    g.shoes.forEach(item  => slots.push({ ...item, x:48, y:76, w:32, h:22, rotate:0, zIndex:8 }));
 
   } else {
-    // ── SCENARIO C: Single top + bottom (most common)
-    // top: 18→62, 2→42 | bottom: 3→47, 46→96
-    // bag: 54→92, 46→76 | shoes: 56→84, 78→96
-    g.clothing.forEach(item => slots.push({ ...item, x:18, y:2,  w:44, h:40, rotate:0, zIndex:5 }));
-    g.dress.forEach(item   => slots.push({ ...item, x:18, y:2,  w:44, h:64, rotate:0, zIndex:4 }));
-    g.bottom.forEach(item  => slots.push({ ...item, x:3,  y:46, w:44, h:50, rotate:0, zIndex:2 }));
-    g.bag.forEach(item     => slots.push({ ...item, x:54, y:46, w:38, h:30, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item   => slots.push({ ...item, x:56, y:78, w:28, h:18, rotate:0, zIndex:8 }));
+    // ── Single top + bottom (most common)
+    g.clothing.forEach(item => slots.push({ ...item, x:14, y:1,  w:52, h:44, rotate:0, zIndex:5 }));
+    g.dress.forEach(item   => slots.push({ ...item, x:14, y:1,  w:52, h:62, rotate:0, zIndex:4 }));
+    g.bottom.forEach(item  => slots.push({ ...item, x:2,  y:48, w:42, h:48, rotate:0, zIndex:2 }));
+    g.bag.forEach(item     => slots.push({ ...item, x:48, y:48, w:32, h:26, rotate:0, zIndex:7 }));
+    g.shoes.forEach(item   => slots.push({ ...item, x:48, y:76, w:32, h:22, rotate:0, zIndex:8 }));
   }
 
   // ── Belt: horizontal strip at the waist junction ──
-  // Dress scenarios: belt overlays dress at waist (higher zIndex, intentional visual overlay)
-  // Other scenarios: belt sits between top and bottom rows
-  if (g.belt.length > 0) {
+  if (hasBelt) {
     let beltPos;
     if (hasDress && !hasBottom) {
-      // Belt overlays the dress at waist height
       beltPos = hasOuter
-        ? { x:56, y:32, w:38, h:10 }   // on dress in right column
-        : { x:20, y:34, w:40, h:10 };   // on centered dress
+        ? { x:52, y:32, w:40, h:10 }
+        : { x:22, y:34, w:44, h:10 };
     } else {
-      // Belt in the gap row between top and bottom sections
-      // Scenario C: top ends y42, bottom starts y46 → belt at y42, h4
-      // Scenario B/D/E: items end y44, bottom starts y48 → belt at y44, h4
-      const beltY = (!hasOuter && nClothing <= 1) ? 42 : 44;
-      beltPos = { x:10, y:beltY, w:36, h:4 };
+      const beltY = (!hasOuter && nClothing <= 1) ? 45 : 47;
+      beltPos = { x:8, y:beltY, w:38, h:3 };
     }
     g.belt.forEach(item => slots.push({ ...item, ...beltPos, rotate:0, zIndex:10 }));
   }
 
-  // ── Accessories: small, tucked into top corners
-  const accPos = [
-    { x:3,  y:2,  w:14, h:16, rotate:0 },
-    { x:82, y:2,  w:14, h:14, rotate:0 },
-  ];
-  g.accessory.forEach((item, i) => {
-    if (i >= accPos.length) return;
-    slots.push({ ...item, ...accPos[i], zIndex:11+i });
-  });
+  // ── Accessories: only render if there's a clear empty corner ──
+  // In dress-only layouts the top corners are free; in layered looks they're occupied
+  if (g.accessory.length > 0 && hasDress && !hasBottom && !hasOuter) {
+    // Dress solo: top-left and top-right corners are empty
+    const accPos = [{ x:2, y:1, w:16, h:16 }, { x:72, y:1, w:16, h:14 }];
+    g.accessory.forEach((item, i) => {
+      if (i < accPos.length) slots.push({ ...item, ...accPos[i], rotate:0, zIndex:11+i });
+    });
+  }
 
   return slots.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
 }
