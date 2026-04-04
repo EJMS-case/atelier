@@ -1177,7 +1177,7 @@ export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
   const [view,       setView]       = useState("closet");
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
-  const [activeFilters, setActiveFilters] = useState({ category: [], color: [], brand: [], occasion: [], season: [], sets: "", lastWorn: "" });
+  const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
   const [allLooks,   setAllLooks]   = useState([]); // history of all generated looks for anti-repeat
   const [styling,    setStyling]    = useState(false);
@@ -1423,26 +1423,12 @@ export default function App() {
     let base = items;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
+    if (activeFilters.subcategory?.length) base = base.filter(it => activeFilters.subcategory.includes(it.subcategory));
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
       base = base.filter(it => it.color && activeFilters.color.some(c =>
         it.color.toLowerCase().includes(c.toLowerCase())
       ));
-    }
-    // Occasion filter
-    if (activeFilters.occasion?.length) {
-      base = base.filter(it => it.occasion && activeFilters.occasion.some(o =>
-        (Array.isArray(it.occasion) ? it.occasion : [it.occasion]).includes(o)
-      ));
-    }
-    // Season filter
-    if (activeFilters.season) {
-      base = base.filter(it => {
-        if (activeFilters.season === "All Season") return it.season === "All Season";
-        if (activeFilters.season === "Spring/Summer") return it.season === "Spring/Summer" || it.season === "All Season";
-        if (activeFilters.season === "Fall/Winter") return it.season === "Fall/Winter" || it.season === "All Season";
-        return true;
-      });
     }
     // Sets filter
     if (activeFilters.sets === "Sets Only") base = base.filter(it => it.set_id);
@@ -1762,7 +1748,12 @@ function FilterBar({ items, activeFilters, onChange }) {
     const next = current.includes(value)
       ? current.filter(v => v !== value)
       : [...current, value];
-    onChange({ ...activeFilters, [type]: next });
+    // When switching categories, clear subcategory filter
+    if (type === "category") {
+      onChange({ ...activeFilters, [type]: next, subcategory: [] });
+    } else {
+      onChange({ ...activeFilters, [type]: next });
+    }
   };
 
   const setSingle = (type, value) => {
@@ -1770,12 +1761,30 @@ function FilterBar({ items, activeFilters, onChange }) {
   };
 
   const isActive = (type, value) => (activeFilters[type] || []).includes(value);
-  const clearAll = () => onChange({ category: [], color: [], brand: [], occasion: [], season: "", sets: "", lastWorn: "" });
+  const clearAll = () => onChange({ category: [], subcategory: [], color: [], brand: [], sets: "", lastWorn: "" });
   const hasActive = Object.values(activeFilters).some(v => Array.isArray(v) ? v.length > 0 : !!v);
 
   // Unique brands from wardrobe
   const brands = [...new Set(items.map(it => it.brand).filter(Boolean))].sort();
   const filteredBrands = brands.filter(b => b.toLowerCase().includes(brandSearch.toLowerCase()));
+
+  // Subcategories: show relevant ones based on selected categories (or all if "All")
+  const selectedCats = activeFilters.category?.filter(c => c !== "Sets") || [];
+  const subcatOptions = (() => {
+    const cats = selectedCats.length > 0 ? selectedCats : CATEGORY_ORDER;
+    const subs = new Set();
+    cats.forEach(cat => {
+      (TAXONOMY[cat] || []).forEach(sub => {
+        // Only show subcategories that actually have items
+        if (items.some(it => it.category === cat && it.subcategory === sub)) subs.add(sub);
+        // Also check L3 subcategories
+        (SUBCATEGORY_L3[sub] || []).forEach(l3 => {
+          if (items.some(it => it.subcategory === l3)) subs.add(l3);
+        });
+      });
+    });
+    return [...subs].sort();
+  })();
 
   return (
     <div style={s.filterBar}>
@@ -1784,7 +1793,7 @@ function FilterBar({ items, activeFilters, onChange }) {
         <div style={s.filterRow}>
           {["All", ...CATEGORY_ORDER].map(cat => (
             <button key={cat}
-              onClick={() => cat === "All" ? onChange({ ...activeFilters, category: [] }) : toggle("category", cat)}
+              onClick={() => cat === "All" ? onChange({ ...activeFilters, category: [], subcategory: [] }) : toggle("category", cat)}
               style={{
                 ...s.chip,
                 ...((cat === "All" && !activeFilters.category?.length) || isActive("category", cat) ? s.chipActive : {}),
@@ -1794,6 +1803,22 @@ function FilterBar({ items, activeFilters, onChange }) {
           ))}
         </div>
       </div>
+
+      {/* Subcategory chips — prominent, always visible when relevant */}
+      {subcatOptions.length > 0 && (
+        <div style={s.filterSection}>
+          <div style={s.filterSectionLabel}>Subcategory</div>
+          <div style={s.filterRow}>
+            {subcatOptions.map(sub => (
+              <button key={sub}
+                onClick={() => toggle("subcategory", sub)}
+                style={{...s.chip, ...(isActive("subcategory", sub) ? s.chipActive : {})}}>
+                {sub}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Color swatches */}
       <div style={s.filterSection}>
@@ -1868,7 +1893,7 @@ function FilterBar({ items, activeFilters, onChange }) {
         )}
       </div>
 
-      {/* Expandable filters row */}
+      {/* More: Sets + Last Worn */}
       <div style={s.filterSection}>
         <button style={s.filterToggleBtn} onClick={() => setShowMore(v => !v)}>
           More Filters {showMore ? "▲" : "▼"}
@@ -1877,35 +1902,6 @@ function FilterBar({ items, activeFilters, onChange }) {
 
       {showMore && (
         <>
-          {/* Occasion multi-select */}
-          <div style={s.filterSection}>
-            <div style={s.filterSectionLabel}>Occasion</div>
-            <div style={s.filterRow}>
-              {OCCASIONS.map(occ => (
-                <button key={occ}
-                  onClick={() => toggle("occasion", occ)}
-                  style={{...s.chip, fontSize:10, ...(isActive("occasion", occ) ? s.chipActive : {})}}>
-                  {occ}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Season */}
-          <div style={s.filterSection}>
-            <div style={s.filterSectionLabel}>Season</div>
-            <div style={s.filterRow}>
-              {["Spring/Summer","Fall/Winter","All Season"].map(season => (
-                <button key={season}
-                  onClick={() => setSingle("season", season)}
-                  style={{...s.chip, fontSize:10, ...(activeFilters.season === season ? s.chipActive : {})}}>
-                  {season}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Sets toggle */}
           <div style={s.filterSection}>
             <div style={s.filterSectionLabel}>Sets</div>
             <div style={s.filterRow}>
@@ -1919,7 +1915,6 @@ function FilterBar({ items, activeFilters, onChange }) {
             </div>
           </div>
 
-          {/* Last Worn */}
           <div style={s.filterSection}>
             <div style={s.filterSectionLabel}>Last Worn</div>
             <div style={s.filterRow}>
