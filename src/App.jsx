@@ -549,13 +549,11 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
 
   const colorPairsList = stylePrefs.colorPairs.map(p => `  - ${p}`).join("\n");
 
-  const systemPrompt = `${STYLE_PROFILE}
+  const prompt = `${STYLE_PROFILE}
 ${STYLING_PRINCIPLES}
 APPROVED COLOR PAIRS: ${stylePrefs.colorPairs.join(", ")}. Monochromatic and tonal builds encouraged. Warm browns + warm reds approved.
 
-You respond ONLY with valid JSON — no text, no markdown, no explanation.`;
-
-  const prompt = `WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must be weather-appropriate.` : ""}
+WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must be weather-appropriate.` : ""}
 OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — tailored and polished only' : ''}${occasion === 'Activity' ? ' — casual, comfortable, movement-friendly' : ''}${occasion === 'Athleisure' ? ' — sporty-chic, athleisure pieces preferred' : ''}
 ${request ? `CLIENT REQUEST: "${request}" — FOLLOW THIS. If she says jeans, USE JEANS. If she names an item, BUILD AROUND IT.` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
@@ -584,6 +582,7 @@ RULES:
 - No item in more than one look
 - Each look must use a COMPLETELY different anchor piece — 3 similar looks is a failure
 
+Respond ONLY with valid JSON, no markdown:
 {
   "looks": [
     {
@@ -608,7 +607,6 @@ RULES:
       model: "claude-sonnet-4-5",
       max_tokens: 3000,
       temperature: 1,
-      system: systemPrompt,
       messages: [{ role: "user", content: prompt }]
     })
   });
