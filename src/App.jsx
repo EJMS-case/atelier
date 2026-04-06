@@ -618,9 +618,10 @@ Respond ONLY with valid JSON, no markdown:
 
   const data = await res.json();
   const text = data.content?.map(b => b.text || "").join("") || "";
+  console.log("API raw response (first 300):", text.slice(0, 300));
   const clean = text.replace(/```json|```/g, "").trim();
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("No valid JSON in response");
+  if (!jsonMatch) throw new Error("No valid JSON in AI response. Raw: " + text.slice(0, 200));
   return JSON.parse(jsonMatch[0]);
 }
 
@@ -1396,13 +1397,17 @@ export default function App() {
     setStyling(true); setStyleErr(""); setOutfits(null);
     try {
       const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe());
-      setOutfits(result.looks);
-      // Accumulate look history so next generation avoids repeats
-      setAllLooks(prev => [...prev, ...result.looks].slice(-12)); // keep last 12
+      console.log("Generation result:", JSON.stringify(result).slice(0, 500));
+      const looks = result?.looks;
+      if (!looks || !Array.isArray(looks) || looks.length === 0) {
+        throw new Error("AI returned no looks — try again.");
+      }
+      setOutfits(looks);
+      setAllLooks(prev => [...prev, ...looks].slice(-12));
       setView("style");
     } catch(e) {
       setStyleErr(e.message || "Styling failed — check your API key.");
-      console.error(e);
+      console.error("Generation error:", e);
     } finally { setStyling(false); }
   };
 
