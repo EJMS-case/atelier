@@ -618,11 +618,17 @@ Respond ONLY with valid JSON, no markdown:
 
   const data = await res.json();
   const text = data.content?.map(b => b.text || "").join("") || "";
-  console.log("API raw response (first 300):", text.slice(0, 300));
   const clean = text.replace(/```json|```/g, "").trim();
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No valid JSON in AI response. Raw: " + text.slice(0, 200));
-  return JSON.parse(jsonMatch[0]);
+  const parsed = JSON.parse(jsonMatch[0]);
+  // Normalize IDs — AI sometimes returns "ID:xxx" instead of "xxx"
+  if (parsed.looks) {
+    parsed.looks.forEach(look => {
+      if (look.items) look.items = look.items.map(id => String(id).replace(/^ID:/i, "").trim());
+    });
+  }
+  return parsed;
 }
 
 // ── AI ELEVATION ─────────────────────────────────────────────────────────────
@@ -3005,7 +3011,7 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
 
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const lookItems = (look.items || [])
-    .map(id => items.find(i => i.id === id))
+    .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
     .filter(Boolean)
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
