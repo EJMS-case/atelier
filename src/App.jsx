@@ -45,7 +45,7 @@ const STYLE_PREFS = {
 // ── CATEGORY TAXONOMY ─────────────────────────────────────────────────────────
 const CATEGORY_ORDER = [
   "Tops","Knits","Bottoms","Dresses","Sets","Jumpsuits",
-  "Loungewear","Athleisure","Swim","Outerwear","Occasionwear","Shoes","Accessories",
+  "Loungewear","Athleisure","Swim","Outerwear","Occasionwear","Shoes","Bags","Accessories",
 ];
 
 // Subcategories per main category
@@ -62,7 +62,8 @@ const TAXONOMY = {
   Outerwear:    ["Blazers","Coats","Jackets"],
   Occasionwear: ["Cocktail Dresses","Evening Accessories","Formal Separates","Gowns"],
   Shoes:        ["Boots","Flats","Heels","Loafers","Sandals"],
-  Accessories:  ["Bags","Belts","Jewelry","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
+  Bags:         ["Clutch","Crossbody","Shoulder","Tote"],
+  Accessories:  ["Belts","Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
 };
 
 // Third-level options for select subcategories
@@ -71,7 +72,6 @@ const SUBCATEGORY_L3 = {
   "Skirts":             ["Mini","Midi","Maxi"],
   "Boots":              ["Ankle","Knee-High","Over-the-Knee"],
   "Heels":              ["Block","Kitten","Stiletto"],
-  "Bags":               ["Clutch","Crossbody","Shoulder","Tote"],
   "Jewelry":            ["Bracelets","Earrings","Necklaces","Rings"],
   "Earrings":           ["Drop","Stud"],
   "Necklaces":          ["Layering","Statement"],
@@ -401,7 +401,7 @@ function compressImage(dataUrl, maxDim = 400, quality = 0.6, transparent = false
 // Supabase stores metadata only (no images — too large)
 // On load: fetch metadata from Supabase, merge images from localStorage
 function loadLocalItems() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(normalizeItem); }
   catch { return []; }
 }
 function saveLocalItems(items) {
@@ -443,7 +443,19 @@ function mergeItems(sbItems, localItems) {
     if (!sbMap[it.id]) merged.push(it);
   });
 
-  return merged;
+  return merged.map(normalizeItem);
+}
+
+// Normalize item taxonomy — migrate Accessories bags to Bags category
+function normalizeItem(item) {
+  const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
+  if (item.category === "Accessories" && BAG_SUBS.has(item.subcategory)) {
+    return { ...item, category: "Bags", subcategory: item.subcategory === "Bags" ? "" : item.subcategory };
+  }
+  if (item.category === "Accessories" && /\b(bag|purse|tote|clutch|handbag|crossbody)\b/i.test(item.name) && !item.subcategory) {
+    return { ...item, category: "Bags" };
+  }
+  return item;
 }
 
 // ── BACKGROUND REMOVAL ───────────────────────────────────────────────────────
@@ -1199,7 +1211,7 @@ export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
   const [view,       setView]       = useState("closet");
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
-  const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sets: "", lastWorn: "" });
+  const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
   const [allLooks,   setAllLooks]   = useState([]); // history of all generated looks for anti-repeat
   const [styling,    setStyling]    = useState(false);
@@ -1450,6 +1462,21 @@ export default function App() {
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
     if (activeFilters.subcategory?.length) base = base.filter(it => activeFilters.subcategory.includes(it.subcategory));
+    // Sleeve length filter — uses subcategory mapping for Tops, sleeve_length field for Dresses
+    if (activeFilters.sleeveLength) {
+      const sl = activeFilters.sleeveLength;
+      const TOPS_SLEEVE_MAP = {
+        "Tanks": "Sleeveless",
+        "T-Shirts": "Short Sleeve", "Polos": "Short Sleeve", "Short Sleeve": "Short Sleeve",
+        "Blouses": "Long Sleeve", "Shirts": "Long Sleeve", "Tops": "Long Sleeve",
+        "Lightweight Knits": "Long Sleeve",
+      };
+      base = base.filter(it => {
+        if (it.category === "Tops") return TOPS_SLEEVE_MAP[it.subcategory] === sl;
+        if (it.category === "Dresses") return (it.sleeve_length || "").toLowerCase() === sl.toLowerCase();
+        return true;   // don't filter non-Tops/Dresses items
+      });
+    }
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
       base = base.filter(it => {
@@ -1779,9 +1806,9 @@ function FilterBar({ items, activeFilters, onChange }) {
     const next = current.includes(value)
       ? current.filter(v => v !== value)
       : [...current, value];
-    // When switching categories, clear subcategory filter
+    // When switching categories, clear subcategory and sleeve length filters
     if (type === "category") {
-      onChange({ ...activeFilters, [type]: next, subcategory: [] });
+      onChange({ ...activeFilters, [type]: next, subcategory: [], sleeveLength: "" });
     } else {
       onChange({ ...activeFilters, [type]: next });
     }
@@ -1792,7 +1819,7 @@ function FilterBar({ items, activeFilters, onChange }) {
   };
 
   const isActive = (type, value) => (activeFilters[type] || []).includes(value);
-  const clearAll = () => onChange({ category: [], subcategory: [], color: [], brand: [], sets: "", lastWorn: "" });
+  const clearAll = () => onChange({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const hasActive = Object.values(activeFilters).some(v => Array.isArray(v) ? v.length > 0 : !!v);
 
   // Unique brands from wardrobe
@@ -1823,7 +1850,7 @@ function FilterBar({ items, activeFilters, onChange }) {
         <div style={s.filterRow}>
           {["All", ...CATEGORY_ORDER].map(cat => (
             <button key={cat}
-              onClick={() => cat === "All" ? onChange({ ...activeFilters, category: [], subcategory: [] }) : toggle("category", cat)}
+              onClick={() => cat === "All" ? onChange({ ...activeFilters, category: [], subcategory: [], sleeveLength: "" }) : toggle("category", cat)}
               style={{
                 ...s.chip,
                 ...((cat === "All" && !activeFilters.category?.length) || isActive("category", cat) ? s.chipActive : {}),
@@ -1853,6 +1880,34 @@ function FilterBar({ items, activeFilters, onChange }) {
           </div>
         </div>
       )}
+
+      {/* Sleeve length filter — only when Tops or Dresses is selected */}
+      {(() => {
+        const cat = selectedCats.length === 1 ? selectedCats[0] : null;
+        if (cat !== "Tops" && cat !== "Dresses") return null;
+        const SLEEVE_OPTIONS = ["Sleeveless", "Short Sleeve", "Long Sleeve"];
+        // For Tops: map subcategories to sleeve lengths
+        const TOPS_SLEEVE_MAP = {
+          "Tanks": "Sleeveless",
+          "T-Shirts": "Short Sleeve", "Polos": "Short Sleeve", "Short Sleeve": "Short Sleeve",
+          "Blouses": "Long Sleeve", "Shirts": "Long Sleeve", "Tops": "Long Sleeve",
+          "Lightweight Knits": "Long Sleeve",
+        };
+        return (
+          <div style={s.filterSection}>
+            <div style={s.filterSectionLabel}>Sleeve Length</div>
+            <div style={s.filterRow}>
+              {SLEEVE_OPTIONS.map(sl => (
+                <button key={sl}
+                  onClick={() => onChange({ ...activeFilters, sleeveLength: activeFilters.sleeveLength === sl ? "" : sl })}
+                  style={{...s.chip, ...(activeFilters.sleeveLength === sl ? s.chipActive : {})}}>
+                  {sl}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Denim wash filter — only when Jeans subcategory is active or Jeans items are visible */}
       {(() => {
@@ -2956,6 +3011,7 @@ function buildCollageLayout(items, suggestionSlots = []) {
     if (cat === "Bottoms")   return "bottom";
     if (cat === "Shoes")     return "shoes";
     if (cat === "Dresses" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
+    if (cat === "Bags") return "bag";
     if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name))) return "bag";
     if (cat === "Accessories" && (sub === "Belts" || /\bbelt\b/i.test(name))) return "belt";
     if (cat === "Accessories") return "accessory";
