@@ -1209,7 +1209,23 @@ async function migrateAndSync(items, setItemsFn, flashSyncFn) {
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
-  const [view,       setView]       = useState("closet");
+  const [view,       setViewRaw]    = useState("closet");
+  const closetScrollRef = useRef(0);
+  const viewRef = useRef("closet");
+  const setView = useCallback((v) => {
+    // Save scroll position when leaving closet
+    if (viewRef.current === "closet" && v !== "closet") {
+      closetScrollRef.current = window.scrollY;
+    }
+    viewRef.current = v;
+    setViewRaw(v);
+    // Restore scroll position when returning to closet
+    if (v === "closet") {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, closetScrollRef.current);
+      });
+    }
+  }, []);
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
