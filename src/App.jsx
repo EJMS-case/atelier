@@ -457,8 +457,10 @@ function normalizeItem(item) {
     return { ...item, category: "Bags" };
   }
   if (item.category === "Accessories" && (item.subcategory === "Belts" || /\bbelt\b/i.test(item.name))) {
-    return { ...item, category: "Belts", subcategory: "" };
+    item = { ...item, category: "Belts", subcategory: "" };
   }
+  // Backfill created_at for items that predate the field
+  if (!item.created_at) item = { ...item, created_at: "2025-01-01T00:00:00.000Z" };
   return item;
 }
 
@@ -2297,7 +2299,8 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
     setSaving(true);
     const newItems = valid.map(item => ({
       ...item,
-      id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      created_at: new Date().toISOString(),
     }));
     onAdd(newItems);
     setSaving(false);
