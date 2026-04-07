@@ -1452,9 +1452,14 @@ export default function App() {
     if (activeFilters.subcategory?.length) base = base.filter(it => activeFilters.subcategory.includes(it.subcategory));
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
-      base = base.filter(it => it.color && activeFilters.color.some(c =>
-        it.color.toLowerCase().includes(c.toLowerCase())
-      ));
+      base = base.filter(it => {
+        const itemColor = (it.color || "").toLowerCase();
+        const itemFamily = (it.color_family || "").toLowerCase();
+        return activeFilters.color.some(c => {
+          const cl = c.toLowerCase();
+          return itemColor.includes(cl) || itemFamily.includes(cl) || itemColor === cl;
+        });
+      });
     }
     // Sets filter
     if (activeFilters.sets === "Sets Only") base = base.filter(it => it.set_id);
@@ -1794,22 +1799,21 @@ function FilterBar({ items, activeFilters, onChange }) {
   const brands = [...new Set(items.map(it => it.brand).filter(Boolean))].sort();
   const filteredBrands = brands.filter(b => b.toLowerCase().includes(brandSearch.toLowerCase()));
 
-  // Subcategories: show relevant ones based on selected categories (or all if "All")
+  // Subcategories: only show when exactly one category is selected (scoped to that category)
   const selectedCats = activeFilters.category?.filter(c => c !== "Sets") || [];
   const subcatOptions = (() => {
-    const cats = selectedCats.length > 0 ? selectedCats : CATEGORY_ORDER;
-    const subs = new Set();
-    cats.forEach(cat => {
-      (TAXONOMY[cat] || []).forEach(sub => {
-        // Only show subcategories that actually have items
-        if (items.some(it => it.category === cat && it.subcategory === sub)) subs.add(sub);
-        // Also check L3 subcategories
-        (SUBCATEGORY_L3[sub] || []).forEach(l3 => {
-          if (items.some(it => it.subcategory === l3)) subs.add(l3);
-        });
+    if (selectedCats.length !== 1) return [];   // only show for single-category selection
+    const cat = selectedCats[0];
+    const subs = [];
+    (TAXONOMY[cat] || []).forEach(sub => {
+      // Only show subcategories that actually have items
+      if (items.some(it => it.category === cat && it.subcategory === sub)) subs.push(sub);
+      // Also check L3 subcategories
+      (SUBCATEGORY_L3[sub] || []).forEach(l3 => {
+        if (items.some(it => it.category === cat && it.subcategory === l3)) subs.push(l3);
       });
     });
-    return [...subs].sort();
+    return subs;   // preserve TAXONOMY order instead of sorting alphabetically
   })();
 
   return (
@@ -1830,14 +1834,18 @@ function FilterBar({ items, activeFilters, onChange }) {
         </div>
       </div>
 
-      {/* Subcategory chips — prominent, always visible when relevant */}
+      {/* Subcategory chips — single-select, scoped to selected category */}
       {subcatOptions.length > 0 && (
         <div style={s.filterSection}>
-          <div style={s.filterSectionLabel}>Subcategory</div>
           <div style={s.filterRow}>
             {subcatOptions.map(sub => (
               <button key={sub}
-                onClick={() => toggle("subcategory", sub)}
+                onClick={() => {
+                  // Single-select: toggle off if already selected, otherwise switch to this one
+                  const current = activeFilters.subcategory || [];
+                  const next = current.includes(sub) ? [] : [sub];
+                  onChange({ ...activeFilters, subcategory: next });
+                }}
                 style={{...s.chip, ...(isActive("subcategory", sub) ? s.chipActive : {})}}>
                 {sub}
               </button>
@@ -1845,6 +1853,32 @@ function FilterBar({ items, activeFilters, onChange }) {
           </div>
         </div>
       )}
+
+      {/* Denim wash filter — only when Jeans subcategory is active or Jeans items are visible */}
+      {(() => {
+        const showWash = (activeFilters.subcategory || []).includes("Jeans")
+          || ((activeFilters.category || []).length === 0 && items.some(it => it.subcategory === "Jeans"));
+        if (!showWash) return null;
+        const WASH_ORDER = ["Light Wash", "Medium Wash", "Dark Wash", "Black Wash"];
+        return (
+          <div style={s.filterSection}>
+            <div style={s.filterSectionLabel}>Wash</div>
+            <div style={s.filterRow}>
+              {WASH_ORDER.map(wash => (
+                <button key={wash}
+                  onClick={() => {
+                    const current = activeFilters.color || [];
+                    const next = current.includes(wash) ? current.filter(v => v !== wash) : [...current, wash];
+                    onChange({ ...activeFilters, color: next });
+                  }}
+                  style={{...s.chip, ...(isActive("color", wash) ? s.chipActive : {})}}>
+                  {wash}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Color swatches */}
       <div style={s.filterSection}>
