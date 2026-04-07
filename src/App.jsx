@@ -1982,11 +1982,9 @@ function FilterBar({ items, activeFilters, onChange }) {
         );
       })()}
 
-      {/* Denim wash filter — only when Jeans subcategory is active or Jeans items are visible */}
+      {/* Denim wash filter — only when Jeans subcategory is explicitly selected */}
       {(() => {
-        const showWash = (activeFilters.subcategory || []).includes("Jeans")
-          || ((activeFilters.category || []).length === 0 && items.some(it => it.subcategory === "Jeans"));
-        if (!showWash) return null;
+        if (!(activeFilters.subcategory || []).includes("Jeans")) return null;
         const WASH_ORDER = ["Light Wash", "Medium Wash", "Dark Wash", "Black Wash"];
         return (
           <div style={s.filterSection}>
