@@ -531,9 +531,19 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   });
   const shuffled = Object.values(byCategory).flat();
 
-  const inventory = shuffled.map(it => {
+  // Use short sequential IDs so the AI doesn't garble long UUIDs
+  const idMap = {};          // shortId → realId
+  const reverseMap = {};     // realId → shortId
+  shuffled.forEach((it, i) => {
+    const short = `W${String(i + 1).padStart(3, "0")}`;
+    idMap[short] = it.id;
+    reverseMap[it.id] = short;
+  });
+
+  const inventory = shuffled.map((it, i) => {
+    const short = `W${String(i + 1).padStart(3, "0")}`;
     const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `, ${it.knit_fit}` : ""}]` : "";
-    return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
+    return `${short} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
   }).join("\n");
 
   // Pick 3 random distinct moods — filter out nightlife-leaning moods for professional occasions
@@ -542,10 +552,11 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const moodPool = workOccasions.has(occasion) ? MOODS.filter(m => !nightMoods.has(m.name)) : MOODS;
   const selectedMoods = shuffle(moodPool).slice(0, 3);
 
-  // Build list of recently used individual item IDs to discourage repeats
+  // Build list of recently used individual item IDs to discourage repeats (mapped to short IDs)
   const recentItemIds = [...new Set(previousLooks.flatMap(l => l.items || []))];
-  const usedItemsNote = recentItemIds.length > 0
-    ? `RECENTLY USED ITEMS (strongly avoid reusing these — pick DIFFERENT pieces): ${recentItemIds.join(", ")}`
+  const recentShortIds = recentItemIds.map(id => reverseMap[id]).filter(Boolean);
+  const usedItemsNote = recentShortIds.length > 0
+    ? `RECENTLY USED ITEMS (strongly avoid reusing these — pick DIFFERENT pieces): ${recentShortIds.join(", ")}`
     : "";
 
   const colorPairsList = stylePrefs.colorPairs.map(p => `  - ${p}`).join("\n");
@@ -592,7 +603,7 @@ Respond ONLY with valid JSON, no markdown:
       "name": "2-4 words referencing actual colors/fabrics in the look",
       "mood": "mood name",
       "occasion": "${occasion}",
-      "items": ["id1", "id2", "id3", "id4", "id5", "id6"],
+      "items": ["W001", "W002", "W003", "W004", "W005", "W006"],
       "styling": "the specific styling move: how items are worn together (e.g. 'blazer open over tucked silk cami, belt cinching at waist, wide trousers breaking at the ankle boot')"
     }
   ]
@@ -625,10 +636,13 @@ Respond ONLY with valid JSON, no markdown:
   const jsonMatch = clean.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No valid JSON in AI response. Raw: " + text.slice(0, 200));
   const parsed = JSON.parse(jsonMatch[0]);
-  // Normalize IDs — AI sometimes returns "ID:xxx" instead of "xxx"
+  // Map short IDs (W001, W002…) back to real Supabase UUIDs
   if (parsed.looks) {
     parsed.looks.forEach(look => {
-      if (look.items) look.items = look.items.map(id => String(id).replace(/^ID:/i, "").trim());
+      if (look.items) look.items = look.items.map(id => {
+        const clean = String(id).replace(/^ID:/i, "").trim();
+        return idMap[clean] || clean;   // resolve short ID → real ID, fallback to raw
+      });
     });
   }
   return parsed;
