@@ -568,7 +568,7 @@ const MOODS = [
 ];
 
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
-async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}) {
+async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}, styleExcludes = new Set()) {
   // ── Pre-filter: remove categories that make no sense for this occasion ──
   const OCCASION_EXCLUDE = {
     Activity:    new Set(["Occasionwear","Loungewear","Swim"]),
@@ -588,15 +588,52 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const excluded = OCCASION_EXCLUDE[effectiveOccasion] || new Set();
   let filtered = items.filter(it => !excluded.has(it.category));
 
-  // For formal/Executive requests, strip casual pieces from the wardrobe the AI sees
+  // Helper: detect denim by subcategory, name, or notes
+  const isDenim = (it) =>
+    it.subcategory === "Jeans" ||
+    /\b(jeans|denim|jean)\b/i.test(it.name || "") ||
+    /\b(jeans|denim|jean)\b/i.test(it.notes || "");
+
+  // For formal/Executive/Interview: whitelist appropriate subcategories only
   if (isFormalRequest || effectiveOccasion === "Executive") {
+    const FORMAL_ALLOW = {
+      Tops:         new Set(["Blouses","Shirts","Bodysuits","Tops","Lightweight Knits"]),
+      Knits:        new Set(["Cardigans","Pullovers"]),
+      Bottoms:      new Set(["Trousers","Satin/Silk","Ponte","Pants"]), // Pants L2 allowed (will filter denim separately)
+      Dresses:      new Set(["Midi","Mini","Sweater Dress"]),
+      Outerwear:    new Set(["Blazers","Coats","Jackets"]),
+      Shoes:        new Set(["Heels","Loafers","Boots","Flats"]),
+      Bags:         null, // all allowed
+      Belts:        null,
+      Accessories:  null,
+      Occasionwear: new Set(["Cocktail Dresses","Formal Separates"]),
+    };
     filtered = filtered.filter(it => {
-      if (it.subcategory === "Jeans") return false;
+      // Block entire casual categories
+      if (["Athleisure","Loungewear","Swim","Jumpsuits"].includes(it.category)) return false;
+      // Block denim
+      if (isDenim(it)) return false;
+      // Block casual subcategories
       if (it.subcategory === "T-Shirts" || it.subcategory === "Tanks") return false;
       if (it.subcategory === "Shorts") return false;
-      if (it.subcategory === "Maxi") return false; // maxi skirts/dresses too casual for boardroom
-      if (it.category === "Loungewear") return false;
-      if (it.category === "Swim") return false;
+      if (it.subcategory === "Maxi") return false;
+      // If category has a whitelist, check it
+      const allowed = FORMAL_ALLOW[it.category];
+      if (allowed && it.subcategory && !allowed.has(it.subcategory)) return false;
+      return true;
+    });
+  }
+
+  // Apply user-toggled exclusions from the Style Me panel
+  if (styleExcludes?.size > 0) {
+    filtered = filtered.filter(it => {
+      if (styleExcludes.has("no-jeans") && isDenim(it)) return false;
+      if (styleExcludes.has("no-skirts") && it.subcategory === "Skirts") return false;
+      if (styleExcludes.has("no-dresses") && it.category === "Dresses") return false;
+      if (styleExcludes.has("trousers-only") && it.category === "Bottoms" && it.subcategory !== "Trousers" && it.subcategory !== "Satin/Silk" && it.subcategory !== "Ponte") return false;
+      if (styleExcludes.has("no-boots") && it.subcategory === "Boots") return false;
+      if (styleExcludes.has("heels-only") && it.category === "Shoes" && it.subcategory !== "Heels") return false;
+      if (styleExcludes.has("no-knits") && it.category === "Knits") return false;
       return true;
     });
   }
@@ -1308,6 +1345,8 @@ export default function App() {
   const [occasion,   setOccasion]   = useState("Work");
   const [weather,    setWeather]    = useState("");
   const [request,    setRequest]    = useState("");
+  const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
+  const [stylePanelOpen, setStylePanelOpen] = useState(false);
   const [apiKey,     setApiKey]     = useState(() => loadApiKey());
   const [rmbgKey,    setRmbgKey]    = useState(() => loadRmbgKey());
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
@@ -1565,7 +1604,7 @@ export default function App() {
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null);
     try {
-      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe());
+      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes);
       console.log("Generation result:", JSON.stringify(result).slice(0, 500));
       const looks = result?.looks;
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
@@ -1912,47 +1951,109 @@ export default function App() {
             </div>
           )}
 
-          {/* Style panel */}
+          {/* Style panel — collapsed = just the button, expanded = full controls */}
           <div style={s.stylePanel}>
-            <div style={s.panelLabel}>✦ STYLE ME</div>
+            {!stylePanelOpen ? (
+              /* ── Collapsed: one-tap button ── */
+              <button style={{...s.btnPrimary, width:"100%", padding:"14px 20px"}}
+                onClick={() => setStylePanelOpen(true)}>
+                <Icon path={icons.sparkle} size={15}/> Style Me
+              </button>
+            ) : (
+              /* ── Expanded: full controls ── */
+              <>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+                  <div style={s.panelLabel}>✦ STYLE ME</div>
+                  <button onClick={() => setStylePanelOpen(false)}
+                    style={{background:"none", border:"none", color:"#9A8E84", fontSize:18, cursor:"pointer", padding:"0 4px", lineHeight:1}}>✕</button>
+                </div>
 
-            {/* Occasion pills */}
-            <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
-              {OCCASIONS.map(o => (
-                <button key={o}
-                  style={occasion === o
-                    ? {...s.chip, ...s.chipActive, fontSize:12, padding:"6px 14px"}
-                    : {...s.chip, fontSize:12, padding:"6px 14px"}}
-                  onClick={() => setOccasion(o)}>
-                  {o}
+                {/* WHERE ARE YOU GOING? — occasion pills */}
+                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>WHERE ARE YOU GOING?</div>
+                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+                  {OCCASIONS.map(o => (
+                    <button key={o}
+                      style={occasion === o
+                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"6px 12px"}
+                        : {...s.chip, fontSize:11, padding:"6px 12px"}}
+                      onClick={() => {
+                        setOccasion(o);
+                        // Auto-set smart defaults per occasion
+                        if (o === "Interview" || o === "Executive") {
+                          setStyleExcludes(new Set(["no-jeans","trousers-only"]));
+                        } else if (o === "Work") {
+                          setStyleExcludes(new Set(["no-jeans"]));
+                        } else {
+                          setStyleExcludes(new Set());
+                        }
+                      }}>
+                      {o}
+                    </button>
+                  ))}
+                </div>
+
+                {/* WHAT'S THE WEATHER? */}
+                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>WHAT'S THE WEATHER?</div>
+                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+                  {[
+                    ["","Any"],["Hot (85°F+)","Hot"],["Warm (70-84°F)","Warm"],
+                    ["Mild (55-69°F)","Mild"],["Cool (40-54°F)","Cool"],
+                    ["Cold (below 40°F)","Cold"],["Rainy","Rainy"],
+                  ].map(([val,label]) => (
+                    <button key={val}
+                      style={weather === val
+                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                      onClick={() => setWeather(val)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* DON'T INCLUDE — user exclusion toggles */}
+                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>DON'T INCLUDE</div>
+                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+                  {[
+                    ["no-jeans","No Jeans"],
+                    ["no-skirts","No Skirts"],
+                    ["no-dresses","No Dresses"],
+                    ["trousers-only","Trousers Only"],
+                    ["no-boots","No Boots"],
+                    ["heels-only","Heels Only"],
+                    ["no-knits","No Knits"],
+                  ].map(([key,label]) => (
+                    <button key={key}
+                      style={styleExcludes.has(key)
+                        ? {...s.chip, background:"#C0392B", borderColor:"#C0392B", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
+                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                      onClick={() => setStyleExcludes(prev => {
+                        const next = new Set(prev);
+                        // Handle mutual exclusivity
+                        if (key === "trousers-only" && !next.has(key)) { next.delete("no-skirts"); }
+                        if (key === "heels-only" && !next.has(key)) { next.delete("no-boots"); }
+                        next.has(key) ? next.delete(key) : next.add(key);
+                        return next;
+                      })}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ANYTHING SPECIFIC? */}
+                <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black', 'navy and brown')"
+                  value={request} onChange={e=>setRequest(e.target.value)}
+                  style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
+
+                {styleErr && <p style={s.err}>{styleErr}</p>}
+                <button style={{...s.btnPrimary, width:"100%"}}
+                  onClick={() => { handleStyle(); }}
+                  disabled={styling}>
+                  {styling
+                    ? <><span style={s.spinnerSm}/> Styling…</>
+                    : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
                 </button>
-              ))}
-            </div>
-
-            {/* Weather + Request row */}
-            <div style={{display:"flex", gap:8, marginBottom:8}}>
-              <select value={weather} onChange={e=>setWeather(e.target.value)}
-                style={{...s.select, flex:"0 0 auto", width:120, fontSize:12, color: weather ? "#1C1814" : "#9A8E84"}}>
-                <option value="">Weather</option>
-                <option value="Hot (85°F+)">Hot (85°F+)</option>
-                <option value="Warm (70-84°F)">Warm (70-84°F)</option>
-                <option value="Mild (55-69°F)">Mild (55-69°F)</option>
-                <option value="Cool (40-54°F)">Cool (40-54°F)</option>
-                <option value="Cold (below 40°F)">Cold (below 40°F)</option>
-                <option value="Rainy">Rainy</option>
-              </select>
-              <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black')"
-                value={request} onChange={e=>setRequest(e.target.value)}
-                style={{...s.input, flex:1, fontSize:12}}/>
-            </div>
-
-            {styleErr && <p style={s.err}>{styleErr}</p>}
-            <button style={{...s.btnPrimary, width:"100%"}}
-              onClick={handleStyle} disabled={styling}>
-              {styling
-                ? <><span style={s.spinnerSm}/> Styling…</>
-                : <><Icon path={icons.sparkle} size={15}/> Style Me</>}
-            </button>
+              </>
+            )}
           </div>
 
           {/* FAB */}
@@ -4456,7 +4557,7 @@ const s = {
   spinnerElevate: { display:"inline-block", width:11, height:11, border:"1.5px solid #C8BFB4", borderTop:"1.5px solid #1C1814", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
 
   // Style panel
-  stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid #E8E0D8", padding:"14px 20px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)" },
+  stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid #E8E0D8", padding:"14px 20px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", maxHeight:"80vh", overflowY:"auto" },
   panelLabel: { fontSize:10, letterSpacing:"0.22em", color:"#9A8E84", marginBottom:10 },
   panelRow: { display:"flex", gap:8, marginBottom:8 },
   select: { flex:1, border:"1px solid #E8E0D8", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"#1C1814" },
