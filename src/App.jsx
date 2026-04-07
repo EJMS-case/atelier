@@ -626,28 +626,41 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
 
   // ── STEP 4: Weather pre-filtering ──
   const weatherLower = (weather || "").toLowerCase();
-  const isCold = /cold|below 40|cool|40-54/i.test(weatherLower);
-  const isHot  = /hot|85|warm|70-84/i.test(weatherLower);
+  const isCold = /cold|below 40/i.test(weatherLower);
+  const isCool = /cool|40-54/i.test(weatherLower);
   const isMild = /mild|55-69/i.test(weatherLower);
+  const isHot  = /hot|85\+/i.test(weatherLower) && !/warm/i.test(weatherLower);
 
   if (isCold) {
     filtered = filtered.filter(it => {
-      // Remove sleeveless and short-sleeve tops in cold weather
       if (it.category === "Tops" && ["Tanks","T-Shirts"].includes(it.subcategory)) return false;
       if (it.category === "Swim") return false;
       if (it.subcategory === "Shorts") return false;
       if (it.subcategory === "Sandals") return false;
-      // Remove items with "sleeveless" in notes
       if (/\bsleeveless\b/i.test(it.notes || "")) return false;
       return true;
     });
   }
   if (isHot) {
     filtered = filtered.filter(it => {
-      // Remove heavy outerwear in hot weather
+      // Hot (85°F+): no knits, no boots, no coats, no heavy layers
+      if (it.category === "Knits") return false;
       if (it.subcategory === "Coats") return false;
-      if (it.category === "Knits" && /\b(chunky|heavy|wool|winter)\b/i.test((it.notes || "") + " " + (it.knit_weight || ""))) return false;
-      if (it.subcategory === "Boots" && /\b(knee|over-the-knee)\b/i.test(it.subcategory || "")) return false;
+      if (it.subcategory === "Jackets") return false; // leather jackets etc. too heavy
+      if (it.subcategory === "Boots") return false;
+      if (it.category === "Swim") return false; // not relevant for styled looks
+      if (/\b(wool|cashmere|chunky|heavy|fleece|sherpa)\b/i.test((it.notes || "") + " " + (it.name || ""))) return false;
+      return true;
+    });
+  }
+  const isWarm = /warm|70-84/i.test(weatherLower);
+  if (isWarm) {
+    filtered = filtered.filter(it => {
+      // Warm (70-84°F): no heavy knits, no coats, no tall boots
+      if (it.subcategory === "Coats") return false;
+      if (it.category === "Knits" && it.subcategory === "Pullovers") return false; // cardigans OK as light layers
+      if (it.subcategory === "Boots" && /\b(knee|over-the-knee)\b/i.test((it.notes || "") + " " + (it.name || ""))) return false;
+      if (/\b(wool|cashmere|chunky|heavy|fleece|sherpa)\b/i.test((it.notes || "") + " " + (it.name || ""))) return false;
       return true;
     });
   }
@@ -716,7 +729,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const occasionContext = {
     Executive: "EXECUTIVE — boardroom/client-facing. Blazer required on every look. Tailored trousers or structured midi dress only. Pointed-toe heels or polished loafers. No casual fabrics, no chunky knits, no boots with platforms.",
     Work: "WORK — polished professional. Blazer or structured outerwear on at least 2 of 3 looks. Trousers preferred. Heels or loafers.",
-    "Date Night": "DATE NIGHT — elevated and feminine. A silk or satin piece, heels, a statement bag.",
+    "Date Night": "DATE NIGHT — elevated and feminine. Heels required (no flats, no boots unless ankle heeled boots). A silk, satin, or luxe fabric piece. A structured or statement bag. This is a night out — she should look stunning.",
     Dinner: "DINNER — chic and considered. Elevated fabrics, heels or polished boots, a good bag.",
     "Dinner Party": "DINNER PARTY — more daring than dinner. A bold color, a texture mix, something unexpected.",
     "Lunch/Brunch": "LUNCH/BRUNCH — effortless polish. Can be relaxed but never sloppy.",
@@ -745,7 +758,7 @@ BUILD 3 LOOKS. Each must:
 - Mood 3: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
 RULES (violation = FAILED):
-1. EVERY look must have a layer (blazer/cardigan/coat/jacket) unless weather is Hot. Top + bottom + shoes alone = FAILED.
+1. ${isHot ? 'Layering is OPTIONAL in hot weather — a great top + bottom + shoes + bag + belt is enough. Skip heavy layers.' : 'EVERY look must have a layer (blazer/cardigan/coat/jacket). Top + bottom + shoes alone = FAILED.'}
 2. At least 2 of 3 looks must include a BELT.
 3. Silhouette contrast required: fitted × wide, slim × oversized, structured × fluid.
 4. Texture contrast required: silk × wool, leather × knit, satin × cotton. Same weight everything = FAILED.
