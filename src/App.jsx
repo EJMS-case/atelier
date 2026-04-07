@@ -179,9 +179,14 @@ function defaultSortComparator(a, b) {
 }
 
 const OCCASIONS = [
-  "Executive","Work","Dinner","Dinner Party","Lunch/Brunch",
-  "Daytime","Event","Athleisure","Activity","Travel","Lounge",
+  "Interview","Executive","Work","Date Night","Dinner","Dinner Party",
+  "Lunch/Brunch","Daytime","Event","Athleisure","Activity","Travel","Lounge",
 ];
+// Map display occasions to AI occasion context
+const OCCASION_AI_MAP = {
+  "Interview": "Executive",
+  "Date Night": "Dinner",
+};
 const STORAGE_KEY    = "atelier-wardrobe-v1";
 const API_KEY_STORE  = "atelier-api-key";
 const RMBG_KEY_STORE = "atelier-rmbg-key";
@@ -569,14 +574,16 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     Activity:    new Set(["Occasionwear","Loungewear","Swim"]),
     Athleisure:  new Set(["Occasionwear","Swim"]),
     Executive:   new Set(["Athleisure","Loungewear","Swim","Occasionwear"]),
+    Interview:   new Set(["Athleisure","Loungewear","Swim","Occasionwear"]),
     Work:        new Set(["Athleisure","Loungewear","Swim","Occasionwear"]),
     Lounge:      new Set(["Occasionwear","Swim"]),
     Travel:      new Set(["Occasionwear","Swim"]),
   };
-  // Detect formality escalation from request text
+  // Detect formality escalation from occasion selection or request text
   const FORMAL_KEYWORDS = /\b(interview|important meeting|presentation|board meeting|client meeting|first day)\b/i;
-  const isFormalRequest = FORMAL_KEYWORDS.test(request || "");
-  const effectiveOccasion = isFormalRequest && !["Executive","Work"].includes(occasion) ? "Executive" : occasion;
+  const isFormalRequest = occasion === "Interview" || FORMAL_KEYWORDS.test(request || "");
+  const aiOccasion = OCCASION_AI_MAP[occasion] || occasion;
+  const effectiveOccasion = isFormalRequest && !["Executive","Work"].includes(aiOccasion) ? "Executive" : aiOccasion;
 
   const excluded = OCCASION_EXCLUDE[effectiveOccasion] || new Set();
   let filtered = items.filter(it => !excluded.has(it.category));
@@ -1907,19 +1914,40 @@ export default function App() {
 
           {/* Style panel */}
           <div style={s.stylePanel}>
-            <div style={s.panelLabel}>✦ GENERATE LOOKS</div>
-            <div style={s.panelRow}>
-              <select value={occasion} onChange={e=>setOccasion(e.target.value)} style={s.select}>
-                {OCCASIONS.map(o=><option key={o}>{o}</option>)}
-              </select>
-              <input placeholder="Weather (e.g. 45°F, rainy)"
-                value={weather} onChange={e=>setWeather(e.target.value)} style={s.input}/>
+            <div style={s.panelLabel}>✦ STYLE ME</div>
+
+            {/* Occasion pills */}
+            <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
+              {OCCASIONS.map(o => (
+                <button key={o}
+                  style={occasion === o
+                    ? {...s.chip, ...s.chipActive, fontSize:12, padding:"6px 14px"}
+                    : {...s.chip, fontSize:12, padding:"6px 14px"}}
+                  onClick={() => setOccasion(o)}>
+                  {o}
+                </button>
+              ))}
             </div>
-            <input placeholder="Request (e.g. 'red and brown', 'all black evening')"
-              value={request} onChange={e=>setRequest(e.target.value)}
-              style={{...s.input, width:"100%"}}/>
+
+            {/* Weather + Request row */}
+            <div style={{display:"flex", gap:8, marginBottom:8}}>
+              <select value={weather} onChange={e=>setWeather(e.target.value)}
+                style={{...s.select, flex:"0 0 auto", width:120, fontSize:12, color: weather ? "#1C1814" : "#9A8E84"}}>
+                <option value="">Weather</option>
+                <option value="Hot (85°F+)">Hot (85°F+)</option>
+                <option value="Warm (70-84°F)">Warm (70-84°F)</option>
+                <option value="Mild (55-69°F)">Mild (55-69°F)</option>
+                <option value="Cool (40-54°F)">Cool (40-54°F)</option>
+                <option value="Cold (below 40°F)">Cold (below 40°F)</option>
+                <option value="Rainy">Rainy</option>
+              </select>
+              <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black')"
+                value={request} onChange={e=>setRequest(e.target.value)}
+                style={{...s.input, flex:1, fontSize:12}}/>
+            </div>
+
             {styleErr && <p style={s.err}>{styleErr}</p>}
-            <button style={{...s.btnPrimary, width:"100%", marginTop:8}}
+            <button style={{...s.btnPrimary, width:"100%"}}
               onClick={handleStyle} disabled={styling}>
               {styling
                 ? <><span style={s.spinnerSm}/> Styling…</>
@@ -4436,7 +4464,7 @@ const s = {
   err: { color:"#C0392B", fontSize:12, margin:"4px 0 0" },
   btnPrimary: { background:"#1C1814", color:"#F5F1EC", border:"none", borderRadius:4, padding:"10px 20px", fontSize:12, letterSpacing:"0.08em", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7 },
   btnSecondary: { background:"none", border:"1px solid #E8E0D8", borderRadius:4, padding:"10px 20px", fontSize:12, color:"#6B5E54", cursor:"pointer", letterSpacing:"0.06em", textAlign:"center" },
-  fab: { position:"fixed", bottom:155, right:20, width:48, height:48, borderRadius:24, background:"#1C1814", color:"#F5F1EC", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(0,0,0,0.22)", zIndex:60 },
+  fab: { position:"fixed", bottom:200, right:20, width:48, height:48, borderRadius:24, background:"#1C1814", color:"#F5F1EC", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(0,0,0,0.22)", zIndex:60 },
 
   // Bulk add
   dropZone: { display:"block", cursor:"pointer", marginBottom:24, border:"2px dashed #C8BFB4", borderRadius:10 },
