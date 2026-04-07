@@ -87,6 +87,154 @@ const CATEGORIES = CATEGORY_ORDER;
 // ── SET TAGS ──────────────────────────────────────────────────────────────────
 const SET_TAGS = ["Work","Weekend","Evening","Travel","Casual","Date Night","Seasonal","Formal","Vacation"];
 
+// ── OCCASION SLOTS — deterministic structure for every occasion ─────────────
+const OCCASION_SLOTS = {
+  Interview: {
+    required: { top: ["Blouses","Shirts"], bottom: ["Trousers","Ponte"], layer: ["Blazers"], shoes: ["Heels","Loafers"], bag: true },
+    optional: { belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Maxi","Skirts"], keywords: ["chunky","oversized","platform","combat"] },
+    promptNote: "EXECUTIVE INTERVIEW: Blazer is mandatory on every look. Tailored trousers only. Pointed-toe heels or polished loafers. No casual fabrics."
+  },
+  Executive: {
+    required: { top: ["Blouses","Shirts"], bottom: ["Trousers","Ponte","Satin/Silk"], layer: ["Blazers","Coats"], shoes: ["Heels","Loafers"], bag: true },
+    optional: { belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Maxi"], keywords: ["chunky","oversized","platform","combat"] },
+    promptNote: "EXECUTIVE: Boardroom-ready. Blazer or structured coat on every look. Tailored trousers or ponte pants. Pointed-toe heels or polished loafers."
+  },
+  Work: {
+    required: { top: ["Blouses","Shirts","Tops","Bodysuits","Lightweight Knits"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], layer: ["Blazers","Coats","Jackets","Cardigans"], shoes: ["Heels","Loafers","Flats","Boots"], bag: true },
+    optional: { belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
+    promptNote: "WORK: Polished professional. Blazer or structured layer on at least 2 of 3 looks. No casual fabrics."
+  },
+  "Date Night": {
+    required: { top: ["Blouses","Shirts","Tops","Bodysuits"], shoes: ["Heels"], bag: true },
+    optional: { bottom: ["Trousers","Skirts","Satin/Silk","Ponte","Pants"], dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Jackets","Cardigans"], belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: ["chunky","platform","combat","lug"] },
+    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Silk, satin, or luxe fabrics. She should look stunning. At least one look should be a dress."
+  },
+  Dinner: {
+    required: { shoes: ["Heels","Loafers","Boots"], bag: true },
+    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
+    promptNote: "DINNER: Chic and considered. Elevated fabrics, polished shoes, a good bag."
+  },
+  "Dinner Party": {
+    required: { shoes: ["Heels","Loafers","Boots"], bag: true },
+    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
+    promptNote: "DINNER PARTY: More daring than dinner. A bold color, a texture mix, something unexpected."
+  },
+  "Lunch/Brunch": {
+    required: { shoes: true, bag: true },
+    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Swim"], subcategories: [], keywords: [] },
+    promptNote: "LUNCH/BRUNCH: Effortless polish. Can be relaxed but never sloppy."
+  },
+  Daytime: {
+    required: { shoes: true, bag: true },
+    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Swim","Occasionwear"], subcategories: [], keywords: [] },
+    promptNote: "DAYTIME: Smart-casual. Styled but lighter."
+  },
+  Event: {
+    required: { shoes: ["Heels"], bag: true },
+    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
+    promptNote: "EVENT: Occasion-worthy. Dress or elevated separates."
+  },
+  Athleisure: {
+    required: { shoes: true },
+    optional: { top: true, bottom: true, layer: true, bag: true, accessory: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
+    promptNote: "ATHLEISURE: Sporty-chic. Athleisure pieces styled up."
+  },
+  Activity: {
+    required: { shoes: true },
+    optional: { top: true, bottom: true, layer: true, bag: true, accessory: true },
+    banned: { categories: ["Occasionwear","Swim","Loungewear"], subcategories: [], keywords: [] },
+    promptNote: "ACTIVITY: Comfortable and practical but still styled."
+  },
+  Travel: {
+    required: { shoes: true, bag: true },
+    optional: { top: true, bottom: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
+    promptNote: "TRAVEL: Comfortable elegance. Layers, practical shoes, functional bag."
+  },
+  Lounge: {
+    required: {},
+    optional: { top: true, bottom: true, layer: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
+    promptNote: "LOUNGE: Relaxed at-home style."
+  },
+};
+
+// ── SLEEVE CLASSIFICATION ─────────────────────────────────────────────────────
+function getSleeveType(item) {
+  const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeve":"short", "Bra/Crop Top":"sleeveless" };
+  if (item.category === "Tops" && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
+  if (/\bsleeveless\b/i.test(item.notes || "")) return "sleeveless";
+  if (/\bshort.?sleeve\b/i.test(item.notes || "")) return "short";
+  if (/\bcap.?sleeve\b/i.test(item.notes || "")) return "short";
+  if (item.sleeve_length) return item.sleeve_length.toLowerCase().includes("short") ? "short" : item.sleeve_length.toLowerCase().includes("sleeveless") ? "sleeveless" : "long";
+  return "long"; // default for blouses, shirts, knits
+}
+
+// ── WEATHER-BASED FILTERING ───────────────────────────────────────────────────
+function filterByWeather(items, weather) {
+  const w = (weather || "").toLowerCase();
+  if (!w || w === "any") return items;
+
+  const isHot  = /hot|85/i.test(w);
+  const isWarm = /warm|70-84/i.test(w);
+  const isMild = /mild|55-69/i.test(w);
+  const isCool = /cool|40-54/i.test(w);
+  const isCold = /cold|below 40/i.test(w);
+
+  return items.filter(it => {
+    const sleeve = getSleeveType(it);
+    const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "")).toLowerCase();
+    const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer/i.test(nameNotes);
+
+    if (isHot) {
+      if (it.category === "Knits") return false;
+      if (it.subcategory === "Boots") return false;
+      if (it.subcategory === "Coats" || it.subcategory === "Jackets") return false;
+      if (it.category === "Tops" && sleeve === "long") return false;
+      if (isHeavyFabric) return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isWarm) {
+      if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
+      if (it.subcategory === "Coats") return false;
+      if (isHeavyFabric) return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isMild) {
+      if (it.subcategory === "Sandals") return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isCool) {
+      if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
+      if (it.subcategory === "Sandals") return false;
+      if (it.subcategory === "Shorts") return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isCold) {
+      if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
+      if (it.subcategory === "Sandals") return false;
+      if (it.subcategory === "Shorts") return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    return true;
+  });
+}
+
 // Given a category + subcategory value (may be L2 or L3), find the L2 parent
 function getSubcatL2(category, subcategory) {
   if (!subcategory) return "";
@@ -182,11 +330,6 @@ const OCCASIONS = [
   "Interview","Executive","Work","Date Night","Dinner","Dinner Party",
   "Lunch/Brunch","Daytime","Event","Athleisure","Activity","Travel","Lounge",
 ];
-// Map display occasions to AI occasion context
-const OCCASION_AI_MAP = {
-  "Interview": "Executive",
-  "Date Night": "Dinner",
-};
 const STORAGE_KEY    = "atelier-wardrobe-v1";
 const API_KEY_STORE  = "atelier-api-key";
 const RMBG_KEY_STORE = "atelier-rmbg-key";
@@ -570,24 +713,8 @@ const MOODS = [
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
 async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}, styleExcludes = new Set()) {
 
-  // ── STEP 1: Determine effective occasion + formality ──
-  const FORMAL_KEYWORDS = /\b(interview|important meeting|presentation|board meeting|client meeting|first day)\b/i;
-  const isFormalRequest = occasion === "Interview" || occasion === "Executive" || FORMAL_KEYWORDS.test(request || "");
-  const isWork = isFormalRequest || occasion === "Work";
-  const aiOccasion = OCCASION_AI_MAP[occasion] || occasion;
-  const effectiveOccasion = isFormalRequest ? "Executive" : aiOccasion;
-
-  // ── STEP 2: Category-level exclusions ──
-  const OCCASION_EXCLUDE = {
-    Activity:    new Set(["Occasionwear","Loungewear","Swim"]),
-    Athleisure:  new Set(["Occasionwear","Swim","Loungewear"]),
-    Executive:   new Set(["Athleisure","Loungewear","Swim","Jumpsuits"]),
-    Work:        new Set(["Athleisure","Loungewear","Swim","Jumpsuits"]),
-    Lounge:      new Set(["Occasionwear","Swim"]),
-    Travel:      new Set(["Occasionwear","Swim"]),
-  };
-  const excluded = OCCASION_EXCLUDE[effectiveOccasion] || new Set();
-  let filtered = items.filter(it => !excluded.has(it.category));
+  // ── STEP 1: Get occasion slots (deterministic) ──
+  const slots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Daytime;
 
   // Helper: detect denim by subcategory, name, or notes
   const isDenim = (it) =>
@@ -595,77 +722,24 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     /\b(jeans|denim|jean)\b/i.test(it.name || "") ||
     /\b(jeans|denim|jean)\b/i.test(it.notes || "");
 
-  // Helper: detect chunky/platform boots
-  const isCasualBoot = (it) =>
-    it.subcategory === "Boots" &&
-    /\b(platform|chunky|combat|lug|hiker|rain)\b/i.test(it.name || "") ||
-    /\b(platform|chunky|combat|lug|hiker|rain)\b/i.test(it.notes || "");
+  // ── STEP 2: Apply bans (category + subcategory + keyword) ──
+  const bannedCats = new Set(slots.banned?.categories || []);
+  const bannedSubs = new Set(slots.banned?.subcategories || []);
+  const bannedKeywords = slots.banned?.keywords || [];
+  let filtered = items.filter(it => {
+    if (bannedCats.has(it.category)) return false;
+    if (bannedSubs.has(it.subcategory)) return false;
+    // Check subcategory also matches denim detection for "Jeans" ban
+    if (bannedSubs.has("Jeans") && isDenim(it)) return false;
+    // Keyword bans — check name + notes
+    if (bannedKeywords.length > 0) {
+      const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
+      if (bannedKeywords.some(kw => text.includes(kw.toLowerCase()))) return false;
+    }
+    return true;
+  });
 
-  // ── STEP 3: Subcategory whitelisting for formal occasions ──
-  if (isFormalRequest) {
-    filtered = filtered.filter(it => {
-      if (isDenim(it)) return false;
-      if (it.subcategory === "T-Shirts" || it.subcategory === "Tanks") return false;
-      if (it.subcategory === "Shorts") return false;
-      if (it.subcategory === "Maxi") return false;
-      if (it.subcategory === "Sandals") return false;
-      if (isCasualBoot(it)) return false;
-      if (it.category === "Bottoms" && it.subcategory === "Skirts") return false; // no skirts for PE interviews
-      if (it.category === "Knits" && it.subcategory === "Pullovers" && /\b(oversized|chunky|cable)\b/i.test((it.notes || "") + " " + (it.name || ""))) return false;
-      return true;
-    });
-  } else if (isWork) {
-    filtered = filtered.filter(it => {
-      if (isDenim(it)) return false;
-      if (it.subcategory === "T-Shirts" || it.subcategory === "Tanks") return false;
-      if (it.subcategory === "Shorts") return false;
-      if (it.subcategory === "Sandals") return false;
-      return true;
-    });
-  }
-
-  // ── STEP 4: Weather pre-filtering ──
-  const weatherLower = (weather || "").toLowerCase();
-  const isCold = /cold|below 40/i.test(weatherLower);
-  const isCool = /cool|40-54/i.test(weatherLower);
-  const isMild = /mild|55-69/i.test(weatherLower);
-  const isHot  = /hot|85\+/i.test(weatherLower) && !/warm/i.test(weatherLower);
-
-  if (isCold) {
-    filtered = filtered.filter(it => {
-      if (it.category === "Tops" && ["Tanks","T-Shirts"].includes(it.subcategory)) return false;
-      if (it.category === "Swim") return false;
-      if (it.subcategory === "Shorts") return false;
-      if (it.subcategory === "Sandals") return false;
-      if (/\bsleeveless\b/i.test(it.notes || "")) return false;
-      return true;
-    });
-  }
-  if (isHot) {
-    filtered = filtered.filter(it => {
-      // Hot (85°F+): no knits, no boots, no coats, no heavy layers
-      if (it.category === "Knits") return false;
-      if (it.subcategory === "Coats") return false;
-      if (it.subcategory === "Jackets") return false; // leather jackets etc. too heavy
-      if (it.subcategory === "Boots") return false;
-      if (it.category === "Swim") return false; // not relevant for styled looks
-      if (/\b(wool|cashmere|chunky|heavy|fleece|sherpa)\b/i.test((it.notes || "") + " " + (it.name || ""))) return false;
-      return true;
-    });
-  }
-  const isWarm = /warm|70-84/i.test(weatherLower);
-  if (isWarm) {
-    filtered = filtered.filter(it => {
-      // Warm (70-84°F): no heavy knits, no coats, no tall boots
-      if (it.subcategory === "Coats") return false;
-      if (it.category === "Knits" && it.subcategory === "Pullovers") return false; // cardigans OK as light layers
-      if (it.subcategory === "Boots" && /\b(knee|over-the-knee)\b/i.test((it.notes || "") + " " + (it.name || ""))) return false;
-      if (/\b(wool|cashmere|chunky|heavy|fleece|sherpa)\b/i.test((it.notes || "") + " " + (it.name || ""))) return false;
-      return true;
-    });
-  }
-
-  // ── STEP 5: User exclusion toggles ──
+  // ── STEP 3: User exclusion toggles ──
   if (styleExcludes?.size > 0) {
     filtered = filtered.filter(it => {
       if (styleExcludes.has("no-jeans") && isDenim(it)) return false;
@@ -679,20 +753,51 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     });
   }
 
-  // ── STEP 6: Smart inventory reduction — cap at ~80 items so AI can focus ──
-  const MAX_PER_CAT = { Tops:10, Knits:6, Bottoms:8, Dresses:6, Outerwear:8, Shoes:8, Bags:6, Belts:5, Accessories:6, Occasionwear:4, Sets:4, Jumpsuits:3, Loungewear:3, Athleisure:5, Swim:3 };
+  // ── STEP 4: Weather filter ──
+  filtered = filterByWeather(filtered, weather);
+
+  // ── STEP 5: Verify required slots have items ──
+  const ROLE_CATEGORIES = {
+    top:    ["Tops","Knits"],
+    bottom: ["Bottoms"],
+    layer:  ["Outerwear","Knits"],
+    shoes:  ["Shoes"],
+    bag:    ["Bags"],
+    belt:   ["Belts"],
+    dress:  ["Dresses","Occasionwear"],
+    accessory: ["Accessories"],
+  };
+  for (const [role, constraint] of Object.entries(slots.required)) {
+    if (constraint === true) continue; // any item in that role works
+    const roleCats = ROLE_CATEGORIES[role] || [];
+    const hasItems = filtered.some(it => {
+      if (!roleCats.includes(it.category)) return false;
+      if (Array.isArray(constraint)) {
+        // Must match one of the allowed subcategories
+        return constraint.some(sub => it.subcategory === sub || it.category === sub);
+      }
+      return true;
+    });
+    if (!hasItems) {
+      const friendly = role.charAt(0).toUpperCase() + role.slice(1);
+      const needed = Array.isArray(constraint) ? constraint.join(" or ") : friendly;
+      throw new Error(`No ${friendly} items (${needed}) available for ${occasion} after filtering. Try a different occasion or add more items.`);
+    }
+  }
+
+  // ── STEP 6: Cap inventory — max 8 per role, ~50-60 items total ──
+  const MAX_PER_CAT = { Tops:8, Knits:6, Bottoms:8, Dresses:6, Outerwear:8, Shoes:8, Bags:6, Belts:5, Accessories:5, Occasionwear:4, Sets:3, Jumpsuits:3, Loungewear:3, Athleisure:5, Swim:3 };
   const byCategory = {};
   filtered.forEach(it => {
     if (!byCategory[it.category]) byCategory[it.category] = [];
     byCategory[it.category].push(it);
   });
-  // Shuffle within each category for variety, then cap
   Object.keys(byCategory).forEach(cat => {
     byCategory[cat] = shuffle(byCategory[cat]).slice(0, MAX_PER_CAT[cat] || 6);
   });
   const curated = Object.values(byCategory).flat();
 
-  // ── STEP 7: Build inventory string with short IDs ──
+  // ── STEP 7: Build short ID map ──
   const idMap = {};
   const reverseMap = {};
   curated.forEach((it, i) => {
@@ -701,78 +806,89 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     reverseMap[it.id] = short;
   });
 
+  // ── STEP 8: Build annotated inventory (include sleeve type) ──
   const inventory = curated.map((it, i) => {
     const short = `W${String(i + 1).padStart(3, "0")}`;
     const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `, ${it.knit_fit}` : ""}]` : "";
-    return `${short} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
+    const sleeveTag = (it.category === "Tops" || it.category === "Knits") ? ` [sleeve:${getSleeveType(it)}]` : "";
+    return `${short} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
   }).join("\n");
 
-  // ── STEP 8: Select moods — occasion-appropriate only ──
-  const PROFESSIONAL = new Set(["Work","Executive"]);
-  const nightMoods = new Set(["After Hours","Off-Duty Parisian","Editorial"]);
-  const casualMoods = new Set(["Uptown Undone"]);
+  // ── STEP 9: Select moods — filter inappropriate moods for occasion ──
+  const PROFESSIONAL_OCCASIONS = new Set(["Interview","Executive","Work"]);
+  const professionalExcludeMoods = new Set(["After Hours","Off-Duty Parisian","Editorial","Uptown Undone"]);
+  const dateExcludeMoods = new Set(["Off-Duty Parisian"]);
   let moodPool = MOODS;
-  if (PROFESSIONAL.has(effectiveOccasion) || isFormalRequest) {
-    moodPool = MOODS.filter(m => !nightMoods.has(m.name) && !casualMoods.has(m.name));
+  if (PROFESSIONAL_OCCASIONS.has(occasion)) {
+    moodPool = MOODS.filter(m => !professionalExcludeMoods.has(m.name));
+  } else if (occasion === "Date Night") {
+    moodPool = MOODS.filter(m => !dateExcludeMoods.has(m.name));
   }
   const selectedMoods = shuffle(moodPool).slice(0, 3);
 
-  // ── STEP 9: Recently used items ──
+  // ── STEP 10: Recently used items ──
   const recentItemIds = [...new Set(previousLooks.flatMap(l => l.items || []))];
   const recentShortIds = recentItemIds.map(id => reverseMap[id]).filter(Boolean);
   const usedItemsNote = recentShortIds.length > 0
     ? `RECENTLY USED (avoid): ${recentShortIds.join(", ")}`
     : "";
 
-  // ── STEP 10: Build prompt — concise, structured, directive ──
-  const weatherLine = weather ? `WEATHER: ${weather}. Every piece must be appropriate for this temperature.` : "";
-  const occasionContext = {
-    Executive: "EXECUTIVE — boardroom/client-facing. Blazer required on every look. Tailored trousers or structured midi dress only. Pointed-toe heels or polished loafers. No casual fabrics, no chunky knits, no boots with platforms.",
-    Work: "WORK — polished professional. Blazer or structured outerwear on at least 2 of 3 looks. Trousers preferred. Heels or loafers.",
-    "Date Night": "DATE NIGHT — elevated and feminine. Heels required (no flats, no boots unless ankle heeled boots). A silk, satin, or luxe fabric piece. A structured or statement bag. This is a night out — she should look stunning.",
-    Dinner: "DINNER — chic and considered. Elevated fabrics, heels or polished boots, a good bag.",
-    "Dinner Party": "DINNER PARTY — more daring than dinner. A bold color, a texture mix, something unexpected.",
-    "Lunch/Brunch": "LUNCH/BRUNCH — effortless polish. Can be relaxed but never sloppy.",
-    Daytime: "DAYTIME — smart-casual. Still styled, just lighter.",
-    Event: "EVENT — occasion-worthy. Dress or separates that feel special.",
-    Activity: "ACTIVITY — comfortable and practical but still styled.",
-    Athleisure: "ATHLEISURE — sporty-chic. Athleisure pieces styled up.",
-    Travel: "TRAVEL — comfortable elegance. Layers, flat shoes, functional bag.",
-    Lounge: "LOUNGE — relaxed at-home style.",
-  };
+  // ── STEP 11: Build HC1 — dynamic required slots constraint ──
+  const hc1Parts = [];
+  for (const [role, constraint] of Object.entries(slots.required)) {
+    if (constraint === true) {
+      const friendly = role.charAt(0).toUpperCase() + role.slice(1);
+      hc1Parts.push(`1 ${friendly} item`);
+    } else if (Array.isArray(constraint)) {
+      const friendly = role.charAt(0).toUpperCase() + role.slice(1);
+      hc1Parts.push(`1 ${friendly} item (${constraint.join(" or ")})`);
+    }
+  }
+  const hc1 = hc1Parts.length > 0 ? `Must contain: ${hc1Parts.join(" + ")}` : "Use appropriate items for the occasion.";
 
+  // ── STEP 12: Build weather constraint ──
+  const w = (weather || "").toLowerCase();
+  const isHot = /hot|85/i.test(w);
+  const isWarm = /warm|70-84/i.test(w);
+  const isCool = /cool|40-54/i.test(w);
+  const isCold = /cold|below 40/i.test(w);
+  let hc3 = "";
+  if (isHot) hc3 = "Weather is HOT. No long sleeves. No layers heavier than a blazer.";
+  else if (isWarm) hc3 = "Weather is WARM. Light layers only. No heavy knits or coats.";
+  else if (isCool) hc3 = "Weather is COOL. Long sleeves required. Layer up. No sleeveless, no sandals.";
+  else if (isCold) hc3 = "Weather is COLD. Heavy layers required. No sleeveless, no short sleeves, no sandals.";
+  else hc3 = "Dress appropriately for the weather indicated.";
+
+  const weatherLine = weather ? `WEATHER: ${weather}.` : "";
+  const colorPairs = stylePrefs.colorPairs.join(", ");
+
+  // ── STEP 13: Build structured prompt ──
   const prompt = `${STYLE_PROFILE}
 
+${slots.promptNote}
 ${weatherLine}
-${occasionContext[effectiveOccasion] || `OCCASION: ${effectiveOccasion}`}
-${request ? `HER REQUEST: "${request}" — follow this direction.` : ""}
+${request ? `HER REQUEST: "${request}"` : ""}
 
-WARDROBE (${curated.length} pieces, pre-filtered for this occasion + weather):
+HARD CONSTRAINTS (every look MUST satisfy ALL):
+HC1: ${hc1}
+HC2: 6-7 items per look. Under 6 = FAILED.
+HC3: ${hc3}
+HC4: No item in more than one look.
+HC5: Each look needs a different color story. 3 similar looks = FAILED.
+HC6: Shoes + bag must match the look's color story.
+${usedItemsNote}
+
+COLOR PAIRS: ${colorPairs}
+
+WARDROBE (${curated.length} items, pre-filtered):
 ${inventory}
 
-BUILD 3 LOOKS. Each must:
-- Use a DIFFERENT hero piece and color story
-- Have 6-7 items: top + bottom + outerwear/layer + shoes + bag + belt
-- Mood 1: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
-- Mood 2: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
-- Mood 3: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
+BUILD 3 LOOKS with these moods:
+1. ${selectedMoods[0].name} — ${selectedMoods[0].brief}
+2. ${selectedMoods[1].name} — ${selectedMoods[1].brief}
+3. ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-RULES (violation = FAILED):
-1. ${isHot ? 'Layering is OPTIONAL in hot weather — a great top + bottom + shoes + bag + belt is enough. Skip heavy layers.' : 'EVERY look must have a layer (blazer/cardigan/coat/jacket). Top + bottom + shoes alone = FAILED.'}
-2. At least 2 of 3 looks must include a BELT.
-3. Silhouette contrast required: fitted × wide, slim × oversized, structured × fluid.
-4. Texture contrast required: silk × wool, leather × knit, satin × cotton. Same weight everything = FAILED.
-5. Shoes + bag must match the outfit's color story. Random mismatched accessories = FAILED.
-6. 6-7 items per look. Under 5 = FAILED (except dress looks: minimum 5).
-7. Outerwear requires a top underneath.
-8. Pullovers/sweaters are the OUTER layer over a top — never alongside another top with no layering relationship.
-9. No item in more than one look.
-${usedItemsNote ? `10. ${usedItemsNote}` : ""}
-
-COLOR PAIRS to use: ${stylePrefs.colorPairs.join(", ")}. Tonal/monochromatic encouraged with texture variety.
-
-Respond ONLY with valid JSON:
-{"looks":[{"name":"2-4 words with actual colors/fabrics","mood":"mood name","occasion":"${effectiveOccasion}","items":["W001","W002","W003","W004","W005","W006","W007"],"styling":"how items are worn: 'blazer open over tucked silk blouse, slim belt at waist, wide trousers breaking at ankle boot'"}]}`;
+Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"how to wear it"}]}`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -785,7 +901,7 @@ Respond ONLY with valid JSON:
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
       max_tokens: 3000,
-      temperature: 0.7,
+      temperature: 0.4,
       messages: [{ role: "user", content: prompt }]
     })
   });
@@ -809,8 +925,33 @@ Respond ONLY with valid JSON:
         return idMap[clean] || clean;   // resolve short ID → real ID, fallback to raw
       });
     });
+    // Post-validate looks against required slots
+    parsed.looks = validateLooks(parsed.looks, occasion, idMap, items);
   }
   return parsed;
+}
+
+// ── POST-VALIDATION ─────────────────────────────────────────────────────────
+function validateLooks(looks, occasion, idMap, allItems) {
+  const slots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Daytime;
+  const valid = [];
+  for (const look of looks) {
+    if (!look.items || look.items.length < 5) continue;
+    const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
+    if (resolved.length < 5) continue;
+    let ok = true;
+    for (const [role, constraint] of Object.entries(slots.required)) {
+      if (constraint === true) continue;
+      const roleCategories = role === "top" ? ["Tops","Knits"] : role === "bottom" ? ["Bottoms"] : role === "layer" ? ["Outerwear","Knits"] : role === "shoes" ? ["Shoes"] : role === "bag" ? ["Bags"] : role === "dress" ? ["Dresses","Occasionwear"] : [];
+      const hasRole = resolved.some(it => roleCategories.includes(it.category));
+      if (!hasRole && role !== "dress") {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) valid.push(look);
+  }
+  return valid.length > 0 ? valid : looks;
 }
 
 // ── AI ELEVATION ─────────────────────────────────────────────────────────────
@@ -3585,7 +3726,7 @@ function buildCollageLayout(items, suggestionSlots = []) {
     const cat  = item.category    || "";
     const sub  = item.subcategory || "";
     const name = item.name        || "";
-    if (cat === "Outerwear") return "outer";
+    if (cat === "Outerwear") return "layer";
     if (cat === "Bottoms")   return "bottom";
     if (cat === "Shoes")     return "shoes";
     if (cat === "Dresses" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
@@ -3594,97 +3735,158 @@ function buildCollageLayout(items, suggestionSlots = []) {
     if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name))) return "bag";
     if (cat === "Accessories" && /\bbelt\b/i.test(name)) return "belt";
     if (cat === "Accessories") return "accessory";
-    return "clothing";
+    return "top";
   };
 
-  const g = { outer:[], clothing:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], accessory:[] };
+  const g = { layer:[], top:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], accessory:[] };
   all.forEach(item => { const r = getRole(item); if (g[r]) g[r].push(item); });
 
+  // ── Template-based layout system ──
+  const TEMPLATES = {
+    "layer-top-bottom-shoes-bag-belt": {
+      layer:  { x:1,  y:1,  w:46, h:44 },
+      top:    { x:49, y:1,  w:46, h:40 },
+      belt:   { x:1,  y:43, w:46, h:14 },
+      bottom: { x:1,  y:48, w:44, h:46 },
+      bag:    { x:47, y:44, w:30, h:26 },
+      shoes:  { x:47, y:72, w:30, h:24 },
+    },
+    "layer-top-bottom-shoes-bag": {
+      layer:  { x:1,  y:1,  w:46, h:44 },
+      top:    { x:49, y:1,  w:46, h:40 },
+      bottom: { x:1,  y:48, w:44, h:46 },
+      bag:    { x:47, y:44, w:30, h:26 },
+      shoes:  { x:47, y:72, w:30, h:24 },
+    },
+    "top-bottom-shoes-bag-belt": {
+      top:    { x:14, y:1,  w:52, h:42 },
+      belt:   { x:4,  y:38, w:46, h:14 },
+      bottom: { x:1,  y:46, w:44, h:48 },
+      bag:    { x:47, y:46, w:30, h:26 },
+      shoes:  { x:47, y:74, w:30, h:24 },
+    },
+    "top-bottom-shoes-bag": {
+      top:    { x:14, y:1,  w:52, h:44 },
+      bottom: { x:1,  y:48, w:44, h:46 },
+      bag:    { x:47, y:48, w:30, h:26 },
+      shoes:  { x:47, y:76, w:28, h:22 },
+    },
+    "dress-layer-shoes-bag-belt": {
+      layer:  { x:1,  y:1,  w:44, h:50 },
+      dress:  { x:47, y:1,  w:48, h:56 },
+      belt:   { x:47, y:50, w:40, h:14 },
+      shoes:  { x:1,  y:54, w:30, h:26 },
+      bag:    { x:33, y:60, w:30, h:26 },
+    },
+    "dress-layer-shoes-bag": {
+      layer:  { x:1,  y:1,  w:44, h:50 },
+      dress:  { x:47, y:1,  w:48, h:58 },
+      shoes:  { x:1,  y:54, w:30, h:26 },
+      bag:    { x:47, y:62, w:30, h:26 },
+    },
+    "dress-shoes-bag-belt": {
+      dress:  { x:18, y:1,  w:52, h:56 },
+      belt:   { x:14, y:50, w:44, h:14 },
+      shoes:  { x:1,  y:64, w:30, h:28 },
+      bag:    { x:55, y:64, w:30, h:28 },
+    },
+    "dress-shoes-bag": {
+      dress:  { x:18, y:1,  w:52, h:60 },
+      shoes:  { x:1,  y:64, w:32, h:30 },
+      bag:    { x:55, y:64, w:32, h:30 },
+    },
+  };
+
+  // Build template key from present roles in priority order
+  const ROLE_PRIORITY = ["layer","top","dress","bottom","shoes","bag","belt","accessory"];
+  const presentRoles = ROLE_PRIORITY.filter(r => g[r].length > 0);
+  const templateKey = presentRoles.join("-");
+
+  // Find best matching template
+  let template = TEMPLATES[templateKey];
+  if (!template) {
+    // Find closest match: template with most overlapping roles
+    let bestMatch = null;
+    let bestScore = 0;
+    for (const [key, tmpl] of Object.entries(TEMPLATES)) {
+      const tmplRoles = key.split("-");
+      const overlap = tmplRoles.filter(r => presentRoles.includes(r)).length;
+      if (overlap > bestScore) {
+        bestScore = overlap;
+        bestMatch = tmpl;
+      }
+    }
+    template = bestMatch;
+  }
+
   const slots = [];
-  const hasOuter  = g.outer.length > 0;
-  const hasBottom = g.bottom.length > 0;
-  const hasDress  = g.dress.length > 0;
-  const nClothing = g.clothing.length;
-  const hasBelt   = g.belt.length > 0;
 
-  // ── Tight editorial flat-lay — magazine-style grid ──
-  // 3-column layout: LEFT (0-32%), CENTER (34-66%), RIGHT (68-100%)
-  // Tighter gaps, bigger accessories, proportional sizing
-
-  if (hasDress && !hasBottom) {
-    if (hasOuter) {
-      // Dress + outerwear: outer left, dress center-right
-      g.outer.forEach(item => slots.push({ ...item, x:2,  y:2,  w:42, h:52, rotate:0, zIndex:3 }));
-      g.dress.forEach(item => slots.push({ ...item, x:48, y:2,  w:48, h:60, rotate:0, zIndex:4 }));
-      g.shoes.forEach(item => slots.push({ ...item, x:2,  y:58, w:32, h:28, rotate:0, zIndex:8 }));
-      g.bag.forEach(item   => slots.push({ ...item, x:58, y:66, w:36, h:30, rotate:0, zIndex:7 }));
-    } else {
-      // Dress solo: centered large, shoes+bag bottom row
-      g.dress.forEach(item => slots.push({ ...item, x:20, y:1,  w:48, h:62, rotate:0, zIndex:4 }));
-      g.shoes.forEach(item => slots.push({ ...item, x:2,  y:66, w:34, h:30, rotate:0, zIndex:8 }));
-      g.bag.forEach(item   => slots.push({ ...item, x:58, y:66, w:36, h:30, rotate:0, zIndex:7 }));
+  if (template) {
+    // Assign items to template slots
+    for (const role of presentRoles) {
+      if (template[role] && g[role].length > 0) {
+        const pos = template[role];
+        g[role].forEach((item, i) => {
+          if (i === 0) {
+            const zMap = { layer:5, top:4, dress:4, bottom:2, shoes:8, bag:7, belt:10, accessory:11 };
+            slots.push({ ...item, x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
+          }
+        });
+      }
     }
-
-  } else if (hasOuter && nClothing > 0) {
-    // ── Layered look: outer + top + bottom — the power layout
-    // Top row: outerwear (left-center, large) with top peeking from right
-    // Bottom row: bottom (left), bag (center-right), shoes (right)
-    g.outer.forEach(item    => slots.push({ ...item, x:2,  y:1,  w:46, h:46, rotate:0, zIndex:5 }));
-    g.clothing.forEach(item => slots.push({ ...item, x:52, y:1,  w:44, h:42, rotate:0, zIndex:4 }));
-    g.bottom.forEach(item   => slots.push({ ...item, x:2,  y:50, w:42, h:46, rotate:0, zIndex:2 }));
-    g.bag.forEach(item      => slots.push({ ...item, x:48, y:50, w:32, h:26, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item    => slots.push({ ...item, x:48, y:78, w:32, h:20, rotate:0, zIndex:8 }));
-
-  } else if (hasOuter && !nClothing) {
-    // Outer + bottom only
-    g.outer.forEach(item  => slots.push({ ...item, x:14, y:1,  w:52, h:46, rotate:0, zIndex:5 }));
-    g.bottom.forEach(item => slots.push({ ...item, x:2,  y:50, w:42, h:46, rotate:0, zIndex:2 }));
-    g.bag.forEach(item    => slots.push({ ...item, x:48, y:50, w:32, h:26, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item  => slots.push({ ...item, x:48, y:78, w:32, h:20, rotate:0, zIndex:8 }));
-
-  } else if (nClothing > 1) {
-    // Two tops/layers + bottom
-    g.clothing.forEach((item, i) => slots.push({ ...item,
-      x: i === 0 ? 2 : 52, y: 1, w: 44, h: 44, rotate: 0, zIndex: i === 0 ? 4 : 5,
-    }));
-    g.bottom.forEach(item => slots.push({ ...item, x:2,  y:48, w:42, h:48, rotate:0, zIndex:2 }));
-    g.bag.forEach(item    => slots.push({ ...item, x:48, y:48, w:32, h:26, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item  => slots.push({ ...item, x:48, y:76, w:32, h:22, rotate:0, zIndex:8 }));
-
+    // Handle extra tops (knits acting as layers) — place second top in layer slot or beside first
+    if (g.top.length > 1 && !template.layer) {
+      // No layer slot in template, place second top offset
+      g.top.slice(1).forEach(item => {
+        slots.push({ ...item, x:52, y:1, w:44, h:40, rotate:0, zIndex:3 });
+      });
+    }
   } else {
-    // ── Single top + bottom (most common)
-    g.clothing.forEach(item => slots.push({ ...item, x:14, y:1,  w:52, h:44, rotate:0, zIndex:5 }));
-    g.dress.forEach(item   => slots.push({ ...item, x:14, y:1,  w:52, h:62, rotate:0, zIndex:4 }));
-    g.bottom.forEach(item  => slots.push({ ...item, x:2,  y:48, w:42, h:48, rotate:0, zIndex:2 }));
-    g.bag.forEach(item     => slots.push({ ...item, x:48, y:48, w:32, h:26, rotate:0, zIndex:7 }));
-    g.shoes.forEach(item   => slots.push({ ...item, x:48, y:76, w:32, h:22, rotate:0, zIndex:8 }));
-  }
-
-  // ── Belt: visible strip at the waist junction — sized to actually show ──
-  if (hasBelt) {
-    let beltPos;
-    if (hasDress && !hasBottom) {
-      beltPos = hasOuter
-        ? { x:48, y:30, w:44, h:12 }
-        : { x:18, y:32, w:50, h:12 };
-    } else if (hasOuter && nClothing > 0) {
-      // Layered look: belt between top row and bottom row
-      beltPos = { x:4, y:42, w:44, h:10 };
+    // Fallback generic layout
+    let yPos = 1;
+    if (g.layer.length > 0) {
+      g.layer.forEach(item => slots.push({ ...item, x:1, y:yPos, w:46, h:44, rotate:0, zIndex:5 }));
+      g.top.forEach(item => slots.push({ ...item, x:49, y:yPos, w:46, h:40, rotate:0, zIndex:4 }));
+      yPos = 48;
+    } else if (g.dress.length > 0) {
+      g.dress.forEach(item => slots.push({ ...item, x:18, y:yPos, w:52, h:60, rotate:0, zIndex:4 }));
+      yPos = 64;
     } else {
-      // Top + bottom or similar
-      const beltY = (!hasOuter && nClothing <= 1) ? 40 : 42;
-      beltPos = { x:4, y:beltY, w:44, h:10 };
+      g.top.forEach(item => slots.push({ ...item, x:14, y:yPos, w:52, h:44, rotate:0, zIndex:5 }));
+      yPos = 48;
     }
-    g.belt.forEach(item => slots.push({ ...item, ...beltPos, rotate:0, zIndex:10 }));
+    if (g.belt.length > 0) {
+      g.belt.forEach(item => slots.push({ ...item, x:4, y:yPos - 6, w:44, h:14, rotate:0, zIndex:10 }));
+    }
+    if (g.bottom.length > 0) {
+      g.bottom.forEach(item => slots.push({ ...item, x:1, y:yPos, w:44, h:46, rotate:0, zIndex:2 }));
+    }
+    if (g.bag.length > 0) {
+      g.bag.forEach(item => slots.push({ ...item, x:47, y:yPos, w:30, h:26, rotate:0, zIndex:7 }));
+    }
+    if (g.shoes.length > 0) {
+      g.shoes.forEach(item => slots.push({ ...item, x:47, y:yPos + 28, w:30, h:24, rotate:0, zIndex:8 }));
+    }
   }
 
-  // ── Accessories: only render if there's a clear empty corner ──
-  // In dress-only layouts the top corners are free; in layered looks they're occupied
-  if (g.accessory.length > 0 && hasDress && !hasBottom && !hasOuter) {
-    // Dress solo: top-left and top-right corners are empty
-    const accPos = [{ x:2, y:1, w:16, h:16 }, { x:72, y:1, w:16, h:14 }];
-    g.accessory.forEach((item, i) => {
-      if (i < accPos.length) slots.push({ ...item, ...accPos[i], rotate:0, zIndex:11+i });
+  // ── Accessories: place in remaining corners ──
+  if (g.accessory.length > 0) {
+    const accPositions = [
+      { x:80, y:1,  w:16, h:16 },
+      { x:2,  y:1,  w:16, h:16 },
+      { x:80, y:82, w:16, h:14 },
+    ];
+    // Only place if the corner isn't already occupied by a main item
+    const isOccupied = (pos) => slots.some(s =>
+      Math.abs(s.x - pos.x) < 20 && Math.abs(s.y - pos.y) < 20
+    );
+    let accIdx = 0;
+    g.accessory.forEach(item => {
+      while (accIdx < accPositions.length && isOccupied(accPositions[accIdx])) accIdx++;
+      if (accIdx < accPositions.length) {
+        slots.push({ ...item, ...accPositions[accIdx], rotate:0, zIndex:11 + accIdx });
+        accIdx++;
+      }
     });
   }
 
