@@ -108,64 +108,64 @@ const OCCASION_SLOTS = {
     promptNote: "WORK: Polished professional. Blazer or structured layer on at least 2 of 3 looks. No casual fabrics."
   },
   "Date Night": {
-    required: { top: ["Blouses","Shirts","Tops","Bodysuits"], shoes: ["Heels"], bag: true },
-    optional: { bottom: ["Trousers","Skirts","Satin/Silk","Ponte","Pants"], dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Jackets","Cardigans"], belt: true, accessory: true },
+    required: { top: ["Blouses","Shirts","Tops","Bodysuits"], bottom: true, shoes: ["Heels"], bag: true },
+    optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Jackets","Cardigans"], belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: ["chunky","platform","combat","lug"] },
-    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Silk, satin, or luxe fabrics. She should look stunning. At least one look should be a dress."
+    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Silk, satin, or luxe fabrics. At least one look should be a dress."
   },
   Dinner: {
-    required: { shoes: ["Heels","Loafers","Boots"], bag: true },
-    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
-    promptNote: "DINNER: Chic and considered. Elevated fabrics, polished shoes, a good bag."
+    promptNote: "DINNER: Chic and considered. Every look MUST have a bottom (pants/skirt) OR a dress. Elevated fabrics, polished shoes, a good bag."
   },
   "Dinner Party": {
-    required: { shoes: ["Heels","Loafers","Boots"], bag: true },
-    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
-    promptNote: "DINNER PARTY: More daring than dinner. A bold color, a texture mix, something unexpected."
+    promptNote: "DINNER PARTY: More daring than dinner. Every look MUST have a bottom (pants/skirt) OR a dress. A bold color, a texture mix, something unexpected."
   },
   "Lunch/Brunch": {
-    required: { shoes: true, bag: true },
-    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    required: { top: true, bottom: true, shoes: true, bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Swim"], subcategories: [], keywords: [] },
-    promptNote: "LUNCH/BRUNCH: Effortless polish. Can be relaxed but never sloppy."
+    promptNote: "LUNCH/BRUNCH: Effortless polish. Every look MUST have a bottom (pants/skirt) OR a dress. Can be relaxed but never sloppy."
   },
   Daytime: {
-    required: { shoes: true, bag: true },
-    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    required: { top: true, bottom: true, shoes: true, bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Swim","Occasionwear"], subcategories: [], keywords: [] },
-    promptNote: "DAYTIME: Smart-casual. Styled but lighter."
+    promptNote: "DAYTIME: Smart-casual. Every look MUST have a bottom (pants/skirt) OR a dress. Styled but lighter."
   },
   Event: {
-    required: { shoes: ["Heels"], bag: true },
-    optional: { top: true, bottom: true, dress: true, layer: true, belt: true, accessory: true },
+    required: { top: true, bottom: true, shoes: ["Heels"], bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
-    promptNote: "EVENT: Occasion-worthy. Dress or elevated separates."
+    promptNote: "EVENT: Occasion-worthy. Every look MUST have a bottom (pants/skirt) OR a dress. Dress or elevated separates."
   },
   Athleisure: {
-    required: { shoes: true },
-    optional: { top: true, bottom: true, layer: true, bag: true, accessory: true },
+    required: { top: true, bottom: true, shoes: true },
+    optional: { layer: true, bag: true, accessory: true },
     banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "ATHLEISURE: Sporty-chic. Athleisure pieces styled up."
+    promptNote: "ATHLEISURE: Sporty-chic. Every look needs a top + bottom. Athleisure pieces styled up."
   },
   Activity: {
-    required: { shoes: true },
-    optional: { top: true, bottom: true, layer: true, bag: true, accessory: true },
+    required: { top: true, bottom: true, shoes: true },
+    optional: { layer: true, bag: true, accessory: true },
     banned: { categories: ["Occasionwear","Swim","Loungewear"], subcategories: [], keywords: [] },
-    promptNote: "ACTIVITY: Comfortable and practical but still styled."
+    promptNote: "ACTIVITY: Comfortable and practical but still styled. Every look needs a top + bottom."
   },
   Travel: {
-    required: { shoes: true, bag: true },
-    optional: { top: true, bottom: true, layer: true, belt: true, accessory: true },
+    required: { top: true, bottom: true, shoes: true, bag: true },
+    optional: { layer: true, belt: true, accessory: true },
     banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "TRAVEL: Comfortable elegance. Layers, practical shoes, functional bag."
+    promptNote: "TRAVEL: Comfortable elegance. Every look needs a top + bottom. Layers, practical shoes, functional bag."
   },
   Lounge: {
-    required: {},
-    optional: { top: true, bottom: true, layer: true },
+    required: { top: true, bottom: true },
+    optional: { layer: true },
     banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "LOUNGE: Relaxed at-home style."
+    promptNote: "LOUNGE: Relaxed at-home style. Every look needs a top + bottom."
   },
 };
 
@@ -836,6 +836,11 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   // ── STEP 11: Build HC1 — dynamic required slots constraint ──
   const hc1Parts = [];
   for (const [role, constraint] of Object.entries(slots.required)) {
+    if (role === "bottom") {
+      // Bottom is special: "bottom OR dress" — a dress can replace top+bottom
+      hc1Parts.push("1 Bottom (pants/skirt) OR 1 Dress — every look MUST cover the lower half");
+      continue;
+    }
     if (constraint === true) {
       const friendly = role.charAt(0).toUpperCase() + role.slice(1);
       hc1Parts.push(`1 ${friendly} item`);
@@ -869,13 +874,14 @@ ${slots.promptNote}
 ${weatherLine}
 ${request ? `HER REQUEST: "${request}"` : ""}
 
-HARD CONSTRAINTS (every look MUST satisfy ALL):
+HARD CONSTRAINTS (every look MUST satisfy ALL — violation = FAILED):
 HC1: ${hc1}
-HC2: 6-7 items per look. Under 6 = FAILED.
+HC2: 5-7 items per look. Under 5 = FAILED.
 HC3: ${hc3}
 HC4: No item in more than one look.
 HC5: Each look needs a different color story. 3 similar looks = FAILED.
 HC6: Shoes + bag must match the look's color story.
+HC7: EVERY LOOK must have a lower half — either a Bottom (pants/skirt/shorts) OR a Dress. A look with only a top + shoes + bag and NO pants/skirt/dress = FAILED. If using a dress, top is optional.
 ${usedItemsNote}
 
 COLOR PAIRS: ${colorPairs}
@@ -936,12 +942,19 @@ function validateLooks(looks, occasion, idMap, allItems) {
   const slots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Daytime;
   const valid = [];
   for (const look of looks) {
-    if (!look.items || look.items.length < 5) continue;
+    if (!look.items || look.items.length < 4) continue;
     const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
-    if (resolved.length < 5) continue;
+    if (resolved.length < 4) continue;
+
+    // Universal: every look must have a bottom OR a dress (lower half coverage)
+    const hasBottom = resolved.some(it => it.category === "Bottoms");
+    const hasDress = resolved.some(it => it.category === "Dresses" || it.category === "Occasionwear" || it.category === "Jumpsuits");
+    if (!hasBottom && !hasDress) continue; // Skip looks with no lower half
+
     let ok = true;
     for (const [role, constraint] of Object.entries(slots.required)) {
       if (constraint === true) continue;
+      if (role === "bottom") continue; // Handled above (bottom OR dress)
       const roleCategories = role === "top" ? ["Tops","Knits"] : role === "bottom" ? ["Bottoms"] : role === "layer" ? ["Outerwear","Knits"] : role === "shoes" ? ["Shoes"] : role === "bag" ? ["Bags"] : role === "dress" ? ["Dresses","Occasionwear"] : [];
       const hasRole = resolved.some(it => roleCategories.includes(it.category));
       if (!hasRole && role !== "dress") {
