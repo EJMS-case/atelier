@@ -1618,14 +1618,60 @@ export default function App() {
             </div>
           ))}
 
-          {/* Regular grid */}
-          {!isSetView && (filtered.length === 0 ? (
+          {/* Landing view: Recently Added + uncategorized when no filters active */}
+          {!isSetView && !activeFilters.category?.length && !activeFilters.subcategory?.length && !activeFilters.color?.length && !activeFilters.brand?.length && !activeFilters.sets && !activeFilters.lastWorn && (() => {
+            const now = Date.now();
+            const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+            const recentItems = items
+              .filter(it => it.created_at && (now - new Date(it.created_at).getTime()) < TWO_WEEKS)
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const uncategorized = items.filter(it => !it.subcategory);
+            const showRecent = recentItems.length > 0;
+            const showUncat = uncategorized.length > 0;
+            if (!showRecent && !showUncat) return null;
+            return (
+              <div>
+                {showRecent && (
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "#6B5E54", marginBottom: 10, textTransform: "uppercase" }}>
+                      Recently Added
+                    </div>
+                    <div style={s.grid}>
+                      {recentItems.map(item => (
+                        <ItemCard key={item.id} item={item} allItems={items}
+                          onDelete={deleteItem}
+                          onEdit={() => { setEditItem(item); setView("edit"); }}
+                          isFavorited={isFav("piece", item.id)}
+                          onToggleFav={() => toggleFav("piece", item.id)}/>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {showUncat && (
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "#6B5E54", marginBottom: 10, textTransform: "uppercase" }}>
+                      Needs Categorizing
+                    </div>
+                    <div style={s.grid}>
+                      {uncategorized.map(item => (
+                        <ItemCard key={item.id} item={item} allItems={items}
+                          onDelete={deleteItem}
+                          onEdit={() => { setEditItem(item); setView("edit"); }}
+                          isFavorited={isFav("piece", item.id)}
+                          onToggleFav={() => toggleFav("piece", item.id)}/>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Regular grid — only when a category/filter is selected */}
+          {!isSetView && (activeFilters.category?.length > 0 || activeFilters.subcategory?.length > 0 || activeFilters.color?.length > 0 || activeFilters.brand?.length > 0 || !!activeFilters.sets || !!activeFilters.lastWorn) && (filtered.length === 0 ? (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
-              <p style={s.emptyText}>{items.length === 0 ? "Your wardrobe is empty — add your first piece." : "No items match your filters."}</p>
-              <button style={s.btnPrimary} onClick={() => setView("add")}>
-                <Icon path={icons.plus} size={15}/> Add Items
-              </button>
+              <p style={s.emptyText}>No items match your filters.</p>
             </div>
           ) : (
             <div style={s.grid}>
@@ -1638,6 +1684,17 @@ export default function App() {
               ))}
             </div>
           ))}
+
+          {/* Empty wardrobe state */}
+          {items.length === 0 && (
+            <div style={s.empty}>
+              <div style={s.emptyMark}>✦</div>
+              <p style={s.emptyText}>Your wardrobe is empty — add your first piece.</p>
+              <button style={s.btnPrimary} onClick={() => setView("add")}>
+                <Icon path={icons.plus} size={15}/> Add Items
+              </button>
+            </div>
+          )}
 
           {/* Style panel */}
           <div style={s.stylePanel}>
