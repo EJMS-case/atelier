@@ -581,12 +581,15 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const excluded = OCCASION_EXCLUDE[effectiveOccasion] || new Set();
   let filtered = items.filter(it => !excluded.has(it.category));
 
-  // For formal requests, also exclude jeans and casual pieces
-  if (isFormalRequest) {
+  // For formal/Executive requests, strip casual pieces from the wardrobe the AI sees
+  if (isFormalRequest || effectiveOccasion === "Executive") {
     filtered = filtered.filter(it => {
       if (it.subcategory === "Jeans") return false;
       if (it.subcategory === "T-Shirts" || it.subcategory === "Tanks") return false;
+      if (it.subcategory === "Shorts") return false;
+      if (it.subcategory === "Maxi") return false; // maxi skirts/dresses too casual for boardroom
       if (it.category === "Loungewear") return false;
+      if (it.category === "Swim") return false;
       return true;
     });
   }
@@ -637,7 +640,8 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const prompt = `${STYLE_PROFILE}
 APPROVED COLOR PAIRS: ${stylePrefs.colorPairs.join(", ")}. Monochromatic and tonal builds encouraged. Warm browns + warm reds approved.
 WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must be weather-appropriate.` : ""}
-OCCASION: ${effectiveOccasion}${['Work','Executive'].includes(effectiveOccasion) || isFormalRequest ? ' — tailored and polished only. NO jeans, NO t-shirts, NO casual knits. Think blazer + silk blouse + trousers.' : ''}${effectiveOccasion === 'Activity' ? ' — casual, comfortable, movement-friendly' : ''}${effectiveOccasion === 'Athleisure' ? ' — sporty-chic, athleisure pieces preferred' : ''}
+OCCASION: ${effectiveOccasion}${['Work','Executive'].includes(effectiveOccasion) || isFormalRequest ? ' — tailored and polished only. NO jeans, NO t-shirts, NO casual knits, NO camisoles without a blazer, NO maxi skirts. Think blazer + silk blouse + trousers, or sheath dress + structured coat.' : ''}${effectiveOccasion === 'Activity' ? ' — casual, comfortable, movement-friendly' : ''}${effectiveOccasion === 'Athleisure' ? ' — sporty-chic, athleisure pieces preferred' : ''}
+${isFormalRequest ? `⚠️ THIS IS A HIGH-STAKES OCCASION. Every look must be boardroom-ready: structured, sharp, confident. No casual fabrics, no playful prints, no bare shoulders without a blazer. She needs to command the room.` : ''}
 ${request ? `CLIENT REQUEST: "${request}" — FOLLOW THIS. If she says jeans, USE JEANS. If she names an item, BUILD AROUND IT.` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
 
@@ -1294,7 +1298,7 @@ export default function App() {
   const [allLooks,   setAllLooks]   = useState([]); // history of all generated looks for anti-repeat
   const [styling,    setStyling]    = useState(false);
   const [styleErr,   setStyleErr]   = useState("");
-  const [occasion,   setOccasion]   = useState("Business Casual");
+  const [occasion,   setOccasion]   = useState("Work");
   const [weather,    setWeather]    = useState("");
   const [request,    setRequest]    = useState("");
   const [apiKey,     setApiKey]     = useState(() => loadApiKey());
