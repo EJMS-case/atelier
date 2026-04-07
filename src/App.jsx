@@ -50,13 +50,13 @@ const CATEGORY_ORDER = [
 
 // Subcategories per main category
 const TAXONOMY = {
-  Tops:         ["Blouses","Shirts","Tops","Lightweight Knits","T-Shirts","Tanks","Polos"],
+  Tops:         ["Blouses","Bodysuits","Shirts","Tops","Lightweight Knits","T-Shirts","Tanks","Polos"],
   Knits:        ["Cardigans","Pullovers"],
   Bottoms:      ["Pants","Skirts","Shorts"],
   Dresses:      ["Maxi","Midi","Mini","Sweater Dress"],
   Sets:         ["Day Sets","Night Sets"],
   Jumpsuits:    [],
-  Loungewear:   ["Hoodies / Sweatshirts","Pants","Tops"],
+  Loungewear:   ["Hoodies / Sweatshirts","Tops"],
   Athleisure:   ["Bra/Crop Top","Dresses","Long Sleeve","Pants","Short Sleeve","Shorts","Skirts"],
   Swim:         ["Swimsuits","Cover-Ups"],
   Outerwear:    ["Blazers","Coats","Jackets"],
@@ -83,6 +83,9 @@ const SUBCATEGORY_L3 = {
 
 // Flat list for legacy compatibility (AI inventory, sort, etc.)
 const CATEGORIES = CATEGORY_ORDER;
+
+// ── SET TAGS ──────────────────────────────────────────────────────────────────
+const SET_TAGS = ["Work","Weekend","Evening","Travel","Casual","Date Night","Seasonal","Formal","Vacation"];
 
 // Given a category + subcategory value (may be L2 or L3), find the L2 parent
 function getSubcatL2(category, subcategory) {
@@ -373,6 +376,31 @@ const sb = {
       });
     } catch { /* fallback to localStorage only */ }
   },
+
+  // ── Sets ──
+  async fetchSets() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sets?select=*&order=created_at.desc`, { headers: SB_HEADERS });
+      if (!res.ok) return null; // table might not exist yet
+      return res.json();
+    } catch { return null; }
+  },
+  async upsertSet(set) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sets`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify(set),
+      });
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
+  },
+  async deleteSet(id) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/sets?id=eq.${id}`, { method: "DELETE", headers: SB_HEADERS });
+    } catch { /* ignore — table may not exist */ }
+  },
 };
 
 // ── IMAGE COMPRESSION ────────────────────────────────────────────────────────
@@ -425,6 +453,16 @@ function loadApiKey()   { return localStorage.getItem(API_KEY_STORE)  || ""; }
 function saveApiKey(k)  { localStorage.setItem(API_KEY_STORE, k); }
 function loadRmbgKey()  { return localStorage.getItem(RMBG_KEY_STORE) || ""; }
 function saveRmbgKey(k) { localStorage.setItem(RMBG_KEY_STORE, k); }
+
+// ── Sets metadata (localStorage + optional Supabase) ─────────────────────────
+const SETS_META_KEY = "atelier-sets-meta-v1";
+function loadSetsMeta() {
+  try { return JSON.parse(localStorage.getItem(SETS_META_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveSetsMeta(meta) {
+  try { localStorage.setItem(SETS_META_KEY, JSON.stringify(meta)); } catch {}
+}
 
 // Bulletproof merge: Supabase metadata + local images, NEVER lose local-only items
 function mergeItems(sbItems, localItems) {
@@ -1247,6 +1285,12 @@ export default function App() {
   const [editItem,   setEditItem]   = useState(null);
   const [favorites,  setFavorites]  = useState([]);
   const [dismissedSimilarity, setDismissedSimilarity] = useState(new Set());
+  // ── Sets metadata ──
+  const [setsMeta,       setSetsMeta]       = useState(() => loadSetsMeta());
+  const [setsSearch,     setSetsSearch]     = useState("");
+  const [setsTagFilter,  setSetsTagFilter]  = useState("");
+  const [setsSort,       setSetsSort]       = useState("recent"); // recent | alpha | count
+  const [editingSet,     setEditingSet]     = useState(null); // null or set_id for modal
   const syncTimer = useRef(null);
 
   // ── Flash sync status briefly
@@ -1309,6 +1353,16 @@ export default function App() {
     sb.ensureBucket().catch(() => {});
     sb.fetchFavorites().then(setFavorites).catch(() => {});
 
+    // Load sets metadata from Supabase (falls back to localStorage)
+    sb.fetchSets().then(sbSets => {
+      if (sbSets && sbSets.length > 0) {
+        const meta = { ...loadSetsMeta() };
+        sbSets.forEach(s => { meta[s.id] = { name: s.name, tags: s.tags || [], created_at: s.created_at }; });
+        setSetsMeta(meta);
+        saveSetsMeta(meta);
+      }
+    }).catch(() => {});
+
     // Try to load API keys from Supabase (cross-device sync)
     sb.getSettings().then(settings => {
       if (settings?.anthropicKey && !loadApiKey()) {
@@ -1329,6 +1383,35 @@ export default function App() {
     saveLocalItems(updated);
     setItems(updated);
   }, []);
+
+  // ── Sets metadata helpers ──
+  const updateSetMeta = useCallback((setId, data) => {
+    setSetsMeta(prev => {
+      const next = { ...prev, [setId]: { ...(prev[setId] || {}), ...data } };
+      saveSetsMeta(next);
+      sb.upsertSet({ id: setId, name: next[setId].name || "", tags: next[setId].tags || [] }).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const deleteSetMeta = useCallback((setId) => {
+    setSetsMeta(prev => {
+      const next = { ...prev };
+      delete next[setId];
+      saveSetsMeta(next);
+      sb.deleteSet(setId).catch(() => {});
+      return next;
+    });
+    // Unlink all items from this set
+    const updated = items.map(it => it.set_id === setId ? { ...it, set_id: null, is_separable: false } : it);
+    persistItems(updated);
+    updated.filter(it => it.set_id === null && items.find(o => o.id === it.id)?.set_id === setId)
+      .forEach(it => sb.upsert(it).catch(() => {}));
+  }, [items, persistItems]);
+
+  const getSetName = useCallback((setId, index) => {
+    return setsMeta[setId]?.name || `Set ${index + 1}`;
+  }, [setsMeta]);
 
   const addItems = useCallback(async (newItems) => {
     // Add to state immediately so UI feels fast
@@ -1470,13 +1553,45 @@ export default function App() {
 
   // Apply multi-select filters
   const isSetView = activeFilters.category?.includes("Sets");
-  const setGroups = isSetView ? (() => {
+  const setGroupsRaw = isSetView ? (() => {
     const groups = {};
     items.filter(it => it.set_id).forEach(it => {
       if (!groups[it.set_id]) groups[it.set_id] = [];
       groups[it.set_id].push(it);
     });
-    return Object.values(groups);
+    return Object.entries(groups).map(([setId, groupItems]) => ({
+      setId,
+      items: groupItems,
+      name: setsMeta[setId]?.name || "",
+      tags: setsMeta[setId]?.tags || [],
+      created_at: setsMeta[setId]?.created_at || groupItems[0]?.created_at || "",
+    }));
+  })() : null;
+
+  // Filter + sort sets
+  const setGroups = setGroupsRaw ? (() => {
+    let result = [...setGroupsRaw];
+    // Search filter
+    if (setsSearch.trim()) {
+      const q = setsSearch.toLowerCase().trim();
+      result = result.filter(g =>
+        g.name.toLowerCase().includes(q) ||
+        g.items.some(it => it.name.toLowerCase().includes(q) || (it.brand || "").toLowerCase().includes(q))
+      );
+    }
+    // Tag filter
+    if (setsTagFilter) {
+      result = result.filter(g => g.tags.includes(setsTagFilter));
+    }
+    // Sort
+    if (setsSort === "alpha") {
+      result.sort((a, b) => (a.name || "Set").localeCompare(b.name || "Set"));
+    } else if (setsSort === "count") {
+      result.sort((a, b) => b.items.length - a.items.length);
+    } else {
+      result.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    }
+    return result;
   })() : null;
 
   const filtered = (() => {
@@ -1598,30 +1713,80 @@ export default function App() {
         <div style={s.page}>
           <FilterBar items={items} activeFilters={activeFilters} onChange={setActiveFilters}/>
 
-          {/* Sets grouped view */}
-          {isSetView && (
-            setGroups?.length === 0 ? (
-              <div style={s.empty}>
-                <div style={s.emptyMark}>✦</div>
-                <p style={s.emptyText}>No coord sets yet. Link pieces as a set in Edit Item.</p>
+          {/* Sets visual grid view */}
+          {isSetView && (<>
+            {/* Sets search + filter bar */}
+            <div style={ss.filterBar}>
+              <div style={ss.searchRow}>
+                <input
+                  style={ss.searchInput}
+                  placeholder="Search sets…"
+                  value={setsSearch}
+                  onChange={e => setSetsSearch(e.target.value)}
+                />
+                <select style={ss.sortSelect} value={setsSort} onChange={e => setSetsSort(e.target.value)}>
+                  <option value="recent">Recently Created</option>
+                  <option value="alpha">A – Z</option>
+                  <option value="count">Most Items</option>
+                </select>
               </div>
-            ) : (
-              <div>
-                {setGroups?.map((group, gi) => (
-                  <div key={gi} style={s.setGroup}>
-                    <div style={s.setGroupLabel}>Set {gi + 1}</div>
-                    <div style={s.grid}>
-                      {group.map(item => (
-                        <ItemCard key={item.id} item={item} allItems={items}
-                          onDelete={deleteItem}
-                          onEdit={() => { setEditItem(item); setView("edit"); }}/>
-                      ))}
-                    </div>
-                  </div>
+              <div style={ss.tagRow}>
+                {SET_TAGS.map(tag => (
+                  <button key={tag}
+                    style={setsTagFilter === tag ? {...s.chip,...s.chipActive} : s.chip}
+                    onClick={() => setSetsTagFilter(prev => prev === tag ? "" : tag)}>
+                    {tag}
+                  </button>
                 ))}
               </div>
-            )
-          )}
+            </div>
+
+            {/* Sets grid */}
+            {setGroups?.length === 0 ? (
+              <div style={s.empty}>
+                <div style={s.emptyMark}>✦</div>
+                <p style={s.emptyText}>
+                  {setsSearch || setsTagFilter
+                    ? "No sets match your search."
+                    : "No coord sets yet. Link pieces as a set in Edit Item."}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div style={ss.countLabel}>{setGroups.length} set{setGroups.length !== 1 ? "s" : ""}</div>
+                <div style={ss.grid}>
+                  {setGroups.map((group, gi) => (
+                    <SetCard
+                      key={group.setId}
+                      group={group}
+                      index={gi}
+                      onEdit={() => setEditingSet(group.setId)}
+                      onOpen={() => {
+                        // Navigate to view showing this set's items
+                        setActiveFilters(f => ({ ...f, category: [], subcategory: [], sets: "Sets Only" }));
+                        // We'll just open the edit modal for now
+                        setEditingSet(group.setId);
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Set Edit Modal */}
+            {editingSet && (
+              <SetEditModal
+                setId={editingSet}
+                meta={setsMeta[editingSet] || { name: "", tags: [] }}
+                groupItems={items.filter(it => it.set_id === editingSet)}
+                allItems={items}
+                onSave={(data) => { updateSetMeta(editingSet, data); setEditingSet(null); }}
+                onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
+                onClose={() => setEditingSet(null)}
+                onEditItem={(item) => { setEditItem(item); setView("edit"); setEditingSet(null); }}
+              />
+            )}
+          </>)}
 
           {/* Similarity flags */}
           {!isSetView && similarityGroups.map(group => (
@@ -1757,6 +1922,7 @@ export default function App() {
         <EditItemView
           item={editItem}
           allItems={items}
+          setsMeta={setsMeta}
           onSave={(fields) => { updateItem(editItem.id, fields); setView("closet"); }}
           onDelete={() => { deleteItem(editItem.id); setView("closet"); }}
           onBack={() => setView("closet")}/>
@@ -2154,6 +2320,127 @@ function FilterBar({ items, activeFilters, onChange }) {
   );
 }
 
+// ── SET CARD — 2-column grid card with mini collage ──────────────────────────
+function SetCard({ group, index, onEdit, onOpen }) {
+  const thumbItems = group.items.slice(0, 4);
+  const name = group.name || `Set ${index + 1}`;
+  return (
+    <div style={ss.card} onClick={onEdit}>
+      {/* Mini collage of first 4 items */}
+      <div style={ss.collage}>
+        {thumbItems.map((it, i) => (
+          <div key={it.id} style={{
+            ...ss.collageTile,
+            ...(thumbItems.length === 1 ? { width: "100%", height: "100%" } :
+                thumbItems.length === 2 ? { width: "50%", height: "100%" } :
+                thumbItems.length === 3 && i === 0 ? { width: "50%", height: "100%" } :
+                thumbItems.length === 3 ? { width: "50%", height: "50%" } :
+                { width: "50%", height: "50%" }),
+          }}>
+            {it.image
+              ? <img src={it.image} alt={it.name} style={ss.collageImg}/>
+              : <div style={ss.collagePlaceholder}>{(it.category || "?")[0]}</div>}
+          </div>
+        ))}
+        {thumbItems.length === 0 && (
+          <div style={ss.collagePlaceholder}>✦</div>
+        )}
+      </div>
+      {/* Info */}
+      <div style={ss.cardBody}>
+        <div style={ss.cardName}>{name}</div>
+        <div style={ss.cardCount}>{group.items.length} piece{group.items.length !== 1 ? "s" : ""}</div>
+        {group.tags.length > 0 && (
+          <div style={ss.cardTags}>
+            {group.tags.map(t => <span key={t} style={ss.tagChip}>{t}</span>)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── SET EDIT MODAL — name + tags + item list ─────────────────────────────────
+function SetEditModal({ setId, meta, groupItems, allItems, onSave, onDelete, onClose, onEditItem }) {
+  const [name, setName] = useState(meta.name || "");
+  const [tags, setTags] = useState(meta.tags || []);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const toggleTag = (tag) => {
+    setTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
+
+  return (
+    <div style={s.modalOverlay} onClick={onClose}>
+      <div style={{...s.modalCard, maxWidth: 440}} onClick={e => e.stopPropagation()}>
+        <div style={s.modalHeader}>
+          <div style={s.modalTitle}>Edit Set</div>
+          <button style={s.modalClose} onClick={onClose}>×</button>
+        </div>
+
+        <div style={{ padding: "16px 22px" }}>
+          {/* Name */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={s.modalLabel}>SET NAME</div>
+            <input
+              style={s.modalInput}
+              placeholder="e.g. Navy Work Set, Weekend Linen"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          {/* Tags */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={s.modalLabel}>TAGS</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {SET_TAGS.map(tag => (
+                <button key={tag}
+                  style={tags.includes(tag) ? {...s.chip,...s.chipActive} : s.chip}
+                  onClick={() => toggleTag(tag)}>
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Pieces in this set */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={s.modalLabel}>PIECES IN THIS SET ({groupItems.length})</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 200, overflowY: "auto" }}>
+              {groupItems.map(it => (
+                <div key={it.id} style={ss.modalItem} onClick={() => onEditItem(it)}>
+                  {it.image
+                    ? <img src={it.image} alt={it.name} style={ss.modalItemThumb}/>
+                    : <div style={{...ss.modalItemThumb, background:"#F0EBE4", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#C8BFB4"}}>{(it.category || "?")[0]}</div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: "#1C1814", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+                    <div style={{ fontSize: 10, color: "#9A8E84", letterSpacing: "0.06em" }}>{it.category}{it.subcategory ? ` · ${it.subcategory}` : ""}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: "#C8BFB4" }}>→</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ padding: "0 22px 22px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <button style={s.modalSaveBtn} onClick={() => onSave({ name, tags })}>
+            Save Set
+          </button>
+          <button
+            style={{ background: "none", border: "none", fontSize: 11, color: confirmDelete ? "#C0392B" : "#9A8E84", cursor: "pointer", padding: "6px 0", letterSpacing: "0.04em" }}
+            onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}>
+            {confirmDelete ? "Tap again to confirm — this unlinks all pieces" : "Delete Set"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SET PANEL — shows partner pieces when "Part of Set" badge is tapped ───────
 function SetPanel({ item, allItems, onClose }) {
   const partners = allItems.filter(it => it.set_id && it.set_id === item.set_id && it.id !== item.id);
@@ -2467,7 +2754,7 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
 }
 
 // ── EDIT ITEM VIEW ────────────────────────────────────────────────────────────
-function EditItemView({ item, allItems, onSave, onDelete, onBack }) {
+function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -2550,17 +2837,34 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack }) {
       {/* Set linking */}
       <div style={s.settingsCard}>
         <div style={s.settingsTitle}>Coord Set</div>
-        <p style={s.settingsSub}>Link this piece to another item as part of a coord set.</p>
-        <div style={s.fieldLabel}>Link to piece</div>
+        <p style={s.settingsSub}>Link this piece to a coord set, or create a new one.</p>
+        <div style={s.fieldLabel}>Set</div>
         <select style={{...s.select, width:"100%", marginBottom:10}}
           value={form.set_id}
-          onChange={e => setForm(f => ({ ...f, set_id: e.target.value }))}>
+          onChange={e => {
+            const val = e.target.value;
+            if (val === "__new__") {
+              const newId = crypto.randomUUID();
+              setForm(f => ({ ...f, set_id: newId }));
+            } else {
+              setForm(f => ({ ...f, set_id: val }));
+            }
+          }}>
           <option value="">— Not part of a set —</option>
-          {(allItems || []).filter(it => it.id !== item.id).map(it => (
-            <option key={it.id} value={it.set_id || it.id}>
-              {it.name} ({it.category})
-            </option>
-          ))}
+          <option value="__new__">+ Create new set</option>
+          {(() => {
+            // Build unique set IDs from items
+            const seen = new Set();
+            return (allItems || []).filter(it => it.set_id && !seen.has(it.set_id) && (seen.add(it.set_id), true)).map(it => {
+              const setName = (setsMetaProp || {})[it.set_id]?.name;
+              const count = (allItems || []).filter(o => o.set_id === it.set_id).length;
+              return (
+                <option key={it.set_id} value={it.set_id}>
+                  {setName || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
+                </option>
+              );
+            });
+          })()}
         </select>
         {form.set_id && (
           <label style={{display:"flex", alignItems:"center", gap:8, fontSize:12, color:"#4A3E36", cursor:"pointer"}}>
@@ -4415,4 +4719,70 @@ const si = {
   underutilMeta: { padding:"8px 10px 10px" },
   pairGrid: { display:"flex", flexWrap:"wrap", gap:10 },
   pairChip: { display:"flex", alignItems:"center", gap:5, background:"#FAFAF8", borderRadius:20, padding:"6px 14px", border:"1px solid #F0E8E0" },
+};
+
+// ── SETS STYLES ──────────────────────────────────────────────────────────────
+const ss = {
+  filterBar: { marginBottom: 16 },
+  searchRow: { display: "flex", gap: 8, marginBottom: 10 },
+  searchInput: {
+    flex: 1, border: "1px solid #E8E0D8", borderRadius: 6, padding: "8px 12px",
+    fontSize: 13, color: "#1C1814", background: "#fff", outline: "none",
+    fontFamily: "'DM Sans',sans-serif",
+  },
+  sortSelect: {
+    border: "1px solid #E8E0D8", borderRadius: 6, padding: "8px 10px",
+    fontSize: 11, color: "#6B5E54", background: "#fff", cursor: "pointer",
+    fontFamily: "'DM Sans',sans-serif", letterSpacing: "0.04em",
+  },
+  tagRow: { display: "flex", gap: 6, flexWrap: "wrap" },
+  countLabel: {
+    fontSize: 10, letterSpacing: "0.18em", color: "#9A8E84", marginBottom: 12,
+    fontFamily: "sans-serif",
+  },
+  grid: {
+    display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14,
+  },
+  card: {
+    background: "#fff", borderRadius: 10, border: "1px solid #E8E0D8",
+    overflow: "hidden", cursor: "pointer", transition: "box-shadow 0.2s ease",
+  },
+  collage: {
+    width: "100%", aspectRatio: "1", background: "#F5F1EC",
+    display: "flex", flexWrap: "wrap", overflow: "hidden",
+  },
+  collageTile: {
+    overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+    borderRight: "1px solid #F0EBE4", borderBottom: "1px solid #F0EBE4", boxSizing: "border-box",
+  },
+  collageImg: {
+    width: "100%", height: "100%", objectFit: "contain", background: "#FAFAF8",
+  },
+  collagePlaceholder: {
+    width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 18, color: "#C8BFB4", background: "#F5F1EC",
+  },
+  cardBody: { padding: "10px 12px 12px" },
+  cardName: {
+    fontSize: 14, fontWeight: 500, color: "#1C1814", letterSpacing: "0.02em",
+    marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+    fontFamily: "'DM Sans',sans-serif",
+  },
+  cardCount: {
+    fontSize: 10, color: "#9A8E84", letterSpacing: "0.08em", marginBottom: 6,
+  },
+  cardTags: { display: "flex", gap: 4, flexWrap: "wrap" },
+  tagChip: {
+    fontSize: 9, letterSpacing: "0.06em", color: "#6B5E54",
+    background: "#F5F1EC", borderRadius: 10, padding: "2px 8px",
+  },
+  // Modal items
+  modalItem: {
+    display: "flex", gap: 10, alignItems: "center", padding: "8px 10px",
+    background: "#FAFAF8", borderRadius: 6, cursor: "pointer", border: "1px solid #F0E8E0",
+  },
+  modalItemThumb: {
+    width: 40, height: 50, objectFit: "contain", borderRadius: 4, flexShrink: 0,
+    border: "1px solid #E8E0D8",
+  },
 };
