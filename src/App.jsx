@@ -3740,9 +3740,10 @@ function buildCollageLayout(items, suggestionSlots = []) {
     const sub  = item.subcategory || "";
     const name = item.name        || "";
     if (cat === "Outerwear") return "layer";
+    if (cat === "Knits")     return "layer";  // Cardigans & pullovers are layers
     if (cat === "Bottoms")   return "bottom";
     if (cat === "Shoes")     return "shoes";
-    if (cat === "Dresses" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
+    if (cat === "Dresses" || cat === "Jumpsuits" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
     if (cat === "Bags") return "bag";
     if (cat === "Belts") return "belt";
     if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name))) return "bag";
@@ -3754,131 +3755,71 @@ function buildCollageLayout(items, suggestionSlots = []) {
   const g = { layer:[], top:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], accessory:[] };
   all.forEach(item => { const r = getRole(item); if (g[r]) g[r].push(item); });
 
-  // ── Template-based layout system ──
-  const TEMPLATES = {
-    "layer-top-bottom-shoes-bag-belt": {
-      layer:  { x:1,  y:1,  w:46, h:44 },
-      top:    { x:49, y:1,  w:46, h:40 },
-      belt:   { x:1,  y:43, w:46, h:14 },
-      bottom: { x:1,  y:48, w:44, h:46 },
-      bag:    { x:47, y:44, w:30, h:26 },
-      shoes:  { x:47, y:72, w:30, h:24 },
-    },
-    "layer-top-bottom-shoes-bag": {
-      layer:  { x:1,  y:1,  w:46, h:44 },
-      top:    { x:49, y:1,  w:46, h:40 },
-      bottom: { x:1,  y:48, w:44, h:46 },
-      bag:    { x:47, y:44, w:30, h:26 },
-      shoes:  { x:47, y:72, w:30, h:24 },
-    },
-    "top-bottom-shoes-bag-belt": {
-      top:    { x:14, y:1,  w:52, h:42 },
-      belt:   { x:4,  y:38, w:46, h:14 },
-      bottom: { x:1,  y:46, w:44, h:48 },
-      bag:    { x:47, y:46, w:30, h:26 },
-      shoes:  { x:47, y:74, w:30, h:24 },
-    },
-    "top-bottom-shoes-bag": {
-      top:    { x:14, y:1,  w:52, h:44 },
-      bottom: { x:1,  y:48, w:44, h:46 },
-      bag:    { x:47, y:48, w:30, h:26 },
-      shoes:  { x:47, y:76, w:28, h:22 },
-    },
-    "dress-layer-shoes-bag-belt": {
-      layer:  { x:1,  y:1,  w:44, h:50 },
-      dress:  { x:47, y:1,  w:48, h:56 },
-      belt:   { x:47, y:50, w:40, h:14 },
-      shoes:  { x:1,  y:54, w:30, h:26 },
-      bag:    { x:33, y:60, w:30, h:26 },
-    },
-    "dress-layer-shoes-bag": {
-      layer:  { x:1,  y:1,  w:44, h:50 },
-      dress:  { x:47, y:1,  w:48, h:58 },
-      shoes:  { x:1,  y:54, w:30, h:26 },
-      bag:    { x:47, y:62, w:30, h:26 },
-    },
-    "dress-shoes-bag-belt": {
-      dress:  { x:18, y:1,  w:52, h:56 },
-      belt:   { x:14, y:50, w:44, h:14 },
-      shoes:  { x:1,  y:64, w:30, h:28 },
-      bag:    { x:55, y:64, w:30, h:28 },
-    },
-    "dress-shoes-bag": {
-      dress:  { x:18, y:1,  w:52, h:60 },
-      shoes:  { x:1,  y:64, w:32, h:30 },
-      bag:    { x:55, y:64, w:32, h:30 },
-    },
-  };
-
-  // Build template key from present roles in priority order
-  const ROLE_PRIORITY = ["layer","top","dress","bottom","shoes","bag","belt","accessory"];
-  const presentRoles = ROLE_PRIORITY.filter(r => g[r].length > 0);
-  const templateKey = presentRoles.join("-");
-
-  // Find best matching template
-  let template = TEMPLATES[templateKey];
-  if (!template) {
-    // Find closest match: template with most overlapping roles
-    let bestMatch = null;
-    let bestScore = 0;
-    for (const [key, tmpl] of Object.entries(TEMPLATES)) {
-      const tmplRoles = key.split("-");
-      const overlap = tmplRoles.filter(r => presentRoles.includes(r)).length;
-      if (overlap > bestScore) {
-        bestScore = overlap;
-        bestMatch = tmpl;
-      }
-    }
-    template = bestMatch;
-  }
+  // ── Dynamic layout engine ──
+  // Determines layout based on whether outfit is dress-based or separates-based
+  const hasDress = g.dress.length > 0;
+  const hasBottom = g.bottom.length > 0;
+  const hasTop = g.top.length > 0;
+  const hasLayer = g.layer.length > 0;
+  const hasBelt = g.belt.length > 0;
+  const hasBag = g.bag.length > 0;
+  const hasShoes = g.shoes.length > 0;
 
   const slots = [];
-
-  if (template) {
-    // Assign items to template slots
-    for (const role of presentRoles) {
-      if (template[role] && g[role].length > 0) {
-        const pos = template[role];
-        g[role].forEach((item, i) => {
-          if (i === 0) {
-            const zMap = { layer:5, top:4, dress:4, bottom:2, shoes:8, bag:7, belt:10, accessory:11 };
-            slots.push({ ...item, x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
-          }
-        });
-      }
+  const zMap = { layer:5, top:4, dress:4, bottom:2, shoes:8, bag:7, belt:10, accessory:11 };
+  const place = (role, pos) => {
+    if (g[role].length > 0) {
+      slots.push({ ...g[role][0], x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
     }
-    // Handle extra tops (knits acting as layers) — place second top in layer slot or beside first
-    if (g.top.length > 1 && !template.layer) {
-      // No layer slot in template, place second top offset
-      g.top.slice(1).forEach(item => {
-        slots.push({ ...item, x:52, y:1, w:44, h:40, rotate:0, zIndex:3 });
-      });
+  };
+
+  if (hasDress) {
+    // ── DRESS-BASED LAYOUT ──
+    if (hasLayer) {
+      // Dress + Layer (cardigan/blazer over dress)
+      place("layer",  { x:1,  y:1,  w:44, h:50 });
+      place("dress",  { x:47, y:1,  w:48, h:56 });
+      if (hasBelt) place("belt", { x:20, y:52, w:40, h:14 });
+      if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
+      if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
+    } else if (hasTop) {
+      // Dress + Top (e.g. bodysuit under dress, or top layered)
+      place("top",    { x:1,  y:1,  w:40, h:44 });
+      place("dress",  { x:43, y:1,  w:52, h:56 });
+      if (hasBelt) place("belt", { x:20, y:52, w:40, h:14 });
+      if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
+      if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
+    } else {
+      // Dress only (no layer or top)
+      place("dress",  { x:18, y:1,  w:52, h:58 });
+      if (hasBelt) place("belt", { x:14, y:52, w:44, h:14 });
+      if (hasShoes) place("shoes", { x:1, y:64, w:32, h:28 });
+      if (hasBag) place("bag", { x:55, y:64, w:32, h:28 });
     }
   } else {
-    // Fallback generic layout
-    let yPos = 1;
-    if (g.layer.length > 0) {
-      g.layer.forEach(item => slots.push({ ...item, x:1, y:yPos, w:46, h:44, rotate:0, zIndex:5 }));
-      g.top.forEach(item => slots.push({ ...item, x:49, y:yPos, w:46, h:40, rotate:0, zIndex:4 }));
-      yPos = 48;
-    } else if (g.dress.length > 0) {
-      g.dress.forEach(item => slots.push({ ...item, x:18, y:yPos, w:52, h:60, rotate:0, zIndex:4 }));
-      yPos = 64;
+    // ── SEPARATES-BASED LAYOUT (top + bottom) ──
+    if (hasLayer && hasTop) {
+      // Layer + Top + Bottom
+      place("layer",  { x:1,  y:1,  w:46, h:44 });
+      place("top",    { x:49, y:1,  w:46, h:40 });
+      if (hasBelt) place("belt", { x:1, y:43, w:46, h:14 });
+      place("bottom", { x:1,  y:48, w:44, h:46 });
+      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
+      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
+    } else if (hasLayer) {
+      // Layer + Bottom (no separate top — layer IS the top)
+      place("layer",  { x:14, y:1,  w:52, h:44 });
+      if (hasBelt) place("belt", { x:4, y:40, w:46, h:14 });
+      place("bottom", { x:1,  y:48, w:44, h:46 });
+      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
+      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
     } else {
-      g.top.forEach(item => slots.push({ ...item, x:14, y:yPos, w:52, h:44, rotate:0, zIndex:5 }));
-      yPos = 48;
-    }
-    if (g.belt.length > 0) {
-      g.belt.forEach(item => slots.push({ ...item, x:4, y:yPos - 6, w:44, h:14, rotate:0, zIndex:10 }));
-    }
-    if (g.bottom.length > 0) {
-      g.bottom.forEach(item => slots.push({ ...item, x:1, y:yPos, w:44, h:46, rotate:0, zIndex:2 }));
-    }
-    if (g.bag.length > 0) {
-      g.bag.forEach(item => slots.push({ ...item, x:47, y:yPos, w:30, h:26, rotate:0, zIndex:7 }));
-    }
-    if (g.shoes.length > 0) {
-      g.shoes.forEach(item => slots.push({ ...item, x:47, y:yPos + 28, w:30, h:24, rotate:0, zIndex:8 }));
+      // Top + Bottom (no layer)
+      place("top",    { x:14, y:1,  w:52, h:44 });
+      if (hasBelt) place("belt", { x:4, y:40, w:46, h:14 });
+      place("bottom", { x:1,  y:48, w:44, h:46 });
+      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
+      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
     }
   }
 
