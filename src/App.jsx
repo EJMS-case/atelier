@@ -2,19 +2,19 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
-You are a senior stylist at The Row. You build editorially precise outfits — every piece earns its place.
+You are the styling director at Khaite. You build looks that stop traffic and close deals.
 
-CLIENT: Dark Winter coloring, NYC private equity. Her closet is Totême, Khaite, Max Mara, Theory.
-PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm brown is an accent. No yellow, no warm/muted tones.
+CLIENT: Dark Winter coloring, NYC private equity. Her closet is Totême, Khaite, Max Mara, Theory, COS.
+PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm brown is an accent neutral. No yellow, no warm/muted tones.
 ONLY use items from her wardrobe inventory below. Never invent items.
 
-HOW YOU STYLE (follow this thought process for EVERY look):
-1. START WITH COLOR: Pick 2-3 colors that create a deliberate story. Every item must belong to that palette. A navy dress → navy/black accessories. A burgundy top → pair with navy or black, never random brown.
-2. SILHOUETTE: Fitted top + wide bottom, OR oversized layer + slim bottom, OR dress with structured outerwear. Never same volume everywhere.
-3. TEXTURE MIX: Pair different fabrics — silk with wool, leather with knit, satin with denim. If everything is the same fabric weight, the look is flat.
-4. BELT LOGIC: Only add a belt when it IMPROVES the look — cinching a blazer over trousers, defining a waist on a tucked blouse. NEVER belt a fitted dress, a print dress, or a structured dress. Skip the belt entirely if it doesn't serve the silhouette.
-5. SHOES + BAG must be in the same color family as each other (black+black, brown+brown, navy+navy) and must coordinate with the outfit's overall palette.
-6. Each look should feel like one deliberate thought, not 6 random items.
+YOUR STYLING METHOD (follow for EVERY look):
+1. HERO PIECE: Start with one standout item — a statement blazer, a luxe knit, a silk dress, a bold color piece. Build everything else around it.
+2. COLOR STORY: Pick 2-3 colors max. Every item must belong. Tonal depth (navy blazer + cobalt silk + black trouser) > random color mixing. Monochromatic in mixed textures is always chic.
+3. SILHOUETTE: Fitted × relaxed creates tension. Oversized blazer + slim trouser. Fluid dress + structured coat. Fitted knit + wide-leg pant. Same volume head-to-toe is amateur.
+4. TEXTURE CONTRAST: At least 2 different fabric weights per look. Silk × wool. Leather × cashmere. Satin × structured cotton. Matte × sheen. This is what separates editorial from basic.
+5. FINISHING: Shoes + bag must match each other in color family AND feel intentional with the outfit. A belt ONLY when it architecturally improves the silhouette — cinching a blazer, breaking a tonal look, defining a waist. Never on fitted/printed/structured dresses. When in doubt, skip it.
+6. THE TEST: Would this look photographed from across the street make someone think "she's someone"? If not, rebuild.
 `;
 
 // ── STYLING PRINCIPLES — injected into shopping prompts ──────────
@@ -699,13 +699,14 @@ function shuffle(arr) {
 
 // ── MOOD ARCHETYPES — rotated randomly to force variety ──────────────────────
 const MOODS = [
-  { name: "Off-Duty Parisian", brief: "Gallery-exit energy. One piece is slightly undone — a sleeve pushed up, a shirt half-tucked. Pair something structured with something fluid. A silk blouse with straight-leg jeans and a belt. A knit over a midi skirt with flat boots." },
-  { name: "Quiet Power", brief: "Monochromatic or deep tonal — one color family in 2-3 textures. Sleek, architectural. Wool blazer over silk cami with tailored trousers. Head-to-toe navy in three fabrics. A belt cinching a tonal look is the move here." },
-  { name: "Modern Minimalist", brief: "The Row energy. Max 4 pieces. One texture surprise does all the work — leather against cashmere, satin against denim. Everything else disappears. If there's a belt, it's the accent." },
-  { name: "Italian Edit", brief: "Relaxed tailoring with confident proportion. Oversized blazer + slim bottom, or fluid trouser + fitted knit. The bag is the quiet flex. Brown leather accessories ground cool tones beautifully here." },
-  { name: "After Hours", brief: "Dinner-ready: unexpected fabric (silk, satin, velvet) mixed with something grounded (denim, structured wool, leather). Satin cami + jeans + heels. Silk blouse + leather skirt. A woman who has somewhere better to be." },
-  { name: "Editorial", brief: "The street-style-photographer stopper. One unexpected pairing that shouldn't work but does — proportion clash (oversized × slim), texture clash (chunky knit × delicate skirt), or a color pair that creates visual tension." },
-  { name: "Uptown Undone", brief: "Polished pieces worn casually. Blazer thrown over a simple tee + trousers. Cashmere tucked into jeans with heeled boots. The trick: one expensive piece styled down, or one casual piece styled up. Belt optional but effective." },
+  { name: "Tonal Power", brief: "One color family, 3 textures. Head-to-toe navy: silk blouse + wool blazer + satin trouser + leather bag. Or all-black: cashmere + tailored pants + suede boot. The richness comes from fabric, not color. Monochromatic = instant editorial." },
+  { name: "The Statement Blazer", brief: "Build the entire look around one exceptional blazer. Everything underneath is simple — a silk cami or fitted top, clean trousers or a slim skirt. Let the blazer do 80% of the work. Accessories minimal and tonal." },
+  { name: "Quiet Luxury", brief: "Nothing screams, everything whispers. Cashmere + tailored trousers + pointed-toe heel. A Max Mara coat over a simple knit. Colors are muted, fabrics are rich, fit is impeccable. The look costs a fortune and says nothing." },
+  { name: "Silk & Structure", brief: "Pair something fluid with something architectural. Silk blouse + structured blazer. Satin skirt + fitted knit. The contrast between soft and sharp is what makes it interesting. Always include one piece with movement." },
+  { name: "After Dark", brief: "Evening energy: one luxe fabric (silk, satin, velvet) as the hero. A satin cami under a blazer with slim trousers. A silk dress with a structured coat. A velvet top with tailored pants. Heels are non-negotiable. Everything should catch the light." },
+  { name: "Power Feminine", brief: "Boardroom meets runway. A pencil skirt with a silk blouse and blazer. A fitted dress with a structured coat. High heels, polished bag, everything sharp. She runs the meeting and the room knows it." },
+  { name: "Cool Contrast", brief: "Two unexpected textures or proportions that create visual tension. Oversized blazer + slim satin trouser. Chunky knit + delicate midi skirt. Leather jacket + silk dress. The deliberate clash is the point." },
+  { name: "Italian Elegance", brief: "Relaxed tailoring, confident proportion, considered accessories. Oversized coat + slim bottom. Fluid trouser + fitted top. Brown leather accessories grounding cool tones. She looks like she just left a gallery in Milan." },
 ];
 
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
@@ -813,15 +814,15 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
   }).join("\n");
 
-  // ── STEP 9: Select moods — filter inappropriate moods for occasion ──
+  // ── STEP 9: Select moods — filter by occasion appropriateness ──
   const PROFESSIONAL_OCCASIONS = new Set(["Interview","Executive","Work"]);
-  const professionalExcludeMoods = new Set(["After Hours","Off-Duty Parisian","Editorial","Uptown Undone"]);
-  const dateExcludeMoods = new Set(["Off-Duty Parisian"]);
+  const PROFESSIONAL_MOODS = new Set(["Tonal Power","The Statement Blazer","Quiet Luxury","Silk & Structure","Power Feminine"]);
+  const EVENING_MOODS = new Set(["After Dark","Silk & Structure","Power Feminine","Cool Contrast","Tonal Power","Italian Elegance"]);
   let moodPool = MOODS;
   if (PROFESSIONAL_OCCASIONS.has(occasion)) {
-    moodPool = MOODS.filter(m => !professionalExcludeMoods.has(m.name));
-  } else if (occasion === "Date Night") {
-    moodPool = MOODS.filter(m => !dateExcludeMoods.has(m.name));
+    moodPool = MOODS.filter(m => PROFESSIONAL_MOODS.has(m.name));
+  } else if (occasion === "Date Night" || occasion === "Dinner" || occasion === "Dinner Party" || occasion === "Event") {
+    moodPool = MOODS.filter(m => EVENING_MOODS.has(m.name));
   }
   const selectedMoods = shuffle(moodPool).slice(0, 3);
 
@@ -893,9 +894,13 @@ BUILD 3 LOOKS. Each should feel like a different stylist's take:
 2. ${selectedMoods[1].name} — ${selectedMoods[1].brief}
 3. ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-BEFORE outputting, verify each look: Does every piece color-coordinate? Is there a clear silhouette? Would a PE executive wear this? Are shoes + bag in the same color family?
+QUALITY CHECK before outputting — reject and rebuild any look that fails:
+- Can you name the color story in 3 words? (e.g. "navy-black tonal", "burgundy + ivory") If not, the look has no story.
+- Is there texture contrast? (silk vs wool, leather vs knit, matte vs sheen) If every piece is the same weight, it's flat.
+- Would this look make someone stop on a NYC street and think "she's someone"? If not, it's not good enough.
+- Are shoes + bag in the same color family? If not, fix it.
 
-Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"how to wear it"}]}`;
+Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"1-2 sentences: how to wear it, what to tuck/layer/cinch, the key proportion or texture move"}]}`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
