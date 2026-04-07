@@ -531,9 +531,10 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   });
   const shuffled = Object.values(byCategory).flat();
 
-  const inventory = shuffled.map(it =>
-    `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`
-  ).join("\n");
+  const inventory = shuffled.map(it => {
+    const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `, ${it.knit_fit}` : ""}]` : "";
+    return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
+  }).join("\n");
 
   // Pick 3 random distinct moods — filter out nightlife-leaning moods for professional occasions
   const workOccasions = new Set(["Work", "Executive"]);
@@ -550,37 +551,39 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const colorPairsList = stylePrefs.colorPairs.map(p => `  - ${p}`).join("\n");
 
   const prompt = `${STYLE_PROFILE}
-${STYLING_PRINCIPLES}
 APPROVED COLOR PAIRS: ${stylePrefs.colorPairs.join(", ")}. Monochromatic and tonal builds encouraged. Warm browns + warm reds approved.
-
 WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must be weather-appropriate.` : ""}
 OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — tailored and polished only' : ''}${occasion === 'Activity' ? ' — casual, comfortable, movement-friendly' : ''}${occasion === 'Athleisure' ? ' — sporty-chic, athleisure pieces preferred' : ''}
 ${request ? `CLIENT REQUEST: "${request}" — FOLLOW THIS. If she says jeans, USE JEANS. If she names an item, BUILD AROUND IT.` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
-${usedItemsNote}
 
 WARDROBE:
 ${inventory}
 
 BUILD 3 LOOKS — each with a different mood and different hero piece.
-
 MOOD 1: ${selectedMoods[0].name} — ${selectedMoods[0].brief}
 MOOD 2: ${selectedMoods[1].name} — ${selectedMoods[1].brief}
 MOOD 3: ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
-EACH LOOK MUST HAVE:
-- 4-7 items minimum. A top + bottom + shoes + bag is the BARE MINIMUM. Layer on top of that: outerwear, belt, second layer.
-- A clear silhouette contrast (fitted × wide, slim × oversized, structured × fluid)
-- At least one layer beyond the base (blazer, cardigan, coat, jacket) unless it's hot weather
-- A belt if belts exist in the wardrobe
-- Shoes + bag that match the color story
+HARD RULES — violating ANY rule means the generation FAILED:
+1. LAYER: Every look needs outerwear or a second layer (blazer, cardigan, coat, jacket over a top) unless weather is hot. A top + bottom + shoes alone = FAILED.
+2. BELT: At least 2 of 3 looks MUST include a belt from the wardrobe. Belts cinch blazers, define waists, break tonal outfits.
+3. SILHOUETTE CONTRAST: fitted × wide, OR slim × oversized, OR structured × fluid. Same volume head-to-toe = FAILED.
+4. TEXTURE MIX: Every look must combine 2+ different fabric weights (silk × wool, leather × knit, denim × cashmere, satin × cotton). All same weight = FAILED.
+5. COLOR STORY: Use the approved color pairs. Mix navy + burgundy, brown + cool red, not all-black-everything. Monochromatic is fine IF you mix 2-3 textures within it.
+6. ITEM COUNT: 5-7 items per look. Top + bottom + layer + shoes + bag + belt is the target. 4 items = bare minimum only if it's a dress look.
+7. Outerwear REQUIRES a top underneath. Blazer with no blouse/cami/tee = FAILED.
+8. Dresses stand alone — no separate top or bottom with a dress. Outerwear + belt over dress = great.
+9. No item in more than one look. No two items from same category (Outerwear + Tops layering is the exception).
+10. 3 looks must use 3 DIFFERENT anchor pieces and color stories. 3 similar looks = FAILED.
+${usedItemsNote ? `11. ${usedItemsNote}` : ""}
 
-RULES:
-- Outerwear REQUIRES a top underneath (blazer needs a blouse/cami/tee under it)
-- Dresses stand alone — no separate top or bottom with a dress (but outerwear + belt over a dress = great)
-- No two items from the same category (Outerwear + Tops layering is the only exception)
-- No item in more than one look
-- Each look must use a COMPLETELY different anchor piece — 3 similar looks is a failure
+CHIC vs BASIC — aim for CHIC:
+- BASIC: black top + black pants + black shoes. CHIC: navy silk blouse + black wide-leg trousers + burgundy belt + black pointed-toe heels + dark crossbody.
+- BASIC: sweater + jeans. CHIC: chunky cream knit half-tucked into dark straight-leg jeans + slim belt + leather bag + heeled boots.
+- BASIC: dress + heels. CHIC: slip dress + oversized blazer + belt cinching the blazer + ankle boots.
+
+Before outputting, mentally verify each look against every HARD RULE. Fix any violations before responding.
 
 Respond ONLY with valid JSON, no markdown:
 {
@@ -606,7 +609,7 @@ Respond ONLY with valid JSON, no markdown:
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
       max_tokens: 3000,
-      temperature: 1,
+      temperature: 0.7,
       messages: [{ role: "user", content: prompt }]
     })
   });
@@ -2982,8 +2985,8 @@ function buildCollageLayout(items, suggestionSlots = []) {
         ? { x:52, y:32, w:40, h:10 }
         : { x:22, y:34, w:44, h:10 };
     } else {
-      const beltY = (!hasOuter && nClothing <= 1) ? 45 : 47;
-      beltPos = { x:8, y:beltY, w:38, h:3 };
+      const beltY = (!hasOuter && nClothing <= 1) ? 42 : 44;
+      beltPos = { x:8, y:beltY, w:38, h:8 };
     }
     g.belt.forEach(item => slots.push({ ...item, ...beltPos, rotate:0, zIndex:10 }));
   }
