@@ -946,31 +946,34 @@ Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"
 // ── POST-VALIDATION ─────────────────────────────────────────────────────────
 function validateLooks(looks, occasion, idMap, allItems) {
   const slots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Daytime;
-  const valid = [];
-  for (const look of looks) {
-    if (!look.items || look.items.length < 4) continue;
-    const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
-    if (resolved.length < 4) continue;
 
-    // Universal: every look must have a bottom OR a dress (lower half coverage)
+  // PASS 1: Hard filter — every look MUST have a bottom or dress. Non-negotiable.
+  const withLowerHalf = looks.filter(look => {
+    if (!look.items || look.items.length < 4) return false;
+    const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
+    if (resolved.length < 4) return false;
     const hasBottom = resolved.some(it => it.category === "Bottoms");
     const hasDress = resolved.some(it => it.category === "Dresses" || it.category === "Occasionwear" || it.category === "Jumpsuits");
-    if (!hasBottom && !hasDress) continue; // Skip looks with no lower half
+    return hasBottom || hasDress;
+  });
 
-    let ok = true;
+  // PASS 2: Soft filter — check occasion-specific required roles
+  const fullyValid = withLowerHalf.filter(look => {
+    const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
     for (const [role, constraint] of Object.entries(slots.required)) {
       if (constraint === true) continue;
-      if (role === "bottom") continue; // Handled above (bottom OR dress)
-      const roleCategories = role === "top" ? ["Tops","Knits"] : role === "bottom" ? ["Bottoms"] : role === "layer" ? ["Outerwear","Knits"] : role === "shoes" ? ["Shoes"] : role === "bag" ? ["Bags"] : role === "dress" ? ["Dresses","Occasionwear"] : [];
-      const hasRole = resolved.some(it => roleCategories.includes(it.category));
-      if (!hasRole && role !== "dress") {
-        ok = false;
-        break;
-      }
+      if (role === "bottom") continue; // Already enforced in pass 1
+      const roleCategories = role === "top" ? ["Tops","Knits"] : role === "layer" ? ["Outerwear","Knits"] : role === "shoes" ? ["Shoes"] : role === "bag" ? ["Bags"] : role === "dress" ? ["Dresses","Occasionwear"] : [];
+      if (!resolved.some(it => roleCategories.includes(it.category)) && role !== "dress") return false;
     }
-    if (ok) valid.push(look);
-  }
-  return valid.length > 0 ? valid : looks;
+    return true;
+  });
+
+  // Return best available: fully valid > has lower half > raw (last resort)
+  if (fullyValid.length > 0) return fullyValid;
+  if (withLowerHalf.length > 0) return withLowerHalf;
+  console.warn("[Atelier] All AI looks failed validation — no look has a bottom or dress");
+  return looks;
 }
 
 // ── AI ELEVATION ─────────────────────────────────────────────────────────────
