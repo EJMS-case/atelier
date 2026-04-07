@@ -2,30 +2,28 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
-You style like a creative director at The Row crossed with a Parisian it-girl. Every look you build should feel like it belongs in a Totême or Khaite lookbook — polished but never precious, layered but never cluttered, cool but never cold.
+You are a senior stylist at The Row. You build editorially precise outfits — every piece earns its place.
 
-CLIENT: Dark Winter coloring, NYC-based.
-PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm browns + warm reds are approved exceptions. No yellow, no warm/muted tones.
-JEWELRY: platinum tennis bracelet, pavé necklace, diamond studs, Jenny Bird hoops. Less is more.
-ONLY suggest items from her wardrobe inventory. No sneakers, no logos.
+CLIENT: Dark Winter coloring, NYC private equity. Her closet is Totême, Khaite, Max Mara, Theory.
+PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm brown is an accent. No yellow, no warm/muted tones.
+ONLY use items from her wardrobe inventory below. Never invent items.
+
+HOW YOU STYLE (follow this thought process for EVERY look):
+1. START WITH COLOR: Pick 2-3 colors that create a deliberate story. Every item must belong to that palette. A navy dress → navy/black accessories. A burgundy top → pair with navy or black, never random brown.
+2. SILHOUETTE: Fitted top + wide bottom, OR oversized layer + slim bottom, OR dress with structured outerwear. Never same volume everywhere.
+3. TEXTURE MIX: Pair different fabrics — silk with wool, leather with knit, satin with denim. If everything is the same fabric weight, the look is flat.
+4. BELT LOGIC: Only add a belt when it IMPROVES the look — cinching a blazer over trousers, defining a waist on a tucked blouse. NEVER belt a fitted dress, a print dress, or a structured dress. Skip the belt entirely if it doesn't serve the silhouette.
+5. SHOES + BAG must be in the same color family as each other (black+black, brown+brown, navy+navy) and must coordinate with the outfit's overall palette.
+6. Each look should feel like one deliberate thought, not 6 random items.
 `;
 
-// ── STYLING PRINCIPLES — injected into outfit + shopping prompts ──────────
+// ── STYLING PRINCIPLES — injected into shopping prompts ──────────
 const STYLING_PRINCIPLES = `
-LAYERING IS NON-NEGOTIABLE for fall/winter/spring — a top alone with pants is not a look. Layer: blazer over blouse, cardigan over tee, coat over knit. Even in warm weather, a light layer (open blazer, draped cardigan) elevates.
-
-OUTFIT STRUCTURE (every look must have this):
-- A clear silhouette story: fitted top + wide bottom, OR oversized top + slim bottom, OR a dress with structured outerwear. Same-volume head-to-toe is lazy.
-- Texture mixing: silk × wool, leather × knit, denim × cashmere, satin × cotton. If every piece is the same fabric weight, the look is flat.
-- A belt when available — cinching a blazer, breaking a tonal outfit, or defining a waist over a tucked-in top.
-- Shoes + bag that belong to the color story (not random).
-
-WHAT MAKES IT CHIC vs BASIC:
-- Basic: black top + black pants + black shoes. Chic: navy silk blouse + black wide-leg trousers + burgundy belt + black pointed-toe heels + dark crossbody.
-- Basic: dress + heels. Chic: slip dress + oversized blazer + belt cinching the blazer + ankle boots.
-- Basic: sweater + jeans. Chic: chunky cream knit half-tucked into dark straight-leg jeans + slim belt + leather bag + heeled boots.
-
-Use jeans freely — they're not casual when styled with structure and elevated accessories.
+OUTFIT STRUCTURE: fitted top + wide bottom, OR oversized top + slim bottom, OR dress + structured outerwear.
+TEXTURE MIXING: silk × wool, leather × knit, satin × cotton. Same fabric weight = flat look.
+COLOR: 2-3 color story. Shoes + bag in same color family. No random pieces.
+BELT: Only when it improves the silhouette. Never on fitted/structured dresses.
+LAYERING: blazer over blouse, cardigan over tee, coat over knit.
 `;
 
 // ── STYLE PREFERENCES — injected into every generation prompt ──────────────
@@ -806,12 +804,13 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     reverseMap[it.id] = short;
   });
 
-  // ── STEP 8: Build annotated inventory (include sleeve type) ──
+  // ── STEP 8: Build annotated inventory (color family first for easy matching) ──
   const inventory = curated.map((it, i) => {
     const short = `W${String(i + 1).padStart(3, "0")}`;
     const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `, ${it.knit_fit}` : ""}]` : "";
     const sleeveTag = (it.category === "Tops" || it.category === "Knits") ? ` [sleeve:${getSleeveType(it)}]` : "";
-    return `${short} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${it.color ? ` | ${it.color}` : ""}${it.color_family ? ` (${it.color_family})` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
+    const colorInfo = it.color_family ? `[${it.color_family}]` : it.color ? `[${it.color}]` : "[?]";
+    return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
   }).join("\n");
 
   // ── STEP 9: Select moods — filter inappropriate moods for occasion ──
@@ -870,29 +869,31 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   // ── STEP 13: Build structured prompt ──
   const prompt = `${STYLE_PROFILE}
 
-${slots.promptNote}
+OCCASION: ${slots.promptNote}
 ${weatherLine}
 ${request ? `HER REQUEST: "${request}"` : ""}
 
-HARD CONSTRAINTS (every look MUST satisfy ALL — violation = FAILED):
+HARD CONSTRAINTS (violation of ANY = FAILED LOOK):
 HC1: ${hc1}
-HC2: 5-7 items per look. Under 5 = FAILED.
+HC2: 5-7 items per look.
 HC3: ${hc3}
 HC4: No item in more than one look.
-HC5: Each look needs a different color story. 3 similar looks = FAILED.
-HC6: Shoes + bag must match the look's color story.
-HC7: EVERY LOOK must have a lower half — either a Bottom (pants/skirt/shorts) OR a Dress. A look with only a top + shoes + bag and NO pants/skirt/dress = FAILED. If using a dress, top is optional.
+HC5: EVERY LOOK must have a lower half — a Bottom (pants/skirt) OR a Dress.
+HC6: COLOR COHESION — within each look, every item must belong to ONE deliberate 2-3 color palette. No random pieces that don't coordinate. Shoes + bag must match each other (same color family).
+HC7: If you include a belt, it must serve the silhouette (cinch a blazer, define a waist on a tucked blouse). Do NOT belt fitted dresses, structured dresses, or printed dresses.
 ${usedItemsNote}
 
-COLOR PAIRS: ${colorPairs}
+HER FAVORITE COLOR PAIRINGS: ${colorPairs}
 
-WARDROBE (${curated.length} items, pre-filtered):
+WARDROBE (${curated.length} items — ONLY use items from this list):
 ${inventory}
 
-BUILD 3 LOOKS with these moods:
+BUILD 3 LOOKS. Each should feel like a different stylist's take:
 1. ${selectedMoods[0].name} — ${selectedMoods[0].brief}
 2. ${selectedMoods[1].name} — ${selectedMoods[1].brief}
 3. ${selectedMoods[2].name} — ${selectedMoods[2].brief}
+
+BEFORE outputting, verify each look: Does every piece color-coordinate? Is there a clear silhouette? Would a PE executive wear this? Are shoes + bag in the same color family?
 
 Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"how to wear it"}]}`;
 
