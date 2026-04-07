@@ -573,8 +573,23 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     Lounge:      new Set(["Occasionwear","Swim"]),
     Travel:      new Set(["Occasionwear","Swim"]),
   };
-  const excluded = OCCASION_EXCLUDE[occasion] || new Set();
-  const filtered = items.filter(it => !excluded.has(it.category));
+  // Detect formality escalation from request text
+  const FORMAL_KEYWORDS = /\b(interview|important meeting|presentation|board meeting|client meeting|first day)\b/i;
+  const isFormalRequest = FORMAL_KEYWORDS.test(request || "");
+  const effectiveOccasion = isFormalRequest && !["Executive","Work"].includes(occasion) ? "Executive" : occasion;
+
+  const excluded = OCCASION_EXCLUDE[effectiveOccasion] || new Set();
+  let filtered = items.filter(it => !excluded.has(it.category));
+
+  // For formal requests, also exclude jeans and casual pieces
+  if (isFormalRequest) {
+    filtered = filtered.filter(it => {
+      if (it.subcategory === "Jeans") return false;
+      if (it.subcategory === "T-Shirts" || it.subcategory === "Tanks") return false;
+      if (it.category === "Loungewear") return false;
+      return true;
+    });
+  }
 
   // Shuffle wardrobe so AI sees different items first each time
   const byCategory = {};
@@ -605,7 +620,9 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   // Pick 3 random distinct moods — filter out nightlife-leaning moods for professional occasions
   const workOccasions = new Set(["Work", "Executive"]);
   const nightMoods = new Set(["After Hours", "Off-Duty Parisian"]);
-  const moodPool = workOccasions.has(occasion) ? MOODS.filter(m => !nightMoods.has(m.name)) : MOODS;
+  const moodPool = (workOccasions.has(effectiveOccasion) || isFormalRequest)
+    ? MOODS.filter(m => !nightMoods.has(m.name))
+    : MOODS;
   const selectedMoods = shuffle(moodPool).slice(0, 3);
 
   // Build list of recently used individual item IDs to discourage repeats (mapped to short IDs)
@@ -620,7 +637,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const prompt = `${STYLE_PROFILE}
 APPROVED COLOR PAIRS: ${stylePrefs.colorPairs.join(", ")}. Monochromatic and tonal builds encouraged. Warm browns + warm reds approved.
 WEATHER: ${weather || "NYC current season"}${weather ? ` — every piece must be weather-appropriate.` : ""}
-OCCASION: ${occasion}${['Work','Executive'].includes(occasion) ? ' — tailored and polished only' : ''}${occasion === 'Activity' ? ' — casual, comfortable, movement-friendly' : ''}${occasion === 'Athleisure' ? ' — sporty-chic, athleisure pieces preferred' : ''}
+OCCASION: ${effectiveOccasion}${['Work','Executive'].includes(effectiveOccasion) || isFormalRequest ? ' — tailored and polished only. NO jeans, NO t-shirts, NO casual knits. Think blazer + silk blouse + trousers.' : ''}${effectiveOccasion === 'Activity' ? ' — casual, comfortable, movement-friendly' : ''}${effectiveOccasion === 'Athleisure' ? ' — sporty-chic, athleisure pieces preferred' : ''}
 ${request ? `CLIENT REQUEST: "${request}" — FOLLOW THIS. If she says jeans, USE JEANS. If she names an item, BUILD AROUND IT.` : ""}
 ${aboutMe.height || aboutMe.torsoLength || aboutMe.fitNotes || aboutMe.proportions ? `BODY: ${[aboutMe.height, aboutMe.torsoLength, aboutMe.fitNotes, aboutMe.proportions].filter(Boolean).join("; ")}` : ""}
 
@@ -637,13 +654,14 @@ HARD RULES — violating ANY rule means the generation FAILED:
 2. BELT: At least 2 of 3 looks MUST include a belt from the wardrobe. Belts cinch blazers, define waists, break tonal outfits.
 3. SILHOUETTE CONTRAST: fitted × wide, OR slim × oversized, OR structured × fluid. Same volume head-to-toe = FAILED.
 4. TEXTURE MIX: Every look must combine 2+ different fabric weights (silk × wool, leather × knit, denim × cashmere, satin × cotton). All same weight = FAILED.
-5. COLOR STORY: Use the approved color pairs. Mix navy + burgundy, brown + cool red, not all-black-everything. Monochromatic is fine IF you mix 2-3 textures within it.
+5. COLOR STORY: Use the approved color pairs. Mix navy + burgundy, brown + cool red, not all-black-everything. Monochromatic is fine IF you mix 2-3 textures within it. Shoes and bag must belong to the same color story — don't pair random brown shoes with an all-navy outfit unless brown is intentionally the accent.
 6. ITEM COUNT: 5-7 items per look. Top + bottom + layer + shoes + bag + belt is the target. 4 items = bare minimum only if it's a dress look.
 7. Outerwear REQUIRES a top underneath. Blazer with no blouse/cami/tee = FAILED.
-8. Dresses stand alone — no separate top or bottom with a dress. Outerwear + belt over dress = great.
-9. No item in more than one look. No two items from same category (Outerwear + Tops layering is the exception).
-10. 3 looks must use 3 DIFFERENT anchor pieces and color stories. 3 similar looks = FAILED.
-${usedItemsNote ? `11. ${usedItemsNote}` : ""}
+8. LAYERING ORDER: Pullovers and chunky knits are the OUTER layer — they go OVER a blouse, cami, or tee, never UNDER one. A pullover sweater paired next to a short-sleeve shirt with nothing layered properly = FAILED. Cardigans can layer over anything.
+9. Dresses stand alone — no separate top or bottom with a dress. Outerwear + belt over dress = great.
+10. No item in more than one look. Max one Tops piece + one Knits piece per look (as a layering pair). Two blouses or two knits in the same look = FAILED.
+11. 3 looks must use 3 DIFFERENT anchor pieces and color stories. 3 similar looks = FAILED.
+${usedItemsNote ? `12. ${usedItemsNote}` : ""}
 
 CHIC vs BASIC — aim for CHIC:
 - BASIC: black top + black pants + black shoes. CHIC: navy silk blouse + black wide-leg trousers + burgundy belt + black pointed-toe heels + dark crossbody.
@@ -658,7 +676,7 @@ Respond ONLY with valid JSON, no markdown:
     {
       "name": "2-4 words referencing actual colors/fabrics in the look",
       "mood": "mood name",
-      "occasion": "${occasion}",
+      "occasion": "${effectiveOccasion}",
       "items": ["W001", "W002", "W003", "W004", "W005", "W006"],
       "styling": "the specific styling move: how items are worn together (e.g. 'blazer open over tucked silk cami, belt cinching at waist, wide trousers breaking at the ankle boot')"
     }
