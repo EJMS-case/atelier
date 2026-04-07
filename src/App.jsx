@@ -45,7 +45,7 @@ const STYLE_PREFS = {
 // ── CATEGORY TAXONOMY ─────────────────────────────────────────────────────────
 const CATEGORY_ORDER = [
   "Tops","Knits","Bottoms","Dresses","Sets","Jumpsuits",
-  "Loungewear","Athleisure","Swim","Outerwear","Occasionwear","Shoes","Bags","Accessories",
+  "Loungewear","Athleisure","Swim","Outerwear","Occasionwear","Shoes","Bags","Belts","Accessories",
 ];
 
 // Subcategories per main category
@@ -63,7 +63,8 @@ const TAXONOMY = {
   Occasionwear: ["Cocktail Dresses","Evening Accessories","Formal Separates","Gowns"],
   Shoes:        ["Boots","Flats","Heels","Loafers","Sandals"],
   Bags:         ["Clutch","Crossbody","Shoulder","Tote"],
-  Accessories:  ["Belts","Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
+  Belts:        [],
+  Accessories:  ["Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
 };
 
 // Third-level options for select subcategories
@@ -454,6 +455,9 @@ function normalizeItem(item) {
   }
   if (item.category === "Accessories" && /\b(bag|purse|tote|clutch|handbag|crossbody)\b/i.test(item.name) && !item.subcategory) {
     return { ...item, category: "Bags" };
+  }
+  if (item.category === "Accessories" && (item.subcategory === "Belts" || /\bbelt\b/i.test(item.name))) {
+    return { ...item, category: "Belts", subcategory: "" };
   }
   return item;
 }
@@ -1875,14 +1879,16 @@ function FilterBar({ items, activeFilters, onChange }) {
   const [showMore, setShowMore] = useState(false);
 
   const toggle = (type, value) => {
-    const current = activeFilters[type] || [];
-    const next = current.includes(value)
-      ? current.filter(v => v !== value)
-      : [...current, value];
-    // When switching categories, clear subcategory and sleeve length filters
     if (type === "category") {
-      onChange({ ...activeFilters, [type]: next, subcategory: [], sleeveLength: "" });
+      // Single-select for categories: toggle off if already selected, otherwise switch
+      const current = activeFilters.category || [];
+      const next = current.includes(value) ? [] : [value];
+      onChange({ ...activeFilters, category: next, subcategory: [], sleeveLength: "" });
     } else {
+      const current = activeFilters[type] || [];
+      const next = current.includes(value)
+        ? current.filter(v => v !== value)
+        : [...current, value];
       onChange({ ...activeFilters, [type]: next });
     }
   };
@@ -3083,8 +3089,9 @@ function buildCollageLayout(items, suggestionSlots = []) {
     if (cat === "Shoes")     return "shoes";
     if (cat === "Dresses" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
     if (cat === "Bags") return "bag";
+    if (cat === "Belts") return "belt";
     if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name))) return "bag";
-    if (cat === "Accessories" && (sub === "Belts" || /\bbelt\b/i.test(name))) return "belt";
+    if (cat === "Accessories" && /\bbelt\b/i.test(name)) return "belt";
     if (cat === "Accessories") return "accessory";
     return "clothing";
   };
@@ -4062,8 +4069,8 @@ const s = {
 
   // Filter (legacy — kept for queue rows etc.)
   chipRow: { display:"flex", gap:8, flexWrap:"wrap", marginBottom:24 },
-  chip: { background:"none", border:"1px solid #C8BFB4", color:"#6B5E54", fontSize:11, letterSpacing:"0.08em", padding:"5px 13px", borderRadius:20, cursor:"pointer" },
-  chipActive: { background:"#1C1814", borderColor:"#1C1814", color:"#F5F1EC" },
+  chip: { background:"none", border:"1px solid #C8BFB4", color:"#6B5E54", fontSize:11, letterSpacing:"0.08em", padding:"5px 13px", borderRadius:20, cursor:"pointer", transition:"all 0.15s ease" },
+  chipActive: { background:"#1C1814", borderColor:"#1C1814", color:"#F5F1EC", fontWeight:500, boxShadow:"0 2px 8px rgba(28,24,20,0.25)" },
 
   // Grid
   grid: { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))", gap:14 },
