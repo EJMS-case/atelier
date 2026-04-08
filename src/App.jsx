@@ -17,6 +17,22 @@ YOUR STYLING METHOD (follow for EVERY look):
 6. THE TEST: Would this look photographed from across the street make someone think "she's someone"? If not, rebuild.
 `;
 
+// ── CASUAL STYLE PROFILE — used for daytime/weekend occasions ────────────────
+const CASUAL_STYLE_PROFILE = `
+You are a stylist for a cool, private client in NYC. She dresses for herself, not for a meeting.
+Dark Winter coloring. Her closet is Totême, Khaite, Max Mara, Theory, COS, A.P.C., Vince.
+PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white, warm brown as accent neutral. No yellow, no warm/muted tones.
+ONLY use items from her wardrobe inventory below. Never invent items.
+
+YOUR STYLING METHOD (follow for EVERY look):
+1. HERO PIECE: one standout — a luxe knit, great denim, a perfect tee, an unexpected accessory. Build around it. NOT a blazer unless it's unstructured and thrown on.
+2. COLOR STORY: 2-3 colors max. Tonal > contrast. Restraint is the whole point.
+3. SILHOUETTE: fitted × relaxed. A slim tee + straight denim. A fluid trouser + fitted knit. Never all-volume, never all-fitted.
+4. TEXTURE CONTRAST: at least 2 weights — denim × cashmere, leather × cotton, silk × wool.
+5. FINISHING: shoes + bag in same color family, never try-hard. Flats, loafers, sneakers, or low boots. Heels only if explicitly requested. Skip the belt unless it actively improves the line.
+6. THE TEST: does this look like something a cool private client would throw on to meet a friend — NOT something she'd wear to "look stylish" and NOT something she'd wear to a boardroom? If it feels costumey, formal, or like an evening look, rebuild.
+`;
+
 // ── STYLING PRINCIPLES — injected into shopping prompts ──────────
 const STYLING_PRINCIPLES = `
 OUTFIT STRUCTURE: fitted top + wide bottom, OR oversized top + slim bottom, OR dress + structured outerwear.
@@ -707,6 +723,10 @@ const MOODS = [
   { name: "Power Feminine", brief: "Boardroom meets runway. A pencil skirt with a silk blouse and blazer. A fitted dress with a structured coat. High heels, polished bag, everything sharp. She runs the meeting and the room knows it." },
   { name: "Cool Contrast", brief: "Two unexpected textures or proportions that create visual tension. Oversized blazer + slim satin trouser. Chunky knit + delicate midi skirt. Leather jacket + silk dress. The deliberate clash is the point." },
   { name: "Italian Elegance", brief: "Relaxed tailoring, confident proportion, considered accessories. Oversized coat + slim bottom. Fluid trouser + fitted top. Brown leather accessories grounding cool tones. She looks like she just left a gallery in Milan." },
+  { name: "Off-Duty Cool", brief: "Weekend effortless. A great knit + slim denim + a loafer or ballet flat. A cashmere tee + trouser + crossbody. NO blazers. NO heels. The look comes from fit, fabric quality, and restraint. This is what she wears when she's not trying. If you reach for a blazer, you've failed this mood." },
+  { name: "Parisian Casual", brief: "Her version of French-girl: a fitted tee or silk cami tucked into straight jeans, MAYBE an unstructured blazer thrown on but not required, loafers or ballet flats, a shoulder bag. Nothing matches too hard. It looks thrown together but every piece is perfect. No heels. No cocktail dresses." },
+  { name: "Modern Minimalist", brief: "Clean architectural lines, neutral palette (ivory/bone/charcoal/black), no pattern, no hardware. A fluid trouser + fitted knit + clean leather bag. The styling move is restraint — subtract until there's nothing to subtract. Flats or loafers, never heels." },
+  { name: "Elevated Basics", brief: "Her best white tee. Her best jeans. Her best shoes (flats/loafers/sneakers). One unexpected accessory. The entire look is foundational pieces styled perfectly — no tricks, no trends, just great fit and quality. The hero is how it wears, not what it is. No blazers unless unstructured." },
 ];
 
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
@@ -784,8 +804,8 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     }
   }
 
-  // ── STEP 6: Cap inventory — max 8 per role, ~50-60 items total ──
-  const MAX_PER_CAT = { Tops:8, Knits:6, Bottoms:8, Dresses:6, Outerwear:8, Shoes:8, Bags:6, Belts:5, Accessories:5, Occasionwear:4, Sets:3, Jumpsuits:3, Loungewear:3, Athleisure:5, Swim:3 };
+  // ── STEP 6: Cap inventory — widened per-category pool for variety ──
+  const MAX_PER_CAT = { Tops:14, Knits:10, Bottoms:14, Dresses:10, Outerwear:12, Shoes:12, Bags:10, Belts:8, Accessories:8, Occasionwear:6, Sets:5, Jumpsuits:5, Loungewear:5, Athleisure:8, Swim:3 };
   const byCategory = {};
   filtered.forEach(it => {
     if (!byCategory[it.category]) byCategory[it.category] = [];
@@ -814,23 +834,32 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
   }).join("\n");
 
-  // ── STEP 9: Select moods — filter by occasion appropriateness ──
-  const PROFESSIONAL_OCCASIONS = new Set(["Interview","Executive","Work"]);
-  const PROFESSIONAL_MOODS = new Set(["Tonal Power","The Statement Blazer","Quiet Luxury","Silk & Structure","Power Feminine"]);
-  const EVENING_MOODS = new Set(["After Dark","Silk & Structure","Power Feminine","Cool Contrast","Tonal Power","Italian Elegance"]);
-  let moodPool = MOODS;
-  if (PROFESSIONAL_OCCASIONS.has(occasion)) {
-    moodPool = MOODS.filter(m => PROFESSIONAL_MOODS.has(m.name));
-  } else if (occasion === "Date Night" || occasion === "Dinner" || occasion === "Dinner Party" || occasion === "Event") {
-    moodPool = MOODS.filter(m => EVENING_MOODS.has(m.name));
-  }
-  const selectedMoods = shuffle(moodPool).slice(0, 3);
+  // ── STEP 9: Select moods — comprehensive occasion-to-mood mapping ──
+  const MOOD_POOLS = {
+    Interview:     ["Tonal Power","The Statement Blazer","Quiet Luxury","Power Feminine"],
+    Executive:     ["Tonal Power","The Statement Blazer","Quiet Luxury","Silk & Structure","Power Feminine"],
+    Work:          ["Tonal Power","The Statement Blazer","Quiet Luxury","Silk & Structure","Modern Minimalist","Parisian Casual"],
+    "Date Night":  ["After Dark","Silk & Structure","Power Feminine","Cool Contrast"],
+    Dinner:        ["After Dark","Silk & Structure","Italian Elegance","Cool Contrast","Quiet Luxury"],
+    "Dinner Party":["After Dark","Cool Contrast","Silk & Structure","Italian Elegance","Power Feminine"],
+    Event:         ["After Dark","Silk & Structure","Power Feminine","Tonal Power"],
+    "Lunch/Brunch":["Parisian Casual","Italian Elegance","Elevated Basics","Off-Duty Cool","Modern Minimalist"],
+    Daytime:       ["Parisian Casual","Elevated Basics","Modern Minimalist","Italian Elegance","Off-Duty Cool"],
+    Athleisure:    ["Off-Duty Cool","Elevated Basics","Modern Minimalist"],
+    Activity:      ["Off-Duty Cool","Elevated Basics"],
+    Travel:        ["Off-Duty Cool","Elevated Basics","Parisian Casual","Modern Minimalist","Italian Elegance"],
+    Lounge:        ["Off-Duty Cool","Elevated Basics"],
+  };
+  const allowedMoodNames = new Set(MOOD_POOLS[occasion] || MOOD_POOLS.Daytime);
+  const moodPool = MOODS.filter(m => allowedMoodNames.has(m.name));
+  const selectedMoods = shuffle(moodPool.length >= 3 ? moodPool : MOODS).slice(0, 3);
+  console.log("[StyleMe] occasion:", occasion, "→ moods:", selectedMoods.map(m => m.name));
 
   // ── STEP 10: Recently used items ──
   const recentItemIds = [...new Set(previousLooks.flatMap(l => l.items || []))];
   const recentShortIds = recentItemIds.map(id => reverseMap[id]).filter(Boolean);
   const usedItemsNote = recentShortIds.length > 0
-    ? `RECENTLY USED (avoid): ${recentShortIds.join(", ")}`
+    ? `RECENTLY USED (strongly prefer items NOT on this list — show her variety): ${recentShortIds.join(", ")}`
     : "";
 
   // ── STEP 11: Build HC1 — dynamic required slots constraint ──
@@ -867,8 +896,19 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const weatherLine = weather ? `WEATHER: ${weather}.` : "";
   const colorPairs = stylePrefs.colorPairs.join(", ");
 
-  // ── STEP 13: Build structured prompt ──
-  const prompt = `${STYLE_PROFILE}
+  // ── STEP 13: Select style profile based on occasion vibe ──
+  const CASUAL_OCCASIONS = new Set(["Lunch/Brunch","Daytime","Athleisure","Activity","Travel","Lounge"]);
+  const isCasualOccasion = CASUAL_OCCASIONS.has(occasion);
+  const activeProfile = isCasualOccasion ? CASUAL_STYLE_PROFILE : STYLE_PROFILE;
+  const qualityCheckFinal = isCasualOccasion
+    ? `- Does this look like she THREW IT ON — not like she planned it? If it feels "dressed up", rebuild.
+- Would she wear this to run errands or meet a friend for coffee? If it feels too formal or evening, rebuild.
+- Are shoes + bag in the same color family? If not, fix it.`
+    : `- Would this look make someone stop on a NYC street and think "she's someone"? If not, it's not good enough.
+- Are shoes + bag in the same color family? If not, fix it.`;
+
+  // ── STEP 14: Build structured prompt ──
+  const prompt = `${activeProfile}
 
 OCCASION: ${slots.promptNote}
 ${weatherLine}
@@ -882,6 +922,8 @@ HC4: No item in more than one look.
 HC5: EVERY LOOK must have a lower half — a Bottom (pants/skirt) OR a Dress.
 HC6: COLOR COHESION — within each look, every item must belong to ONE deliberate 2-3 color palette. No random pieces that don't coordinate. Shoes + bag must match each other (same color family).
 HC7: If you include a belt, it must serve the silhouette (cinch a blazer, define a waist on a tucked blouse). Do NOT belt fitted dresses, structured dresses, or printed dresses.
+HC8: VARIETY — across these 3 looks, at most 1 item total may come from the RECENTLY USED list below. Show her pieces she hasn't seen lately.
+${isCasualOccasion ? "HC9: THIS IS A CASUAL OCCASION — NO cocktail dresses, NO gowns, NO stilettos, NO formal separates. Blazers only if explicitly unstructured. Think weekend, not workday or evening." : ""}
 ${usedItemsNote}
 
 HER FAVORITE COLOR PAIRINGS: ${colorPairs}
@@ -897,10 +939,11 @@ BUILD 3 LOOKS. Each should feel like a different stylist's take:
 QUALITY CHECK before outputting — reject and rebuild any look that fails:
 - Can you name the color story in 3 words? (e.g. "navy-black tonal", "burgundy + ivory") If not, the look has no story.
 - Is there texture contrast? (silk vs wool, leather vs knit, matte vs sheen) If every piece is the same weight, it's flat.
-- Would this look make someone stop on a NYC street and think "she's someone"? If not, it's not good enough.
-- Are shoes + bag in the same color family? If not, fix it.
+${qualityCheckFinal}
 
-Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"1-2 sentences: how to wear it, what to tuck/layer/cinch, the key proportion or texture move"}]}`;
+Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"1-2 sentences: how to wear it, what to tuck/layer/cinch, the key proportion or texture move"}]}
+
+Generation seed: ${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -913,7 +956,7 @@ Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
       max_tokens: 3000,
-      temperature: 0.4,
+      temperature: 0.75,
       messages: [{ role: "user", content: prompt }]
     })
   });
@@ -1545,7 +1588,13 @@ export default function App() {
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
-  const [allLooks,   setAllLooks]   = useState([]); // history of all generated looks for anti-repeat
+  const [allLooks,   setAllLooks]   = useState(() => {
+    // Lazy-init from localStorage so anti-repeat history persists across sessions
+    try {
+      const raw = localStorage.getItem("atelier-recent-looks");
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }); // history of all generated looks for anti-repeat
   const [styling,    setStyling]    = useState(false);
   const [styleErr,   setStyleErr]   = useState("");
   const [occasion,   setOccasion]   = useState("Work");
@@ -1566,6 +1615,11 @@ export default function App() {
   const [setsSort,       setSetsSort]       = useState("recent"); // recent | alpha | count
   const [editingSet,     setEditingSet]     = useState(null); // null or set_id for modal
   const syncTimer = useRef(null);
+
+  // ── Persist allLooks to localStorage so anti-repeat history survives reloads
+  useEffect(() => {
+    try { localStorage.setItem("atelier-recent-looks", JSON.stringify(allLooks)); } catch {}
+  }, [allLooks]);
 
   // ── Flash sync status briefly
   const flashSync = (status) => {
@@ -1817,7 +1871,7 @@ export default function App() {
         throw new Error("AI returned no looks — try again.");
       }
       setOutfits(looks);
-      setAllLooks(prev => [...prev, ...looks].slice(-12));
+      setAllLooks(prev => [...prev, ...looks].slice(-30));
       setView("style");
     } catch(e) {
       setStyleErr(e.message || "Styling failed — check your API key.");
