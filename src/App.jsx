@@ -834,6 +834,13 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
   }).join("\n");
 
+  // ── STEP 8b: Category availability summary — force AI to notice what's available ──
+  const skirtCount = curated.filter(it => it.subcategory === "Skirts" || (it.category === "Bottoms" && /skirt/i.test(it.name || ""))).length;
+  const dressCount = curated.filter(it => it.category === "Dresses" || it.category === "Occasionwear").length;
+  const pantsCount = curated.filter(it => it.category === "Bottoms" && !(it.subcategory === "Skirts" || /skirt/i.test(it.name || ""))).length;
+  const skirtDressAvailable = skirtCount + dressCount > 0;
+  const availabilityNote = `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the 3 looks MUST use a skirt or dress (not pants) — otherwise you've wasted her wardrobe." : "Only pants available, so all 3 looks will use pants."}`;
+
   // ── STEP 9: Select moods — comprehensive occasion-to-mood mapping ──
   const MOOD_POOLS = {
     Interview:     ["Tonal Power","The Statement Blazer","Quiet Luxury","Power Feminine"],
@@ -855,11 +862,33 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const selectedMoods = shuffle(moodPool.length >= 3 ? moodPool : MOODS).slice(0, 3);
   console.log("[StyleMe] occasion:", occasion, "→ moods:", selectedMoods.map(m => m.name));
 
-  // ── STEP 10: Recently used items ──
+  // ── STEP 10: Build rich recent-looks context — use real item names, not per-generation short IDs ──
+  // BUG FIX: previously mapped old item IDs through the current reverseMap, which drops any item
+  // not in the current curated pool — so the anti-repeat signal was silently near-empty. Now we
+  // resolve item IDs against the full `items` list so the AI sees names regardless of pool churn.
+  const itemById = new Map(items.map(it => [it.id, it]));
+  const lookSummary = (look) => {
+    const names = (look.items || [])
+      .map(id => itemById.get(id))
+      .filter(Boolean)
+      .map(it => `${it.name}${it.color ? ` (${it.color})` : ""}`)
+      .join(", ");
+    return names ? `  • "${look.name || "look"}" [${look.mood || "?"}]: ${names}` : "";
+  };
+  const recentSummaries = previousLooks.slice(-8).map(lookSummary).filter(Boolean).join("\n");
   const recentItemIds = [...new Set(previousLooks.flatMap(l => l.items || []))];
+  const recentNames = recentItemIds
+    .map(id => itemById.get(id))
+    .filter(Boolean)
+    .map(it => it.name)
+    .slice(0, 40);
+  // Also keep the short-id avoid list for items that ARE in the current pool
   const recentShortIds = recentItemIds.map(id => reverseMap[id]).filter(Boolean);
-  const usedItemsNote = recentShortIds.length > 0
-    ? `RECENTLY USED (strongly prefer items NOT on this list — show her variety): ${recentShortIds.join(", ")}`
+  const usedItemsNote = recentSummaries
+    ? `RECENT LOOKS SHE HAS ALREADY SEEN (your new looks must feel fundamentally different in structure, color story, and hero pieces — do NOT repeat these combinations):
+${recentSummaries}
+
+RECENTLY USED PIECES (strongly avoid — she wants to see her other wardrobe): ${recentNames.join(", ")}${recentShortIds.length > 0 ? `\nIn the current wardrobe list, these correspond to: ${recentShortIds.join(", ")}` : ""}`
     : "";
 
   // ── STEP 11: Build HC1 — dynamic required slots constraint ──
@@ -922,23 +951,35 @@ HC4: No item in more than one look.
 HC5: EVERY LOOK must have a lower half — a Bottom (pants/skirt) OR a Dress.
 HC6: COLOR COHESION — within each look, every item must belong to ONE deliberate 2-3 color palette. No random pieces that don't coordinate. Shoes + bag must match each other (same color family).
 HC7: If you include a belt, it must serve the silhouette (cinch a blazer, define a waist on a tucked blouse). Do NOT belt fitted dresses, structured dresses, or printed dresses.
-HC8: VARIETY — across these 3 looks, at most 1 item total may come from the RECENTLY USED list below. Show her pieces she hasn't seen lately.
-${isCasualOccasion ? "HC9: THIS IS A CASUAL OCCASION — NO cocktail dresses, NO gowns, NO stilettos, NO formal separates. Blazers only if explicitly unstructured. Think weekend, not workday or evening." : ""}
+HC8: RECENT VARIETY — across these 3 looks, at most 1 item total may come from the RECENT LOOKS list below. Show her pieces she hasn't seen lately.
+HC9: THE 3 LOOKS MUST BE FUNDAMENTALLY DIFFERENT FROM EACH OTHER:
+  (a) DIFFERENT COLOR STORIES — no two looks can share the same dominant color or tonal story. If look 1 is all-black tonal, look 2 must NOT be all-black and must NOT be a similar dark neutral palette.
+  (b) DIFFERENT SILHOUETTES — at least one look must use a dress or skirt if dresses/skirts are available in the wardrobe. Do NOT default all 3 looks to pants. If all 3 use pants, the generation has failed.
+  (c) DIFFERENT HERO PIECES — each look's hero (the standout item it's built around) must be from a different category: e.g. look 1 hero = trouser, look 2 hero = dress, look 3 hero = knit. Never repeat the same hero category.
+  (d) DIFFERENT FOOTWEAR TYPES — across the 3 looks, vary footwear. Don't give her 3 pairs of flats or 3 pairs of heels. Mix flats + loafers + low boots, or heels + flats + boots, etc.
+  (e) DIFFERENT TOP TREATMENTS — don't tuck every top, don't layer every look, don't do the same sleeve length in all 3.
+${isCasualOccasion ? "HC10: THIS IS A CASUAL OCCASION — NO cocktail dresses, NO gowns, NO stilettos, NO formal separates. Blazers only if explicitly unstructured. Think weekend, not workday or evening. Flat/low footwear strongly preferred." : ""}
 ${usedItemsNote}
 
 HER FAVORITE COLOR PAIRINGS: ${colorPairs}
 
+${availabilityNote}
+
 WARDROBE (${curated.length} items — ONLY use items from this list):
 ${inventory}
 
-BUILD 3 LOOKS. Each should feel like a different stylist's take:
+BUILD 3 LOOKS. Each is a genuinely DIFFERENT take — different hero, different color, different silhouette. Three stylists, three points of view, one client:
 1. ${selectedMoods[0].name} — ${selectedMoods[0].brief}
 2. ${selectedMoods[1].name} — ${selectedMoods[1].brief}
 3. ${selectedMoods[2].name} — ${selectedMoods[2].brief}
 
+BEFORE WRITING JSON: lay out your 3 looks side by side. If any two share the same color story, the same hero category, or the same silhouette formula — throw one out and rebuild it. If all 3 use pants, rebuild one with a dress or skirt. If all 3 use flats, rebuild one with a different shoe type. Variety is the whole point.
+
 QUALITY CHECK before outputting — reject and rebuild any look that fails:
 - Can you name the color story in 3 words? (e.g. "navy-black tonal", "burgundy + ivory") If not, the look has no story.
-- Is there texture contrast? (silk vs wool, leather vs knit, matte vs sheen) If every piece is the same weight, it's flat.
+- Are the 3 looks' color stories clearly different from each other? If two look alike, rebuild one.
+- Is there texture contrast WITHIN each look? (silk vs wool, leather vs knit, matte vs sheen) If every piece is the same weight, it's flat.
+- Do the 3 looks use different hero pieces and different silhouettes?
 ${qualityCheckFinal}
 
 Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"1-2 sentences: how to wear it, what to tuck/layer/cinch, the key proportion or texture move"}]}
@@ -955,8 +996,8 @@ Generation seed: ${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 3000,
-      temperature: 0.75,
+      max_tokens: 4000,
+      temperature: 0.85,
       messages: [{ role: "user", content: prompt }]
     })
   });
