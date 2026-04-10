@@ -4145,19 +4145,22 @@ function buildCollageLayout(items, suggestionSlots = []) {
   // which matches portrait clothing images tightly.
   if (hasDress) {
     // ── DRESS-BASED FLAT-LAY ──
+    // Canvas is 4:5 (width:height = 0.80). Product photos are ~3:4 portrait.
+    // A slot with w:50, h:53 gives pixel aspect (50/100*858)/(53/100*1073) ≈ 0.75,
+    // which matches typical product-photo aspect — minimal dead space with contain.
     if (hasLayer) {
-      // Layer LEFT, dress RIGHT. Both dominant. Shoes + bag hug the bottom of the dress.
-      place("layer",  { x:  0, y:  4,  w: 50, h: 64 }, 1);
-      place("dress",  { x: 38, y:  0,  w: 58, h: 72 }, 2);
-      if (hasShoes) place("shoes", { x:  6, y: 64, w: 38, h: 28 }, 3);
-      if (hasBag)   place("bag",   { x: 62, y: 66, w: 34, h: 30 }, 4);
-      if (hasBelt)  place("belt",  { x: 42, y: 68, w: 48, h: 18 }, 5);
+      // Layer LEFT, dress RIGHT. Shoes + bag + belt packed tight at the bottom.
+      place("layer",  { x:  0, y:  6, w: 50, h: 54 }, 1);
+      place("dress",  { x: 38, y:  0, w: 58, h: 62 }, 2);
+      if (hasShoes) place("shoes", { x:  4, y: 58, w: 38, h: 28 }, 3);
+      if (hasBag)   place("bag",   { x: 62, y: 58, w: 34, h: 30 }, 4);
+      if (hasBelt)  place("belt",  { x: 40, y: 64, w: 48, h: 18 }, 5);
     } else {
       // Dress only (or dress + items we're ignoring). Centered, dominant.
-      place("dress",  { x: 22, y:  0,  w: 60, h: 76 }, 1);
-      if (hasShoes) place("shoes", { x:  6, y: 68, w: 38, h: 28 }, 2);
-      if (hasBag)   place("bag",   { x: 62, y: 62, w: 34, h: 32 }, 3);
-      if (hasBelt)  place("belt",  { x: 26, y: 72, w: 48, h: 18 }, 4);
+      place("dress",  { x: 22, y:  0, w: 58, h: 68 }, 1);
+      if (hasShoes) place("shoes", { x:  4, y: 58, w: 38, h: 28 }, 2);
+      if (hasBag)   place("bag",   { x: 62, y: 54, w: 34, h: 32 }, 3);
+      if (hasBelt)  place("belt",  { x: 26, y: 66, w: 48, h: 18 }, 4);
     }
   } else {
     // ── SEPARATES FLAT-LAY ──
