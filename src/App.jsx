@@ -729,7 +729,249 @@ const MOODS = [
   { name: "Elevated Basics", brief: "Her best white tee. Her best jeans. Her best shoes (flats/loafers/sneakers). One unexpected accessory. The entire look is foundational pieces styled perfectly — no tricks, no trends, just great fit and quality. The hero is how it wears, not what it is. No blazers unless unstructured." },
 ];
 
-// ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
+// ── SILHOUETTE RECIPES — proportional strategy assigned per look ─────────────
+const SILHOUETTE_RECIPES = [
+  { id: "fitted-wide",     name: "Fitted Top × Wide Bottom",   brief: "Fitted knit, slim tucked top, or bodysuit paired with a wide-leg trouser, palazzo, or A-line midi skirt. The proportion creates a strong vertical line." },
+  { id: "relaxed-slim",    name: "Relaxed Top × Slim Bottom",  brief: "Oversized tee, unstructured blazer, or slouchy knit over straight denim, cigarette trouser, or pencil skirt. Contrast is the whole point." },
+  { id: "column",          name: "Column Slim",                brief: "Everything slim head to toe — fitted knit + cigarette pant + pointed flat. Pure elongation. Best in one color family." },
+  { id: "fluid-structured",name: "Fluid × Structured",         brief: "A soft silk/knit dress or fluid trouser under a sharp blazer, leather jacket, or tailored coat. Soft meets hard." },
+  { id: "cropped-highwaist",name:"Cropped × High Waist",       brief: "A fitted or cropped knit / tee / bodysuit tucked into a high-waist trouser or skirt. Shows the waist without trying." },
+];
+
+// ── COLOR STRATEGIES — palette approach assigned per look ────────────────────
+const COLOR_STRATEGIES = [
+  { id: "tonal",         name: "Tonal",              brief: "ONE color family, multiple shades and textures. All navy from ink to cobalt. All black from soft to hard. Richness from fabric, not hue." },
+  { id: "mono",          name: "Monochrome",         brief: "Strict single color. All ivory. All black. All deep burgundy. Zero variation — texture does the talking." },
+  { id: "neutral-punch", name: "Neutral + Punch",    brief: "Black/ivory/gray base + ONE piece in a strong cool color (burgundy, cobalt, deep teal, cool red). The punch is the whole look." },
+  { id: "two-tone",      name: "Two-Tone Cool",      brief: "Two cool colors paired deliberately. Navy + burgundy. Black + cobalt. Deep teal + ivory. No more than two colors total." },
+  { id: "warm-accent",   name: "Cool + Warm Accent", brief: "Cool base (black, navy, ivory) with chocolate brown as the warm grounding accent — belt, bag, or shoe only. Never the hero color." },
+];
+
+// ── ITEM ENRICHMENT — infer formality, fabric, silhouette, hero potential ────
+function enrichItem(it) {
+  const name  = (it.name  || "").toLowerCase();
+  const notes = (it.notes || "").toLowerCase();
+  const text  = `${name} ${notes}`;
+  const cat   = it.category;
+  const sub   = it.subcategory || "";
+
+  // Fabric inference from name/notes
+  const fabrics = [];
+  if (/\bsilk\b|\bsatin\b/.test(text))             fabrics.push("silk");
+  if (/\bcashmere\b|\bmerino\b|\bwool\b/.test(text)) fabrics.push("wool");
+  if (/\bdenim\b|\bjean\b/.test(text) || sub === "Jeans") fabrics.push("denim");
+  if (/\bleather\b/.test(text))                    fabrics.push("leather");
+  if (/\bcotton\b|\blinen\b/.test(text))           fabrics.push("cotton");
+  if (/\bvelvet\b/.test(text))                     fabrics.push("velvet");
+  if (cat === "Knits" && !fabrics.includes("wool")) fabrics.push("knit");
+
+  // Formality score (1 = athleisure, 5 = black-tie)
+  let formality = 3;
+  if (cat === "Athleisure" || cat === "Loungewear" || cat === "Swim") formality = 1;
+  else if (sub === "T-Shirts" || sub === "Tanks" || sub === "Jeans" || sub === "Shorts") formality = 2;
+  else if (cat === "Occasionwear" || sub === "Gowns" || sub === "Cocktail Dresses") formality = 5;
+  else if (sub === "Blazers" || sub === "Heels" || sub === "Trousers" || fabrics.includes("silk")) formality = 4;
+
+  // Silhouette hint from keywords
+  let silhouette = "";
+  if      (/\bwide[- ]?leg\b|\bpalazzo\b|\bflare\b/.test(text)) silhouette = "wide";
+  else if (/\bslim\b|\bcigarette\b|\bskinny\b|\btapered\b/.test(text)) silhouette = "slim";
+  else if (/\bstraight\b/.test(text))                           silhouette = "straight";
+  else if (/\boversized\b|\bslouchy\b|\brelaxed\b|\bbaggy\b/.test(text)) silhouette = "oversized";
+  else if (/\bfitted\b/.test(text))                             silhouette = "fitted";
+  else if (/\bA[- ]?line\b/.test(text))                         silhouette = "A-line";
+  else if (sub === "Maxi"  || /\bmaxi\b/.test(text))            silhouette = "maxi";
+  else if (sub === "Midi"  || /\bmidi\b/.test(text))            silhouette = "midi";
+  else if (sub === "Mini"  || /\bmini\b/.test(text))            silhouette = "mini";
+
+  // Hero score — likelihood this is a statement anchor piece
+  let heroScore = 0;
+  if (cat === "Outerwear")                               heroScore += 3;
+  if (cat === "Dresses" || cat === "Occasionwear")       heroScore += 3;
+  if (cat === "Knits" && fabrics.includes("wool"))       heroScore += 2;
+  if (cat === "Bottoms" && (sub === "Satin/Silk" || fabrics.includes("silk"))) heroScore += 2;
+  if (formality >= 4)                                    heroScore += 1;
+  const colorText = `${it.color || ""} ${it.color_family || ""} ${text}`.toLowerCase();
+  if (/\b(burgundy|cobalt|teal|crimson|emerald|cherry|wine|sapphire|oxblood|rust|forest)\b/.test(colorText)) heroScore += 2;
+  // Supporting-piece penalty
+  if (sub === "T-Shirts" || sub === "Tanks" || sub === "Tops" || sub === "Polos") heroScore -= 1;
+  if (cat === "Accessories" || cat === "Belts") heroScore -= 10;
+  if (cat === "Bags" || cat === "Shoes") heroScore -= 5;
+
+  return { ...it, _formality: formality, _fabrics: fabrics, _silhouette: silhouette, _heroScore: heroScore };
+}
+
+// ── DIRECTOR — algorithmically pick 3 distinct hero pieces ───────────────────
+function pickHeroes(enrichedItems, isCasual, slots) {
+  // Cannot be hero: accessories, bags, belts, shoes
+  let candidates = enrichedItems.filter(it =>
+    it.category !== "Bags" &&
+    it.category !== "Belts" &&
+    it.category !== "Accessories" &&
+    it.category !== "Shoes"
+  );
+
+  // For casual occasions, drop overly formal pieces as hero candidates
+  if (isCasual) {
+    candidates = candidates.filter(it =>
+      it.category !== "Occasionwear" &&
+      it.subcategory !== "Cocktail Dresses" &&
+      it.subcategory !== "Gowns" &&
+      it._formality < 5
+    );
+  }
+
+  // For professional occasions, drop athleisure/loungewear
+  if (slots?.banned?.categories?.includes("Athleisure")) {
+    candidates = candidates.filter(it =>
+      it.category !== "Athleisure" && it.category !== "Loungewear"
+    );
+  }
+
+  if (candidates.length === 0) return [];
+
+  // Sort by hero score (with a bit of random jitter for variety across generations)
+  candidates.sort((a, b) => (b._heroScore - a._heroScore) + (Math.random() - 0.5) * 1.5);
+
+  // Pick 3 with DISTINCT categories AND DISTINCT color families
+  const picked = [];
+  const usedCats = new Set();
+  const usedColors = new Set();
+  for (const it of candidates) {
+    if (picked.length >= 3) break;
+    const colorKey = (it.color_family || it.color || "?").toLowerCase();
+    const catClash = usedCats.has(it.category);
+    const colorClash = usedColors.has(colorKey);
+    if (catClash && colorClash) continue; // must differ in EITHER category or color
+    picked.push(it);
+    usedCats.add(it.category);
+    usedColors.add(colorKey);
+  }
+
+  // Fallback: pad with best remaining if we couldn't find 3 fully distinct
+  if (picked.length < 3) {
+    for (const it of candidates) {
+      if (picked.length >= 3) break;
+      if (!picked.find(p => p.id === it.id)) picked.push(it);
+    }
+  }
+
+  return picked.slice(0, 3);
+}
+
+// ── RECIPE ASSIGNMENT — give each look a distinct silhouette + color strategy
+function assignRecipes(heroes, moods) {
+  const silhouettes = shuffle([...SILHOUETTE_RECIPES]).slice(0, heroes.length);
+  const colors      = shuffle([...COLOR_STRATEGIES]).slice(0, heroes.length);
+  return heroes.map((hero, i) => {
+    let sil = silhouettes[i];
+    // Override: a dress hero should use the fluid×structured recipe
+    if (hero.category === "Dresses" || hero.category === "Occasionwear") {
+      sil = SILHOUETTE_RECIPES.find(r => r.id === "fluid-structured") || sil;
+    }
+    return {
+      hero,
+      silhouette:    sil,
+      colorStrategy: colors[i],
+      mood:          moods[i] || moods[0],
+    };
+  });
+}
+
+// ── STYLIST — build ONE look around a pre-assigned hero + recipe + strategy ──
+async function buildSingleLook(ctx) {
+  const { hero, silhouette, colorStrategy, mood, occasion, slots, inventory, idMap, reverseMap, activeProfile, weather, hc1, hc3, recentSummaries, request, apiKey, lookNumber, isCasual } = ctx;
+  const heroShortId = reverseMap[hero.id] || "???";
+
+  const prompt = `${activeProfile}
+
+YOU ARE BUILDING ONE LOOK (Look ${lookNumber} of 3) for ${occasion.toUpperCase()}.
+The other two stylists are building their own looks in parallel — YOU focus only on this one.
+
+╔══ YOUR ASSIGNMENT ══╗
+
+HERO PIECE (must appear in this look): ${heroShortId} — ${hero.name}${hero.color ? ` · ${hero.color}` : ""} [${hero.category}${hero.subcategory ? ` > ${hero.subcategory}` : ""}]
+  → This is the anchor. Build the entire look around it. Do NOT drop it.
+
+SILHOUETTE RECIPE: ${silhouette.name}
+  → ${silhouette.brief}
+
+COLOR STRATEGY: ${colorStrategy.name}
+  → ${colorStrategy.brief}
+
+MOOD: ${mood.name}
+  → ${mood.brief}
+
+╔══ OCCASION ══╗
+${slots.promptNote}
+${weather ? `WEATHER: ${weather}.` : ""}
+${request ? `HER REQUEST: "${request}"` : ""}
+
+╔══ THINK STEP BY STEP (internal, do not put in JSON) ══╗
+1. HERO ROLE — Why this hero? What role does it play (top, bottom, dress, layer)?
+2. COLOR CHOICE — Name your 2-3 exact colors. They must follow "${colorStrategy.name}".
+3. SILHOUETTE — Apply "${silhouette.name}". What's on top? What's on bottom? Don't fight the recipe.
+4. TEXTURE — Pick at least 2 different fabric weights. List them.
+5. SHOES + BAG — Same color family. Matching finish.
+6. FINISH — One accent (belt, scarf, jewelry) ONLY if it improves the silhouette. Otherwise skip.
+7. GUT CHECK — Does this feel like something she'd actually reach for? Is it ${isCasual ? "relaxed-cool, not dressed-up" : "strong and considered, not costumey"}?
+
+╔══ HARD CONSTRAINTS ══╗
+- Must contain: ${hc1}
+- 5-7 items total
+- ${hc3}
+- Every item ID must come from the WARDROBE list below
+- The hero piece ${heroShortId} MUST be in your items array
+- Colors must obey "${colorStrategy.name}" — no random fifth color
+- Shoes + bag must be same color family
+${isCasual ? "- NO cocktail dresses, NO gowns, NO stiletto heels, NO formal separates. Flat/low footwear strongly preferred. Blazers only if unstructured." : ""}
+${recentSummaries ? `\n╔══ SHE RECENTLY SAW THESE LOOKS — avoid repeating their vibe or pieces ══╗\n${recentSummaries}\n` : ""}
+
+╔══ WARDROBE (only use items from this list) ══╗
+${inventory}
+
+Respond with ONLY this JSON — no markdown, no commentary:
+{
+  "name": "2-4 word name that captures the vibe",
+  "mood": "${mood.name}",
+  "occasion": "${occasion}",
+  "colorStory": "3-word color description (e.g. 'navy tonal', 'burgundy + ivory', 'black mono')",
+  "reasoning": "2 sentences: why the hero, how you built around it, what the key move is",
+  "items": ["${heroShortId}", "W###", "W###", "W###", "W###"],
+  "styling": "1-2 sentences: how to wear it — tuck, layer, cinch, proportion move"
+}
+
+Seed: ${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1500,
+      temperature: 0.9,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data.content?.map(b => b.text || "").join("") || "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  const jsonMatch = clean.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error(`Look ${lookNumber}: No JSON in response`);
+  return JSON.parse(jsonMatch[0]);
+}
+
+// ── AI OUTFIT GENERATION — Director → Parallel Stylists architecture ─────────
 async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}, styleExcludes = new Set()) {
 
   // ── STEP 1: Get occasion slots (deterministic) ──
@@ -825,23 +1067,22 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     reverseMap[it.id] = short;
   });
 
-  // ── STEP 8: Build annotated inventory (color family first for easy matching) ──
-  const inventory = curated.map((it, i) => {
+  // ── STEP 8: Enrich curated items with formality, fabric, silhouette, hero score ──
+  const enriched = curated.map(enrichItem);
+
+  // ── STEP 8b: Build annotated inventory (color + tags + fabric hint) ──
+  const inventory = enriched.map((it, i) => {
     const short = `W${String(i + 1).padStart(3, "0")}`;
     const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `, ${it.knit_fit}` : ""}]` : "";
     const sleeveTag = (it.category === "Tops" || it.category === "Knits") ? ` [sleeve:${getSleeveType(it)}]` : "";
+    const fabTag = it._fabrics.length ? ` {${it._fabrics.join("/")}}` : "";
+    const silTag = it._silhouette ? ` {${it._silhouette}}` : "";
+    const formTag = it._formality >= 4 ? " {formal}" : it._formality <= 2 ? " {casual}" : "";
     const colorInfo = it.color_family ? `[${it.color_family}]` : it.color ? `[${it.color}]` : "[?]";
-    return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}${it.notes ? ` | ${it.notes}` : ""}`;
+    return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${fabTag}${silTag}${formTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}`;
   }).join("\n");
 
-  // ── STEP 8b: Category availability summary — force AI to notice what's available ──
-  const skirtCount = curated.filter(it => it.subcategory === "Skirts" || (it.category === "Bottoms" && /skirt/i.test(it.name || ""))).length;
-  const dressCount = curated.filter(it => it.category === "Dresses" || it.category === "Occasionwear").length;
-  const pantsCount = curated.filter(it => it.category === "Bottoms" && !(it.subcategory === "Skirts" || /skirt/i.test(it.name || ""))).length;
-  const skirtDressAvailable = skirtCount + dressCount > 0;
-  const availabilityNote = `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the 3 looks MUST use a skirt or dress (not pants) — otherwise you've wasted her wardrobe." : "Only pants available, so all 3 looks will use pants."}`;
-
-  // ── STEP 9: Select moods — comprehensive occasion-to-mood mapping ──
+  // ── STEP 9: Mood pool selection — curated per-occasion ──
   const MOOD_POOLS = {
     Interview:     ["Tonal Power","The Statement Blazer","Quiet Luxury","Power Feminine"],
     Executive:     ["Tonal Power","The Statement Blazer","Quiet Luxury","Silk & Structure","Power Feminine"],
@@ -860,12 +1101,8 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const allowedMoodNames = new Set(MOOD_POOLS[occasion] || MOOD_POOLS.Daytime);
   const moodPool = MOODS.filter(m => allowedMoodNames.has(m.name));
   const selectedMoods = shuffle(moodPool.length >= 3 ? moodPool : MOODS).slice(0, 3);
-  console.log("[StyleMe] occasion:", occasion, "→ moods:", selectedMoods.map(m => m.name));
 
-  // ── STEP 10: Build rich recent-looks context — use real item names, not per-generation short IDs ──
-  // BUG FIX: previously mapped old item IDs through the current reverseMap, which drops any item
-  // not in the current curated pool — so the anti-repeat signal was silently near-empty. Now we
-  // resolve item IDs against the full `items` list so the AI sees names regardless of pool churn.
+  // ── STEP 10: Recent-looks summary (anti-repeat signal) ──
   const itemById = new Map(items.map(it => [it.id, it]));
   const lookSummary = (look) => {
     const names = (look.items || [])
@@ -875,27 +1112,12 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
       .join(", ");
     return names ? `  • "${look.name || "look"}" [${look.mood || "?"}]: ${names}` : "";
   };
-  const recentSummaries = previousLooks.slice(-8).map(lookSummary).filter(Boolean).join("\n");
-  const recentItemIds = [...new Set(previousLooks.flatMap(l => l.items || []))];
-  const recentNames = recentItemIds
-    .map(id => itemById.get(id))
-    .filter(Boolean)
-    .map(it => it.name)
-    .slice(0, 40);
-  // Also keep the short-id avoid list for items that ARE in the current pool
-  const recentShortIds = recentItemIds.map(id => reverseMap[id]).filter(Boolean);
-  const usedItemsNote = recentSummaries
-    ? `RECENT LOOKS SHE HAS ALREADY SEEN (your new looks must feel fundamentally different in structure, color story, and hero pieces — do NOT repeat these combinations):
-${recentSummaries}
+  const recentSummaries = previousLooks.slice(-6).map(lookSummary).filter(Boolean).join("\n");
 
-RECENTLY USED PIECES (strongly avoid — she wants to see her other wardrobe): ${recentNames.join(", ")}${recentShortIds.length > 0 ? `\nIn the current wardrobe list, these correspond to: ${recentShortIds.join(", ")}` : ""}`
-    : "";
-
-  // ── STEP 11: Build HC1 — dynamic required slots constraint ──
+  // ── STEP 11: HC1 — dynamic required slots constraint (shared across stylists) ──
   const hc1Parts = [];
   for (const [role, constraint] of Object.entries(slots.required)) {
     if (role === "bottom") {
-      // Bottom is special: "bottom OR dress" — a dress can replace top+bottom
       hc1Parts.push("1 Bottom (pants/skirt) OR 1 Dress — every look MUST cover the lower half");
       continue;
     }
@@ -907,124 +1129,64 @@ RECENTLY USED PIECES (strongly avoid — she wants to see her other wardrobe): $
       hc1Parts.push(`1 ${friendly} item (${constraint.join(" or ")})`);
     }
   }
-  const hc1 = hc1Parts.length > 0 ? `Must contain: ${hc1Parts.join(" + ")}` : "Use appropriate items for the occasion.";
+  const hc1 = hc1Parts.length > 0 ? hc1Parts.join(" + ") : "Use appropriate items for the occasion.";
 
-  // ── STEP 12: Build weather constraint ──
+  // ── STEP 12: HC3 — weather constraint ──
   const w = (weather || "").toLowerCase();
-  const isHot = /hot|85/i.test(w);
-  const isWarm = /warm|70-84/i.test(w);
-  const isCool = /cool|40-54/i.test(w);
-  const isCold = /cold|below 40/i.test(w);
   let hc3 = "";
-  if (isHot) hc3 = "Weather is HOT. No long sleeves. No layers heavier than a blazer.";
-  else if (isWarm) hc3 = "Weather is WARM. Light layers only. No heavy knits or coats.";
-  else if (isCool) hc3 = "Weather is COOL. Long sleeves required. Layer up. No sleeveless, no sandals.";
-  else if (isCold) hc3 = "Weather is COLD. Heavy layers required. No sleeveless, no short sleeves, no sandals.";
-  else hc3 = "Dress appropriately for the weather indicated.";
+  if      (/hot|85/i.test(w))       hc3 = "Weather is HOT. No long sleeves. No layers heavier than a blazer.";
+  else if (/warm|70-84/i.test(w))   hc3 = "Weather is WARM. Light layers only. No heavy knits or coats.";
+  else if (/cool|40-54/i.test(w))   hc3 = "Weather is COOL. Long sleeves required. Layer up. No sleeveless, no sandals.";
+  else if (/cold|below 40/i.test(w)) hc3 = "Weather is COLD. Heavy layers required. No sleeveless, no short sleeves, no sandals.";
+  else                              hc3 = "Dress appropriately for the weather indicated.";
 
-  const weatherLine = weather ? `WEATHER: ${weather}.` : "";
-  const colorPairs = stylePrefs.colorPairs.join(", ");
-
-  // ── STEP 13: Select style profile based on occasion vibe ──
+  // ── STEP 13: Active style profile based on occasion vibe ──
   const CASUAL_OCCASIONS = new Set(["Lunch/Brunch","Daytime","Athleisure","Activity","Travel","Lounge"]);
-  const isCasualOccasion = CASUAL_OCCASIONS.has(occasion);
-  const activeProfile = isCasualOccasion ? CASUAL_STYLE_PROFILE : STYLE_PROFILE;
-  const qualityCheckFinal = isCasualOccasion
-    ? `- Does this look like she THREW IT ON — not like she planned it? If it feels "dressed up", rebuild.
-- Would she wear this to run errands or meet a friend for coffee? If it feels too formal or evening, rebuild.
-- Are shoes + bag in the same color family? If not, fix it.`
-    : `- Would this look make someone stop on a NYC street and think "she's someone"? If not, it's not good enough.
-- Are shoes + bag in the same color family? If not, fix it.`;
+  const isCasual = CASUAL_OCCASIONS.has(occasion);
+  const activeProfile = isCasual ? CASUAL_STYLE_PROFILE : STYLE_PROFILE;
 
-  // ── STEP 14: Build structured prompt ──
-  const prompt = `${activeProfile}
+  // ── STEP 14: DIRECTOR — algorithmically pick 3 distinct hero pieces ──
+  const heroes = pickHeroes(enriched, isCasual, slots);
+  if (heroes.length === 0) {
+    throw new Error(`No suitable hero pieces available for ${occasion}. Try adding statement items to your wardrobe.`);
+  }
 
-OCCASION: ${slots.promptNote}
-${weatherLine}
-${request ? `HER REQUEST: "${request}"` : ""}
+  // ── STEP 15: RECIPE ASSIGNMENT — distinct silhouette + color strategy per look ──
+  const plans = assignRecipes(heroes, selectedMoods);
+  console.log(
+    "[StyleMe]", occasion, "→ plans:",
+    plans.map(p => `${p.hero.name.slice(0,24)} · ${p.mood.name} · ${p.silhouette.name} · ${p.colorStrategy.name}`)
+  );
 
-HARD CONSTRAINTS (violation of ANY = FAILED LOOK):
-HC1: ${hc1}
-HC2: 5-7 items per look.
-HC3: ${hc3}
-HC4: No item in more than one look.
-HC5: EVERY LOOK must have a lower half — a Bottom (pants/skirt) OR a Dress.
-HC6: COLOR COHESION — within each look, every item must belong to ONE deliberate 2-3 color palette. No random pieces that don't coordinate. Shoes + bag must match each other (same color family).
-HC7: If you include a belt, it must serve the silhouette (cinch a blazer, define a waist on a tucked blouse). Do NOT belt fitted dresses, structured dresses, or printed dresses.
-HC8: RECENT VARIETY — across these 3 looks, at most 1 item total may come from the RECENT LOOKS list below. Show her pieces she hasn't seen lately.
-HC9: THE 3 LOOKS MUST BE FUNDAMENTALLY DIFFERENT FROM EACH OTHER:
-  (a) DIFFERENT COLOR STORIES — no two looks can share the same dominant color or tonal story. If look 1 is all-black tonal, look 2 must NOT be all-black and must NOT be a similar dark neutral palette.
-  (b) DIFFERENT SILHOUETTES — at least one look must use a dress or skirt if dresses/skirts are available in the wardrobe. Do NOT default all 3 looks to pants. If all 3 use pants, the generation has failed.
-  (c) DIFFERENT HERO PIECES — each look's hero (the standout item it's built around) must be from a different category: e.g. look 1 hero = trouser, look 2 hero = dress, look 3 hero = knit. Never repeat the same hero category.
-  (d) DIFFERENT FOOTWEAR TYPES — across the 3 looks, vary footwear. Don't give her 3 pairs of flats or 3 pairs of heels. Mix flats + loafers + low boots, or heels + flats + boots, etc.
-  (e) DIFFERENT TOP TREATMENTS — don't tuck every top, don't layer every look, don't do the same sleeve length in all 3.
-${isCasualOccasion ? "HC10: THIS IS A CASUAL OCCASION — NO cocktail dresses, NO gowns, NO stilettos, NO formal separates. Blazers only if explicitly unstructured. Think weekend, not workday or evening. Flat/low footwear strongly preferred." : ""}
-${usedItemsNote}
+  // ── STEP 16: STYLIST — 3 PARALLEL calls, each building ONE look around its hero ──
+  const commonCtx = {
+    occasion, slots, inventory, idMap, reverseMap,
+    activeProfile, weather, hc1, hc3, recentSummaries, request, apiKey, isCasual,
+  };
+  const stylistResults = await Promise.all(
+    plans.map((plan, i) =>
+      buildSingleLook({ ...plan, ...commonCtx, lookNumber: i + 1 })
+        .catch(e => { console.error(`[StyleMe] Look ${i+1} failed:`, e.message); return null; })
+    )
+  );
+  const rawLooks = stylistResults.filter(Boolean);
+  if (rawLooks.length === 0) throw new Error("All look generations failed — try again.");
 
-HER FAVORITE COLOR PAIRINGS: ${colorPairs}
-
-${availabilityNote}
-
-WARDROBE (${curated.length} items — ONLY use items from this list):
-${inventory}
-
-BUILD 3 LOOKS. Each is a genuinely DIFFERENT take — different hero, different color, different silhouette. Three stylists, three points of view, one client:
-1. ${selectedMoods[0].name} — ${selectedMoods[0].brief}
-2. ${selectedMoods[1].name} — ${selectedMoods[1].brief}
-3. ${selectedMoods[2].name} — ${selectedMoods[2].brief}
-
-BEFORE WRITING JSON: lay out your 3 looks side by side. If any two share the same color story, the same hero category, or the same silhouette formula — throw one out and rebuild it. If all 3 use pants, rebuild one with a dress or skirt. If all 3 use flats, rebuild one with a different shoe type. Variety is the whole point.
-
-QUALITY CHECK before outputting — reject and rebuild any look that fails:
-- Can you name the color story in 3 words? (e.g. "navy-black tonal", "burgundy + ivory") If not, the look has no story.
-- Are the 3 looks' color stories clearly different from each other? If two look alike, rebuild one.
-- Is there texture contrast WITHIN each look? (silk vs wool, leather vs knit, matte vs sheen) If every piece is the same weight, it's flat.
-- Do the 3 looks use different hero pieces and different silhouettes?
-${qualityCheckFinal}
-
-Respond ONLY with JSON: {"looks":[{"name":"2-4 words","mood":"mood","occasion":"${occasion}","items":["W001",...],"styling":"1-2 sentences: how to wear it, what to tuck/layer/cinch, the key proportion or texture move"}]}
-
-Generation seed: ${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 4000,
-      temperature: 0.85,
-      messages: [{ role: "user", content: prompt }]
-    })
+  // ── STEP 17: Resolve short IDs → real IDs, guarantee hero is included ──
+  const resolvedLooks = rawLooks.map((look, lookIdx) => {
+    const resolved = (look.items || []).map(id => {
+      const clean = String(id).replace(/^ID:/i, "").trim();
+      return idMap[clean] || clean;
+    });
+    // Hero safety-net: if the stylist somehow dropped its assigned hero, force it back in
+    const heroId = plans[lookIdx]?.hero?.id;
+    if (heroId && !resolved.includes(heroId)) resolved.unshift(heroId);
+    return { ...look, items: resolved };
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
-  }
-
-  const data = await res.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("No valid JSON in AI response. Raw: " + text.slice(0, 200));
-  const parsed = JSON.parse(jsonMatch[0]);
-  // Map short IDs (W001, W002…) back to real Supabase UUIDs
-  if (parsed.looks) {
-    parsed.looks.forEach(look => {
-      if (look.items) look.items = look.items.map(id => {
-        const clean = String(id).replace(/^ID:/i, "").trim();
-        return idMap[clean] || clean;   // resolve short ID → real ID, fallback to raw
-      });
-    });
-    // Post-validate looks against required slots
-    parsed.looks = validateLooks(parsed.looks, occasion, idMap, items);
-  }
-  return parsed;
+  // ── STEP 18: Post-validate (bottoms-or-dress, required roles) ──
+  const validated = validateLooks(resolvedLooks, occasion, idMap, items);
+  return { looks: validated.length > 0 ? validated : resolvedLooks };
 }
 
 // ── POST-VALIDATION ─────────────────────────────────────────────────────────
@@ -3819,7 +3981,13 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
             </div>
           ) : slot.image ? (
             <img src={slot.image} alt={slot.name}
-              style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
+              style={{
+                width:"100%", height:"100%", display:"block",
+                // Belts and accessories: center in both axes so thin horizontal images fill the slot.
+                // Clothing (tops, dresses, outerwear): anchor to top so the shoulders align.
+                objectFit:   (slot.category === "Belts" || slot.category === "Bags" || slot.category === "Accessories" || slot.category === "Shoes") ? "contain" : "contain",
+                objectPosition: (slot.category === "Belts" || slot.category === "Accessories") ? "center center" : "center top",
+              }}/>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
               <span style={s.collageCat}>{slot.category?.[0]}</span>
@@ -3880,50 +4048,48 @@ function buildCollageLayout(items, suggestionSlots = []) {
   if (hasDress) {
     // ── DRESS-BASED LAYOUT ──
     if (hasLayer) {
-      // Dress + Layer (cardigan/blazer over dress)
+      // Dress + Layer (cardigan/blazer over dress). Belt placed in corner so dress stays dominant.
       place("layer",  { x:1,  y:1,  w:44, h:50 });
       place("dress",  { x:47, y:1,  w:48, h:56 });
-      if (hasBelt) place("belt", { x:20, y:52, w:40, h:14 });
-      if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
-      if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
+      if (hasBelt) place("belt", { x:2, y:58, w:48, h:24 });
+      if (hasShoes) place("shoes", { x:50, y:60, w:22, h:24 });
+      if (hasBag) place("bag", { x:72, y:62, w:26, h:28 });
     } else if (hasTop) {
-      // Dress + Top (e.g. bodysuit under dress, or top layered)
+      // Dress + Top
       place("top",    { x:1,  y:1,  w:40, h:44 });
       place("dress",  { x:43, y:1,  w:52, h:56 });
-      if (hasBelt) place("belt", { x:20, y:52, w:40, h:14 });
-      if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
-      if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
+      if (hasBelt) place("belt", { x:2, y:58, w:48, h:24 });
+      if (hasShoes) place("shoes", { x:50, y:60, w:22, h:24 });
+      if (hasBag) place("bag", { x:72, y:62, w:26, h:28 });
     } else {
-      // Dress only (no layer or top)
-      place("dress",  { x:18, y:1,  w:52, h:58 });
-      if (hasBelt) place("belt", { x:14, y:52, w:44, h:14 });
-      if (hasShoes) place("shoes", { x:1, y:64, w:32, h:28 });
-      if (hasBag) place("bag", { x:55, y:64, w:32, h:28 });
+      // Dress only
+      place("dress",  { x:36, y:1,  w:44, h:58 });
+      if (hasBelt) place("belt", { x:2, y:62, w:50, h:26 });
+      if (hasShoes) place("shoes", { x:54, y:64, w:22, h:28 });
+      if (hasBag) place("bag", { x:76, y:66, w:22, h:28 });
     }
   } else {
     // ── SEPARATES-BASED LAYOUT (top + bottom) ──
+    // Belts placed in the top-right corner at a larger size so they read as a real piece.
     if (hasLayer && hasTop) {
-      // Layer + Top + Bottom
-      place("layer",  { x:1,  y:1,  w:46, h:44 });
-      place("top",    { x:49, y:1,  w:46, h:40 });
-      if (hasBelt) place("belt", { x:1, y:43, w:46, h:14 });
-      place("bottom", { x:1,  y:48, w:44, h:46 });
-      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
-      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
+      place("layer",  { x:1,  y:1,  w:42, h:44 });
+      place("top",    { x:45, y:1,  w:40, h:38 });
+      if (hasBelt) place("belt", { x:45, y:41, w:52, h:22 });
+      place("bottom", { x:1,  y:48, w:42, h:46 });
+      if (hasBag) place("bag", { x:45, y:65, w:26, h:26 });
+      if (hasShoes) place("shoes", { x:72, y:65, w:26, h:26 });
     } else if (hasLayer) {
-      // Layer + Bottom (no separate top — layer IS the top)
-      place("layer",  { x:14, y:1,  w:52, h:44 });
-      if (hasBelt) place("belt", { x:4, y:40, w:46, h:14 });
+      place("layer",  { x:14, y:1,  w:48, h:44 });
+      if (hasBelt) place("belt", { x:64, y:3, w:34, h:22 });
       place("bottom", { x:1,  y:48, w:44, h:46 });
-      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
-      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
+      if (hasBag) place("bag", { x:47, y:48, w:26, h:26 });
+      if (hasShoes) place("shoes", { x:72, y:72, w:26, h:24 });
     } else {
-      // Top + Bottom (no layer)
-      place("top",    { x:14, y:1,  w:52, h:44 });
-      if (hasBelt) place("belt", { x:4, y:40, w:46, h:14 });
-      place("bottom", { x:1,  y:48, w:44, h:46 });
-      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
-      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
+      place("top",    { x:14, y:1,  w:48, h:42 });
+      if (hasBelt) place("belt", { x:62, y:3, w:36, h:24 });
+      place("bottom", { x:1,  y:46, w:44, h:48 });
+      if (hasBag) place("bag", { x:47, y:46, w:26, h:26 });
+      if (hasShoes) place("shoes", { x:72, y:70, w:26, h:26 });
     }
   }
 
