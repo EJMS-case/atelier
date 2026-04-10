@@ -865,12 +865,20 @@ function assignRecipes(heroes, moods) {
   const colors      = shuffle([...COLOR_STRATEGIES]).slice(0, heroes.length);
   return heroes.map((hero, i) => {
     let sil = silhouettes[i];
-    // Override: a dress hero should use the fluid×structured recipe
-    if (hero.category === "Dresses" || hero.category === "Occasionwear") {
+    // Determine the look type from the hero's category.
+    // "dress"     → hero is a dress/jumpsuit; no separate top or knit pullover allowed
+    // "separates" → hero is a top/knit/bottom/layer; no dress allowed
+    const isDressHero = hero.category === "Dresses"
+                     || hero.category === "Jumpsuits"
+                     || (hero.category === "Occasionwear" && /dress|gown/i.test(hero.subcategory || ""));
+    const lookType = isDressHero ? "dress" : "separates";
+    // A dress hero needs the fluid×structured recipe so layering options make sense.
+    if (isDressHero) {
       sil = SILHOUETTE_RECIPES.find(r => r.id === "fluid-structured") || sil;
     }
     return {
       hero,
+      lookType,
       silhouette:    sil,
       colorStrategy: colors[i],
       mood:          moods[i] || moods[0],
@@ -880,8 +888,30 @@ function assignRecipes(heroes, moods) {
 
 // ── STYLIST — build ONE look around a pre-assigned hero + recipe + strategy ──
 async function buildSingleLook(ctx) {
-  const { hero, silhouette, colorStrategy, mood, occasion, slots, inventory, idMap, reverseMap, activeProfile, weather, hc1, hc3, recentSummaries, request, apiKey, lookNumber, isCasual } = ctx;
+  const { hero, lookType, silhouette, colorStrategy, mood, occasion, slots, inventory, idMap, reverseMap, activeProfile, weather, hc1, hc3, recentSummaries, request, apiKey, lookNumber, isCasual } = ctx;
   const heroShortId = reverseMap[hero.id] || "???";
+
+  // ── Look-type rules: dress-based vs separates-based, NEVER both ──
+  const lookTypeRule = lookType === "dress"
+    ? `╔══ LOOK TYPE: DRESS-BASED ══╗
+This look is built around a DRESS. Absolutely forbidden:
+  ✗ NO separate top (no blouse, shirt, tee, bodysuit)
+  ✗ NO pullover knit (no turtleneck, no crewneck sweater)
+  ✗ NO second dress
+Allowed as an optional layer OVER the dress:
+  ✓ A tailored blazer (open)
+  ✓ A structured coat or trench (open)
+  ✓ A leather jacket (open)
+  ✓ An open cardigan
+If the layer is a closed knit pullover you will fail the brief. A dress does NOT need a top.`
+    : `╔══ LOOK TYPE: SEPARATES-BASED ══╗
+This look is built around separates (top + bottom). Absolutely forbidden:
+  ✗ NO dress of any kind
+  ✗ NO jumpsuit
+Required:
+  ✓ One top (blouse/shirt/tee/bodysuit) OR a knit pullover
+  ✓ One bottom (trouser/skirt/jean/short)
+  ✓ Shoes + bag`;
 
   const prompt = `${activeProfile}
 
@@ -902,19 +932,22 @@ COLOR STRATEGY: ${colorStrategy.name}
 MOOD: ${mood.name}
   → ${mood.brief}
 
+${lookTypeRule}
+
 ╔══ OCCASION ══╗
 ${slots.promptNote}
 ${weather ? `WEATHER: ${weather}.` : ""}
 ${request ? `HER REQUEST: "${request}"` : ""}
 
 ╔══ THINK STEP BY STEP (internal, do not put in JSON) ══╗
-1. HERO ROLE — Why this hero? What role does it play (top, bottom, dress, layer)?
+1. HERO ROLE — What role does the hero play? Is this a DRESS look or a SEPARATES look? (Match the LOOK TYPE above.)
 2. COLOR CHOICE — Name your 2-3 exact colors. They must follow "${colorStrategy.name}".
 3. SILHOUETTE — Apply "${silhouette.name}". What's on top? What's on bottom? Don't fight the recipe.
-4. TEXTURE — Pick at least 2 different fabric weights. List them.
-5. SHOES + BAG — Same color family. Matching finish.
+4. TEXTURE — Pick at least 2 different fabric weights. List them. No two pieces in the same fabric.
+5. SHOES + BAG — Same color family. Matching finish. Either both polished leather, both suede, or both soft.
 6. FINISH — One accent (belt, scarf, jewelry) ONLY if it improves the silhouette. Otherwise skip.
-7. GUT CHECK — Does this feel like something she'd actually reach for? Is it ${isCasual ? "relaxed-cool, not dressed-up" : "strong and considered, not costumey"}?
+7. THE UNEXPECTED MOVE — Every editorial look has ONE element that surprises: an unexpected color pairing, a high-low mix, a proportion flip, a masculine piece on a feminine silhouette. Name yours. A look without a surprise is a uniform.
+8. GUT CHECK — Does this feel like something she'd actually reach for? Is it ${isCasual ? "relaxed-cool, not dressed-up" : "strong and considered, not costumey"}? Would a stylist pin this to a mood board?
 
 ╔══ HARD CONSTRAINTS ══╗
 - Must contain: ${hc1}
@@ -922,6 +955,7 @@ ${request ? `HER REQUEST: "${request}"` : ""}
 - ${hc3}
 - Every item ID must come from the WARDROBE list below
 - The hero piece ${heroShortId} MUST be in your items array
+- OBEY THE LOOK TYPE ABOVE — violating it is an automatic fail
 - Colors must obey "${colorStrategy.name}" — no random fifth color
 - Shoes + bag must be same color family
 ${isCasual ? "- NO cocktail dresses, NO gowns, NO stiletto heels, NO formal separates. Flat/low footwear strongly preferred. Blazers only if unstructured." : ""}
@@ -936,9 +970,9 @@ Respond with ONLY this JSON — no markdown, no commentary:
   "mood": "${mood.name}",
   "occasion": "${occasion}",
   "colorStory": "3-word color description (e.g. 'navy tonal', 'burgundy + ivory', 'black mono')",
-  "reasoning": "2 sentences: why the hero, how you built around it, what the key move is",
+  "reasoning": "2 sentences: why the hero, and what the unexpected move is",
   "items": ["${heroShortId}", "W###", "W###", "W###", "W###"],
-  "styling": "1-2 sentences: how to wear it — tuck, layer, cinch, proportion move"
+  "styling": "1-2 sentences: the proportion move — tuck, layer, cinch, cuff, unbutton"
 }
 
 Seed: ${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -1159,7 +1193,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const plans = assignRecipes(heroes, selectedMoods);
   console.log(
     "[StyleMe]", occasion, "→ plans:",
-    plans.map(p => `${p.hero.name.slice(0,24)} · ${p.mood.name} · ${p.silhouette.name} · ${p.colorStrategy.name}`)
+    plans.map(p => `${p.hero.name.slice(0,24)} [${p.lookType}] · ${p.mood.name} · ${p.silhouette.name} · ${p.colorStrategy.name}`)
   );
 
   // ── STEP 16: STYLIST — 3 PARALLEL calls, each building ONE look around its hero ──
@@ -1197,14 +1231,44 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
 function validateLooks(looks, occasion, idMap, allItems) {
   const slots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Daytime;
 
-  // PASS 1: Hard filter — every look MUST have a bottom or dress. Non-negotiable.
+  // Helper: does this look mix incompatible pieces?
+  // A dress cannot cohabit with a separate top or a closed pullover knit.
+  // Allowed layers over a dress: cardigans, blazers, coats, jackets.
+  const hasIllegalMix = (resolved) => {
+    const hasDress = resolved.some(it =>
+      it.category === "Dresses" ||
+      it.category === "Jumpsuits" ||
+      (it.category === "Occasionwear" && /dress|gown/i.test(it.subcategory || ""))
+    );
+    if (!hasDress) return false;
+    const hasSeparateTop = resolved.some(it => it.category === "Tops");
+    const hasPullover    = resolved.some(it => it.category === "Knits" && it.subcategory === "Pullovers");
+    return hasSeparateTop || hasPullover;
+  };
+
+  // Helper: separates-based looks must have both a top and a bottom, no dress.
+  const hasSeparatesMismatch = (resolved) => {
+    const hasDress = resolved.some(it =>
+      it.category === "Dresses" ||
+      it.category === "Jumpsuits" ||
+      (it.category === "Occasionwear" && /dress|gown/i.test(it.subcategory || ""))
+    );
+    const hasBottom = resolved.some(it => it.category === "Bottoms");
+    // If there's no dress AND no bottom, it's broken (unless it's a jumpsuit, already handled).
+    return !hasDress && !hasBottom;
+  };
+
+  // PASS 1: Hard filter — every look MUST have a bottom or dress + no illegal mixes.
   const withLowerHalf = looks.filter(look => {
     if (!look.items || look.items.length < 4) return false;
     const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
     if (resolved.length < 4) return false;
-    const hasBottom = resolved.some(it => it.category === "Bottoms");
-    const hasDress = resolved.some(it => it.category === "Dresses" || it.category === "Occasionwear" || it.category === "Jumpsuits");
-    return hasBottom || hasDress;
+    if (hasSeparatesMismatch(resolved)) return false;
+    if (hasIllegalMix(resolved)) {
+      console.warn("[Atelier] Rejected look — dress mixed with separate top/pullover:", look.name);
+      return false;
+    }
+    return true;
   });
 
   // PASS 2: Soft filter — check occasion-specific required roles
@@ -1232,27 +1296,26 @@ async function generateElevation(look, lookItems, apiKey) {
     `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.notes ? ` — ${it.notes}` : ""}`
   ).join("\n");
 
-  const prompt = `${STYLE_PROFILE}
+  const prompt = `${EDITORIAL_STYLIST}
 
-You are a world-class stylist elevating an existing outfit. Here is the current look:
+You are elevating an existing look with three specific, shoppable pieces. Here is the current look:
 LOOK NAME: "${look.name}"
 OCCASION: ${look.occasion}
 CURRENT ITEMS:
 ${currentItems}
 
-Your task: Suggest exactly 3 specific pieces to purchase that would meaningfully elevate this look. Be specific, shoppable, and direct.
+Your task: suggest exactly 3 pieces that would push this from "good" to "editorial". Draw from the full landscape of modern designers — not a fixed brand list. Match the color story that's already working in the look; don't force a different palette.
 
-ELEVATION RULES:
-- Suggest pieces from these brands: Totême, Max Mara, Theory, COS, A.P.C., Khaite, Vince, Club Monaco, Banana Republic, Reformation, Sezane, Mango, & Other Stories, Arket, Massimo Dutti, Ganni, Zimmermann
-- Include one splurge piece ($150–$350), one mid-range ($75–$175), one accessible ($30–$100)
-- Every piece must work with her Dark Winter palette (cool, deep, jewel tones — no warm/muted)
+RULES:
+- Price tiers: one splurge ($150–$350), one mid-range ($75–$175), one accessible ($30–$100)
 - Mix adds and swaps — don't only suggest additions
-- Be specific: "Totême double-breasted wool blazer in navy" not just "a navy blazer"
+- Be specific: brand + silhouette + color ("The Row wool trench in ink") not "a coat"
+- Every suggestion must improve either the silhouette, the texture mix, or the color story — and you must name which
 
 You MUST respond with ONLY this exact JSON structure — no text before or after, no markdown:
 {
   "elevatedLookName": "evocative 2-4 word name for the elevated version",
-  "elevatedWhy": "one sentence on why the elevated version is more powerful",
+  "elevatedWhy": "one sentence on what the elevation actually changes",
   "elevations": [
     {
       "type": "add",
@@ -1261,8 +1324,8 @@ You MUST respond with ONLY this exact JSON structure — no text before or after
       "item": "Brand + specific item name",
       "description": "one sentence: color, fabric, silhouette",
       "price": "$XXX–$XXX",
-      "why": "why this specific piece elevates this specific look",
-      "colorNote": "why this works for Dark Winter coloring"
+      "why": "why this specific piece elevates THIS look",
+      "colorNote": "how the color works with the existing story"
     },
     {
       "type": "swap",
@@ -1272,7 +1335,7 @@ You MUST respond with ONLY this exact JSON structure — no text before or after
       "description": "one sentence: color, fabric, silhouette",
       "price": "$XXX–$XXX",
       "why": "why swapping this in is an upgrade",
-      "colorNote": "why this works for Dark Winter coloring"
+      "colorNote": "how the color works with the existing story"
     },
     {
       "type": "add",
@@ -1282,7 +1345,7 @@ You MUST respond with ONLY this exact JSON structure — no text before or after
       "description": "one sentence: color, fabric, silhouette",
       "price": "$XXX–$XXX",
       "why": "why this accessory completes the look",
-      "colorNote": "why this works for Dark Winter coloring"
+      "colorNote": "how the color works with the existing story"
     }
   ]
 }`;
@@ -3995,10 +4058,12 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
             <img src={slot.image} alt={slot.name}
               style={{
                 width:"100%", height:"100%", display:"block",
-                // Belts and accessories: center in both axes so thin horizontal images fill the slot.
-                // Clothing (tops, dresses, outerwear): anchor to top so the shoulders align.
-                objectFit:   (slot.category === "Belts" || slot.category === "Bags" || slot.category === "Accessories" || slot.category === "Shoes") ? "contain" : "contain",
-                objectPosition: (slot.category === "Belts" || slot.category === "Accessories") ? "center center" : "center top",
+                objectFit: "contain",
+                // Center-center everywhere — previously "center top" for clothing left
+                // a huge empty gap at the bottom of each slot because product photos are
+                // portrait-oriented and didn't fill the tall slots. Center-center splits
+                // the whitespace evenly so pieces feel closer together.
+                objectPosition: "center center",
               }}/>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
@@ -4071,75 +4136,65 @@ function buildCollageLayout(items, suggestionSlots = []) {
     return slot;
   };
 
+  // Slot dimensions are sized so that product photos (mostly portrait, ~3:4 to
+  // ~4:5 aspect ratio) fill most of the slot when drawn with `object-fit:
+  // contain`. Canvas is 4:5 (100 wide × 125 tall in percent units), so a slot
+  // with w:50, h:70 → actual pixel ratio of 50 : (70 × 1.25) = 50:87.5 ≈ 3:5,
+  // which matches portrait clothing images tightly.
   if (hasDress) {
     // ── DRESS-BASED FLAT-LAY ──
-    // Dress is always the hero. Everything else overlaps around it.
     if (hasLayer) {
-      // Layer (coat/jacket/cardigan) drapes to the LEFT of the dress, slightly behind.
-      place("layer",  { x: -4, y:  4,  w: 52, h: 78 }, 1);
-      place("dress",  { x: 36, y:  2,  w: 54, h: 82 }, 2);
-      // Shoes tuck UNDER the dress hem (overlap top of shoes with bottom of dress).
-      if (hasShoes) place("shoes", { x: 44, y: 74, w: 30, h: 22 }, 3);
-      // Bag rests against the right side of the dress, overlapping the hem.
-      if (hasBag)   place("bag",   { x: 72, y: 62, w: 28, h: 30 }, 4);
-      // Belt curves across the layer's middle — a real stylist move.
-      if (hasBelt)  place("belt",  { x: -2, y: 76, w: 44, h: 18 }, 5);
-    } else if (hasTop) {
-      // Dress + Top variant — top to the left, dress dominant right.
-      place("top",    { x: -2, y:  4,  w: 44, h: 54 }, 1);
-      place("dress",  { x: 38, y:  2,  w: 56, h: 84 }, 2);
-      if (hasShoes) place("shoes", { x: 44, y: 76, w: 30, h: 22 }, 3);
-      if (hasBag)   place("bag",   { x: 72, y: 60, w: 28, h: 30 }, 4);
-      if (hasBelt)  place("belt",  { x:  0, y: 62, w: 42, h: 18 }, 5);
+      // Layer LEFT, dress RIGHT. Both dominant. Shoes + bag hug the bottom of the dress.
+      place("layer",  { x:  0, y:  4,  w: 50, h: 64 }, 1);
+      place("dress",  { x: 38, y:  0,  w: 58, h: 72 }, 2);
+      if (hasShoes) place("shoes", { x:  6, y: 64, w: 38, h: 28 }, 3);
+      if (hasBag)   place("bag",   { x: 62, y: 66, w: 34, h: 30 }, 4);
+      if (hasBelt)  place("belt",  { x: 42, y: 68, w: 48, h: 18 }, 5);
     } else {
-      // Dress only — centered, dominant, with shoes + bag hugging it.
-      place("dress",  { x: 22, y:  2,  w: 62, h: 88 }, 1);
-      if (hasShoes) place("shoes", { x: 30, y: 76, w: 34, h: 24 }, 2);
-      if (hasBag)   place("bag",   { x: 70, y: 58, w: 30, h: 32 }, 3);
-      if (hasBelt)  place("belt",  { x: -2, y: 56, w: 40, h: 18 }, 4);
+      // Dress only (or dress + items we're ignoring). Centered, dominant.
+      place("dress",  { x: 22, y:  0,  w: 60, h: 76 }, 1);
+      if (hasShoes) place("shoes", { x:  6, y: 68, w: 38, h: 28 }, 2);
+      if (hasBag)   place("bag",   { x: 62, y: 62, w: 34, h: 32 }, 3);
+      if (hasBelt)  place("belt",  { x: 26, y: 72, w: 48, h: 18 }, 4);
     }
   } else {
     // ── SEPARATES FLAT-LAY ──
-    // Layer (or top) anchors the upper half; bottom anchors the lower half;
-    // they OVERLAP at the waistline so it reads as one outfit, not two halves.
+    // Torso piece anchors the upper 55% of the canvas, bottom anchors the lower 55%,
+    // they OVERLAP at the waistline (~y:40–55) so the outfit reads as one silhouette.
     if (hasLayer && hasTop) {
-      // Layer is the dominant piece — drape it over the top which peeks out.
-      place("top",    { x:  2, y:  2,  w: 48, h: 46 }, 1);
-      place("layer",  { x: 34, y:  0,  w: 58, h: 62 }, 2);
-      // Bottom overlaps the bottom edge of layer/top at the waist.
-      place("bottom", { x: 10, y: 40, w: 52, h: 58 }, 3);
-      // Belt crosses the overlap line where top meets bottom.
-      if (hasBelt)  place("belt",  { x: 56, y: 52, w: 42, h: 16 }, 4);
-      // Shoes tuck under the bottom hem.
-      if (hasShoes) place("shoes", { x: 56, y: 72, w: 30, h: 24 }, 5);
-      // Bag rests against the right side, behind the layer.
-      if (hasBag)   place("bag",   { x: 70, y: 30, w: 28, h: 32 }, 6);
+      // Three torso pieces: top (small, left), layer (dominant, center), bottom below.
+      place("top",    { x:  0, y:  0,  w: 40, h: 42 }, 1);
+      place("layer",  { x: 30, y:  0,  w: 60, h: 56 }, 2);
+      place("bottom", { x: 10, y: 40, w: 58, h: 58 }, 3);
+      if (hasBelt)  place("belt",  { x: 52, y: 50, w: 46, h: 16 }, 4);
+      if (hasShoes) place("shoes", { x:  0, y: 70, w: 36, h: 28 }, 5);
+      if (hasBag)   place("bag",   { x: 64, y: 60, w: 34, h: 32 }, 6);
     } else if (hasLayer && hasBottom) {
-      // No top — layer becomes the whole torso.
-      place("layer",  { x:  8, y:  0,  w: 58, h: 58 }, 1);
-      place("bottom", { x: 14, y: 40, w: 56, h: 58 }, 2);
-      if (hasBelt)  place("belt",  { x: 58, y:  4, w: 40, h: 18 }, 3);
-      if (hasShoes) place("shoes", { x: 62, y: 72, w: 32, h: 24 }, 4);
-      if (hasBag)   place("bag",   { x: 66, y: 30, w: 30, h: 34 }, 5);
+      // Layer + bottom, no separate top. Layer is the whole torso.
+      place("layer",  { x:  6, y:  0,  w: 62, h: 58 }, 1);
+      place("bottom", { x: 10, y: 42, w: 60, h: 58 }, 2);
+      if (hasBelt)  place("belt",  { x: 56, y:  2, w: 42, h: 18 }, 3);
+      if (hasShoes) place("shoes", { x: 58, y: 72, w: 38, h: 26 }, 4);
+      if (hasBag)   place("bag",   { x: 64, y: 30, w: 34, h: 34 }, 5);
     } else if (hasTop && hasBottom) {
-      // Top + bottom, no layer. Overlap at the waist.
-      place("top",    { x: 12, y:  0,  w: 56, h: 54 }, 1);
-      place("bottom", { x: 10, y: 44, w: 58, h: 56 }, 2);
-      if (hasBelt)  place("belt",  { x: 58, y: 48, w: 40, h: 18 }, 3);
-      if (hasShoes) place("shoes", { x: 60, y: 72, w: 32, h: 24 }, 4);
-      if (hasBag)   place("bag",   { x: 66, y: 18, w: 30, h: 32 }, 5);
+      // Top + bottom, no layer.
+      place("top",    { x:  8, y:  0,  w: 60, h: 54 }, 1);
+      place("bottom", { x:  6, y: 42, w: 62, h: 58 }, 2);
+      if (hasBelt)  place("belt",  { x: 56, y: 48, w: 42, h: 18 }, 3);
+      if (hasShoes) place("shoes", { x: 58, y: 72, w: 38, h: 26 }, 4);
+      if (hasBag)   place("bag",   { x: 64, y: 18, w: 34, h: 32 }, 5);
     } else if (hasBottom) {
-      // Just bottoms — rare, but handle it.
-      place("bottom", { x: 14, y: 10, w: 62, h: 80 }, 1);
-      if (hasShoes) place("shoes", { x: 60, y: 66, w: 34, h: 26 }, 2);
-      if (hasBag)   place("bag",   { x: 66, y:  8, w: 30, h: 34 }, 3);
-      if (hasBelt)  place("belt",  { x: 60, y: 38, w: 38, h: 18 }, 4);
+      // Just a bottom + accessories.
+      place("bottom", { x: 10, y:  6, w: 64, h: 82 }, 1);
+      if (hasShoes) place("shoes", { x: 58, y: 66, w: 38, h: 28 }, 2);
+      if (hasBag)   place("bag",   { x: 64, y:  8, w: 34, h: 34 }, 3);
+      if (hasBelt)  place("belt",  { x: 56, y: 38, w: 42, h: 18 }, 4);
     } else {
-      // Fallback — just lay out whatever's there.
-      place("top",    { x: 14, y:  4,  w: 58, h: 70 }, 1);
-      if (hasShoes) place("shoes", { x: 58, y: 68, w: 34, h: 26 }, 2);
-      if (hasBag)   place("bag",   { x: 66, y: 14, w: 30, h: 34 }, 3);
-      if (hasBelt)  place("belt",  { x: 56, y: 38, w: 40, h: 18 }, 4);
+      // Fallback.
+      place("top",    { x: 10, y:  4, w: 60, h: 70 }, 1);
+      if (hasShoes) place("shoes", { x: 58, y: 68, w: 38, h: 28 }, 2);
+      if (hasBag)   place("bag",   { x: 64, y: 14, w: 34, h: 34 }, 3);
+      if (hasBelt)  place("belt",  { x: 56, y: 38, w: 42, h: 18 }, 4);
     }
   }
 
