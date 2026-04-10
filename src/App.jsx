@@ -208,14 +208,22 @@ function filterByWeather(items, weather) {
     if (it.category === "Swim") return false;
 
     if (isHot) {
-      if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
-      if (it.subcategory === "Coats") return false;
+      // Hot (85°+): no knits at all, no outerwear, no boots, no long sleeves on tops.
+      if (it.category === "Knits") return false;
+      if (it.category === "Outerwear") return false;
       if (it.subcategory === "Boots") return false;
+      if (it.category === "Tops" && sleeve === "long") return false;
       if (isHeavyFabric) return false;
       return true;
     }
     if (isWarm) {
+      // Warm (70–84°): no pullovers, no heavy outerwear, no boots, no blazers/coats.
+      // Cardigans and light jackets allowed (can be carried/layered on the cool end).
+      if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
       if (it.subcategory === "Coats") return false;
+      if (it.subcategory === "Blazers" && /wool|tweed|flannel/i.test(nameNotes)) return false;
+      if (it.subcategory === "Boots") return false;
+      if (it.category === "Outerwear" && /puffer|down|shearling|fleece|trench/i.test(nameNotes)) return false;
       if (isHeavyFabric) return false;
       return true;
     }
@@ -830,8 +838,29 @@ function pickHeroes(enrichedItems, isCasual, slots) {
 
   if (candidates.length === 0) return [];
 
-  // Sort by hero score (with a bit of random jitter for variety across generations)
-  candidates.sort((a, b) => (b._heroScore - a._heroScore) + (Math.random() - 0.5) * 1.5);
+  // ── FRESHNESS BOOST — surface pieces that haven't been worn recently ──
+  // Items never worn or worn 30+ days ago are "fresh" and get a big boost.
+  // Items worn in the last 7 days are "fatigued" and get penalized so we
+  // don't keep pulling the same 20 pieces every generation.
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  const freshnessBoost = (item) => {
+    if (!item.last_worn) return 2;                        // never-worn: full boost
+    const daysSince = (now - new Date(item.last_worn).getTime()) / DAY;
+    if (daysSince >= 30) return 2;                        // stale-fresh: full boost
+    if (daysSince >= 14) return 1;                        // moderately fresh
+    if (daysSince <= 3)  return -4;                       // just worn: heavy penalty
+    if (daysSince <= 7)  return -2;                       // recently worn: penalty
+    return 0;                                             // neutral zone
+  };
+
+  // Sort by (heroScore + freshness) with WIDE random jitter so top-scoring
+  // pieces don't always win. ±3 means two items within 6 points can flip.
+  candidates.sort((a, b) => {
+    const aScore = a._heroScore + freshnessBoost(a);
+    const bScore = b._heroScore + freshnessBoost(b);
+    return (bScore - aScore) + (Math.random() - 0.5) * 6;
+  });
 
   // Pick 3 with DISTINCT categories AND DISTINCT color families
   const picked = [];
@@ -1169,7 +1198,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   const w = (weather || "").toLowerCase();
   let hc3 = "";
   if      (/hot|85/i.test(w))        hc3 = "Weather is HOT (85°F+). No long sleeves. No knits. No coats or jackets. Breathable fabrics only.";
-  else if (/warm|70-84/i.test(w))    hc3 = "Weather is WARM (70–84°F). Light layers only — no heavy knits, no coats, unstructured blazer at most.";
+  else if (/warm|70-84/i.test(w))    hc3 = "Weather is WARM (70–84°F). Absolutely no sweaters, no pullovers, no boots, no coats, no wool blazers. A light unstructured jacket or open cardigan is the maximum layer. Think silk, cotton, linen, poplin, denim. Short sleeves are welcome.";
   else if (/mild|55-69/i.test(w))    hc3 = "Weather is MILD (55–69°F). Light jacket or unstructured blazer works. A cardigan or trench is perfect. No puffers, no shearling.";
   else if (/cool|40-54/i.test(w))    hc3 = "Weather is COOL (40–54°F). Include a real layer — coat, blazer, or substantial knit. Long sleeves underneath. No open-toe shoes.";
   else if (/cold|below 40/i.test(w)) hc3 = "Weather is COLD (below 40°F). Heavy layers required — coat + knit or coat + structured layer. No sleeveless, no short sleeves, no open-toe shoes.";
@@ -1258,25 +1287,53 @@ function validateLooks(looks, occasion, idMap, allItems) {
     return !hasDress && !hasBottom;
   };
 
-  // PASS 1: Hard filter — every look MUST have a bottom or dress + no illegal mixes.
-  const withLowerHalf = looks.filter(look => {
-    if (!look.items || look.items.length < 4) return false;
-    const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
-    if (resolved.length < 4) return false;
-    if (hasSeparatesMismatch(resolved)) return false;
-    if (hasIllegalMix(resolved)) {
-      console.warn("[Atelier] Rejected look — dress mixed with separate top/pullover:", look.name);
-      return false;
-    }
-    return true;
-  });
+  // Helper: resolve an ID list to real item objects.
+  const resolveIds = (ids) => ids.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
 
-  // PASS 2: Soft filter — check occasion-specific required roles
+  // Helper: try to repair an illegal dress+top/pullover mix by dropping the
+  // offending piece. Returns a new look if repair succeeded, null otherwise.
+  const repairIllegalMix = (look) => {
+    const resolved = resolveIds(look.items || []);
+    if (!hasIllegalMix(resolved)) return look;
+    // Drop separate tops and closed pullovers; keep the dress + everything else.
+    const kept = resolved.filter(it =>
+      it.category !== "Tops" &&
+      !(it.category === "Knits" && it.subcategory === "Pullovers")
+    );
+    if (kept.length < 4) return null; // not enough items left to be a complete look
+    console.warn("[Atelier] Repaired look by dropping top/pullover from dress-based outfit:", look.name);
+    return { ...look, items: kept.map(it => it.id) };
+  };
+
+  // PASS 1: Hard filter — every look MUST have a bottom or dress + no illegal mixes.
+  const withLowerHalf = looks
+    .map(look => {
+      if (!look.items || look.items.length < 4) return null;
+      const repaired = repairIllegalMix(look);
+      if (!repaired) return null;
+      const resolved = resolveIds(repaired.items);
+      if (resolved.length < 4) return null;
+      if (hasSeparatesMismatch(resolved)) return null;
+      return repaired;
+    })
+    .filter(Boolean);
+
+  // PASS 2: Soft filter — check occasion-specific required roles.
+  // Dress-based looks are exempt from the "top" requirement because a dress
+  // already covers the torso. Jumpsuits are similarly exempt from "top" AND
+  // "bottom" checks.
   const fullyValid = withLowerHalf.filter(look => {
-    const resolved = look.items.map(id => allItems.find(it => it.id === (idMap[id] || id))).filter(Boolean);
+    const resolved = resolveIds(look.items);
+    const hasDress = resolved.some(it =>
+      it.category === "Dresses" ||
+      it.category === "Jumpsuits" ||
+      (it.category === "Occasionwear" && /dress|gown/i.test(it.subcategory || ""))
+    );
+    const hasJumpsuit = resolved.some(it => it.category === "Jumpsuits");
     for (const [role, constraint] of Object.entries(slots.required)) {
       if (constraint === true) continue;
       if (role === "bottom") continue; // Already enforced in pass 1
+      if (role === "top" && (hasDress || hasJumpsuit)) continue; // dress covers torso
       const roleCategories = role === "top" ? ["Tops","Knits"] : role === "layer" ? ["Outerwear","Knits"] : role === "shoes" ? ["Shoes"] : role === "bag" ? ["Bags"] : role === "dress" ? ["Dresses","Occasionwear"] : [];
       if (!resolved.some(it => roleCategories.includes(it.category)) && role !== "dress") return false;
     }
@@ -4164,42 +4221,44 @@ function buildCollageLayout(items, suggestionSlots = []) {
     }
   } else {
     // ── SEPARATES FLAT-LAY ──
-    // Torso piece anchors the upper 55% of the canvas, bottom anchors the lower 55%,
-    // they OVERLAP at the waistline (~y:40–55) so the outfit reads as one silhouette.
+    // Canvas is 4:5 (858×1073). For product photos at ~3:4 aspect, a slot
+    // with w/h ≈ 0.94 packs tightly. Torso pieces stack above the waistline,
+    // bottom stacks below with generous overlap so the silhouette reads whole.
     if (hasLayer && hasTop) {
       // Three torso pieces: top (small, left), layer (dominant, center), bottom below.
-      place("top",    { x:  0, y:  0,  w: 40, h: 42 }, 1);
-      place("layer",  { x: 30, y:  0,  w: 60, h: 56 }, 2);
-      place("bottom", { x: 10, y: 40, w: 58, h: 58 }, 3);
-      if (hasBelt)  place("belt",  { x: 52, y: 50, w: 46, h: 16 }, 4);
-      if (hasShoes) place("shoes", { x:  0, y: 70, w: 36, h: 28 }, 5);
-      if (hasBag)   place("bag",   { x: 64, y: 60, w: 34, h: 32 }, 6);
+      place("top",    { x:  0, y:  2, w: 42, h: 44 }, 1);
+      place("layer",  { x: 34, y:  0, w: 58, h: 52 }, 2);
+      place("bottom", { x:  8, y: 40, w: 58, h: 54 }, 3);
+      if (hasBelt)  place("belt",  { x: 52, y: 44, w: 46, h: 16 }, 4);
+      if (hasShoes) place("shoes", { x:  2, y: 68, w: 38, h: 26 }, 5);
+      if (hasBag)   place("bag",   { x: 62, y: 58, w: 36, h: 32 }, 6);
     } else if (hasLayer && hasBottom) {
       // Layer + bottom, no separate top. Layer is the whole torso.
-      place("layer",  { x:  6, y:  0,  w: 62, h: 58 }, 1);
-      place("bottom", { x: 10, y: 42, w: 60, h: 58 }, 2);
-      if (hasBelt)  place("belt",  { x: 56, y:  2, w: 42, h: 18 }, 3);
-      if (hasShoes) place("shoes", { x: 58, y: 72, w: 38, h: 26 }, 4);
-      if (hasBag)   place("bag",   { x: 64, y: 30, w: 34, h: 34 }, 5);
+      place("layer",  { x:  4, y:  0, w: 62, h: 54 }, 1);
+      place("bottom", { x:  8, y: 42, w: 60, h: 54 }, 2);
+      if (hasBelt)  place("belt",  { x: 52, y: 42, w: 46, h: 16 }, 3);
+      if (hasShoes) place("shoes", { x:  2, y: 68, w: 38, h: 26 }, 4);
+      if (hasBag)   place("bag",   { x: 62, y: 14, w: 36, h: 34 }, 5);
     } else if (hasTop && hasBottom) {
-      // Top + bottom, no layer.
-      place("top",    { x:  8, y:  0,  w: 60, h: 54 }, 1);
-      place("bottom", { x:  6, y: 42, w: 62, h: 58 }, 2);
-      if (hasBelt)  place("belt",  { x: 56, y: 48, w: 42, h: 18 }, 3);
-      if (hasShoes) place("shoes", { x: 58, y: 72, w: 38, h: 26 }, 4);
-      if (hasBag)   place("bag",   { x: 64, y: 18, w: 34, h: 32 }, 5);
+      // Top + bottom, no layer. Pack right-column accessories closer together
+      // so there's no vertical gap between the bag and the shoes.
+      place("top",    { x:  4, y:  0, w: 58, h: 50 }, 1);
+      place("bottom", { x:  6, y: 40, w: 58, h: 56 }, 2);
+      if (hasBelt)  place("belt",  { x: 50, y: 42, w: 46, h: 16 }, 3);
+      if (hasBag)   place("bag",   { x: 62, y: 14, w: 36, h: 34 }, 4);
+      if (hasShoes) place("shoes", { x: 58, y: 58, w: 40, h: 30 }, 5);
     } else if (hasBottom) {
       // Just a bottom + accessories.
-      place("bottom", { x: 10, y:  6, w: 64, h: 82 }, 1);
-      if (hasShoes) place("shoes", { x: 58, y: 66, w: 38, h: 28 }, 2);
-      if (hasBag)   place("bag",   { x: 64, y:  8, w: 34, h: 34 }, 3);
-      if (hasBelt)  place("belt",  { x: 56, y: 38, w: 42, h: 18 }, 4);
+      place("bottom", { x: 10, y:  4, w: 62, h: 74 }, 1);
+      if (hasShoes) place("shoes", { x: 56, y: 60, w: 40, h: 30 }, 2);
+      if (hasBag)   place("bag",   { x: 62, y:  6, w: 36, h: 34 }, 3);
+      if (hasBelt)  place("belt",  { x: 50, y: 44, w: 46, h: 16 }, 4);
     } else {
       // Fallback.
-      place("top",    { x: 10, y:  4, w: 60, h: 70 }, 1);
-      if (hasShoes) place("shoes", { x: 58, y: 68, w: 38, h: 28 }, 2);
-      if (hasBag)   place("bag",   { x: 64, y: 14, w: 34, h: 34 }, 3);
-      if (hasBelt)  place("belt",  { x: 56, y: 38, w: 42, h: 18 }, 4);
+      place("top",    { x: 10, y:  4, w: 60, h: 66 }, 1);
+      if (hasShoes) place("shoes", { x: 56, y: 64, w: 40, h: 30 }, 2);
+      if (hasBag)   place("bag",   { x: 62, y: 12, w: 36, h: 34 }, 3);
+      if (hasBelt)  place("belt",  { x: 50, y: 44, w: 46, h: 16 }, 4);
     }
   }
 
