@@ -1,37 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
-const STYLE_PROFILE = `
-You are the styling director at Khaite. You build looks that stop traffic and close deals.
+// One voice for every occasion. No persona, no palette list, no brand list —
+// the wardrobe itself carries the palette, and the mood + silhouette recipe
+// (assigned per look) dictates energy. This keeps the AI in pure stylist mode.
+const EDITORIAL_STYLIST = `
+You are an elite editorial stylist — the kind who pins mood boards for magazine covers and styles private clients who already have beautiful wardrobes. Your only job is to make every look feel collected, considered, and a little unexpected. Never trying too hard. Never costumey.
 
-CLIENT: Dark Winter coloring, NYC private equity. Her closet is Totême, Khaite, Max Mara, Theory, COS.
-PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm brown is an accent neutral. No yellow, no warm/muted tones.
-ONLY use items from her wardrobe inventory below. Never invent items.
+ONLY use items from the wardrobe inventory below. Never invent pieces.
 
-YOUR STYLING METHOD (follow for EVERY look):
-1. HERO PIECE: Start with one standout item — a statement blazer, a luxe knit, a silk dress, a bold color piece. Build everything else around it.
-2. COLOR STORY: Pick 2-3 colors max. Every item must belong. Tonal depth (navy blazer + cobalt silk + black trouser) > random color mixing. Monochromatic in mixed textures is always chic.
-3. SILHOUETTE: Fitted × relaxed creates tension. Oversized blazer + slim trouser. Fluid dress + structured coat. Fitted knit + wide-leg pant. Same volume head-to-toe is amateur.
-4. TEXTURE CONTRAST: At least 2 different fabric weights per look. Silk × wool. Leather × cashmere. Satin × structured cotton. Matte × sheen. This is what separates editorial from basic.
-5. FINISHING: Shoes + bag must match each other in color family AND feel intentional with the outfit. A belt ONLY when it architecturally improves the silhouette — cinching a blazer, breaking a tonal look, defining a waist. Never on fitted/printed/structured dresses. When in doubt, skip it.
-6. THE TEST: Would this look photographed from across the street make someone think "she's someone"? If not, rebuild.
+YOUR METHOD (apply to every look):
+1. HERO — Anchor on one standout piece. Build AROUND it, not next to it. Every other item supports the hero.
+2. COLOR — 2–3 colors, any family that flatters the hero. Tonal beats contrast nine times out of ten. Monochromatic in mixed textures is always chic.
+3. SILHOUETTE — Fitted × relaxed creates tension. Same volume head-to-toe is amateur. Never all-fitted, never all-oversized.
+4. TEXTURE — Minimum two fabric weights per look. Silk × wool. Leather × knit. Denim × cashmere. Satin × structured cotton. This is what separates editorial from basic.
+5. FINISHING — Shoes + bag in the same color family, always. One intentional accessory move; if in doubt, leave it. Belts only when they architecturally improve the silhouette.
+6. THE TEST — Would a stylist pin this to a mood board? If not, rebuild.
 `;
-
-// ── CASUAL STYLE PROFILE — used for daytime/weekend occasions ────────────────
-const CASUAL_STYLE_PROFILE = `
-You are a stylist for a cool, private client in NYC. She dresses for herself, not for a meeting.
-Dark Winter coloring. Her closet is Totême, Khaite, Max Mara, Theory, COS, A.P.C., Vince.
-PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white, warm brown as accent neutral. No yellow, no warm/muted tones.
-ONLY use items from her wardrobe inventory below. Never invent items.
-
-YOUR STYLING METHOD (follow for EVERY look):
-1. HERO PIECE: one standout — a luxe knit, great denim, a perfect tee, an unexpected accessory. Build around it. NOT a blazer unless it's unstructured and thrown on.
-2. COLOR STORY: 2-3 colors max. Tonal > contrast. Restraint is the whole point.
-3. SILHOUETTE: fitted × relaxed. A slim tee + straight denim. A fluid trouser + fitted knit. Never all-volume, never all-fitted.
-4. TEXTURE CONTRAST: at least 2 weights — denim × cashmere, leather × cotton, silk × wool.
-5. FINISHING: shoes + bag in same color family, never try-hard. Flats, loafers, sneakers, or low boots. Heels only if explicitly requested. Skip the belt unless it actively improves the line.
-6. THE TEST: does this look like something a cool private client would throw on to meet a friend — NOT something she'd wear to "look stylish" and NOT something she'd wear to a boardroom? If it feels costumey, formal, or like an evening look, rebuild.
-`;
+// Kept for backwards compatibility with any code that still references the old name.
+const STYLE_PROFILE = EDITORIAL_STYLIST;
+const CASUAL_STYLE_PROFILE = EDITORIAL_STYLIST;
 
 // ── STYLING PRINCIPLES — injected into shopping prompts ──────────
 const STYLING_PRINCIPLES = `
@@ -195,54 +183,66 @@ function getSleeveType(item) {
 }
 
 // ── WEATHER-BASED FILTERING ───────────────────────────────────────────────────
+// Softer than before — we only remove items that would genuinely be wrong for
+// the weather. Borderline items (a short-sleeve tee in cool weather, say) stay
+// in the pool because the stylist can layer over them.
 function filterByWeather(items, weather) {
   const w = (weather || "").toLowerCase();
   if (!w || w === "any") return items;
 
-  const isHot  = /hot|85/i.test(w);
-  const isWarm = /warm|70-84/i.test(w);
-  const isMild = /mild|55-69/i.test(w);
-  const isCool = /cool|40-54/i.test(w);
-  const isCold = /cold|below 40/i.test(w);
+  const isHot   = /hot|85/i.test(w);
+  const isWarm  = /warm|70-84/i.test(w);
+  const isMild  = /mild|55-69/i.test(w);
+  const isCool  = /cool|40-54/i.test(w);
+  const isCold  = /cold|below 40/i.test(w);
+  const isRainy = /rain/i.test(w);
 
   return items.filter(it => {
-    const sleeve = getSleeveType(it);
+    const sleeve    = getSleeveType(it);
     const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "")).toLowerCase();
-    const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer/i.test(nameNotes);
+    const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|down|padded/i.test(nameNotes);
+    const isSuede       = /\bsuede\b/i.test(nameNotes);
+    const isOpenToe     = it.subcategory === "Sandals" || /sandal|open[- ]toe|slide|mule/i.test(nameNotes);
+
+    // Swim is never for any of the weather chips — it's its own occasion.
+    if (it.category === "Swim") return false;
 
     if (isHot) {
-      if (it.category === "Knits") return false;
+      if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
+      if (it.subcategory === "Coats") return false;
       if (it.subcategory === "Boots") return false;
-      if (it.subcategory === "Coats" || it.subcategory === "Jackets") return false;
-      if (it.category === "Tops" && sleeve === "long") return false;
       if (isHeavyFabric) return false;
-      if (it.category === "Swim") return false;
       return true;
     }
     if (isWarm) {
-      if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
       if (it.subcategory === "Coats") return false;
       if (isHeavyFabric) return false;
-      if (it.category === "Swim") return false;
       return true;
     }
     if (isMild) {
-      if (it.subcategory === "Sandals") return false;
-      if (it.category === "Swim") return false;
+      // Mild is forgiving — only rule out the most extreme outerwear.
+      if (isHeavyFabric && (it.category === "Outerwear" || it.category === "Knits")) {
+        if (/puffer|down|shearling|fleece/i.test(nameNotes)) return false;
+      }
       return true;
     }
     if (isCool) {
-      if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
-      if (it.subcategory === "Sandals") return false;
+      // Keep short-sleeve tops in the pool — the stylist may layer a blazer over.
       if (it.subcategory === "Shorts") return false;
-      if (it.category === "Swim") return false;
+      if (isOpenToe) return false;
       return true;
     }
     if (isCold) {
       if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
-      if (it.subcategory === "Sandals") return false;
       if (it.subcategory === "Shorts") return false;
-      if (it.category === "Swim") return false;
+      if (isOpenToe) return false;
+      return true;
+    }
+    if (isRainy) {
+      // Rainy: no suede (ruins it), no open-toe (soaks feet), no delicate fabrics on shoes.
+      if (isSuede && (it.category === "Shoes" || it.category === "Bags" || it.category === "Outerwear")) return false;
+      if (isOpenToe) return false;
+      if (it.category === "Shoes" && /satin|silk|velvet/i.test(nameNotes)) return false;
       return true;
     }
     return true;
@@ -1134,16 +1134,20 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   // ── STEP 12: HC3 — weather constraint ──
   const w = (weather || "").toLowerCase();
   let hc3 = "";
-  if      (/hot|85/i.test(w))       hc3 = "Weather is HOT. No long sleeves. No layers heavier than a blazer.";
-  else if (/warm|70-84/i.test(w))   hc3 = "Weather is WARM. Light layers only. No heavy knits or coats.";
-  else if (/cool|40-54/i.test(w))   hc3 = "Weather is COOL. Long sleeves required. Layer up. No sleeveless, no sandals.";
-  else if (/cold|below 40/i.test(w)) hc3 = "Weather is COLD. Heavy layers required. No sleeveless, no short sleeves, no sandals.";
-  else                              hc3 = "Dress appropriately for the weather indicated.";
+  if      (/hot|85/i.test(w))        hc3 = "Weather is HOT (85°F+). No long sleeves. No knits. No coats or jackets. Breathable fabrics only.";
+  else if (/warm|70-84/i.test(w))    hc3 = "Weather is WARM (70–84°F). Light layers only — no heavy knits, no coats, unstructured blazer at most.";
+  else if (/mild|55-69/i.test(w))    hc3 = "Weather is MILD (55–69°F). Light jacket or unstructured blazer works. A cardigan or trench is perfect. No puffers, no shearling.";
+  else if (/cool|40-54/i.test(w))    hc3 = "Weather is COOL (40–54°F). Include a real layer — coat, blazer, or substantial knit. Long sleeves underneath. No open-toe shoes.";
+  else if (/cold|below 40/i.test(w)) hc3 = "Weather is COLD (below 40°F). Heavy layers required — coat + knit or coat + structured layer. No sleeveless, no short sleeves, no open-toe shoes.";
+  else if (/rain/i.test(w))          hc3 = "Weather is RAINY. Must include a real outer layer (trench, coat, or waterproof jacket). No suede shoes/bags, no open-toe. Prefer leather or rubber-soled footwear.";
+  else                               hc3 = "Dress appropriately for the weather indicated.";
 
-  // ── STEP 13: Active style profile based on occasion vibe ──
+  // ── STEP 13: One editorial stylist voice for every occasion ──
+  // The mood + silhouette recipe carries the vibe; no need for a separate
+  // casual profile. isCasual is only used downstream as a soft footwear hint.
   const CASUAL_OCCASIONS = new Set(["Lunch/Brunch","Daytime","Athleisure","Activity","Travel","Lounge"]);
   const isCasual = CASUAL_OCCASIONS.has(occasion);
-  const activeProfile = isCasual ? CASUAL_STYLE_PROFILE : STYLE_PROFILE;
+  const activeProfile = EDITORIAL_STYLIST;
 
   // ── STEP 14: DIRECTOR — algorithmically pick 3 distinct hero pieces ──
   const heroes = pickHeroes(enriched, isCasual, slots);
@@ -1801,7 +1805,10 @@ export default function App() {
   const [styling,    setStyling]    = useState(false);
   const [styleErr,   setStyleErr]   = useState("");
   const [occasion,   setOccasion]   = useState("Work");
-  const [weather,    setWeather]    = useState("");
+  const [weather,    setWeather]    = useState(() => {
+    // Persist weather across sessions — saves a click every visit.
+    try { return localStorage.getItem("atelier-weather") || ""; } catch { return ""; }
+  });
   const [request,    setRequest]    = useState("");
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
@@ -1823,6 +1830,11 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("atelier-recent-looks", JSON.stringify(allLooks)); } catch {}
   }, [allLooks]);
+
+  // ── Persist weather choice across sessions
+  useEffect(() => {
+    try { localStorage.setItem("atelier-weather", weather || ""); } catch {}
+  }, [weather]);
 
   // ── Flash sync status briefly
   const flashSync = (status) => {
@@ -4000,7 +4012,11 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
   );
 }
 
-// Build layout positions based on item categories
+// ── EDITORIAL FLAT-LAY ENGINE ────────────────────────────────────────────────
+// Hero-anchored layout with deliberate overlaps. The hero piece gets the
+// dominant position (55–60% of canvas). Everything else is placed *relative
+// to the hero* so shoes tuck under hems, belts cross waistlines, bags rest
+// against the layer — the way a real stylist arranges pieces on a studio floor.
 function buildCollageLayout(items, suggestionSlots = []) {
   const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
 
@@ -4027,88 +4043,126 @@ function buildCollageLayout(items, suggestionSlots = []) {
   const g = { layer:[], top:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], accessory:[] };
   all.forEach(item => { const r = getRole(item); if (g[r]) g[r].push(item); });
 
-  // ── Dynamic layout engine ──
-  // Determines layout based on whether outfit is dress-based or separates-based
-  const hasDress = g.dress.length > 0;
+  const hasDress  = g.dress.length > 0;
   const hasBottom = g.bottom.length > 0;
-  const hasTop = g.top.length > 0;
-  const hasLayer = g.layer.length > 0;
-  const hasBelt = g.belt.length > 0;
-  const hasBag = g.bag.length > 0;
-  const hasShoes = g.shoes.length > 0;
+  const hasTop    = g.top.length > 0;
+  const hasLayer  = g.layer.length > 0;
+  const hasBelt   = g.belt.length > 0;
+  const hasBag    = g.bag.length > 0;
+  const hasShoes  = g.shoes.length > 0;
+
+  // Stable jitter from the first real item ID so the same look always
+  // renders identically but different looks get slightly different angles.
+  const seed = (items[0]?.id || "x").split("").reduce((a,c) => a + c.charCodeAt(0), 0);
+  const rand = (i) => {
+    const x = Math.sin(seed * 9301 + i * 49297) * 233280;
+    return x - Math.floor(x);
+  };
+  const tilt = (i, range = 3) => (rand(i) * 2 - 1) * range; // ±range degrees
 
   const slots = [];
-  const zMap = { layer:5, top:4, dress:4, bottom:2, shoes:8, bag:7, belt:10, accessory:11 };
-  const place = (role, pos) => {
-    if (g[role].length > 0) {
-      slots.push({ ...g[role][0], x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
-    }
+  // Layered z-order: bottoms are backdrop, layers sit over tops, accessories top.
+  const zMap = { bottom:2, dress:3, top:4, layer:6, bag:8, shoes:9, belt:11, accessory:12 };
+  const place = (role, pos, tiltI = 0) => {
+    if (g[role].length === 0) return null;
+    const item = g[role][0];
+    const slot = { ...item, ...pos, rotate: tilt(tiltI, 2.5), zIndex: zMap[role] || 6 };
+    slots.push(slot);
+    return slot;
   };
 
   if (hasDress) {
-    // ── DRESS-BASED LAYOUT ──
+    // ── DRESS-BASED FLAT-LAY ──
+    // Dress is always the hero. Everything else overlaps around it.
     if (hasLayer) {
-      // Dress + Layer (cardigan/blazer over dress). Belt placed in corner so dress stays dominant.
-      place("layer",  { x:1,  y:1,  w:44, h:50 });
-      place("dress",  { x:47, y:1,  w:48, h:56 });
-      if (hasBelt) place("belt", { x:2, y:58, w:48, h:24 });
-      if (hasShoes) place("shoes", { x:50, y:60, w:22, h:24 });
-      if (hasBag) place("bag", { x:72, y:62, w:26, h:28 });
+      // Layer (coat/jacket/cardigan) drapes to the LEFT of the dress, slightly behind.
+      place("layer",  { x: -4, y:  4,  w: 52, h: 78 }, 1);
+      place("dress",  { x: 36, y:  2,  w: 54, h: 82 }, 2);
+      // Shoes tuck UNDER the dress hem (overlap top of shoes with bottom of dress).
+      if (hasShoes) place("shoes", { x: 44, y: 74, w: 30, h: 22 }, 3);
+      // Bag rests against the right side of the dress, overlapping the hem.
+      if (hasBag)   place("bag",   { x: 72, y: 62, w: 28, h: 30 }, 4);
+      // Belt curves across the layer's middle — a real stylist move.
+      if (hasBelt)  place("belt",  { x: -2, y: 76, w: 44, h: 18 }, 5);
     } else if (hasTop) {
-      // Dress + Top
-      place("top",    { x:1,  y:1,  w:40, h:44 });
-      place("dress",  { x:43, y:1,  w:52, h:56 });
-      if (hasBelt) place("belt", { x:2, y:58, w:48, h:24 });
-      if (hasShoes) place("shoes", { x:50, y:60, w:22, h:24 });
-      if (hasBag) place("bag", { x:72, y:62, w:26, h:28 });
+      // Dress + Top variant — top to the left, dress dominant right.
+      place("top",    { x: -2, y:  4,  w: 44, h: 54 }, 1);
+      place("dress",  { x: 38, y:  2,  w: 56, h: 84 }, 2);
+      if (hasShoes) place("shoes", { x: 44, y: 76, w: 30, h: 22 }, 3);
+      if (hasBag)   place("bag",   { x: 72, y: 60, w: 28, h: 30 }, 4);
+      if (hasBelt)  place("belt",  { x:  0, y: 62, w: 42, h: 18 }, 5);
     } else {
-      // Dress only
-      place("dress",  { x:36, y:1,  w:44, h:58 });
-      if (hasBelt) place("belt", { x:2, y:62, w:50, h:26 });
-      if (hasShoes) place("shoes", { x:54, y:64, w:22, h:28 });
-      if (hasBag) place("bag", { x:76, y:66, w:22, h:28 });
+      // Dress only — centered, dominant, with shoes + bag hugging it.
+      place("dress",  { x: 22, y:  2,  w: 62, h: 88 }, 1);
+      if (hasShoes) place("shoes", { x: 30, y: 76, w: 34, h: 24 }, 2);
+      if (hasBag)   place("bag",   { x: 70, y: 58, w: 30, h: 32 }, 3);
+      if (hasBelt)  place("belt",  { x: -2, y: 56, w: 40, h: 18 }, 4);
     }
   } else {
-    // ── SEPARATES-BASED LAYOUT (top + bottom) ──
-    // Belts placed in the top-right corner at a larger size so they read as a real piece.
+    // ── SEPARATES FLAT-LAY ──
+    // Layer (or top) anchors the upper half; bottom anchors the lower half;
+    // they OVERLAP at the waistline so it reads as one outfit, not two halves.
     if (hasLayer && hasTop) {
-      place("layer",  { x:1,  y:1,  w:42, h:44 });
-      place("top",    { x:45, y:1,  w:40, h:38 });
-      if (hasBelt) place("belt", { x:45, y:41, w:52, h:22 });
-      place("bottom", { x:1,  y:48, w:42, h:46 });
-      if (hasBag) place("bag", { x:45, y:65, w:26, h:26 });
-      if (hasShoes) place("shoes", { x:72, y:65, w:26, h:26 });
-    } else if (hasLayer) {
-      place("layer",  { x:14, y:1,  w:48, h:44 });
-      if (hasBelt) place("belt", { x:64, y:3, w:34, h:22 });
-      place("bottom", { x:1,  y:48, w:44, h:46 });
-      if (hasBag) place("bag", { x:47, y:48, w:26, h:26 });
-      if (hasShoes) place("shoes", { x:72, y:72, w:26, h:24 });
+      // Layer is the dominant piece — drape it over the top which peeks out.
+      place("top",    { x:  2, y:  2,  w: 48, h: 46 }, 1);
+      place("layer",  { x: 34, y:  0,  w: 58, h: 62 }, 2);
+      // Bottom overlaps the bottom edge of layer/top at the waist.
+      place("bottom", { x: 10, y: 40, w: 52, h: 58 }, 3);
+      // Belt crosses the overlap line where top meets bottom.
+      if (hasBelt)  place("belt",  { x: 56, y: 52, w: 42, h: 16 }, 4);
+      // Shoes tuck under the bottom hem.
+      if (hasShoes) place("shoes", { x: 56, y: 72, w: 30, h: 24 }, 5);
+      // Bag rests against the right side, behind the layer.
+      if (hasBag)   place("bag",   { x: 70, y: 30, w: 28, h: 32 }, 6);
+    } else if (hasLayer && hasBottom) {
+      // No top — layer becomes the whole torso.
+      place("layer",  { x:  8, y:  0,  w: 58, h: 58 }, 1);
+      place("bottom", { x: 14, y: 40, w: 56, h: 58 }, 2);
+      if (hasBelt)  place("belt",  { x: 58, y:  4, w: 40, h: 18 }, 3);
+      if (hasShoes) place("shoes", { x: 62, y: 72, w: 32, h: 24 }, 4);
+      if (hasBag)   place("bag",   { x: 66, y: 30, w: 30, h: 34 }, 5);
+    } else if (hasTop && hasBottom) {
+      // Top + bottom, no layer. Overlap at the waist.
+      place("top",    { x: 12, y:  0,  w: 56, h: 54 }, 1);
+      place("bottom", { x: 10, y: 44, w: 58, h: 56 }, 2);
+      if (hasBelt)  place("belt",  { x: 58, y: 48, w: 40, h: 18 }, 3);
+      if (hasShoes) place("shoes", { x: 60, y: 72, w: 32, h: 24 }, 4);
+      if (hasBag)   place("bag",   { x: 66, y: 18, w: 30, h: 32 }, 5);
+    } else if (hasBottom) {
+      // Just bottoms — rare, but handle it.
+      place("bottom", { x: 14, y: 10, w: 62, h: 80 }, 1);
+      if (hasShoes) place("shoes", { x: 60, y: 66, w: 34, h: 26 }, 2);
+      if (hasBag)   place("bag",   { x: 66, y:  8, w: 30, h: 34 }, 3);
+      if (hasBelt)  place("belt",  { x: 60, y: 38, w: 38, h: 18 }, 4);
     } else {
-      place("top",    { x:14, y:1,  w:48, h:42 });
-      if (hasBelt) place("belt", { x:62, y:3, w:36, h:24 });
-      place("bottom", { x:1,  y:46, w:44, h:48 });
-      if (hasBag) place("bag", { x:47, y:46, w:26, h:26 });
-      if (hasShoes) place("shoes", { x:72, y:70, w:26, h:26 });
+      // Fallback — just lay out whatever's there.
+      place("top",    { x: 14, y:  4,  w: 58, h: 70 }, 1);
+      if (hasShoes) place("shoes", { x: 58, y: 68, w: 34, h: 26 }, 2);
+      if (hasBag)   place("bag",   { x: 66, y: 14, w: 30, h: 34 }, 3);
+      if (hasBelt)  place("belt",  { x: 56, y: 38, w: 40, h: 18 }, 4);
     }
   }
 
-  // ── Accessories: place in remaining corners ──
+  // ── Accessories scatter in the remaining white space ──
   if (g.accessory.length > 0) {
     const accPositions = [
-      { x:80, y:1,  w:16, h:16 },
-      { x:2,  y:1,  w:16, h:16 },
-      { x:80, y:82, w:16, h:14 },
+      { x:  2, y: 78, w: 20, h: 18 }, // bottom-left
+      { x: 80, y:  2, w: 18, h: 18 }, // top-right
+      { x:  2, y:  2, w: 18, h: 18 }, // top-left
     ];
-    // Only place if the corner isn't already occupied by a main item
     const isOccupied = (pos) => slots.some(s =>
-      Math.abs(s.x - pos.x) < 20 && Math.abs(s.y - pos.y) < 20
+      Math.abs(s.x - pos.x) < 18 && Math.abs(s.y - pos.y) < 18
     );
     let accIdx = 0;
-    g.accessory.forEach(item => {
+    g.accessory.forEach((item, i) => {
       while (accIdx < accPositions.length && isOccupied(accPositions[accIdx])) accIdx++;
       if (accIdx < accPositions.length) {
-        slots.push({ ...item, ...accPositions[accIdx], rotate:0, zIndex:11 + accIdx });
+        slots.push({
+          ...item,
+          ...accPositions[accIdx],
+          rotate: tilt(20 + i, 4),
+          zIndex: 12 + accIdx,
+        });
         accIdx++;
       }
     });
@@ -5095,7 +5149,7 @@ const s = {
   collageCanvas: {
     position:"relative",
     width:"100%",
-    paddingBottom:"95%",
+    paddingBottom:"125%", // 4:5 portrait like a real editorial page
     background:"#FFFFFF",
     overflow:"hidden",
     margin:"0",
