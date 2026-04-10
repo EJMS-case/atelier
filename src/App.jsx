@@ -4059,11 +4059,13 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
               style={{
                 width:"100%", height:"100%", display:"block",
                 objectFit: "contain",
-                // Center-center everywhere — previously "center top" for clothing left
-                // a huge empty gap at the bottom of each slot because product photos are
-                // portrait-oriented and didn't fill the tall slots. Center-center splits
-                // the whitespace evenly so pieces feel closer together.
-                objectPosition: "center center",
+                // Top-anchor clothing so garments hang from the top edge of their
+                // slot (no weird floating in the middle). Small items (belts,
+                // shoes, bags, accessories) center in both axes so thin horizontal
+                // shapes don't cling to one edge. Slot dimensions are now sized
+                // tightly to a 3:4 image aspect ratio so there's very little
+                // dead space even with top anchoring.
+                objectPosition: (slot.category === "Belts" || slot.category === "Accessories" || slot.category === "Shoes" || slot.category === "Bags") ? "center center" : "center top",
               }}/>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
