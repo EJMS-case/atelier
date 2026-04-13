@@ -28,16 +28,20 @@ TEXTURE MIXING: silk × wool, leather × knit, satin × cotton. Same fabric weig
 COLOR: 2-3 color story. Shoes + bag in same color family. No random pieces.
 BELT: Only when it improves the silhouette. Never on fitted/structured dresses.
 LAYERING: blazer over blouse, cardigan over tee, coat over knit.
+SEASONAL COHERENCE: All items in a look must be from compatible weight classes. Never mix Heavy (wool, cashmere, chunky knit) with Light (linen, silk, thin cotton, tanks). Medium items (ponte, light knit, denim) work with both.
 `;
 
 // ── STYLE PREFERENCES — injected into every generation prompt ──────────────
 const STYLE_PREFS = {
   colorPairs: [
-    "Navy + Cool Pink",
-    "Navy + Cool Red",
-    "Burgundy + Navy",
-    "Cool Red + Cool Pink",
-    "Chocolate Brown + Cool Red",
+    "Navy + White", "Navy + Cream", "Navy + Red", "Navy + Pink",
+    "Black + White", "Black + Camel", "Black + Red",
+    "Burgundy + Navy", "Burgundy + Cream", "Burgundy + Camel",
+    "Brown + Ivory", "Brown + Navy", "Brown + Cream",
+    "Red + White", "Red + Navy", "Navy + Sky Blue",
+    "Burgundy + Blush", "Brown + Tan", "Forest Green + Cream",
+    "Deep Teal + White", "Royal Blue + White", "Forest Green + Burgundy",
+    "Deep Purple + Cream", "Electric Cobalt + Navy",
   ],
   monochromaticMode: true,
   tonalPairing: true,
@@ -272,26 +276,51 @@ function getSubcatL2(category, subcategory) {
 // ── DARK WINTER COLOR SWATCHES ────────────────────────────────────────────────
 // Each family has a display hex + shade expansion
 const COLOR_FAMILIES = [
-  { name:"Black",       hex:"#1A1A1A",  shades:[{name:"Black",       hex:"#1A1A1A"}] },
-  { name:"Charcoal",    hex:"#3D3D3D",  shades:[{name:"Charcoal",    hex:"#3D3D3D"}] },
-  { name:"Navy",        hex:"#1B2A4A",  shades:[{name:"Navy",        hex:"#1B2A4A"}, {name:"Deep Blue", hex:"#1A237E"}, {name:"Sapphire", hex:"#2962FF"}] },
-  { name:"Burgundy",    hex:"#6D1A2E",  shades:[{name:"Burgundy",    hex:"#6D1A2E"}, {name:"Plum", hex:"#4A0E4E"}, {name:"Deep Purple", hex:"#38006B"}] },
-  { name:"Cool Red",    hex:"#C62828",  shades:[{name:"Cool Red",    hex:"#C62828"}, {name:"Cherry", hex:"#B71C1C"}] },
-  { name:"Cool Pink",   hex:"#C2185B",  shades:[{name:"Cool Pink",   hex:"#C2185B"}, {name:"Blush", hex:"#E8A4B8"}, {name:"Rose", hex:"#E91E63"}] },
-  { name:"Deep Teal",   hex:"#00474F",  shades:[{name:"Forest Green", hex:"#1B5E20"}, {name:"Deep Teal", hex:"#00474F"}] },
-  { name:"Brown",       hex:"#5D3A1A",  shades:[{name:"Brown",       hex:"#5D3A1A"}, {name:"Espresso", hex:"#3E1C00"}, {name:"Caramel", hex:"#8B5E3C"}] },
-  { name:"Neutral",     hex:"#C4A882",  shades:[{name:"Neutral",     hex:"#C4A882"}, {name:"Beige", hex:"#D4C5A9"}, {name:"Camel", hex:"#C19A6B"}] },
-  { name:"White",       hex:"#F8F6F2",  shades:[{name:"Ivory", hex:"#FFFBE6"}, {name:"White", hex:"#F8F6F2"}] },
+  { name:"Blacks",             hex:"#1A1A1A",  shades:[] },
+  { name:"Navy",               hex:"#1B2A4A",  shades:[] },
+  { name:"Purples",            hex:"#5E2D82",  shades:[] },
+  { name:"Reds & Burgundy",    hex:"#8B1A2E",  shades:[] },
+  { name:"Blues",              hex:"#2962FF",  shades:[] },
+  { name:"Greens",             hex:"#2E7D32",  shades:[] },
+  { name:"Browns",             hex:"#5D3A1A",  shades:[] },
+  { name:"Denims",             hex:"#4A6FA5",  shades:[] },
+  { name:"Plaids & Patterns",  hex:"#8B7355",  shades:[] },
+  { name:"Pinks & Blush",      hex:"#D4839B",  shades:[] },
+  { name:"Neutrals & Beige",   hex:"#C4A882",  shades:[] },
+  { name:"Metallics",          hex:"#B8A88A",  shades:[] },
+  { name:"Whites & Creams",    hex:"#F8F6F2",  shades:[] },
 ];
 
 // ── DEFAULT SORT ORDER ──────────────────────────────────────────────────────
 // Primary: color family (cool → warm → neutral → white)
 const COLOR_SORT_ORDER = {
-  "Black":0, "Charcoal":1, "Navy":2, "Deep Blue":3, "Sapphire":4,
-  "Burgundy":5, "Plum":6, "Deep Purple":7, "Cool Red":8, "Cherry":9,
-  "Cool Pink":10, "Blush":11, "Rose":12, "Forest Green":13, "Deep Teal":14,
-  "Brown":15, "Espresso":16, "Caramel":17,
-  "Neutral":18, "Beige":19, "Camel":20, "Ivory":21, "White":22,
+  // ── Color families (match DB color_family values) ──
+  "Blacks":0, "Navy":5, "Purples":10, "Reds & Burgundy":15, "Blues":20,
+  "Greens":25, "Browns":30, "Denims":35, "Plaids & Patterns":40,
+  "Pinks & Blush":45, "Neutrals & Beige":50, "Metallics":55,
+  "Whites & Creams":60,
+  // ── Individual colors ──
+  Black:0, "Washed Black":1, "Dark Shadow":2,
+  "Midnight Navy":3, "Peacoat Navy":4, "Washed Navy":6,
+  "Deep Purple":10,
+  Burgundy:12, Oxblood:13, "Deep Red":14, "Black Cherry":14, Red:16,
+  "Electric Cobalt":18, "Royal Blue":20, "Deep Teal":21, "Sky Blue":22,
+  Periwinkle:23, "Light Teal":24,
+  "Forest Green":25, Pine:26, "Pine Green":26, "Army Green":27,
+  "Secret Moss":28, "Olive Green":29, Olive:29, Green:30,
+  Espresso:32, Cocoa:33, Brown:34, Tobacco:35, "Dark Wash":36,
+  "Dark Wash Denim":36, "Medium Wash":37, "Grey Wash":38, "Light Wash":39,
+  "Brown Houndstooth":40, "Black/Brown Houndstooth":40,
+  "Cheshire Houndstooth":41, "Brown Plaid":41,
+  "Black/White Plaid":42, "Green/Blue Plaid":42, "Black/White Stripe":43,
+  "Hot Pink":44, Pink:45, "Pink & Orange":46, "Baby Pink":47,
+  Blush:48, "Blush Pink":48, Peach:49,
+  Tan:50, Camel:51, Beige:52, Nude:53, Grey:54, Yellow:55,
+  Gold:56, Silver:57, Pearlescent:58,
+  Ecru:59, Cream:60, Ivory:61, White:62,
+  // ── Legacy names (backwards compat) ──
+  Charcoal:1, "Deep Blue":3, Sapphire:4, Plum:10, "Cool Red":16, Cherry:16,
+  "Cool Pink":45, Rose:45, Caramel:34, Neutral:50,
 };
 
 // Secondary: sleeve length (for Tops, Knits, Athleisure)
@@ -1080,6 +1109,15 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   // ── STEP 4: Weather filter ──
   filtered = filterByWeather(filtered, weather);
 
+  // ── STEP 4b: Prefer items tagged for this occasion (uses DB occasion array) ──
+  if (occasion) {
+    const occasionTagged = filtered.filter(it => {
+      const oo = it.occasion || [];
+      return Array.isArray(oo) ? oo.includes(occasion) : typeof oo === "string" && oo.includes(occasion);
+    });
+    if (occasionTagged.length >= 15) filtered = occasionTagged;
+  }
+
   // ── STEP 5: Verify required slots have items ──
   const ROLE_CATEGORIES = {
     top:    ["Tops","Knits"],
@@ -1117,7 +1155,10 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     byCategory[it.category].push(it);
   });
   Object.keys(byCategory).forEach(cat => {
-    byCategory[cat] = shuffle(byCategory[cat]).slice(0, MAX_PER_CAT[cat] || 6);
+    const catItems = byCategory[cat];
+    const active = catItems.filter(x => x.is_active_rotation !== false);
+    const inactive = catItems.filter(x => x.is_active_rotation === false);
+    byCategory[cat] = shuffle([...shuffle(active), ...shuffle(inactive)]).slice(0, MAX_PER_CAT[cat] || 6);
   });
   const curated = Object.values(byCategory).flat();
 
@@ -1141,8 +1182,9 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     const fabTag = it._fabrics.length ? ` {${it._fabrics.join("/")}}` : "";
     const silTag = it._silhouette ? ` {${it._silhouette}}` : "";
     const formTag = it._formality >= 4 ? " {formal}" : it._formality <= 2 ? " {casual}" : "";
+    const swTag = it.season_weight ? ` [${it.season_weight}]` : "";
     const colorInfo = it.color_family ? `[${it.color_family}]` : it.color ? `[${it.color}]` : "[?]";
-    return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${fabTag}${silTag}${formTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}`;
+    return `${short} ${colorInfo} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${knitTag}${sleeveTag}${fabTag}${silTag}${formTag}${swTag}${it.color && it.color !== it.color_family ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}`;
   }).join("\n");
 
   // ── STEP 9: Mood pool selection — curated per-occasion ──
@@ -2280,12 +2322,9 @@ export default function App() {
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
       base = base.filter(it => {
-        const itemColor = (it.color || "").toLowerCase();
-        const itemFamily = (it.color_family || "").toLowerCase();
-        return activeFilters.color.some(c => {
-          const cl = c.toLowerCase();
-          return itemColor.includes(cl) || itemFamily.includes(cl) || itemColor === cl;
-        });
+        const itemFamily = it.color_family || "";
+        const itemColor = it.color || "";
+        return activeFilters.color.some(c => itemFamily === c || itemColor === c);
       });
     }
     // Sets filter
@@ -2787,7 +2826,6 @@ export default function App() {
 
 // ── FILTER BAR ────────────────────────────────────────────────────────────────
 function FilterBar({ items, activeFilters, onChange }) {
-  const [expandedColor, setExpandedColor] = useState(null);
   const [showBrand, setShowBrand] = useState(false);
   const [brandSearch, setBrandSearch] = useState("");
   const [showMore, setShowMore] = useState(false);
@@ -2926,49 +2964,23 @@ function FilterBar({ items, activeFilters, onChange }) {
         );
       })()}
 
-      {/* Color swatches */}
+      {/* Color family swatches */}
       <div style={s.filterSection}>
         <div style={s.filterSectionLabel}>Color</div>
-        <div style={s.filterRow}>
+        <div style={{...s.filterRow, gap:6, flexWrap:"wrap"}}>
           {COLOR_FAMILIES.map(family => (
-            <div key={family.name} style={{position:"relative"}}>
-              <button
-                onClick={() => setExpandedColor(expandedColor === family.name ? null : family.name)}
-                style={{
-                  ...s.swatchBtn,
-                  background: family.hex,
-                  boxShadow: isActive("color", family.name)
-                    ? `0 0 0 2px #1C1814, 0 0 0 4px ${family.hex}`
-                    : expandedColor === family.name
-                    ? `0 0 0 2px #C4A882`
-                    : "none",
-                  border: family.name === "White" || family.name === "Neutral" ? "1px solid #E8E0D8" : "none",
-                }}
-                title={family.name}
-              />
-              {/* Shade expansion */}
-              {expandedColor === family.name && family.shades.length > 1 && (
-                <div style={s.shadePopover}>
-                  {family.shades.map(shade => (
-                    <button key={shade.name}
-                      onClick={() => { toggle("color", shade.name); setExpandedColor(null); }}
-                      style={{
-                        ...s.shadeSwatch,
-                        background: shade.hex,
-                        boxShadow: isActive("color", shade.name) ? `0 0 0 2px #1C1814` : "none",
-                        border: shade.name === "White" || shade.name === "Ivory" || shade.name === "Neutral" ? "1px solid #E8E0D8" : "none",
-                      }}
-                      title={shade.name}
-                    />
-                  ))}
-                </div>
-              )}
-              {expandedColor === family.name && family.shades.length === 1 && (() => {
-                toggle("color", family.name);
-                setExpandedColor(null);
-                return null;
-              })()}
-            </div>
+            <button key={family.name}
+              onClick={() => toggle("color", family.name)}
+              style={{
+                ...s.swatchBtn,
+                background: family.hex,
+                boxShadow: isActive("color", family.name)
+                  ? `0 0 0 2px #1C1814, 0 0 0 4px ${family.hex}`
+                  : "none",
+                border: family.name === "Whites & Creams" || family.name === "Neutrals & Beige" ? "1px solid #E8E0D8" : "none",
+              }}
+              title={family.name}
+            />
           ))}
         </div>
       </div>
