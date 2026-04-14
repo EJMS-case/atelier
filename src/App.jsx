@@ -187,9 +187,11 @@ function getSleeveType(item) {
 }
 
 // ── WEATHER-BASED FILTERING ───────────────────────────────────────────────────
-// Softer than before — we only remove items that would genuinely be wrong for
-// the weather. Borderline items (a short-sleeve tee in cool weather, say) stay
-// in the pool because the stylist can layer over them.
+// Item-level weight/keyword filtering — NEVER bans an entire category wholesale.
+// Heavy keywords (wool, cashmere, chunky, etc.) are removed in hot/warm weather,
+// but lightweight items from Knits > Cardigans and Outerwear > Blazers survive.
+const HEAVY_KEYWORDS = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|down\b|padded|tweed|flannel/i;
+
 function filterByWeather(items, weather) {
   const w = (weather || "").toLowerCase();
   if (!w || w === "any") return items;
@@ -204,7 +206,7 @@ function filterByWeather(items, weather) {
   return items.filter(it => {
     const sleeve    = getSleeveType(it);
     const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "")).toLowerCase();
-    const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|down|padded/i.test(nameNotes);
+    const isHeavyFabric = HEAVY_KEYWORDS.test(nameNotes);
     const isSuede       = /\bsuede\b/i.test(nameNotes);
     const isOpenToe     = it.subcategory === "Sandals" || /sandal|open[- ]toe|slide|mule/i.test(nameNotes);
 
@@ -212,30 +214,32 @@ function filterByWeather(items, weather) {
     if (it.category === "Swim") return false;
 
     if (isHot) {
-      // Hot (85°+): no knits at all, no outerwear, no boots, no long sleeves on tops.
-      if (it.category === "Knits") return false;
-      if (it.category === "Outerwear") return false;
-      if (it.subcategory === "Boots") return false;
-      if (it.category === "Tops" && sleeve === "long") return false;
+      // Hot (85°+): Filter by WEIGHT, not category.
+      // Ban heavy items regardless of category.
       if (isHeavyFabric) return false;
+      // Ban boots
+      if (it.subcategory === "Boots") return false;
+      // Ban long sleeves on tops (not layers — those are optional anyway)
+      if (it.category === "Tops" && sleeve === "long") return false;
+      // Knits: ban pullovers entirely, but allow lightweight cardigans
+      if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
+      // Outerwear: ban coats, allow lightweight blazers and jackets
+      if (it.subcategory === "Coats") return false;
       return true;
     }
     if (isWarm) {
-      // Warm (70–84°): no pullovers, no heavy outerwear, no boots, no blazers/coats.
-      // Cardigans and light jackets allowed (can be carried/layered on the cool end).
+      // Warm (70–84°): no pullovers, no coats, no heavy items.
+      // Lightweight cardigans, blazers, and jackets stay in the pool.
+      if (isHeavyFabric) return false;
       if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
       if (it.subcategory === "Coats") return false;
-      if (it.subcategory === "Blazers" && /wool|tweed|flannel/i.test(nameNotes)) return false;
       if (it.subcategory === "Boots") return false;
-      if (it.category === "Outerwear" && /puffer|down|shearling|fleece|trench/i.test(nameNotes)) return false;
-      if (isHeavyFabric) return false;
+      if (it.category === "Outerwear" && /puffer|down|shearling|fleece/i.test(nameNotes)) return false;
       return true;
     }
     if (isMild) {
       // Mild is forgiving — only rule out the most extreme outerwear.
-      if (isHeavyFabric && (it.category === "Outerwear" || it.category === "Knits")) {
-        if (/puffer|down|shearling|fleece/i.test(nameNotes)) return false;
-      }
+      if (/puffer|down|shearling|fleece/i.test(nameNotes) && (it.category === "Outerwear" || it.category === "Knits")) return false;
       return true;
     }
     if (isCool) {
@@ -259,6 +263,18 @@ function filterByWeather(items, weather) {
     }
     return true;
   });
+}
+
+// ── Weather tier helper — used to make layers conditional ──
+function getWeatherTier(weather) {
+  const w = (weather || "").toLowerCase();
+  if (/hot|85/i.test(w))        return "hot";
+  if (/warm|70-84/i.test(w))    return "warm";
+  if (/mild|55-69/i.test(w))    return "mild";
+  if (/cool|40-54/i.test(w))    return "cool";
+  if (/cold|below 40/i.test(w)) return "cold";
+  if (/rain/i.test(w))          return "rainy";
+  return "any";
 }
 
 // Given a category + subcategory value (may be L2 or L3), find the L2 parent
@@ -891,19 +907,27 @@ function pickHeroes(enrichedItems, isCasual, slots) {
     return (bScore - aScore) + (Math.random() - 0.5) * 6;
   });
 
-  // Pick 3 with DISTINCT categories AND DISTINCT color families
+  // Pick 3 with DISTINCT categories AND DISTINCT color families.
+  // Also enforce silhouette mix: at least 2 different look types (dress vs separates).
   const picked = [];
   const usedCats = new Set();
   const usedColors = new Set();
+  let dressCount = 0;
+  let separatesCount = 0;
   for (const it of candidates) {
     if (picked.length >= 3) break;
     const colorKey = (it.color_family || it.color || "?").toLowerCase();
     const catClash = usedCats.has(it.category);
     const colorClash = usedColors.has(colorKey);
     if (catClash && colorClash) continue; // must differ in EITHER category or color
+    // Enforce silhouette mix: don't allow 3 of the same type
+    const isDressType = it.category === "Dresses" || it.category === "Jumpsuits" || (it.category === "Occasionwear" && /dress|gown/i.test(it.subcategory || ""));
+    if (isDressType && dressCount >= 2) continue;
+    if (!isDressType && separatesCount >= 2) continue;
     picked.push(it);
     usedCats.add(it.category);
     usedColors.add(colorKey);
+    if (isDressType) dressCount++; else separatesCount++;
   }
 
   // Fallback: pad with best remaining if we couldn't find 3 fully distinct
@@ -1016,6 +1040,10 @@ ${request ? `HER REQUEST: "${request}"` : ""}
 - OBEY THE LOOK TYPE ABOVE — violating it is an automatic fail
 - Colors must obey "${colorStrategy.name}" — no random fifth color
 - Shoes + bag must be same color family
+- NO REPEATS: Do NOT reuse any item ID that appears in the RECENTLY USED list below. Each of the 3 looks must use DIFFERENT shoes, DIFFERENT bags, and DIFFERENT accessories. If only 1-2 bags exist, bag can repeat, but shoes and main pieces NEVER repeat.
+- HERO PIECE PHILOSOPHY: Build each look around its hero piece — a standout item with bold color, interesting texture, or statement silhouette. Supporting pieces complement the hero, never compete. Name the hero in your reasoning.
+- COLOR DEPTH: Avoid defaulting to all-black unless specifically requested. Prefer color stories with tonal depth (navy + deep teal, burgundy + brown, charcoal + olive). At least one look should include a rich or saturated color.
+- OCCASION-AWARE ACCESSORIES: Select shoes and bags matching both the occasion formality and weather. ${/hot|85/i.test(weather || "") ? "Hot weather → open-toe shoes, sandals, lighter bags." : ""} ${/date/i.test(occasion) ? "Date Night → heels, clutches or small structured bags." : ""} ${/work|interview|executive/i.test(occasion) ? "Work → mix of heels and polished flats, structured bags." : ""} ${/athleisure|activity/i.test(occasion) ? "Casual → sneakers if available, crossbody or skip bag." : ""}
 ${isCasual ? "- NO cocktail dresses, NO gowns, NO stiletto heels, NO formal separates. Flat/low footwear strongly preferred. Blazers only if unstructured." : ""}
 ${recentSummaries ? `\n╔══ SHE RECENTLY SAW THESE LOOKS — avoid repeating their vibe or pieces ══╗\n${recentSummaries}\n` : ""}
 
@@ -1119,6 +1147,25 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   }
 
   // ── STEP 5: Verify required slots have items ──
+  // Layers are weather-conditional: optional in hot, light in warm, required in cool/cold/rainy
+  const weatherTier = getWeatherTier(weather);
+  const effectiveSlots = { ...slots, required: { ...slots.required } };
+  if (effectiveSlots.required.layer) {
+    if (weatherTier === "hot") {
+      // Hot: layers fully optional — move to optional
+      delete effectiveSlots.required.layer;
+      effectiveSlots.optional = { ...effectiveSlots.optional, layer: ["Blazers","Cardigans","Jackets"] };
+    } else if (weatherTier === "warm") {
+      // Warm: light layer optional — move to optional
+      delete effectiveSlots.required.layer;
+      effectiveSlots.optional = { ...effectiveSlots.optional, layer: ["Blazers","Cardigans","Jackets"] };
+    } else if (weatherTier === "mild") {
+      // Mild: layer on most looks, but don't hard-fail if none available
+      effectiveSlots.required.layer = ["Blazers","Cardigans","Jackets","Coats"];
+    }
+    // Cool/Cold/Rainy: layer stays required as-is
+  }
+
   const ROLE_CATEGORIES = {
     top:    ["Tops","Knits"],
     bottom: ["Bottoms"],
@@ -1129,7 +1176,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     dress:  ["Dresses","Occasionwear"],
     accessory: ["Accessories"],
   };
-  for (const [role, constraint] of Object.entries(slots.required)) {
+  for (const [role, constraint] of Object.entries(effectiveSlots.required)) {
     if (constraint === true) continue; // any item in that role works
     const roleCats = ROLE_CATEGORIES[role] || [];
     const hasItems = filtered.some(it => {
@@ -1221,7 +1268,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
 
   // ── STEP 11: HC1 — dynamic required slots constraint (shared across stylists) ──
   const hc1Parts = [];
-  for (const [role, constraint] of Object.entries(slots.required)) {
+  for (const [role, constraint] of Object.entries(effectiveSlots.required)) {
     if (role === "bottom") {
       hc1Parts.push("1 Bottom (pants/skirt) OR 1 Dress — every look MUST cover the lower half");
       continue;
@@ -1236,13 +1283,13 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
   }
   const hc1 = hc1Parts.length > 0 ? hc1Parts.join(" + ") : "Use appropriate items for the occasion.";
 
-  // ── STEP 12: HC3 — weather constraint ──
+  // ── STEP 12: HC3 — weather constraint (updated for granular layer guidance) ──
   const w = (weather || "").toLowerCase();
   let hc3 = "";
-  if      (/hot|85/i.test(w))        hc3 = "Weather is HOT (85°F+). No long sleeves. No knits. No coats or jackets. Breathable fabrics only.";
-  else if (/warm|70-84/i.test(w))    hc3 = "Weather is WARM (70–84°F). Absolutely no sweaters, no pullovers, no boots, no coats, no wool blazers. A light unstructured jacket or open cardigan is the maximum layer. Think silk, cotton, linen, poplin, denim. Short sleeves are welcome.";
-  else if (/mild|55-69/i.test(w))    hc3 = "Weather is MILD (55–69°F). Light jacket or unstructured blazer works. A cardigan or trench is perfect. No puffers, no shearling.";
-  else if (/cool|40-54/i.test(w))    hc3 = "Weather is COOL (40–54°F). Include a real layer — coat, blazer, or substantial knit. Long sleeves underneath. No open-toe shoes.";
+  if      (/hot|85/i.test(w))        hc3 = "Weather is HOT (85°F+). No long sleeves on tops. No coats. No pullovers/sweaters. Breathable fabrics only. A lightweight unstructured blazer or cropped cotton/silk cardigan for AC offices is acceptable but OPTIONAL — do not force a layer. Open-toe shoes and sandals are great.";
+  else if (/warm|70-84/i.test(w))    hc3 = "Weather is WARM (70–84°F). No pullovers, no boots, no coats, no heavy fabrics. A light unstructured jacket, open blazer, or open cardigan is the maximum layer — include one on at most 1 of 3 looks. Think silk, cotton, linen, poplin, denim. Short sleeves are welcome.";
+  else if (/mild|55-69/i.test(w))    hc3 = "Weather is MILD (55–69°F). Include a layer (blazer, cardigan, light jacket, or trench) on at least 2 of 3 looks. No puffers, no shearling. Coats optional.";
+  else if (/cool|40-54/i.test(w))    hc3 = "Weather is COOL (40–54°F). Include a real layer — coat, blazer, or substantial knit — on every look. Long sleeves underneath. No open-toe shoes. Coats optional.";
   else if (/cold|below 40/i.test(w)) hc3 = "Weather is COLD (below 40°F). Heavy layers required — coat + knit or coat + structured layer. No sleeveless, no short sleeves, no open-toe shoes.";
   else if (/rain/i.test(w))          hc3 = "Weather is RAINY. Must include a real outer layer (trench, coat, or waterproof jacket). No suede shoes/bags, no open-toe. Prefer leather or rubber-soled footwear.";
   else                               hc3 = "Dress appropriately for the weather indicated.";
@@ -1293,9 +1340,24 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     return { ...look, items: resolved };
   });
 
+  // ── STEP 17b: Enforce no-repeat rule across 3 looks ──
+  // If any item appears in more than one look, remove duplicates from later looks.
+  // Heroes are exempt (they're algorithmically distinct).
+  const usedItems = new Set();
+  const deduped = resolvedLooks.map(look => {
+    const heroId = plans[resolvedLooks.indexOf(look)]?.hero?.id;
+    const unique = look.items.filter(id => {
+      if (id === heroId) return true; // hero is always kept
+      if (usedItems.has(id)) return false;
+      return true;
+    });
+    unique.forEach(id => usedItems.add(id));
+    return { ...look, items: unique };
+  });
+
   // ── STEP 18: Post-validate (bottoms-or-dress, required roles) ──
-  const validated = validateLooks(resolvedLooks, occasion, idMap, items);
-  return { looks: validated.length > 0 ? validated : resolvedLooks };
+  const validated = validateLooks(deduped, occasion, idMap, items);
+  return { looks: validated.length > 0 ? validated : deduped };
 }
 
 // ── POST-VALIDATION ─────────────────────────────────────────────────────────
@@ -1956,7 +2018,13 @@ export default function App() {
   }, []);
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
-  const [outfits,    setOutfits]    = useState(null);
+  const [outfits,    setOutfits]    = useState(() => {
+    // Restore last generated looks from localStorage so Looks tab persists across navigation
+    try {
+      const raw = localStorage.getItem("atelier-current-looks");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
   const [allLooks,   setAllLooks]   = useState(() => {
     // Lazy-init from localStorage so anti-repeat history persists across sessions
     try {
@@ -1973,6 +2041,7 @@ export default function App() {
   });
   const [request,    setRequest]    = useState("");
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
+  const [autoDefaultNote, setAutoDefaultNote] = useState(""); // brief note when occasion auto-sets filters
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
   const [apiKey,     setApiKey]     = useState(() => loadApiKey());
   const [rmbgKey,    setRmbgKey]    = useState(() => loadRmbgKey());
@@ -1992,6 +2061,13 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("atelier-recent-looks", JSON.stringify(allLooks)); } catch {}
   }, [allLooks]);
+
+  // ── Persist current looks so the Looks tab survives navigation
+  useEffect(() => {
+    try {
+      if (outfits) localStorage.setItem("atelier-current-looks", JSON.stringify(outfits));
+    } catch {}
+  }, [outfits]);
 
   // ── Persist weather choice across sessions
   useEffect(() => {
@@ -2247,8 +2323,10 @@ export default function App() {
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
         throw new Error("AI returned no looks — try again.");
       }
-      setOutfits(looks);
-      setAllLooks(prev => [...prev, ...looks].slice(-30));
+      // Stamp each look with a creation timestamp
+      const stamped = looks.map(l => ({ ...l, createdAt: Date.now() }));
+      setOutfits(stamped);
+      setAllLooks(prev => [...prev, ...stamped].slice(-30));
       setView("style");
     } catch(e) {
       setStyleErr(e.message || "Styling failed — check your API key.");
@@ -2375,6 +2453,7 @@ export default function App() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes highlightPill { 0%{transform:scale(1)} 30%{transform:scale(1.08)} 100%{transform:scale(1)} }
         * { box-sizing: border-box; }
         input, select, button { font-family: inherit; }
       `}</style>
@@ -2612,19 +2691,30 @@ export default function App() {
                         : {...s.chip, fontSize:11, padding:"6px 12px"}}
                       onClick={() => {
                         setOccasion(o);
-                        // Auto-set smart defaults per occasion
+                        setStyleErr(""); // Clear stale errors on occasion change
+                        // Auto-set smart defaults per occasion (with visual note)
                         if (o === "Interview" || o === "Executive") {
                           setStyleExcludes(new Set(["no-jeans","trousers-only"]));
+                          setAutoDefaultNote(`${o} defaults: jeans excluded, trousers only`);
                         } else if (o === "Work") {
                           setStyleExcludes(new Set(["no-jeans"]));
+                          setAutoDefaultNote("Work defaults: jeans excluded");
                         } else {
                           setStyleExcludes(new Set());
+                          setAutoDefaultNote("");
                         }
+                        // Clear note after 3 seconds
+                        setTimeout(() => setAutoDefaultNote(""), 3000);
                       }}>
                       {o}
                     </button>
                   ))}
                 </div>
+                {autoDefaultNote && (
+                  <div style={{ fontSize:10, color:"#9A8E84", fontStyle:"italic", marginTop:-6, marginBottom:8, animation:"fadeIn 0.3s ease" }}>
+                    {autoDefaultNote}
+                  </div>
+                )}
 
                 {/* WHAT'S THE WEATHER? */}
                 <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>WHAT'S THE WEATHER?</div>
@@ -2638,7 +2728,7 @@ export default function App() {
                       style={weather === val
                         ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
                         : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                      onClick={() => setWeather(val)}>
+                      onClick={() => { setWeather(val); setStyleErr(""); }}>
                       {label}
                     </button>
                   ))}
@@ -2678,20 +2768,20 @@ export default function App() {
                   value={request} onChange={e=>setRequest(e.target.value)}
                   style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
 
-                {styleErr && <p style={s.err}>{styleErr}</p>}
-                <button style={{...s.btnPrimary, width:"100%"}}
+                <button style={{...s.btnPrimary, width:"100%", ...(styleErr ? { opacity:0.5, cursor:"not-allowed" } : {})}}
                   onClick={() => { handleStyle(); }}
-                  disabled={styling}>
+                  disabled={styling || !!styleErr}>
                   {styling
                     ? <><span style={s.spinnerSm}/> Styling…</>
                     : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
                 </button>
+                {styleErr && <p style={s.styleNote}>{styleErr}</p>}
               </>
             )}
           </div>
 
           {/* FAB */}
-          <button style={s.fab} onClick={() => setView("add")}>
+          <button style={s.fab} onClick={() => setView("add")} title="Add items to your wardrobe">
             <Icon path={icons.plus} size={22}/>
           </button>
         </div>
@@ -2718,7 +2808,7 @@ export default function App() {
         <div style={s.page}>
           <div style={s.pageHeader}>
             <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
-            <h2 style={s.pageTitle}>Your Looks</h2>
+            <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Your Looks</h2>
           </div>
           {styling && (
             <div style={s.empty}>
@@ -2727,7 +2817,7 @@ export default function App() {
             </div>
           )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={i} look={look} items={items} apiKey={apiKey}
+            <LookCard key={`${look.name}-${i}`} look={look} items={items} apiKey={apiKey}
               onSaveLook={async (log) => {
                 await sb.saveOutfitLog(log);
                 const dateWorn = log.date_worn;
@@ -2744,7 +2834,11 @@ export default function App() {
           ))}
           {!outfits && !styling && (
             <div style={s.empty}>
-              <p style={s.emptyText}>Go back and hit "Style Me" to generate looks.</p>
+              <div style={s.emptyMark}>✦</div>
+              <p style={s.emptyText}>No looks yet — open the Style Me panel to generate your first set.</p>
+              <button style={s.btnPrimary} onClick={() => { setView("closet"); setStylePanelOpen(true); }}>
+                <Icon path={icons.sparkle} size={15}/> Style Me
+              </button>
             </div>
           )}
         </div>
@@ -4099,23 +4193,26 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
-  // Assign editorial positions based on category and count
-  // Each slot: { item, x, y, w, h, rotate, zIndex }
   const slots = buildCollageLayout(sorted, suggestionSlots);
+  const [hoveredId, setHoveredId] = useState(null);
 
   return (
     <div style={s.collageCanvas}>
       {slots.map((slot, i) => (
-        <div key={slot.id || i} style={{
-          position: "absolute",
-          left: `${slot.x}%`,
-          top: `${slot.y}%`,
-          width: `${slot.w}%`,
-          height: `${slot.h}%`,
-          transform: `rotate(${slot.rotate}deg)`,
-          zIndex: slot.zIndex,
-          filter: "drop-shadow(0 4px 14px rgba(28,24,20,0.18))",
-        }}>
+        <div key={slot.id || i}
+          onMouseEnter={() => setHoveredId(slot.id)}
+          onMouseLeave={() => setHoveredId(null)}
+          style={{
+            position: "absolute",
+            left: `${slot.x}%`,
+            top: `${slot.y}%`,
+            width: `${slot.w}%`,
+            height: `${slot.h}%`,
+            transform: `rotate(${slot.rotate}deg)`,
+            zIndex: slot.zIndex,
+            filter: "drop-shadow(0 2px 12px rgba(0,0,0,0.06))",
+            cursor: "default",
+          }}>
           {slot.isSuggestion ? (
             <div style={s.elevSlotPh}>
               <div style={s.elevSlotBrand}>{slot.item?.split(" ").slice(0,2).join(" ")}</div>
@@ -4124,18 +4221,21 @@ function EditorialCollage({ lookItems, suggestionSlots = [] }) {
               <div style={s.elevSlotBadge}>{slot.type === "swap" ? "SWAP" : "ADD"}</div>
             </div>
           ) : slot.image ? (
-            <img src={slot.image} alt={slot.name}
-              style={{
-                width:"100%", height:"100%", display:"block",
-                objectFit: "contain",
-                // Top-anchor clothing so garments hang from the top edge of their
-                // slot (no weird floating in the middle). Small items (belts,
-                // shoes, bags, accessories) center in both axes so thin horizontal
-                // shapes don't cling to one edge. Slot dimensions are now sized
-                // tightly to a 3:4 image aspect ratio so there's very little
-                // dead space even with top anchoring.
-                objectPosition: (slot.category === "Belts" || slot.category === "Accessories" || slot.category === "Shoes" || slot.category === "Bags") ? "center center" : "center top",
-              }}/>
+            <>
+              <img src={slot.image} alt={slot.name}
+                style={{
+                  width:"100%", height:"100%", display:"block",
+                  objectFit: "contain",
+                  objectPosition: (slot.category === "Belts" || slot.category === "Accessories" || slot.category === "Shoes" || slot.category === "Bags") ? "center center" : "center top",
+                }}/>
+              {/* Hover tooltip — item name + brand */}
+              {hoveredId === slot.id && (
+                <div style={s.collageTooltip}>
+                  <div style={{ fontWeight:500 }}>{slot.name}</div>
+                  {slot.brand && <div style={{ fontSize:9, opacity:0.7 }}>{slot.brand}</div>}
+                </div>
+              )}
+            </>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
               <span style={s.collageCat}>{slot.category?.[0]}</span>
@@ -4302,6 +4402,9 @@ function buildCollageLayout(items, suggestionSlots = []) {
   return slots.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
 }
 
+// Occasions that typically need a bag in the collage
+const BAG_OCCASIONS = new Set(["Work","Dinner","Date Night","Event","Interview","Executive","Dinner Party","Lunch/Brunch","Travel"]);
+
 // ── LOOK CARD — EDITORIAL FLAT-LAY ───────────────────────────────────────────
 function LookCard({ look, items, apiKey, onSaveLook }) {
   const [expanded,  setExpanded]  = useState(false);
@@ -4309,12 +4412,17 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
   const [elevation, setElevation] = useState(null);
   const [elevErr,   setElevErr]   = useState("");
   const [showSave,  setShowSave]  = useState(false);
+  const [saved,     setSaved]     = useState(false);
 
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
-  const lookItems = (look.items || [])
+  let lookItems = (look.items || [])
     .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
     .filter(Boolean)
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
+
+  // Conditional bag display — hide bags for casual/athleisure occasions
+  const showBag = BAG_OCCASIONS.has(look.occasion);
+  const collageItems = showBag ? lookItems : lookItems.filter(it => it.category !== "Bags");
 
   const handleElevate = async () => {
     if (!apiKey) { setElevErr("Add your Anthropic API key in Settings."); return; }
@@ -4334,32 +4442,27 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
     const base = lookItems.filter(it =>
       !swapTargets.some(t => it.name.toLowerCase().includes(t))
     );
-    const suggestions = elevation.elevations.map(e => ({
-      ...e, isSuggestion:true, id:`sug-${e.item}`, category: e.category,
-    }));
-    return { base, suggestions };
+    return { base };
   })() : null;
 
   return (
     <div style={s.lookCard}>
-      <div style={s.lookHeader}>
-        <div>
-          <div style={s.lookName}>{look.name}</div>
-          <div style={s.lookOcc}>
-            {look.occasion?.toUpperCase()}
-            {look.mood && <span style={s.lookMood}> · {look.mood.toUpperCase()}</span>}
-          </div>
+      {/* Header ABOVE the collage — editorial style */}
+      <div style={s.lookHeaderAbove}>
+        <div style={s.lookName}>{look.name}</div>
+        <div style={s.lookOcc}>
+          {look.occasion?.toUpperCase()}
+          {look.mood && <span style={s.lookMood}> · {look.mood.toUpperCase()}</span>}
         </div>
-        <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
-          {expanded ? "Hide" : "Details"}
-        </button>
       </div>
 
-      <EditorialCollage lookItems={lookItems}/>
+      <EditorialCollage lookItems={collageItems}/>
 
+      {/* Styling note BELOW the collage — stylist's note */}
       {(look.styling || look.jewelry) && (
-        <div style={s.lookTeaser}>
-          <span style={s.teaserDiamond}>✦</span> {look.styling || look.jewelry}
+        <div style={s.lookStylistNote}>
+          <span style={s.teaserDiamond}>✦</span>
+          <span style={{ fontStyle:"italic" }}>{look.styling || look.jewelry}</span>
         </div>
       )}
 
@@ -4367,32 +4470,52 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
         <div style={s.lookMeta}>
           {look.accessories && <div style={s.metaRow}><span style={s.metaIcon}>✦</span><span>{look.accessories}</span></div>}
           {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"#6B5E54"}}>{look.why}</div>}
+          {look.reasoning   && <div style={{...s.metaRow,fontStyle:"italic",color:"#6B5E54"}}>{look.reasoning}</div>}
         </div>
       )}
 
+      {/* Action buttons — Remix + Save */}
       {!elevation && (
         <div style={s.elevateBar}>
           {elevErr && <p style={{...s.err,marginBottom:6}}>{elevErr}</p>}
-          <div style={{ display:"flex", gap:8 }}>
-            <button style={{...s.elevateBtn, flex:1}} onClick={handleElevate} disabled={elevating}>
-              {elevating ? <><span style={s.spinnerElevate}/> Elevating…</> : <>✦ Elevate this Look</>}
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <button style={{...s.remixBtn, flex:1}} onClick={handleElevate} disabled={elevating}>
+              {elevating ? <><span style={s.spinnerElevate}/> Remixing…</> : <>✦ Remix</>}
+            </button>
+            <button style={s.expandBtnSm} onClick={()=>setExpanded(e=>!e)}>
+              {expanded ? "Less" : "Details"}
             </button>
             {onSaveLook && (
-              <button style={s.saveBtn} onClick={() => setShowSave(true)}>Save</button>
+              <button style={{...s.saveBtnHeart, ...(saved ? { color:"#C0392B" } : {})}}
+                onClick={() => {
+                  if (!saved) { setShowSave(true); }
+                }}>
+                <svg width={18} height={18} viewBox="0 0 24 24"
+                  fill={saved ? "#C0392B" : "none"}
+                  stroke={saved ? "#C0392B" : "#6B5E54"}
+                  strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              </button>
             )}
           </div>
         </div>
       )}
 
       {showSave && onSaveLook && (
-        <SaveLookModal look={look} lookItems={lookItems} onSave={onSaveLook} onClose={() => setShowSave(false)}/>
+        <SaveLookModal look={look} lookItems={lookItems}
+          onSave={async (log) => {
+            await onSaveLook(log);
+            setSaved(true);
+          }}
+          onClose={() => setShowSave(false)}/>
       )}
 
       {elevation && (
         <div style={s.elevatedSection}>
           <div style={s.elevDivider}>
             <div style={s.elevDividerLine}/>
-            <span style={s.elevDividerLabel}>ELEVATED</span>
+            <span style={s.elevDividerLabel}>REMIXED</span>
             <div style={s.elevDividerLine}/>
           </div>
           <div style={s.elevHeader}>
@@ -4420,9 +4543,9 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
               </div>
             ))}
           </div>
-          <button style={{...s.elevateBtn,margin:"0 16px 16px",width:"calc(100% - 32px)"}}
+          <button style={{...s.remixBtn,margin:"0 16px 16px",width:"calc(100% - 32px)"}}
             onClick={handleElevate} disabled={elevating}>
-            {elevating ? "Elevating…" : "✦ Generate New Elevation"}
+            {elevating ? "Remixing…" : "✦ Remix Again"}
           </button>
         </div>
       )}
@@ -4539,8 +4662,12 @@ function OutfitHistory({ items, onWearAgain, onDelete, isFav, toggleFav }) {
     catch { return ym; }
   };
   const formatDate = (d) => {
-    try { return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }); }
-    catch { return d; }
+    if (!d || d === "Unknown") return "Date unknown";
+    try {
+      const date = new Date(d + "T12:00:00");
+      if (isNaN(date.getTime())) return "Date unknown";
+      return date.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric" });
+    } catch { return "Date unknown"; }
   };
   const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
 
@@ -4590,15 +4717,17 @@ function OutfitHistory({ items, onWearAgain, onDelete, isFav, toggleFav }) {
                     </div>
                   </div>
                 </div>
-                <div style={s.histThumbs}>
-                  {logItems.map(it => (
-                    <div key={it.id} style={s.histThumb}>
-                      {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
-                        : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                      <div style={s.histThumbName}>{it.name}</div>
-                    </div>
-                  ))}
-                </div>
+                {/* Mini flat-lay collage */}
+                {logItems.length > 0 && (
+                  <div style={{ padding:"0 18px 12px", maxWidth:360 }}>
+                    <EditorialCollage lookItems={logItems}/>
+                  </div>
+                )}
+                {meta.styling && (
+                  <div style={{ padding:"0 18px 8px", fontSize:11, color:"#8B6E4E", fontStyle:"italic", lineHeight:1.5 }}>
+                    ✦ {meta.styling}
+                  </div>
+                )}
                 {log.notes && <div style={s.histNotes}>{log.notes}</div>}
                 <div style={s.histActions}>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -4647,8 +4776,12 @@ function FavoritesView({ items, favorites, toggleFav, onEditItem }) {
 
   const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
   const formatDate = (d) => {
-    try { return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }); }
-    catch { return d; }
+    if (!d || d === "Unknown") return "Date unknown";
+    try {
+      const date = new Date(d + "T12:00:00");
+      if (isNaN(date.getTime())) return "Date unknown";
+      return date.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric" });
+    } catch { return "Date unknown"; }
   };
   const tabs = [["outfits","Outfits",favOutfits.length],["pieces","Pieces",favPieces.length],["shopping","Shopping",0]];
 
@@ -4682,14 +4815,11 @@ function FavoritesView({ items, favorites, toggleFav, onEditItem }) {
                         strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
                     </button>
                   </div>
-                  <div style={s.histThumbs}>
-                    {logItems.map(it => (
-                      <div key={it.id} style={s.histThumb}>
-                        {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/> : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                        <div style={s.histThumbName}>{it.name}</div>
-                      </div>
-                    ))}
-                  </div>
+                  {logItems.length > 0 && (
+                    <div style={{ padding:"0 18px 12px", maxWidth:360 }}>
+                      <EditorialCollage lookItems={logItems}/>
+                    </div>
+                  )}
                   {log.notes && <div style={s.histNotes}>{log.notes}</div>}
                 </div>
               );
@@ -5221,6 +5351,7 @@ const s = {
   select: { flex:1, border:"1px solid #E8E0D8", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"#1C1814" },
   input: { flex:1, border:"1px solid #E8E0D8", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"#1C1814", outline:"none" },
   err: { color:"#C0392B", fontSize:12, margin:"4px 0 0" },
+  styleNote: { color:"#9A8E84", fontSize:11, margin:"6px 0 0", fontStyle:"italic", textAlign:"center", lineHeight:1.5 },
   btnPrimary: { background:"#1C1814", color:"#F5F1EC", border:"none", borderRadius:4, padding:"10px 20px", fontSize:12, letterSpacing:"0.08em", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7 },
   btnSecondary: { background:"none", border:"1px solid #E8E0D8", borderRadius:4, padding:"10px 20px", fontSize:12, color:"#6B5E54", cursor:"pointer", letterSpacing:"0.06em", textAlign:"center" },
   fab: { position:"fixed", bottom:200, right:20, width:48, height:48, borderRadius:24, background:"#1C1814", color:"#F5F1EC", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(0,0,0,0.22)", zIndex:60 },
@@ -5258,21 +5389,24 @@ const s = {
 
   // ── Look card
   lookCard: {
-    background:"#fff", borderRadius:12, border:"1px solid #E8E0D8",
-    marginBottom:28, overflow:"hidden",
-    boxShadow:"0 4px 24px rgba(28,24,20,0.07)",
+    marginBottom:36, overflow:"visible",
     animation:"fadeIn 0.35s ease",
   },
-  lookHeader: {
-    padding:"18px 22px 14px", borderBottom:"1px solid #F0E8E0",
-    display:"flex", justifyContent:"space-between", alignItems:"center",
+  lookHeaderAbove: {
+    padding:"0 4px 10px",
   },
-  lookName: { fontSize:20, fontWeight:400, letterSpacing:"0.04em", marginBottom:3, fontFamily:"'DM Serif Display',Georgia,serif" },
+  lookName: { fontSize:18, fontWeight:400, letterSpacing:"0.04em", marginBottom:2, fontFamily:"'DM Serif Display',Georgia,serif", color:"#1C1814" },
   lookOcc:  { fontSize:9, letterSpacing:"0.2em", color:"#9A8E84" },
   lookMood: { color:"#C4A882" },
-  expandBtn: {
+  lookStylistNote: {
+    padding:"10px 4px 0",
+    fontSize:12, color:"#8B6E4E", lineHeight:1.6,
+    display:"flex", alignItems:"flex-start", gap:7,
+    maxWidth:650,
+  },
+  expandBtnSm: {
     background:"none", border:"1px solid #DDD5CC", borderRadius:20,
-    padding:"4px 13px", fontSize:11, color:"#6B5E54", cursor:"pointer",
+    padding:"6px 14px", fontSize:10, color:"#6B5E54", cursor:"pointer",
     letterSpacing:"0.06em",
   },
 
@@ -5280,10 +5414,21 @@ const s = {
   collageCanvas: {
     position:"relative",
     width:"100%",
-    paddingBottom:"125%", // 4:5 portrait like a real editorial page
-    background:"#FFFFFF",
+    maxWidth:700,
+    paddingBottom: "min(78%, 550px)", // ~4:5 but capped to prevent giant cards
+    background:"#F5F0EB",
     overflow:"hidden",
     margin:"0",
+    borderRadius:16,
+    boxShadow:"0 4px 24px rgba(28,24,20,0.07)",
+  },
+  collageTooltip: {
+    position:"absolute", bottom:4, left:"50%", transform:"translateX(-50%)",
+    background:"rgba(28,24,20,0.85)", color:"#F5F1EC",
+    padding:"4px 10px", borderRadius:6,
+    fontSize:10, letterSpacing:"0.04em", textAlign:"center",
+    whiteSpace:"nowrap", pointerEvents:"none",
+    zIndex:50, animation:"fadeIn 0.15s ease",
   },
 
   // Placeholders inside canvas
@@ -5328,6 +5473,21 @@ const s = {
     display:"flex", alignItems:"center", justifyContent:"center", gap:7,
     fontFamily:"'DM Sans',sans-serif",
     transition:"all 0.2s",
+  },
+  remixBtn: {
+    background:"none",
+    border:"1.5px solid #1C1814", borderRadius:20,
+    padding:"8px 20px", fontSize:11, letterSpacing:"0.12em",
+    color:"#1C1814", cursor:"pointer",
+    display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+    fontFamily:"'DM Sans',sans-serif",
+    transition:"all 0.2s",
+  },
+  saveBtnHeart: {
+    background:"none", border:"1px solid #DDD5CC", borderRadius:20,
+    width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center",
+    cursor:"pointer", transition:"all 0.2s",
+    flexShrink:0,
   },
   elevatedSection: {
     borderTop:"2px solid #1C1814",
@@ -5442,7 +5602,7 @@ const s = {
   filterBar: { marginBottom:20 },
   filterSection: { marginBottom:12 },
   filterSectionLabel: { fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6 },
-  filterRow: { display:"flex", gap:6, flexWrap:"wrap" },
+  filterRow: { display:"flex", gap:6, flexWrap:"wrap", overflowX:"auto", paddingBottom:4 },
   swatchBtn: { width:22, height:22, borderRadius:"50%", cursor:"pointer", flexShrink:0, transition:"box-shadow 0.15s" },
   shadePopover: { position:"absolute", top:28, left:0, background:"#fff", border:"1px solid #E8E0D8", borderRadius:8, padding:8, display:"flex", gap:6, zIndex:20, boxShadow:"0 4px 16px rgba(0,0,0,0.12)" },
   shadeSwatch: { width:20, height:20, borderRadius:"50%", cursor:"pointer", transition:"box-shadow 0.15s" },
