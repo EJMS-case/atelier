@@ -1,4 +1,4 @@
-// ── ATELIER STYLING SYSTEM PROMPT ───────────────────────────────────
+// ── ATELIER STYLING SYSTEM PROMPT ─────────────────────────────────────────────
 // Compiled system prompt template for AI outfit generation.
 // All content goes in the user message (system param not supported with
 // anthropic-dangerous-direct-browser-access).
@@ -43,7 +43,7 @@ export function buildStylingPrompt({
 
   // ── Exclusions ──
   const exclusionBlock = activeExclusions.length > 0
-    ? `\n⚫ ACTIVE EXCLUSIONS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\nDo NOT include ANY item that matches these exclusions. Not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you. Any look containing an excluded item type is an AUTOMATIC FAILURE and must be rebuilt from scratch.\n`
+    ? `\n⛔ ACTIVE EXCLUSIONS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\nDo NOT include ANY item that matches these exclusions. Not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you. Any look containing an excluded item type is an AUTOMATIC FAILURE and must be rebuilt from scratch.\n`
     : "";
 
   // ── Recently suggested ──
@@ -64,8 +64,25 @@ export function buildStylingPrompt({
 
   // ── Styling directions block ──
   const directionsBlock = stylingDirections.length === 3
-    ? `\n─────────────────────────────────────────────────────────
-STYLING DIRECTIONS (MANDATORY — each look MUST follow its assigned creative direction):\n\nLOOK 1:\n  Color approach: ${stylingDirections[0].color}\n  Proportion: ${stylingDirections[0].proportion}\n  Hero strategy: ${stylingDirections[0].hero}\n\nLOOK 2:\n  Color approach: ${stylingDirections[1].color}\n  Proportion: ${stylingDirections[1].proportion}\n  Hero strategy: ${stylingDirections[1].hero}\n\nLOOK 3:\n  Color approach: ${stylingDirections[2].color}\n  Proportion: ${stylingDirections[2].proportion}\n  Hero strategy: ${stylingDirections[2].hero}\n\nThese directions are NON-NEGOTIABLE. Each look must follow its assigned color approach, proportion strategy, and hero type. This is how you ensure the 3 looks feel FUNDAMENTALLY DIFFERENT — not just "different pants." Style like a creative director, not a personal shopper.\n`
+    ? `\n────────────────────────────────────────────────────────
+STYLING DIRECTIONS (MANDATORY — each look MUST follow its assigned creative direction):
+
+LOOK 1:
+  Color approach: ${stylingDirections[0].color}
+  Proportion: ${stylingDirections[0].proportion}
+  Hero strategy: ${stylingDirections[0].hero}
+
+LOOK 2:
+  Color approach: ${stylingDirections[1].color}
+  Proportion: ${stylingDirections[1].proportion}
+  Hero strategy: ${stylingDirections[1].hero}
+
+LOOK 3:
+  Color approach: ${stylingDirections[2].color}
+  Proportion: ${stylingDirections[2].proportion}
+  Hero strategy: ${stylingDirections[2].hero}
+
+These directions are NON-NEGOTIABLE. Each look must follow its assigned color approach, proportion strategy, and hero type. This is how you ensure the 3 looks feel FUNDAMENTALLY DIFFERENT — not just "different pants." Style like a creative director, not a personal shopper.\n`
     : "";
 
   // ── Casual detection ──
@@ -87,7 +104,7 @@ ${requestBlock}
 ${exclusionBlock}
 ${recentBlock}
 
-───────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────
 YOUR STYLING METHOD (apply rigorously to EVERY look):
 
 1. HERO PIECE — Anchor on ONE standout item. Everything else supports it. The hero is the reason someone would notice this outfit from across the room.
@@ -122,7 +139,7 @@ YOUR STYLING METHOD (apply rigorously to EVERY look):
     ? "Does this look like she THREW IT ON — not like she planned it for an hour? Would she wear this to meet a friend or run errands without feeling overdressed? If it feels formal, costumey, or evening, rebuild."
     : "Would this look photographed from across an NYC street make someone think 'she's someone'? If not, rebuild."}
 
-───────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────
 HARD CONSTRAINTS (violation of ANY = FAILED look):
 
 HC1: ONLY use items from the wardrobe inventory below. NEVER invent items.
@@ -144,11 +161,11 @@ D5: DIFFERENT TOP TREATMENTS — vary tucking, layering, sleeve lengths across t
 
 ${availabilityNote}
 ${directionsBlock}
-───────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────
 WARDROBE INVENTORY (${closetCount} items — use ONLY these):
 ${closetItems}
 
-───────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────
 BUILD 3 LOOKS. Each must be a genuinely different take — different hero, different color story, different silhouette.
 
 FINAL CHECKS (run EACH check before outputting — reject and rebuild any look that fails):
@@ -185,7 +202,7 @@ CRITICAL: Each look must contain EXACTLY 1 Shoes item and EXACTLY 1 Bags item. I
 Generation seed: ${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatAboutMe(aboutMe) {
   if (!aboutMe || Object.values(aboutMe).every(v => v == null || v === "")) {
