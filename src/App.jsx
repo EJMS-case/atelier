@@ -1491,7 +1491,6 @@ export default function App() {
   const [editItem,   setEditItem]   = useState(null);
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
-  const [dismissedSimilarity, setDismissedSimilarity] = useState(new Set());
   // ── Sets metadata ──
   const [setsMeta,       setSetsMeta]       = useState(() => loadSetsMeta());
   const [setsSearch,     setSetsSearch]     = useState("");
@@ -1890,22 +1889,6 @@ export default function App() {
     return isSetView ? [] : [...base].sort(defaultSortComparator);
   })();
 
-  // Compute similarity flags: 4+ items with same subcategory + color_family, excluding non-color categories
-  const SIMILARITY_EXCLUDED = ["Accessories", "Shoes", "Jewelry"];
-  const similarityGroups = (() => {
-    const groups = {};
-    items.forEach(it => {
-      if (SIMILARITY_EXCLUDED.includes(it.category)) return;
-      if (!it.subcategory || !it.color_family) return;
-      const key = `${it.subcategory}||${it.color_family}`;
-      if (!groups[key]) groups[key] = { subcategory: it.subcategory, color_family: it.color_family, count: 0 };
-      groups[key].count++;
-    });
-    return Object.entries(groups)
-      .filter(([k, g]) => g.count >= 4 && !dismissedSimilarity.has(k))
-      .map(([k, g]) => ({ key: k, ...g }));
-  })();
-
   // Sync status indicator
   const syncLabel = syncStatus === "syncing" ? "⟳ syncing"
     : syncStatus === "synced"  ? "✓ saved"
@@ -2069,23 +2052,6 @@ export default function App() {
               />
             )}
           </>)}
-
-          {/* Similarity flags */}
-          {!isSetView && similarityGroups.map(group => (
-            <div key={group.key} style={{background:"#FDF8F0", border:"1px solid #E8D9BE", borderRadius:8, padding:"10px 14px", marginBottom:10, display:"flex", alignItems:"flex-start", gap:10}}>
-              <span style={{fontSize:14, flexShrink:0}}>⚠️</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:12, fontWeight:500, color:"#6B4E1A", marginBottom:2}}>
-                  You own {group.count} similar pieces
-                </div>
-                <div style={{fontSize:11, color:"#8B6914"}}>
-                  {group.count} {group.color_family} {group.subcategory} items — consider whether they're all earning their place.
-                </div>
-              </div>
-              <button onClick={() => setDismissedSimilarity(s => new Set([...s, group.key]))}
-                style={{background:"none", border:"none", color:"#C4A882", cursor:"pointer", fontSize:13, padding:"0 4px", flexShrink:0}}>✕</button>
-            </div>
-          ))}
 
           {/* Landing view: Recently Added + uncategorized when no filters active */}
           {!isSetView && !activeFilters.category?.length && !activeFilters.subcategory?.length && !activeFilters.color?.length && !activeFilters.brand?.length && !activeFilters.sets && !activeFilters.lastWorn && (() => {
