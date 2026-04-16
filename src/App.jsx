@@ -504,6 +504,15 @@ const sb = {
     });
     if (!res.ok) throw new Error("Delete outfit log failed");
   },
+  async updateOutfitLog(id, patch) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error("Update outfit log failed");
+    return res.json();
+  },
 
   // ── Favorites ──
   async fetchFavorites() {
@@ -2307,10 +2316,28 @@ export default function App() {
         <ColorAdvisorView items={items} apiKey={apiKey}/>
       )}
 
-      {/* ── HISTORY ── */}
-      {view === "history" && (
-        <OutfitHistory
+      {/* ── SAVED (Looks / History / Favorites) ── */}
+      {view === "favorites" && (
+        <SavedView
           items={items}
+          favorites={favorites}
+          toggleFav={toggleFav}
+          isFav={isFav}
+          onEditItem={(item) => { setEditItem(item); setView("edit"); }}
+          onDeleteLog={async (id) => { await sb.deleteOutfitLog(id); }}
+          onUnlog={async (id) => { await sb.updateOutfitLog(id, { date_worn: null }); }}
+          onLogAsWorn={async (id, date) => {
+            await sb.updateOutfitLog(id, { date_worn: date });
+            // Also update per-item last_worn so rotation tracking sees the wear
+            const log = (await sb.fetchOutfitLogs()).find(l => l.id === id);
+            const ids = log?.garment_ids || [];
+            await Promise.all(ids.map(gid => sb.updateItemLastWorn(gid, date)));
+            const updated = items.map(it =>
+              ids.includes(it.id) ? {...it, last_worn: date} : it
+            );
+            persistItems(updated);
+            flashSync("synced");
+          }}
           onWearAgain={async (log) => {
             const today = new Date().toISOString().slice(0, 10);
             const newLog = {
@@ -2329,19 +2356,6 @@ export default function App() {
             persistItems(updated);
             flashSync("synced");
           }}
-          onDelete={async (id) => { await sb.deleteOutfitLog(id); }}
-          isFav={isFav}
-          toggleFav={toggleFav}
-        />
-      )}
-
-      {/* ── FAVORITES ── */}
-      {view === "favorites" && (
-        <FavoritesView
-          items={items}
-          favorites={favorites}
-          toggleFav={toggleFav}
-          onEditItem={(item) => { setEditItem(item); setView("edit"); }}
         />
       )}
 
@@ -4000,19 +4014,19 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
 // ── SAVE LOOK MODAL ──────────────────────────────────────────────────────────
 function SaveLookModal({ look, lookItems, onSave, onClose }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [notWorn,  setNotWorn]  = useState(false);
-  const [dateWorn, setDateWorn] = useState(today);
-  const [occasion, setOccasion] = useState(look.occasion || "Work");
-  const [notes,    setNotes]    = useState("");
-  const [saving,   setSaving]   = useState(false);
-  const [saved,    setSaved]    = useState(false);
+  const [logAsWorn, setLogAsWorn] = useState(false);
+  const [dateWorn,  setDateWorn]  = useState(today);
+  const [occasion,  setOccasion]  = useState(look.occasion || "Work");
+  const [notes,     setNotes]     = useState("");
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await onSave({
         garment_ids: (look.items || []),
-        date_worn: notWorn ? null : dateWorn,
+        date_worn: logAsWorn ? dateWorn : null,
         occasion,
         notes: notes.trim() || null,
         collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, styling: look.styling || look.why }),
@@ -4029,13 +4043,15 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
     <div style={s.modalOverlay} onClick={onClose}>
       <div style={s.modalCard} onClick={e => e.stopPropagation()}>
         <div style={s.modalHeader}>
-          <span style={s.modalTitle}>Log This Look</span>
+          <span style={s.modalTitle}>{logAsWorn ? "Log This Look" : "Save This Look"}</span>
           <button style={s.modalClose} onClick={onClose}>&times;</button>
         </div>
         {saved ? (
           <div style={{ padding:"40px 20px", textAlign:"center" }}>
             <div style={{ fontSize:28, marginBottom:10 }}>✓</div>
-            <div style={{ fontSize:14, color:"#3D7A4E", letterSpacing:"0.06em" }}>Saved to your outfit log</div>
+            <div style={{ fontSize:14, color:"#3D7A4E", letterSpacing:"0.06em" }}>
+              {logAsWorn ? "Logged in your history" : "Saved to your looks"}
+            </div>
           </div>
         ) : (
           <>
@@ -4045,12 +4061,12 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
             </div>
             <div style={s.modalField}>
               <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:11, letterSpacing:"0.08em", color:"#6B6460", fontWeight:500 }}>
-                <input type="checkbox" checked={notWorn} onChange={e => setNotWorn(e.target.checked)}
+                <input type="checkbox" checked={logAsWorn} onChange={e => setLogAsWorn(e.target.checked)}
                   style={{ width:14, height:14, accentColor:"#8B6F5E", cursor:"pointer" }}/>
-                I haven't worn this yet — save without date
+                I wore this — log it in history
               </label>
             </div>
-            {!notWorn && (
+            {logAsWorn && (
               <div style={s.modalField}>
                 <label style={s.modalLabel}>DATE WORN</label>
                 <input type="date" value={dateWorn} onChange={e => setDateWorn(e.target.value)} style={s.modalInput}/>
@@ -4069,7 +4085,7 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
                 rows={3} style={{...s.modalInput, resize:"vertical", fontFamily:"inherit"}}/>
             </div>
             <button style={s.modalSaveBtn} onClick={handleSave} disabled={saving}>
-              {saving ? <><span style={s.spinnerSm}/> Saving…</> : "Save to Outfit Log"}
+              {saving ? <><span style={s.spinnerSm}/> Saving…</> : (logAsWorn ? "Log in History" : "Save to Looks")}
             </button>
           </>
         )}
@@ -4079,16 +4095,17 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
 }
 
 // ── OUTFIT HISTORY ───────────────────────────────────────────────────────────
-function OutfitHistory({ items, onWearAgain, onDelete, isFav, toggleFav }) {
+function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested }) {
   const [logs,       setLogs]       = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filterOcc,  setFilterOcc]  = useState("All");
   const [wearingId,  setWearingId]  = useState(null);
   const [deleteId,   setDeleteId]   = useState(null);
+  const [unloggingId, setUnloggingId] = useState(null);
 
   useEffect(() => {
     sb.fetchOutfitLogs()
-      .then(data => { setLogs(data); setLoading(false); })
+      .then(data => { setLogs(data.filter(l => l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
@@ -4121,13 +4138,21 @@ function OutfitHistory({ items, onWearAgain, onDelete, isFav, toggleFav }) {
     try { await onDelete(id); setLogs(prev => prev.filter(l => l.id !== id)); setDeleteId(null); }
     catch (e) { console.error(e); }
   };
+  const handleUnlog = async (id) => {
+    setUnloggingId(id);
+    try { await onUnlog(id); setLogs(prev => prev.filter(l => l.id !== id)); }
+    catch (e) { console.error(e); }
+    finally { setUnloggingId(null); }
+  };
 
   const occasions = ["All", ...new Set(logs.map(l => l.occasion).filter(Boolean))];
+  const Wrap = nested ? "div" : "div";
+  const wrapStyle = nested ? {} : s.page;
 
   return (
-    <div style={s.page}>
-      <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>
-      {logs.length > 0 && (
+    <Wrap style={wrapStyle}>
+      {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>}
+      {logs.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
           {occasions.map(o => (
             <button key={o} onClick={() => setFilterOcc(o)}
@@ -4178,6 +4203,10 @@ function OutfitHistory({ items, onWearAgain, onDelete, isFav, toggleFav }) {
                     <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
                       {wearingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Wear this again"}
                     </button>
+                    <button style={s.histDeleteBtn} onClick={() => handleUnlog(log.id)} disabled={unloggingId === log.id}
+                      title="Move back to Looks (clears the wear date)">
+                      {unloggingId === log.id ? "…" : "Unlog"}
+                    </button>
                   </div>
                   {deleteId === log.id ? (
                     <div style={{ display:"flex", gap:6 }}>
@@ -4193,12 +4222,128 @@ function OutfitHistory({ items, onWearAgain, onDelete, isFav, toggleFav }) {
           })}
         </div>
       ))}
+    </Wrap>
+  );
+}
+
+// ── LOOKS VIEW (saved outfits without a wear date) ──────────────────────────
+function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav }) {
+  const [logs,      setLogs]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [loggingId, setLoggingId] = useState(null);
+  const [deleteId,  setDeleteId]  = useState(null);
+  const [dateById,  setDateById]  = useState({});
+
+  useEffect(() => {
+    sb.fetchOutfitLogs()
+      .then(data => { setLogs(data.filter(l => !l.date_worn)); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
+  const today = new Date().toISOString().slice(0, 10);
+
+  const handleLog = async (id) => {
+    const date = dateById[id] || today;
+    setLoggingId(id);
+    try { await onLogAsWorn(id, date); setLogs(prev => prev.filter(l => l.id !== id)); }
+    catch (e) { console.error(e); }
+    finally { setLoggingId(null); }
+  };
+  const handleDelete = async (id) => {
+    try { await onDelete(id); setLogs(prev => prev.filter(l => l.id !== id)); setDeleteId(null); }
+    catch (e) { console.error(e); }
+  };
+
+  return (
+    <div>
+      {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading your looks…</p></div>}
+      {!loading && logs.length === 0 && (
+        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No looks saved yet. Generate an outfit in Style Me and save it without a date.</p></div>
+      )}
+      {!loading && logs.map(log => {
+        const meta = parseMeta(log.collage_url);
+        const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
+        const pickedDate = dateById[log.id] || today;
+        return (
+          <div key={log.id} style={s.histCard}>
+            <div style={s.histCardHeader}>
+              <div>
+                {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
+                <div style={s.histDate}>
+                  {log.occasion && <span>{log.occasion}</span>}
+                  {meta.mood && <span style={s.histMood}>{log.occasion ? " · " : ""}{meta.mood}</span>}
+                </div>
+              </div>
+            </div>
+            <div style={s.histThumbs}>
+              {logItems.map(it => (
+                <div key={it.id} style={s.histThumb}>
+                  {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
+                    : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
+                  <div style={s.histThumbName}>{it.name}</div>
+                </div>
+              ))}
+            </div>
+            {log.notes && <div style={s.histNotes}>{log.notes}</div>}
+            <div style={s.histActions}>
+              <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
+                  <svg width={15} height={15} viewBox="0 0 24 24"
+                    fill={isFav("outfit", log.id) ? "#C0392B" : "none"}
+                    stroke={isFav("outfit", log.id) ? "#C0392B" : "#C8BFB4"}
+                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                </button>
+                <input type="date" value={pickedDate}
+                  onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}
+                  style={{ fontSize:12, padding:"4px 6px", border:"1px solid #E8E0D8", borderRadius:6, background:"#FDFBF9", fontFamily:"inherit", color:"#2C2420" }}/>
+                <button style={s.histWearBtn} onClick={() => handleLog(log.id)} disabled={loggingId === log.id}>
+                  {loggingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Log as worn"}
+                </button>
+              </div>
+              {deleteId === log.id ? (
+                <div style={{ display:"flex", gap:6 }}>
+                  <button style={{...s.histDeleteBtn, color:"#C0392B"}} onClick={() => handleDelete(log.id)}>Confirm</button>
+                  <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
+                </div>
+              ) : (
+                <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── SAVED VIEW (wrapper with sub-tabs: Looks | History | Favorites) ─────────
+function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav }) {
+  const [tab, setTab] = useState("looks");
+  return (
+    <div style={s.page}>
+      <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Saved</h2>
+      <div style={s.filterRow}>
+        {[["looks","Looks"],["history","History"],["favorites","Favorites"]].map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)}
+            style={{...s.chip, ...(tab === key ? s.chipActive : {})}}>{label}</button>
+        ))}
+      </div>
+      {tab === "looks" && (
+        <LooksView items={items} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav}/>
+      )}
+      {tab === "history" && (
+        <OutfitHistory nested items={items} onWearAgain={onWearAgain} onDelete={onDeleteLog} onUnlog={onUnlog} isFav={isFav} toggleFav={toggleFav}/>
+      )}
+      {tab === "favorites" && (
+        <FavoritesView nested items={items} favorites={favorites} toggleFav={toggleFav} onEditItem={onEditItem}/>
+      )}
     </div>
   );
 }
 
 // ── FAVORITES VIEW ──────────────────────────────────────────────────────────
-function FavoritesView({ items, favorites, toggleFav, onEditItem }) {
+function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
   const [tab, setTab] = useState("outfits");
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4220,8 +4365,8 @@ function FavoritesView({ items, favorites, toggleFav, onEditItem }) {
   const tabs = [["outfits","Outfits",favOutfits.length],["pieces","Pieces",favPieces.length],["shopping","Shopping",0]];
 
   return (
-    <div style={s.page}>
-      <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Favorites</h2>
+    <div style={nested ? {} : s.page}>
+      {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Favorites</h2>}
       <div style={s.filterRow}>
         {tabs.map(([key, label, count]) => (
           <button key={key} onClick={() => setTab(key)}
