@@ -452,7 +452,7 @@ const sb = {
     // Ignore response — error just means bucket already exists
   },
 
-  // Upload base64 image → returns permanent public URL
+  // Upload base64 image → returns permanent public URL (retries up to 3 times)
   async uploadImage(itemId, base64DataUrl) {
     const [header, base64] = base64DataUrl.split(",");
     const mime = header.match(/data:([^;]+)/)?.[1] || "image/jpeg";
@@ -461,13 +461,20 @@ const sb = {
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const blob = new Blob([bytes], { type: mime });
 
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${itemId}`, {
-      method: "POST",
-      headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
-      body: blob,
-    });
-    if (!res.ok) throw new Error("Image upload failed");
-    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${itemId}`;
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
+        const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${itemId}`, {
+          method: "POST",
+          headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
+          body: blob,
+        });
+        if (res.ok) return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${itemId}`;
+        lastErr = new Error(`Image upload failed (HTTP ${res.status}): ${await res.text()}`);
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr;
   },
 
   // Delete image from storage
@@ -1634,15 +1641,14 @@ export default function App() {
   }, [setsMeta]);
 
   const addItems = useCallback(async (newItems) => {
-    // Add to state immediately so UI feels fast
     const optimistic = [...items, ...newItems];
     setItems(optimistic);
     saveLocalItems(optimistic);
     flashSync("syncing");
 
-    // Process in batches of 5 to avoid rate limits
     const BATCH = 5;
     const saved = [...items];
+    let failedImages = [];
     let anyFailed = false;
 
     for (let i = 0; i < newItems.length; i += BATCH) {
@@ -1654,34 +1660,45 @@ export default function App() {
             try {
               const url = await sb.uploadImage(item.id, item.image);
               toSave = { ...item, image: url };
-            } catch { /* keep base64 in memory, upsert without image url */ }
+            } catch (imgErr) {
+              console.error("Image upload failed for", item.name, imgErr);
+              failedImages.push(item.name);
+              // Keep base64 in localStorage so it survives reload and can be retried
+              toSave = item;
+            }
           }
           await sb.upsert(toSave);
           saved.push(toSave);
-          // Update state incrementally so images appear as they upload
           setItems(prev => prev.map(it => it.id === toSave.id ? toSave : it));
         } catch(e) {
           console.error("Failed to save item to Supabase:", item.name, e);
-          saved.push(item); // keep in state even if Supabase failed
+          saved.push(item);
           anyFailed = true;
         }
       }));
-      // Pause between batches
       if (i + BATCH < newItems.length) await new Promise(r => setTimeout(r, 300));
     }
 
     saveLocalItems(saved);
-    anyFailed ? flashSync("error") : flashSync("synced");
+    if (failedImages.length > 0) {
+      flashSync("error");
+      setTimeout(() => alert(`⚠️ Photos failed to upload for ${failedImages.length} item(s):\n\n${failedImages.join("\n")}\n\nThe items were saved but without photos. Go to Settings → Force Sync to retry, or re-upload photos by editing each item.`), 300);
+    } else {
+      anyFailed ? flashSync("error") : flashSync("synced");
+    }
   }, [items]);
 
   const updateItem = useCallback(async (id, fields) => {
     let resolvedFields = { ...fields };
-    // If image changed and is base64, upload to Storage first
+    let imageUploadFailed = false;
     if (fields.image?.startsWith("data:")) {
       try {
         const url = await sb.uploadImage(id, fields.image);
         resolvedFields = { ...fields, image: url };
-      } catch { /* keep base64 as fallback */ }
+      } catch (imgErr) {
+        console.error("Image upload failed during edit:", imgErr);
+        imageUploadFailed = true;
+      }
     }
     const updated = items.map(it => it.id === id ? {...it, ...resolvedFields} : it);
     persistItems(updated);
@@ -1689,7 +1706,12 @@ export default function App() {
     try {
       const item = updated.find(it => it.id === id);
       await sb.upsert(item);
-      flashSync("synced");
+      if (imageUploadFailed) {
+        flashSync("error");
+        alert("⚠️ Your changes were saved, but the photo failed to upload. The photo is stored locally — try editing the item again or use Settings → Force Sync.");
+      } else {
+        flashSync("synced");
+      }
     } catch(e) {
       console.error("Failed to update item in Supabase:", e);
       flashSync("error");
@@ -1700,7 +1722,7 @@ export default function App() {
   // Reads from live state (has base64 images), uploads them, saves URLs back
   const forceSyncAll = useCallback(async (onProgress) => {
     flashSync("syncing");
-    let done = 0, failed = 0;
+    let done = 0, failed = 0, imgFailed = 0;
     const updated = [...items];
     for (let i = 0; i < updated.length; i++) {
       const item = updated[i];
@@ -1712,7 +1734,10 @@ export default function App() {
             toSave = { ...item, image: url };
             updated[i] = toSave;
             setItems(prev => prev.map(it => it.id === toSave.id ? toSave : it));
-          } catch { /* upload failed, upsert metadata only */ }
+          } catch (imgErr) {
+            console.error("Force sync image upload failed for", item.name, imgErr);
+            imgFailed++;
+          }
         }
         await sb.upsert(toSave);
         done++;
@@ -1721,7 +1746,11 @@ export default function App() {
       await new Promise(r => setTimeout(r, 150));
     }
     saveLocalItems(updated);
-    failed > 0 ? flashSync("error") : flashSync("synced");
+    const anyProblems = failed > 0 || imgFailed > 0;
+    anyProblems ? flashSync("error") : flashSync("synced");
+    if (imgFailed > 0) {
+      setTimeout(() => alert(`⚠️ ${imgFailed} photo(s) failed to upload to cloud storage. Item data was saved but those photos are only stored locally.`), 300);
+    }
     return { done, failed };
   }, [items]);
 
