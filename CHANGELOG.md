@@ -2,7 +2,19 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — F5 Mood boards — 2026-04-17
+## [Unreleased] — F6 Wear tracking — 2026-04-17
+
+### Added
+- **Wear sub-tab under Saved.** Three sections: top-5 most-worn strip, average cost-per-wear across priced items, and a neglected-items grid (last worn > 60 days, or never worn and ≥60 days old).
+- Each neglected card has a "✦ Style this" CTA that jumps into Style Me with the piece pre-seeded into the request field.
+- **`wear_count` is now persisted** — bumped on every new outfit save with a date, every "Wear again", and every log-as-worn; decremented on unlog. Uses a fetch-and-patch pair; fire-and-forget so a flaky network never blocks the save.
+- **Purchase price** field added to the Edit Item form. When both price and a wear count exist, cost-per-wear surfaces inline on the edit form.
+- New modules: `src/features/wear/WearView.jsx`, `src/features/wear/wearApi.js`.
+
+### Notes
+- No migration needed — `wear_count`, `price_paid` columns already exist from F1 and earlier setup.
+
+## [Released] — F5 Mood boards — 2026-04-17
 
 ### Added
 - **Boards sub-tab in Saved.** List of moodboards with a cover preview + a new-board button.
