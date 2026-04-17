@@ -4,6 +4,9 @@ import { sampleClosetItems, formatInventory } from "./utils/closet-sampler.js";
 import { generateValidatedLooks, ValidationError } from "./utils/styling-validator.js";
 import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } from "./utils/rotation-tracker.js";
 import { generateContactSheets } from "./utils/contact-sheet.js";
+import { autoDetectItem } from "./lib/anthropic.js";
+import { stripBackground } from "./lib/bgRemoval.js";
+import { applyDetection } from "./features/closet/applyDetection.js";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -2913,7 +2916,8 @@ function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav }
 function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
   const [queue,      setQueue]      = useState([]);
   const [saving,     setSaving]     = useState(false);
-  const [processing, setProcessing] = useState({}); // id -> "removing"|"done"|"error"
+  const [processing, setProcessing] = useState({}); // id -> "bg"|"detect"|"done"|"error"
+  const [detected,   setDetected]   = useState({}); // id -> true once AI detect applied (prevents re-runs)
   const [knitSuggest, setKnitSuggest] = useState({}); // id -> { weight, fit, summary } | "loading" | "dismissed"
 
   const handleFiles = (e) => {
@@ -2926,21 +2930,48 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           id, image: rawImage,
           name: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
           category: "Tops", subcategory: "", brand: "", color: "", notes: "",
+          // F1 autodetect fields (may be filled by AI below)
+          primary_color_hex: "", secondary_color: "", secondary_color_hex: "",
+          material: "", pattern: "", tags: [], has_bg: false,
+          detected_at: null, detection_confidence: null,
         }]);
+        setProcessing(p => ({...p, [id]: "bg"}));
 
-        // Auto-remove background if key is set
-        if (rmbgKey) {
-          setProcessing(p => ({...p, [id]: "removing"}));
-          try {
-            const cleaned = await removeBackground(rawImage, rmbgKey);
-            const compressed = await compressImage(cleaned, 600, 0.9, true);
-            setQueue(q => q.map(i => i.id === id ? {...i, image: compressed} : i));
-            setProcessing(p => ({...p, [id]: "done"}));
-          } catch(err) {
-            console.error("BG removal failed:", err);
-            setProcessing(p => ({...p, [id]: "error"}));
+        // F1 — run BG removal and AI detect in parallel. Both are best-effort;
+        // neither blocks the save button on failure.
+        const bgP = stripBackground(rawImage, { rmbgKey })
+          .then(r => {
+            return compressImage(r.image, 600, 0.9, true).then(compressed => ({
+              image: compressed, has_bg: r.has_bg,
+            }));
+          })
+          .catch(err => {
+            console.warn("[F1] bg strip failed:", err);
+            return { image: rawImage, has_bg: true };
+          });
+
+        const detectP = apiKey
+          ? autoDetectItem(rawImage, apiKey).catch(err => {
+              console.warn("[F1] auto-detect failed:", err);
+              return null;
+            })
+          : Promise.resolve(null);
+
+        const [bg, detection] = await Promise.all([bgP, detectP]);
+
+        // Apply results in a single queue update so we don't race with the
+        // user's typing or the Knits auto-classifier (handleCategoryChange).
+        setQueue(q => q.map(i => {
+          if (i.id !== id) return i;
+          let next = { ...i, image: bg.image, has_bg: bg.has_bg };
+          if (detection) {
+            next = applyDetection(next, detection);
+            next.detected_at = new Date().toISOString();
           }
-        }
+          return next;
+        }));
+        if (detection) setDetected(d => ({ ...d, [id]: true }));
+        setProcessing(p => ({...p, [id]: "done"}));
       };
       reader.readAsDataURL(file);
     });
@@ -2986,7 +3017,10 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
     onBack();
   };
 
-  const allDone = queue.every(i => !rmbgKey || processing[i.id] === "done" || processing[i.id] === "error");
+  const allDone = queue.every(i => {
+    const st = processing[i.id];
+    return st === "done" || st === "error" || st === undefined;
+  });
 
   return (
     <div style={s.page}>
@@ -2996,15 +3030,20 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         {queue.length > 0 && <span style={s.queueBadge}>{queue.length}</span>}
       </div>
 
-      {/* BG removal notice */}
-      {rmbgKey && (
+      {/* Upload pipeline notice */}
+      {apiKey && rmbgKey && (
         <div style={s.rmbgNotice}>
-          ✦ Background removal active — photos will be auto-cleaned on upload
+          ✦ AI auto-detect + background removal active — category, color, brand, and material fill in automatically
         </div>
       )}
-      {!rmbgKey && (
+      {apiKey && !rmbgKey && (
         <div style={{...s.rmbgNotice, background:"#FFF8EC", borderColor:"#E8D5A0", color:"#8B6914"}}>
-          Add a Remove.bg key in Settings to enable automatic background removal
+          ✦ AI auto-detect active. Add a Remove.bg key in Settings for best backgrounds — otherwise photos keep their original background.
+        </div>
+      )}
+      {!apiKey && (
+        <div style={{...s.rmbgNotice, background:"#FFF8EC", borderColor:"#E8D5A0", color:"#8B6914"}}>
+          Add an Anthropic API key in Settings to auto-fill category, colors, and brand from the photo.
         </div>
       )}
 
@@ -3027,13 +3066,13 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                   {/* Thumbnail with status overlay */}
                   <div style={s.queueThumb}>
                     <img src={item.image} alt="" style={s.queueThumbImg}/>
-                    {status === "removing" && (
+                    {status === "bg" && (
                       <div style={s.thumbOverlay}>
                         <span style={s.spinnerSm}/>
                       </div>
                     )}
                     {status === "done" && (
-                      <div style={{...s.thumbOverlay, background:"rgba(61,122,78,0.7)"}}>
+                      <div style={{...s.thumbOverlay, background:"rgba(61,122,78,0.55)"}}>
                         <span style={{color:"#fff",fontSize:14}}>✓</span>
                       </div>
                     )}
@@ -3041,6 +3080,9 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       <div style={{...s.thumbOverlay, background:"rgba(192,57,43,0.7)"}}>
                         <span style={{color:"#fff",fontSize:11}}>failed</span>
                       </div>
+                    )}
+                    {item.has_bg && status === "done" && (
+                      <div style={{position:"absolute",top:4,left:4,background:"rgba(139,105,20,0.9)",color:"#fff",fontSize:9,padding:"2px 5px",borderRadius:3,fontWeight:600}}>BG</div>
                     )}
                   </div>
 
@@ -3125,9 +3167,9 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           </div>
 
           <div style={s.queueActions}>
-            {rmbgKey && !allDone && (
+            {!allDone && (
               <p style={{fontSize:12,color:"#9A8E84",textAlign:"center",margin:"0 0 8px"}}>
-                Removing backgrounds… you can edit names while waiting
+                Cleaning photos & auto-detecting details… you can edit any field while waiting
               </p>
             )}
             <button style={{...s.btnPrimary,width:"100%"}}
@@ -3151,7 +3193,15 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable || false,
+    // F1 fields — editable inline
+    primary_color_hex: item.primary_color_hex || "",
+    secondary_color: item.secondary_color || "",
+    secondary_color_hex: item.secondary_color_hex || "",
+    material: item.material || "",
+    pattern: item.pattern || "",
+    tags: Array.isArray(item.tags) ? item.tags : [],
   });
+  const [tagsInput, setTagsInput] = useState((item.tags || []).join(", "));
   const [preview, setPreview] = useState(item.image || null);
   const [confirm, setConfirm] = useState(false);
 
@@ -3190,6 +3240,54 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
               value={form[field]} onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
           </div>
         ))}
+
+        {/* ── F1 — auto-detected fields (all editable) ─────────────── */}
+        <div style={{display:"flex",gap:10}}>
+          <div style={{flex:1}}>
+            <div style={s.fieldLabel}>Color hex</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {form.primary_color_hex && (
+                <span style={{width:26,height:26,borderRadius:4,border:"1px solid #D6CDC1",background:form.primary_color_hex,flexShrink:0}}/>
+              )}
+              <input style={{...s.input,flex:1,fontFamily:"monospace"}} placeholder="#5D3A1A"
+                value={form.primary_color_hex}
+                onChange={e=>setForm(f=>({...f,primary_color_hex:e.target.value}))}/>
+            </div>
+          </div>
+          <div style={{flex:1}}>
+            <div style={s.fieldLabel}>Secondary color</div>
+            <input style={{...s.input,width:"100%"}} placeholder="optional"
+              value={form.secondary_color}
+              onChange={e=>setForm(f=>({...f,secondary_color:e.target.value}))}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <div style={{flex:1}}>
+            <div style={s.fieldLabel}>Material</div>
+            <input style={{...s.input,width:"100%"}} placeholder="silk, wool, denim…"
+              value={form.material}
+              onChange={e=>setForm(f=>({...f,material:e.target.value}))}/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={s.fieldLabel}>Pattern</div>
+            <select style={{...s.select,width:"100%"}} value={form.pattern}
+              onChange={e=>setForm(f=>({...f,pattern:e.target.value}))}>
+              <option value="">—</option>
+              {["solid","striped","plaid","floral","abstract","animal","polka-dot"].map(p=><option key={p}>{p}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <div style={s.fieldLabel}>Tags (comma-separated)</div>
+          <input style={{...s.input,width:"100%"}} placeholder="tailored, fluid, workwear"
+            value={tagsInput}
+            onChange={e => {
+              const v = e.target.value;
+              setTagsInput(v);
+              const tags = v.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+              setForm(f => ({...f, tags}));
+            }}/>
+        </div>
         <div>
           <div style={s.fieldLabel}>Category</div>
           <select style={{...s.select,width:"100%"}} value={form.category}
