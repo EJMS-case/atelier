@@ -13,6 +13,8 @@ import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/
 import CalendarView from "./features/planner/CalendarView.jsx";
 import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
 import MoodboardView from "./features/moodboard/MoodboardView.jsx";
+import WearView from "./features/wear/WearView.jsx";
+import { bumpWearCounts, unbumpWearCounts, costPerWear } from "./features/wear/wearApi.js";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -2424,8 +2426,11 @@ export default function App() {
                 const ids = log.garment_ids || [];
                 if (dateWorn) {
                   await Promise.all(ids.map(id => sb.updateItemLastWorn(id, dateWorn)));
+                  bumpWearCounts(ids); // F6 — track wear count
                   const updated = items.map(it =>
-                    ids.includes(it.id) ? {...it, last_worn: dateWorn} : it
+                    ids.includes(it.id)
+                      ? {...it, last_worn: dateWorn, wear_count: (it.wear_count || 0) + 1}
+                      : it
                   );
                   persistItems(updated);
                 }
@@ -2466,15 +2471,28 @@ export default function App() {
           isFav={isFav}
           onEditItem={(item) => { setEditItem(item); setView("edit"); }}
           onDeleteLog={async (id) => { await sb.deleteOutfitLog(id); }}
-          onUnlog={async (id) => { await sb.updateOutfitLog(id, { date_worn: null }); }}
+          onUnlog={async (id) => {
+            // F6 — decrement wear counts when unlogging
+            const log = (await sb.fetchOutfitLogs()).find(l => l.id === id);
+            const ids = log?.garment_ids || [];
+            await sb.updateOutfitLog(id, { date_worn: null });
+            unbumpWearCounts(ids);
+            const updated = items.map(it =>
+              ids.includes(it.id) ? {...it, wear_count: Math.max(0, (it.wear_count || 0) - 1)} : it
+            );
+            persistItems(updated);
+          }}
           onLogAsWorn={async (id, date) => {
             await sb.updateOutfitLog(id, { date_worn: date });
             // Also update per-item last_worn so rotation tracking sees the wear
             const log = (await sb.fetchOutfitLogs()).find(l => l.id === id);
             const ids = log?.garment_ids || [];
             await Promise.all(ids.map(gid => sb.updateItemLastWorn(gid, date)));
+            bumpWearCounts(ids); // F6
             const updated = items.map(it =>
-              ids.includes(it.id) ? {...it, last_worn: date} : it
+              ids.includes(it.id)
+                ? {...it, last_worn: date, wear_count: (it.wear_count || 0) + 1}
+                : it
             );
             persistItems(updated);
             flashSync("synced");
@@ -2491,13 +2509,27 @@ export default function App() {
             await sb.saveOutfitLog(newLog);
             const ids = log.garment_ids || [];
             await Promise.all(ids.map(id => sb.updateItemLastWorn(id, today)));
+            bumpWearCounts(ids); // F6
             const updated = items.map(it =>
-              ids.includes(it.id) ? {...it, last_worn: today} : it
+              ids.includes(it.id)
+                ? {...it, last_worn: today, wear_count: (it.wear_count || 0) + 1}
+                : it
             );
             persistItems(updated);
             flashSync("synced");
           }}
-          onSaveLook={async (log) => { await sb.saveOutfitLog(log); }}
+          onSaveLook={async (log) => {
+            await sb.saveOutfitLog(log);
+            // F6 — if the save included date_worn, bump counts too
+            if (log.date_worn) {
+              bumpWearCounts(log.garment_ids || []);
+            }
+          }}
+          onStyleItem={(it) => {
+            setRequest(`use my ${it.color ? it.color + " " : ""}${it.subcategory || it.category} "${it.name}"`);
+            setView("style");
+            setStylePanelOpen(true);
+          }}
         />
       )}
 
@@ -3298,6 +3330,7 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
     material: item.material || "",
     pattern: item.pattern || "",
     tags: Array.isArray(item.tags) ? item.tags : [],
+    price_paid: item.price_paid || "",
   });
   const [tagsInput, setTagsInput] = useState((item.tags || []).join(", "));
   const [preview, setPreview] = useState(item.image || null);
@@ -3385,6 +3418,20 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
               const tags = v.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
               setForm(f => ({...f, tags}));
             }}/>
+        </div>
+
+        {/* F6 — purchase price for cost-per-wear */}
+        <div>
+          <div style={s.fieldLabel}>Purchase price (USD, optional)</div>
+          <input type="number" min="0" step="1" style={{...s.input,width:"100%"}}
+            placeholder="e.g. 450"
+            value={form.price_paid}
+            onChange={e => setForm(f => ({...f, price_paid: e.target.value ? Number(e.target.value) : ""}))}/>
+          {item.wear_count > 0 && costPerWear(item) !== null && (
+            <div style={{fontSize:11, color:"#4A3E36", marginTop:4}}>
+              Cost-per-wear so far: <strong>${costPerWear(item).toFixed(2)}</strong> · {item.wear_count} wears
+            </div>
+          )}
         </div>
         <div>
           <div style={s.fieldLabel}>Category</div>
@@ -4838,13 +4885,13 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook,
 }
 
 // ── SAVED VIEW (wrapper with sub-tabs: Looks | History | Favorites) ─────────
-function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, apiKey }) {
+function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, apiKey, onStyleItem }) {
   const [tab, setTab] = useState("looks");
   return (
     <div style={s.page}>
       <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Saved</h2>
       <div style={s.filterRow}>
-        {[["looks","Looks"],["boards","Boards"],["history","History"],["favorites","Favorites"]].map(([key, label]) => (
+        {[["looks","Looks"],["boards","Boards"],["wear","Wear"],["history","History"],["favorites","Favorites"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             style={{...s.chip, ...(tab === key ? s.chipActive : {})}}>{label}</button>
         ))}
@@ -4854,6 +4901,9 @@ function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDel
       )}
       {tab === "boards" && (
         <MoodboardView items={items}/>
+      )}
+      {tab === "wear" && (
+        <WearView items={items} onStyleItem={onStyleItem} onEditItem={onEditItem}/>
       )}
       {tab === "history" && (
         <OutfitHistory nested items={items} onWearAgain={onWearAgain} onDelete={onDeleteLog} onUnlog={onUnlog} isFav={isFav} toggleFav={toggleFav}/>
