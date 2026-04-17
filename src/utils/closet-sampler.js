@@ -202,6 +202,8 @@ export function sampleClosetItems({
   filterByWeather,
   itemSuggestionCounts = {},
   recentlySuggestedItems = [],
+  recentlyWornItems = [],       // F2 — items from outfit_logs in last 3 days
+  feedbackScores = {},          // F2 — { itemId: signedSum } from look_feedback
   userId = "default",
 }) {
   const excludeSet = styleExcludes instanceof Set ? styleExcludes : new Set(styleExcludes);
@@ -256,6 +258,20 @@ export function sampleClosetItems({
     pool = filterByWeather(pool, weather);
   }
 
+  // ── 3b. F2 — drop items worn in the last 3 calendar days entirely ──
+  // (Tiered enforcement: if removing them would leave the pool too small to
+  //  build 3 looks, skip the filter and let sampling continue.)
+  if (recentlyWornItems.length > 0) {
+    const wornSet = new Set(recentlyWornItems);
+    const trimmed = pool.filter(it => !wornSet.has(it.id));
+    if (trimmed.length >= 80) pool = trimmed; // keep headroom for 3 looks
+  }
+
+  // ── 3c. F2 — drop items with strong down-vote signal (≤ -3) entirely ──
+  if (Object.keys(feedbackScores).length > 0) {
+    pool = pool.filter(it => (feedbackScores[it.id] || 0) > -3);
+  }
+
   // ── 4. Identify force-include items (free-text match) ──
   const forceInclude = freeTextRequest
     ? pool.filter(it => matchesFreeText(it, freeTextRequest))
@@ -270,8 +286,13 @@ export function sampleClosetItems({
     return count === 0 || !recentSet.has(it.id);
   });
 
-  // Sort coldest first (lowest suggestion count)
-  coldItems.sort((a, b) => (itemSuggestionCounts[a.id] || 0) - (itemSuggestionCounts[b.id] || 0));
+  // Sort coldest first (lowest suggestion count). Up-voted items are promoted
+  // — one positive rating cancels one prior suggestion for ranking purposes.
+  coldItems.sort((a, b) => {
+    const aScore = (itemSuggestionCounts[a.id] || 0) - (feedbackScores[a.id] || 0);
+    const bScore = (itemSuggestionCounts[b.id] || 0) - (feedbackScores[b.id] || 0);
+    return aScore - bScore;
+  });
   const coldBoost = coldItems.slice(0, 20);
   const coldIds = new Set(coldBoost.map(it => it.id));
 
