@@ -2,7 +2,17 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — F6 Wear tracking — 2026-04-17
+## [Unreleased] — F7 Home weekly strip — 2026-04-17
+
+### Added
+- **Home is now the default landing view.** New top-nav order: Home · Closet · Style Me · Planner · Saved.
+- **7-day strip** (today ±3, today highlighted, scrollable). Each cell shows a 2×2 mini-collage of that day's planned look; tap any cell to jump into the planner.
+- **Today's weather** via Open-Meteo (tap to locate) and a quick-stat line showing closet size + neglected count.
+- **"✦ Style me for today"** CTA jumps straight into the Style Me flow with the panel expanded.
+- **Most-worn micro-widget** — inline strip of the top-5 items with wear counts.
+- New module: `src/features/home/HomeView.jsx`. No migration needed.
+
+## [Released] — F6 Wear tracking — 2026-04-17
 
 ### Added
 - **Wear sub-tab under Saved.** Three sections: top-5 most-worn strip, average cost-per-wear across priced items, and a neglected-items grid (last worn > 60 days, or never worn and ≥60 days old).

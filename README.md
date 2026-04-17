@@ -44,9 +44,9 @@ A private wardrobe app that stores your clothes and uses Claude AI to generate s
 Tracking parity with [Fits](https://fits-app.com). Each item below links to the feature spec and current status.
 
 - **F1 — Digital closet with auto-detection** ✨ *(shipped)* — Upload any clothing photo and Claude vision auto-fills category, subcategory, primary/secondary color (hex + name), material, pattern, brand (when a logo is visible), and styling tags. Background removal uses Remove.bg when a key is set, with a free in-browser fallback. Every field is editable inline.
-- **F2 — AI Stylist** — generates 3 looks tuned to weather + occasion + mood. *(core generator exists; auto-location weather + thumbs feedback in progress)*
-- **F3 — Outfit planner calendar** — *(not yet built)*
-- **F4 — Outfit maker (swipe + silhouette)** — *(manual builder exists; silhouette rebuild in progress)*
-- **F5 — Mood boards & collages** — *(not yet built)*
-- **F6 — Wear tracking** — per-item `last_worn` + "not worn in 30d" filter are live; dedicated neglected feed + cost-per-wear in progress.
-- **F7 — Weekly planner strip on Home** — *(not yet built)*
+- **F2 — AI Stylist** ✨ *(shipped)* — 3 looks tuned to weather + occasion + mood. Auto-location weather (Open-Meteo), 5 mood tags, heart/✕ feedback that re-weights future picks, 3-day anti-repeat.
+- **F3 — Outfit planner calendar** ✨ *(shipped)* — Month grid with mini-collages; trip mode generates ≤20-item packing list.
+- **F4 — Outfit maker (silhouette)** ✨ *(shipped)* — Minimalist figure with slot-based swipe deck. AI "Evaluate look" scores the build and proposes tips.
+- **F5 — Mood boards & collages** ✨ *(shipped)* — Canvas with drag/resize/rotate for wardrobe items and pasted inspo images.
+- **F6 — Wear tracking** ✨ *(shipped)* — Persisted `wear_count`, neglected feed (60+ days), top-5 most-worn widget, cost-per-wear when `price_paid` is set.
+- **F7 — Weekly planner strip on Home** ✨ *(shipped)* — Default landing: today's weather, 7-day horizontal strip with mini-collages, "Style me for today" CTA, most-worn quick-view.

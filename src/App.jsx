@@ -15,6 +15,7 @@ import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
 import MoodboardView from "./features/moodboard/MoodboardView.jsx";
 import WearView from "./features/wear/WearView.jsx";
 import { bumpWearCounts, unbumpWearCounts, costPerWear } from "./features/wear/wearApi.js";
+import HomeView from "./features/home/HomeView.jsx";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -1493,7 +1494,7 @@ async function migrateAndSync(items, setItemsFn, flashSyncFn) {
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
-  const [view,       setViewRaw]    = useState("closet");
+  const [view,       setViewRaw]    = useState("home");
   const closetScrollRef = useRef(0);
   const viewRef = useRef("closet");
   const setView = useCallback((v) => {
@@ -2008,7 +2009,7 @@ export default function App() {
             )}
           </div>
           <nav style={s.nav}>
-            {[["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
+            {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
               <button key={v} onClick={() => setView(v)}
                 style={{...s.navBtn, ...(view===v ? s.navActive : {})}}>
                 {label}
@@ -2025,6 +2026,20 @@ export default function App() {
       </header>
 
       {/* ── CLOSET ── */}
+      {view === "home" && (
+        <div style={s.page}>
+          <div style={{ ...s.pageHeader, justifyContent: "center" }}>
+            <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Atelier</h2>
+          </div>
+          <HomeView
+            items={items}
+            onOpenPlanner={() => setView("planner")}
+            onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
+            onOpenWear={() => setView("favorites")}
+          />
+        </div>
+      )}
+
       {view === "closet" && (
         <div style={s.page}>
           <FilterBar items={items} activeFilters={activeFilters} onChange={setActiveFilters}/>
