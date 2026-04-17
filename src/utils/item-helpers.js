@@ -1,0 +1,175 @@
+// ── ITEM HELPERS ─────────────────────────────────────────────────────────────
+// Weather filter, sort comparators, sleeve classifier, taxonomy migration.
+
+import { TAXONOMY, SUBCATEGORY_L3 } from "../constants/taxonomy.js";
+import { COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT } from "../constants/color.js";
+
+// ── SLEEVE CLASSIFICATION ───────────────────────────────────────────────────
+export function getSleeveType(item) {
+  const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeve":"short", "Bra/Crop Top":"sleeveless" };
+  if (item.category === "Tops" && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
+  if (/\bsleeveless\b/i.test(item.notes || "")) return "sleeveless";
+  if (/\bshort.?sleeve\b/i.test(item.notes || "")) return "short";
+  if (/\bcap.?sleeve\b/i.test(item.notes || "")) return "short";
+  if (item.sleeve_length) return item.sleeve_length.toLowerCase().includes("short") ? "short" : item.sleeve_length.toLowerCase().includes("sleeveless") ? "sleeveless" : "long";
+  return "long";
+}
+
+// ── WEATHER FILTER ──────────────────────────────────────────────────────────
+export function filterByWeather(items, weather) {
+  const w = (weather || "").toLowerCase();
+  if (!w || w === "any") return items;
+
+  const isHot  = /hot|85/i.test(w);
+  const isWarm = /warm|70-84/i.test(w);
+  const isMild = /mild|55-69/i.test(w);
+  const isCool = /cool|40-54/i.test(w);
+  const isCold = /cold|below 40/i.test(w);
+
+  return items.filter(it => {
+    const sleeve = getSleeveType(it);
+    const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "")).toLowerCase();
+    const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit/i.test(nameNotes);
+    const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
+
+    if (isHot) {
+      if (it.category === "Knits") return false;
+      if (isKnitDress) return false;
+      if (it.subcategory === "Sweater Dress") return false;
+      if (it.subcategory === "Boots") return false;
+      if (it.subcategory === "Coats") return false;
+      if (it.subcategory === "Jackets" && isHeavyFabric) return false;
+      if (it.category === "Tops" && sleeve === "long") return false;
+      if (it.category === "Dresses" && /long.?sleeve/i.test(nameNotes)) return false;
+      if (isHeavyFabric) return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isWarm) {
+      if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
+      if (isKnitDress) return false;
+      if (it.subcategory === "Sweater Dress") return false;
+      if (it.subcategory === "Coats") return false;
+      if (it.subcategory === "Boots") return false; // F2 — no boots above ~70°F
+      if (isHeavyFabric) return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isMild) {
+      if (it.subcategory === "Sandals") return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isCool) {
+      if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
+      if (it.subcategory === "Sandals") return false;
+      if (it.subcategory === "Shorts") return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    if (isCold) {
+      if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
+      if (it.subcategory === "Sandals") return false;
+      if (it.subcategory === "Shorts") return false;
+      if (it.category === "Swim") return false;
+      return true;
+    }
+    return true;
+  });
+}
+
+// ── COLOR SORT INDEX ────────────────────────────────────────────────────────
+export function colorSortIdx(item) {
+  const cf = item.color_family || "";
+  if (COLOR_SORT_ORDER[cf] !== undefined) return COLOR_SORT_ORDER[cf];
+  const c = (item.color || "").toLowerCase();
+  if (!c) return 50;
+  for (const [key, idx] of Object.entries(COLOR_SORT_ORDER)) {
+    if (c === key.toLowerCase()) return idx;
+  }
+  for (const [key, idx] of Object.entries(COLOR_SORT_ORDER)) {
+    if (c.includes(key.toLowerCase())) return idx;
+  }
+  if (/black/i.test(c)) return 0;
+  if (/charcoal|grey|gray/i.test(c)) return 1;
+  if (/navy|midnight/i.test(c)) return 2;
+  if (/burgundy|wine|oxblood|merlot|plum/i.test(c)) return 5;
+  if (/red|cherry|crimson/i.test(c)) return 8;
+  if (/pink|blush|rose/i.test(c)) return 10;
+  if (/teal|green|emerald|forest|hunter/i.test(c)) return 13;
+  if (/brown|espresso|chocolate|cognac|chestnut|walnut|cocoa/i.test(c)) return 15;
+  if (/beige|camel|tan|nude|oat|sand|neutral/i.test(c)) return 18;
+  if (/white|ivory|cream|ecru/i.test(c)) return 21;
+  if (/blue|cobalt|sapphire/i.test(c)) return 3;
+  if (/purple|violet|lavender/i.test(c)) return 6;
+  return 50;
+}
+
+export function defaultSortComparator(a, b) {
+  const ca = colorSortIdx(a), cb = colorSortIdx(b);
+  if (ca !== cb) return ca - cb;
+
+  const SLEEVE_CATS = new Set(["Tops","Knits","Athleisure"]);
+  if (SLEEVE_CATS.has(a.category) && SLEEVE_CATS.has(b.category)) {
+    const sa = SLEEVE_SORT[a.subcategory] ?? 50, sb = SLEEVE_SORT[b.subcategory] ?? 50;
+    if (sa !== sb) return sa - sb;
+  }
+  if (a.category === "Dresses" && b.category === "Dresses") {
+    const la = LENGTH_SORT[a.subcategory] ?? 50, lb = LENGTH_SORT[b.subcategory] ?? 50;
+    if (la !== lb) return la - lb;
+  }
+  if (a.category === "Bottoms" && b.category === "Bottoms") {
+    const la = LENGTH_SORT[a.subcategory] ?? 50, lb = LENGTH_SORT[b.subcategory] ?? 50;
+    if (la !== lb) return la - lb;
+  }
+
+  const wa = WEIGHT_SORT[a.knit_weight] ?? 50, wb = WEIGHT_SORT[b.knit_weight] ?? 50;
+  if (wa !== wb) return wa - wb;
+
+  return 0;
+}
+
+// ── NORMALIZE ───────────────────────────────────────────────────────────────
+// Keeps legacy Accessories items migrating into their new taxonomy buckets
+// on every load so old rows don't re-surface as Accessories bags/belts.
+export function normalizeItem(item) {
+  const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
+  if (item.category === "Accessories" && BAG_SUBS.has(item.subcategory)) {
+    return { ...item, category: "Bags", subcategory: item.subcategory === "Bags" ? "" : item.subcategory };
+  }
+  if (item.category === "Accessories" && /\b(bag|purse|tote|clutch|handbag|crossbody)\b/i.test(item.name) && !item.subcategory) {
+    return { ...item, category: "Bags" };
+  }
+  if (item.category === "Accessories" && (item.subcategory === "Belts" || /\bbelt\b/i.test(item.name))) {
+    item = { ...item, category: "Belts", subcategory: "" };
+  }
+  if (!item.created_at) item = { ...item, created_at: "2025-01-01T00:00:00.000Z" };
+  return item;
+}
+
+// ── MERGE ───────────────────────────────────────────────────────────────────
+// Supabase metadata + local images, NEVER lose local-only items.
+export function mergeItems(sbItems, localItems) {
+  const localMap = {};
+  localItems.forEach(it => { localMap[it.id] = it; });
+  const sbMap = {};
+  sbItems.forEach(it => { sbMap[it.id] = it; });
+  const merged = sbItems.map(it => ({
+    ...it,
+    image: localMap[it.id]?.image || it.image || null,
+  }));
+  localItems.forEach(it => {
+    if (!sbMap[it.id]) merged.push(it);
+  });
+  return merged.map(normalizeItem);
+}
+
+// ── SHUFFLE ─────────────────────────────────────────────────────────────────
+export function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
