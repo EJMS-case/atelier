@@ -3,6 +3,7 @@ import { buildStylingPrompt } from "./prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory } from "./utils/closet-sampler.js";
 import { generateValidatedLooks, ValidationError } from "./utils/styling-validator.js";
 import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } from "./utils/rotation-tracker.js";
+import { generateContactSheets } from "./utils/contact-sheet.js";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -895,6 +896,15 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
 
   console.log("[Atelier] Generating looks for:", occasion, "| Weather:", weather || "any", "| Items sampled:", sampled.length, "| Exclusions:", activeExclusions);
 
+  // ── STEP 8c: Generate visual contact sheets for multimodal styling ──
+  let contactSheets = [];
+  try {
+    contactSheets = await generateContactSheets(sampled, reverseMap);
+    console.log("[Atelier] Generated", contactSheets.length, "contact sheet(s) for", sampled.length, "items");
+  } catch (e) {
+    console.warn("[Atelier] Contact sheet generation failed, falling back to text-only:", e.message);
+  }
+
   // ── STEP 9: Call API through the validator ──
   const result = await generateValidatedLooks({
     apiKey,
@@ -904,6 +914,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     activeExclusions,
     occasionSlots: slots,
     occasion,
+    contactSheets,
   });
 
   // ── STEP 10: Record rotation data ──
@@ -2385,6 +2396,7 @@ export default function App() {
             persistItems(updated);
             flashSync("synced");
           }}
+          onSaveLook={async (log) => { await sb.saveOutfitLog(log); }}
         />
       )}
 
@@ -4255,19 +4267,250 @@ function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav
   );
 }
 
+// ── OUTFIT BUILDER (manual look assembly) ────────────────────────────────────
+function OutfitBuilder({ items, onSave, onClose }) {
+  const [builderFilters, setBuilderFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
+  const [builderSearch, setBuilderSearch] = useState("");
+  const [selected, setSelected] = useState([]);
+  const [lookName, setLookName] = useState("");
+  const [occasion, setOccasion] = useState("Work");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const toggleItem = (id) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const filtered = (() => {
+    let base = items;
+    const cats = builderFilters.category?.filter(c => c !== "Sets") || [];
+    if (cats.length) base = base.filter(it => cats.includes(it.category));
+    if (builderFilters.subcategory?.length) base = base.filter(it => builderFilters.subcategory.includes(it.subcategory));
+    if (builderFilters.sleeveLength) {
+      const sl = builderFilters.sleeveLength;
+      const TOPS_SLEEVE_MAP = {
+        "Tanks": "Sleeveless", "T-Shirts": "Short Sleeve", "Polos": "Short Sleeve", "Short Sleeve": "Short Sleeve",
+        "Blouses": "Long Sleeve", "Shirts": "Long Sleeve", "Tops": "Long Sleeve", "Light Knit Tops": "Long Sleeve",
+      };
+      base = base.filter(it => {
+        if (it.category === "Tops") return TOPS_SLEEVE_MAP[it.subcategory] === sl;
+        if (it.category === "Dresses") return (it.sleeve_length || "").toLowerCase() === sl.toLowerCase();
+        return true;
+      });
+    }
+    if (builderFilters.brand?.length) base = base.filter(it => builderFilters.brand.includes(it.brand));
+    if (builderFilters.color?.length) {
+      base = base.filter(it => {
+        const itemColor = (it.color || "").toLowerCase();
+        const itemFamily = (it.color_family || "").toLowerCase();
+        return builderFilters.color.some(c => {
+          const cl = c.toLowerCase();
+          return itemColor.includes(cl) || itemFamily.includes(cl) || itemColor === cl;
+        });
+      });
+    }
+    if (builderSearch.trim()) {
+      const q = builderSearch.toLowerCase().trim();
+      base = base.filter(it => {
+        const fields = [it.name, it.brand, it.color, it.color_family, it.subcategory, it.category, it.notes].filter(Boolean);
+        return fields.some(f => f.toLowerCase().includes(q));
+      });
+    }
+    return base;
+  })();
+
+  const selectedItems = selected.map(id => items.find(i => i.id === id)).filter(Boolean);
+  const categoriesInOutfit = [...new Set(selectedItems.map(i => i.category))];
+
+  const handleSave = async () => {
+    if (selected.length === 0) return;
+    setSaving(true);
+    try {
+      await onSave({
+        garment_ids: selected,
+        date_worn: null,
+        occasion,
+        notes: null,
+        collage_url: JSON.stringify({ look_name: lookName.trim() || "My Look", mood: null, styling: null }),
+      });
+      setSaved(true);
+      setTimeout(onClose, 1000);
+    } catch (e) {
+      console.error(e);
+      setSaving(false);
+    }
+  };
+
+  if (saved) {
+    return (
+      <div style={s.page}>
+        <div style={{ ...s.empty, padding: "120px 20px" }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>✓</div>
+          <div style={{ fontSize: 14, color: "#3D7A4E", letterSpacing: "0.06em" }}>Saved to your looks</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={s.page}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <h2 style={{ ...s.pageTitle, fontFamily: "'DM Serif Display',Georgia,serif", margin: 0 }}>Build a Look</h2>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "#9A8E84", fontSize: 24, cursor: "pointer", padding: 0, lineHeight: 1 }}>&times;</button>
+      </div>
+
+      {/* Selection tray */}
+      {selected.length > 0 && (
+        <div style={{ background: "#fff", border: "1px solid #E8E0D8", borderRadius: 10, padding: "12px 16px", marginBottom: 16, boxShadow: "0 2px 12px rgba(28,24,20,0.04)" }}>
+          <div style={{ fontSize: 9, letterSpacing: "0.18em", color: "#9A8E84", marginBottom: 8, fontFamily: "sans-serif" }}>
+            YOUR LOOK · {selected.length} {selected.length === 1 ? "PIECE" : "PIECES"}
+          </div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+            {selectedItems.map(it => (
+              <div key={it.id} style={{ flexShrink: 0, width: 56, textAlign: "center", position: "relative", cursor: "pointer" }}
+                onClick={() => toggleItem(it.id)}>
+                {it.image
+                  ? <img src={it.image} alt={it.name} style={{ width: 56, height: 68, objectFit: "contain", borderRadius: 6, background: "#F5F1EC" }} />
+                  : <div style={{ width: 56, height: 68, borderRadius: 6, background: "#F5F1EC", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#C8BFB4" }}>{it.category?.[0]}</div>
+                }
+                <div style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: "#1C1814", color: "#F5F1EC", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>✕</div>
+                <div style={{ fontSize: 8, color: "#9A8E84", marginTop: 3, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+              </div>
+            ))}
+          </div>
+          {/* Category coverage hints */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {CATEGORY_ORDER.filter(c => ["Tops", "Knits", "Bottoms", "Dresses", "Outerwear", "Shoes", "Bags"].includes(c)).map(cat => (
+              <span key={cat} style={{
+                fontSize: 9, letterSpacing: "0.06em", padding: "2px 8px", borderRadius: 10,
+                background: categoriesInOutfit.includes(cat) ? "#E8F5EC" : "#F5F1EC",
+                color: categoriesInOutfit.includes(cat) ? "#3D7A4E" : "#C8BFB4",
+                border: `1px solid ${categoriesInOutfit.includes(cat) ? "#B8D9C0" : "#E8E0D8"}`,
+              }}>{cat}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Save form — inline when items selected */}
+      {selected.length > 0 && (
+        <div style={{ background: "#fff", border: "1px solid #E8E0D8", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 9, letterSpacing: "0.18em", color: "#9A8E84", display: "block", marginBottom: 5, fontFamily: "sans-serif" }}>NAME</label>
+              <input value={lookName} onChange={e => setLookName(e.target.value)}
+                placeholder="e.g. Monday Power Look"
+                style={{ ...s.modalInput, fontSize: 12 }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 9, letterSpacing: "0.18em", color: "#9A8E84", display: "block", marginBottom: 5, fontFamily: "sans-serif" }}>OCCASION</label>
+              <select value={occasion} onChange={e => setOccasion(e.target.value)}
+                style={{ ...s.modalInput, fontSize: 12 }}>
+                {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+          <button onClick={handleSave} disabled={saving}
+            style={{ ...s.btnPrimary, width: "100%", padding: "11px 20px" }}>
+            {saving ? <><span style={s.spinnerSm} /> Saving…</> : "Save Look"}
+          </button>
+        </div>
+      )}
+
+      {/* Browse items */}
+      <FilterBar items={items} activeFilters={builderFilters} onChange={setBuilderFilters} />
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <input type="text" placeholder="Search by brand, color, item type..."
+          value={builderSearch} onChange={e => setBuilderSearch(e.target.value)}
+          style={{
+            width: "100%", padding: "10px 14px 10px 36px", boxSizing: "border-box",
+            border: "1px solid #E8E0D8", borderRadius: 8, fontSize: 13,
+            fontFamily: "'DM Sans',Inter,system-ui,sans-serif",
+            background: "#FDFBF9", color: "#2C2420", outline: "none",
+          }} />
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none"
+          stroke="#9A8E84" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        {builderSearch && (
+          <button onClick={() => setBuilderSearch("")}
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#9A8E84", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>
+            ✕
+          </button>
+        )}
+      </div>
+      {builderSearch.trim() && (
+        <div style={{ fontSize: 11, color: "#9A8E84", marginBottom: 8 }}>
+          {filtered.length} result{filtered.length !== 1 ? "s" : ""} for "{builderSearch.trim()}"
+        </div>
+      )}
+
+      {/* Item grid */}
+      {filtered.length === 0 ? (
+        <div style={s.empty}>
+          <div style={s.emptyMark}>✦</div>
+          <p style={s.emptyText}>No items match your filters.</p>
+        </div>
+      ) : (
+        <div style={s.grid}>
+          {filtered.map(item => {
+            const isSelected = selected.includes(item.id);
+            return (
+              <div key={item.id}
+                onClick={() => toggleItem(item.id)}
+                style={{
+                  ...s.card, cursor: "pointer", position: "relative",
+                  border: isSelected ? "2px solid #1C1814" : "1px solid #E8E0D8",
+                  boxShadow: isSelected ? "0 2px 12px rgba(28,24,20,0.12)" : "none",
+                }}>
+                {isSelected && (
+                  <div style={{
+                    position: "absolute", top: 8, right: 8, width: 22, height: 22,
+                    borderRadius: "50%", background: "#1C1814", color: "#F5F1EC",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: 600, zIndex: 2, fontFamily: "sans-serif",
+                  }}>{selected.indexOf(item.id) + 1}</div>
+                )}
+                <div style={s.cardImg}>
+                  {item.image
+                    ? <img src={item.image} alt={item.name} style={s.cardPhoto} />
+                    : <div style={s.cardPlaceholder}>{item.category?.[0]}</div>
+                  }
+                </div>
+                <div style={s.cardBody}>
+                  <div style={s.cardCat}>{item.category}{item.subcategory ? ` · ${item.subcategory}` : ""}</div>
+                  <div style={s.cardName}>{item.name}</div>
+                  {item.brand && <div style={{ fontSize: 11, color: "#9A8E84", fontStyle: "italic" }}>{item.brand}</div>}
+                  {item.color && <div style={s.cardColor}>{item.color}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bottom spacer for fixed save bar */}
+      <div style={{ height: 20 }} />
+    </div>
+  );
+}
+
 // ── LOOKS VIEW (saved outfits without a wear date) ──────────────────────────
-function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav }) {
+function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
   const [deleteId,  setDeleteId]  = useState(null);
   const [dateById,  setDateById]  = useState({});
+  const [showBuilder, setShowBuilder] = useState(false);
 
-  useEffect(() => {
+  const loadLogs = () => {
     sb.fetchOutfitLogs()
       .then(data => { setLogs(data.filter(l => !l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  };
+  useEffect(loadLogs, []);
 
   const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
   const today = new Date().toISOString().slice(0, 10);
@@ -4284,11 +4527,34 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav }) {
     catch (e) { console.error(e); }
   };
 
+  if (showBuilder) {
+    return (
+      <OutfitBuilder
+        items={items}
+        onSave={async (log) => {
+          await onSaveLook(log);
+          setShowBuilder(false);
+          setLoading(true);
+          loadLogs();
+        }}
+        onClose={() => setShowBuilder(false)}
+      />
+    );
+  }
+
   return (
     <div>
+      {/* Build a Look button */}
+      {!loading && (
+        <button onClick={() => setShowBuilder(true)}
+          style={{ ...s.btnSecondary, width: "100%", marginBottom: 16, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.plus}/></svg>
+          Build a Look
+        </button>
+      )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading your looks…</p></div>}
       {!loading && logs.length === 0 && (
-        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No looks saved yet. Generate an outfit in Style Me and save it without a date.</p></div>
+        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No looks saved yet. Build one manually or generate an outfit in Style Me.</p></div>
       )}
       {!loading && logs.map(log => {
         const meta = parseMeta(log.collage_url);
@@ -4347,7 +4613,7 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav }) {
 }
 
 // ── SAVED VIEW (wrapper with sub-tabs: Looks | History | Favorites) ─────────
-function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav }) {
+function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook }) {
   const [tab, setTab] = useState("looks");
   return (
     <div style={s.page}>
@@ -4359,7 +4625,7 @@ function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDel
         ))}
       </div>
       {tab === "looks" && (
-        <LooksView items={items} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav}/>
+        <LooksView items={items} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook}/>
       )}
       {tab === "history" && (
         <OutfitHistory nested items={items} onWearAgain={onWearAgain} onDelete={onDeleteLog} onUnlog={onUnlog} isFav={isFav} toggleFav={toggleFav}/>

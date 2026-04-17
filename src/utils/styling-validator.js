@@ -391,6 +391,7 @@ export async function generateValidatedLooks({
   activeExclusions = [],
   occasionSlots = {},
   occasion = "Work",
+  contactSheets = [],
 }) {
   let lastFailures = [];
 
@@ -400,6 +401,25 @@ export async function generateValidatedLooks({
     if (attempt > 0 && lastFailures.length > 0) {
       const failureList = lastFailures.map(f => `- ${f.message}`).join("\n");
       userContent += `\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
+    }
+
+    // Build message content — multimodal if contact sheets available
+    let messageContent;
+    if (contactSheets.length > 0) {
+      messageContent = [
+        { type: "text", text: userContent },
+        ...contactSheets.map(dataUri => ({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/jpeg",
+            data: dataUri.replace(/^data:image\/jpeg;base64,/, ""),
+          },
+        })),
+        { type: "text", text: "The contact sheet images above show every wardrobe item as a labeled thumbnail. Each ID (W001, W002…) matches the text inventory. USE THESE VISUALS to assess actual colors, textures, patterns, fabric weight, and silhouette when selecting items and building looks. Trust what you SEE in the photos over the text descriptions when they conflict." },
+      ];
+    } else {
+      messageContent = userContent;
     }
 
     // Call the API
@@ -415,7 +435,7 @@ export async function generateValidatedLooks({
         model: "claude-sonnet-4-5",
         max_tokens: 4500,
         temperature: 0.7,
-        messages: [{ role: "user", content: userContent }],
+        messages: [{ role: "user", content: messageContent }],
       }),
     });
 

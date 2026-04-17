@@ -162,6 +162,9 @@ D5: DIFFERENT TOP TREATMENTS — vary tucking, layering, sleeve lengths across t
 ${availabilityNote}
 ${directionsBlock}
 ────────────────────────────────────────────────────────
+VISUAL REFERENCE: Contact sheet images of every wardrobe item are attached. Each thumbnail is labeled with its inventory ID (W001, W002…). USE THESE PHOTOS to assess actual colors, textures, patterns, fabric weight, and silhouette. The photos are your primary reference — the text inventory below provides metadata. When they conflict, trust the photo.
+
+────────────────────────────────────────────────────────
 WARDROBE INVENTORY (${closetCount} items — use ONLY these):
 ${closetItems}
 
