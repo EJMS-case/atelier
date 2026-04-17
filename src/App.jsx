@@ -7,6 +7,9 @@ import { generateContactSheets } from "./utils/contact-sheet.js";
 import { autoDetectItem } from "./lib/anthropic.js";
 import { stripBackground } from "./lib/bgRemoval.js";
 import { applyDetection } from "./features/closet/applyDetection.js";
+import { getLocalWeatherLabel } from "./lib/weather.js";
+import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
+import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -239,6 +242,7 @@ function filterByWeather(items, weather) {
       if (isKnitDress) return false;
       if (it.subcategory === "Sweater Dress") return false;
       if (it.subcategory === "Coats") return false;
+      if (it.subcategory === "Boots") return false; // F2 — no boots above ~70°F
       if (isHeavyFabric) return false;
       if (it.category === "Swim") return false;
       return true;
@@ -792,7 +796,8 @@ const STYLING_STRATEGIES = {
 };
 
 // ── AI OUTFIT GENERATION ─────────────────────────────────────────────────────
-async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}, styleExcludes = new Set()) {
+async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs = STYLE_PREFS, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
+  const { mood = "", feedbackScores = {}, recentlyWornItems = [] } = extras;
 
   // ── STEP 1: Get occasion slots (weather-aware) ──
   const baseSlots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Daytime;
@@ -851,6 +856,8 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     filterByWeather,
     itemSuggestionCounts,
     recentlySuggestedItems,
+    recentlyWornItems,
+    feedbackScores,
     userId: apiKey ? apiKey.slice(-8) : "default",
   });
 
@@ -895,6 +902,7 @@ async function generateOutfit(items, occasion, weather, request, apiKey, previou
     occasionSlots: slots,
     availabilityNote,
     stylingDirections,
+    moodPrompt: moodPromptFor(mood),
   });
 
   console.log("[Atelier] Generating looks for:", occasion, "| Weather:", weather || "any", "| Items sampled:", sampled.length, "| Exclusions:", activeExclusions);
@@ -1512,9 +1520,13 @@ export default function App() {
   const [styleErr,   setStyleErr]   = useState("");
   const [occasion,   setOccasion]   = useState("Work");
   const [weather,    setWeather]    = useState("");
+  const [mood,       setMood]       = useState(""); // F2 — mood tag key
   const [request,    setRequest]    = useState("");
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
+  const [weatherLoading, setWeatherLoading] = useState(false); // F2 — auto-location fetch
+  const [feedbackScores, setFeedbackScores] = useState({});    // F2 — aggregate item scores
+  const [recentlyWornItems, setRecentlyWornItems] = useState([]); // F2 — item IDs worn in last 3 days
   const [apiKey,     setApiKey]     = useState(() => loadApiKey());
   const [rmbgKey,    setRmbgKey]    = useState(() => loadRmbgKey());
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
@@ -1593,6 +1605,21 @@ export default function App() {
 
     sb.ensureBucket().catch(() => {});
     sb.fetchFavorites().then(setFavorites).catch(() => {});
+
+    // F2 — load aggregate feedback scores so sampler can weight future picks
+    fetchItemFeedbackScores().then(setFeedbackScores).catch(() => {});
+
+    // F2 — compute items worn in last 3 days from outfit_logs
+    sb.fetchOutfitLogs().then(logs => {
+      const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const ids = new Set();
+      (logs || []).forEach(log => {
+        if (log.date_worn && log.date_worn >= cutoff) {
+          (log.garment_ids || []).forEach(id => ids.add(id));
+        }
+      });
+      setRecentlyWornItems([...ids]);
+    }).catch(() => {});
 
     // Load sets metadata from Supabase (falls back to localStorage)
     sb.fetchSets().then(sbSets => {
@@ -1799,7 +1826,7 @@ export default function App() {
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null); setOutfitNotes(null);
     try {
-      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes);
+      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
       console.log("Generation result:", JSON.stringify(result).slice(0, 500));
       const looks = result?.looks;
       // Capture notes for partial results
@@ -2225,7 +2252,25 @@ export default function App() {
                 </div>
 
                 {/* WHAT'S THE WEATHER? */}
-                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>WHAT'S THE WEATHER?</div>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
+                  <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84"}}>WHAT'S THE WEATHER?</div>
+                  <button
+                    onClick={async () => {
+                      setWeatherLoading(true);
+                      try {
+                        const label = await getLocalWeatherLabel();
+                        setWeather(label);
+                      } catch (err) {
+                        console.warn("[F2] auto-weather failed:", err);
+                      } finally {
+                        setWeatherLoading(false);
+                      }
+                    }}
+                    disabled={weatherLoading}
+                    style={{background:"none", border:"none", color:"#4A3E36", fontSize:10, letterSpacing:"0.1em", textDecoration:"underline", cursor:"pointer", padding:0}}>
+                    {weatherLoading ? "locating…" : "✦ use my location"}
+                  </button>
+                </div>
                 <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
                   {[
                     ["","Any"],["Hot (85°F+)","Hot"],["Warm (70-84°F)","Warm"],
@@ -2238,6 +2283,27 @@ export default function App() {
                         : {...s.chip, fontSize:11, padding:"5px 11px"}}
                       onClick={() => setWeather(val)}>
                       {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* MOOD — F2 */}
+                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>MOOD (OPTIONAL)</div>
+                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+                  <button
+                    style={mood === ""
+                      ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                      : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                    onClick={() => setMood("")}>
+                    None
+                  </button>
+                  {MOODS.map(m => (
+                    <button key={m.key}
+                      style={mood === m.key
+                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                      onClick={() => setMood(m.key)}>
+                      {m.label}
                     </button>
                   ))}
                 </div>
@@ -2332,6 +2398,23 @@ export default function App() {
           )}
           {outfits && outfits.map((look, i) => (
             <LookCard key={i} look={look} items={items} apiKey={apiKey}
+              onRate={async (lk, rating) => {
+                try {
+                  const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
+                  await saveLookFeedback({
+                    lookHash: lookHash({ occasion: lk.occasion || occasion, itemIds, mood }),
+                    rating,
+                    itemIds,
+                    occasion: lk.occasion || occasion,
+                    mood: mood || null,
+                  });
+                  // refresh aggregate scores so next generation reflects the new rating
+                  const scores = await fetchItemFeedbackScores().catch(() => null);
+                  if (scores) setFeedbackScores(scores);
+                } catch (err) {
+                  console.warn("[F2] saveLookFeedback failed:", err);
+                }
+              }}
               onSaveLook={async (log) => {
                 await sb.saveOutfitLog(log);
                 const dateWorn = log.date_worn;
@@ -4005,12 +4088,13 @@ function buildCollageLayout(items, suggestionSlots = []) {
 }
 
 // ── LOOK CARD — EDITORIAL FLAT-LAY ───────────────────────────────────────────
-function LookCard({ look, items, apiKey, onSaveLook }) {
+function LookCard({ look, items, apiKey, onSaveLook, onRate }) {
   const [expanded,  setExpanded]  = useState(false);
   const [elevating, setElevating] = useState(false);
   const [elevation, setElevation] = useState(null);
   const [elevErr,   setElevErr]   = useState("");
   const [showSave,  setShowSave]  = useState(false);
+  const [rated,     setRated]     = useState(0); // 0 = unrated, -1/+1 = rated
 
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const lookItems = (look.items || [])
@@ -4055,9 +4139,36 @@ function LookCard({ look, items, apiKey, onSaveLook }) {
             {(look.vibe || look.mood) && <span style={s.lookMood}> · {(look.vibe || look.mood).toUpperCase()}</span>}
           </div>
         </div>
-        <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
-          {expanded ? "Hide" : "Details"}
-        </button>
+        <div style={{display:"flex", alignItems:"center", gap:6}}>
+          {/* F2 — thumbs feedback */}
+          {onRate && (
+            <>
+              <button
+                title="Love it"
+                onClick={() => {
+                  if (rated !== 0) return;
+                  setRated(1);
+                  onRate(look, 1);
+                }}
+                style={{background: rated === 1 ? "#3D7A4E" : "none", border:"1px solid " + (rated === 1 ? "#3D7A4E" : "#D6CDC1"), color: rated === 1 ? "#fff" : "#4A3E36", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
+                ♥
+              </button>
+              <button
+                title="Not for me"
+                onClick={() => {
+                  if (rated !== 0) return;
+                  setRated(-1);
+                  onRate(look, -1);
+                }}
+                style={{background: rated === -1 ? "#C0392B" : "none", border:"1px solid " + (rated === -1 ? "#C0392B" : "#D6CDC1"), color: rated === -1 ? "#fff" : "#4A3E36", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
+                ✕
+              </button>
+            </>
+          )}
+          <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
+            {expanded ? "Hide" : "Details"}
+          </button>
+        </div>
       </div>
 
       <EditorialCollage lookItems={lookItems}/>

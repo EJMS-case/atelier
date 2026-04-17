@@ -34,6 +34,7 @@ export function buildStylingPrompt({
   occasionSlots,
   availabilityNote,
   stylingDirections = [],
+  moodPrompt = "",
 }) {
   // ── About Me block ──
   const aboutMeBlock = formatAboutMe(aboutMe);
@@ -61,6 +62,9 @@ export function buildStylingPrompt({
 
   // ── Occasion prompt note ──
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
+
+  // ── Mood block (F2) ──
+  const moodBlock = moodPrompt ? `\n✦ ${moodPrompt}\nEvery look must reflect this mood in silhouette, palette, and finishing choices. It changes how you interpret the occasion — not what's allowed, but what feels right.\n` : "";
 
   // ── Styling directions block ──
   const directionsBlock = stylingDirections.length === 3
@@ -99,7 +103,7 @@ Based in NYC. Her closet includes Toteme, Khaite, Max Mara, Theory, COS, A.P.C.,
 ${stylePrefsBlock}
 
 OCCASION: ${occasionNote}
-${weatherBlock}
+${moodBlock}${weatherBlock}
 ${requestBlock}
 ${exclusionBlock}
 ${recentBlock}
