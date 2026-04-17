@@ -2,7 +2,20 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — F2 AI Stylist upgrade — 2026-04-17
+## [Unreleased] — F3 Outfit planner calendar — 2026-04-17
+
+### Added
+- **Planner tab** in the top nav. Month grid, swipe between months, today highlighted, days with a plan show a 2×2 mini collage of the planned pieces.
+- **Tap a day** → sheet modal with two tabs: "From saved looks" (picks any outfit_logs row and pins it) or "Generate new" (jumps to Style Me).
+- **Plan a trip** button on the calendar opens a trip sheet: pick start/end + destination, preview a ≤20-item packing list from a greedy set-cover against a seasonal high estimate, then "Pin these days" writes a plan to every day in the range.
+- New modules: `src/features/planner/CalendarView.jsx`, `src/features/planner/plannerApi.js`, `src/features/planner/tripPacker.js`.
+- Migration `supabase/migrations/0003_planned_outfits.sql` adds the `planned_outfits` table (one row per date).
+
+### Known limitations
+- Drag-and-drop between days is not in this PR — use the day modal to re-assign.
+- The trip forecast is a naive seasonal estimate (NYC-ish by month). A real per-destination forecast fetch is a follow-up.
+
+## [Released] — F2 AI Stylist upgrade — 2026-04-17
 
 ### Added
 - **Mood tags** — 5 chips on the Style Me panel (Quiet Luxury / Romantic / Edgy / Sporty / Effortless). Each mood injects a short creative direction into the styling prompt so the same occasion generates visibly different looks.

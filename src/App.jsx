@@ -10,6 +10,7 @@ import { applyDetection } from "./features/closet/applyDetection.js";
 import { getLocalWeatherLabel } from "./lib/weather.js";
 import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
+import CalendarView from "./features/planner/CalendarView.jsx";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -2003,7 +2004,7 @@ export default function App() {
             )}
           </div>
           <nav style={s.nav}>
-            {[["closet","Closet"],["style","Style Me"],["favorites","Saved"]].map(([v,label]) => (
+            {[["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
               <button key={v} onClick={() => setView(v)}
                 style={{...s.navBtn, ...(view===v ? s.navActive : {})}}>
                 {label}
@@ -2440,6 +2441,17 @@ export default function App() {
       {/* ── COLOR ADVISOR ── */}
       {view === "color" && (
         <ColorAdvisorView items={items} apiKey={apiKey}/>
+      )}
+
+      {/* ── PLANNER (F3) ── */}
+      {view === "planner" && (
+        <div style={s.page}>
+          <div style={s.pageHeader}>
+            <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
+            <h2 style={s.pageTitle}>Planner</h2>
+          </div>
+          <PlannerWrapper items={items} onGoToStyleMe={() => setView("style")}/>
+        </div>
       )}
 
       {/* ── SAVED (Looks / History / Favorites) ── */}
@@ -5375,6 +5387,17 @@ function ShoppingView({ items, apiKey, onBack }) {
       )}
     </div>
   );
+}
+
+// ── PLANNER WRAPPER (F3) ─────────────────────────────────────────────────────
+// Fetches saved outfit_logs on mount and passes them to CalendarView so the
+// "pick a saved look" tab inside the day modal has something to show.
+function PlannerWrapper({ items, onGoToStyleMe }) {
+  const [logs, setLogs] = useState([]);
+  useEffect(() => {
+    sb.fetchOutfitLogs().then(setLogs).catch(() => {});
+  }, []);
+  return <CalendarView items={items} outfitLogs={logs} onGoToStyleMe={onGoToStyleMe}/>;
 }
 
 // ── STYLES ────────────────────────────────────────────────────────────────────
