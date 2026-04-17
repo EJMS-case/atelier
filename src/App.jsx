@@ -12,6 +12,7 @@ import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import CalendarView from "./features/planner/CalendarView.jsx";
 import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
+import MoodboardView from "./features/moodboard/MoodboardView.jsx";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -4843,13 +4844,16 @@ function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDel
     <div style={s.page}>
       <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Saved</h2>
       <div style={s.filterRow}>
-        {[["looks","Looks"],["history","History"],["favorites","Favorites"]].map(([key, label]) => (
+        {[["looks","Looks"],["boards","Boards"],["history","History"],["favorites","Favorites"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             style={{...s.chip, ...(tab === key ? s.chipActive : {})}}>{label}</button>
         ))}
       </div>
       {tab === "looks" && (
         <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook}/>
+      )}
+      {tab === "boards" && (
+        <MoodboardView items={items}/>
       )}
       {tab === "history" && (
         <OutfitHistory nested items={items} onWearAgain={onWearAgain} onDelete={onDeleteLog} onUnlog={onUnlog} isFav={isFav} toggleFav={toggleFav}/>

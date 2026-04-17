@@ -2,7 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — F4 Silhouette outfit builder — 2026-04-17
+## [Unreleased] — F5 Mood boards — 2026-04-17
+
+### Added
+- **Boards sub-tab in Saved.** List of moodboards with a cover preview + a new-board button.
+- **Canvas editor:** absolute-positioned layers with drag / resize / rotate via pointer events (no external DnD lib). Each layer is a wardrobe item, an inspo image, or both composed into a single board.
+- Items added from the closet via a bottom-sheet picker. Inspo images upload through the existing `wardrobe-images` bucket under a `moodboard-` prefix.
+- Layers persist as jsonb in new `moodboards` table; re-opening a board restores every layer's x/y/w/h/rotation/z.
+- New modules: `src/features/moodboard/MoodboardView.jsx`, `src/features/moodboard/BoardCanvas.jsx`, `src/features/moodboard/moodboardApi.js`.
+- Migration `supabase/migrations/0004_moodboards.sql`.
+
+### Notes
+- Touch-tested on iPhone viewport via `touchAction: none`. Handles are 14px tap targets.
+- Zero new dependencies.
+
+## [Released] — F4 Silhouette outfit builder — 2026-04-17
 
 ### Added
 - **Silhouette builder** replaces the old search-grid OutfitBuilder. Minimalist SVG figure with 4+ slots (top/bottom/dress/outer/shoes/bag/accessory). Tap a slot, swipe the horizontal deck, tap to lock a piece in. Live preview composites items on the figure.
