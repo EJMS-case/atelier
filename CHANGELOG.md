@@ -2,7 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — App.jsx refactor (phase 1: shared infra) — 2026-04-17
+## [Unreleased] — App.jsx refactor (phase 2: AI helpers) — 2026-04-17
+
+### Changed
+Second mechanical extraction pass. Moves every Anthropic-API caller out of `App.jsx` into `src/lib/ai/stylist.js`. No behavior change.
+
+- `generateOutfit` — the 3-look validated generator (~140 lines)
+- `generateElevation` — 3-piece elevation suggester (~85 lines)
+- `classifyKnitAI` — knit weight/fit vision classifier
+- `analyzeColorAI` — undertone + Dark Winter verdict + optional pairings
+- `generateStyleProfile` — monthly editorial snapshot
+- `generateShoppingRecs` — gap analysis or outfit-completion
+- `buildImgSource`, `colorHex` — small utilities pulled along for the ride
+
+App.jsx drops from 4704 to **4225 lines** (−479). Combined with phase 1 that's −1683 from the original 5908 (−28%).
+
+### Not in this PR
+- Component extraction (`BulkAddView`, `EditItemView`, `LookCard`, `SettingsView`, `ColorAdvisorView`, `StyleInsightsView`, `ShoppingView`) — these depend on App-level hooks and are safer as a third phase.
+
+## [Released] — App.jsx refactor (phase 1: shared infra) — 2026-04-17
 
 ### Changed
 Mechanical extraction of shared infrastructure out of the single `App.jsx` file. No behavior change, no new features, no migration.
