@@ -2,7 +2,29 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — F7 Home weekly strip — 2026-04-17
+## [Unreleased] — App.jsx refactor (phase 1: shared infra) — 2026-04-17
+
+### Changed
+Mechanical extraction of shared infrastructure out of the single `App.jsx` file. No behavior change, no new features, no migration.
+
+- `src/ui/styles.js` — the three style objects (`s`, `si`, `ss`, ~430 lines)
+- `src/ui/icons.jsx` — icon SVG paths + `Icon` component
+- `src/constants/taxonomy.js` — category hierarchy, `getSubcatL2`, `SET_TAGS`, `OCCASIONS`
+- `src/constants/styling.js` — `STYLE_PROFILE`, `CASUAL_STYLE_PROFILE`, `STYLING_PRINCIPLES`, `STYLE_PREFS`, `OCCASION_SLOTS`, `STYLING_STRATEGIES`
+- `src/constants/color.js` — `COLOR_FAMILIES`, sort orders
+- `src/utils/item-helpers.js` — `getSleeveType`, `filterByWeather`, `colorSortIdx`, `defaultSortComparator`, `normalizeItem`, `mergeItems`, `shuffle`
+- `src/utils/storage.js` — `loadLocalItems`, `saveLocalItems`, API-key helpers, sets-meta helpers
+- `src/utils/images.js` — `compressImage`, `imageToBase64`, legacy `removeBackground`
+- `src/lib/supabase.js` — Supabase config + the entire `sb.*` client object (~230 lines)
+
+`App.jsx` drops from ~5908 to ~4704 lines. Build is green; preview boots clean with zero warnings.
+
+### Not in this PR (follow-up)
+- AI helper extraction (`generateOutfit`, `generateElevation`, `classifyKnitAI`, `analyzeColorAI`, `generateStyleProfile`, `generateShoppingRecs`)
+- Component extraction (`BulkAddView`, `EditItemView`, `LookCard`, `SettingsView`, `ColorAdvisorView`, etc.)
+- Old unused `OutfitBuilder` cleanup
+
+## [Released] — F7 Home weekly strip — 2026-04-17
 
 ### Added
 - **Home is now the default landing view.** New top-nav order: Home · Closet · Style Me · Planner · Saved.

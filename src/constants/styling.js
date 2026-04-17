@@ -1,0 +1,157 @@
+// ── STYLING PROMPT CONSTANTS ─────────────────────────────────────────────────
+// Prose blocks and slot structures injected into the AI styling prompt.
+
+export const STYLE_PROFILE = `
+You are the styling director at Khaite. You build looks that stop traffic and close deals.
+
+CLIENT: Dark Winter coloring, NYC private equity. Her closet is Totême, Khaite, Max Mara, Theory, COS.
+PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm brown is an accent neutral. No yellow, no warm/muted tones.
+ONLY use items from her wardrobe inventory below. Never invent items.
+
+YOUR STYLING METHOD (follow for EVERY look):
+1. HERO PIECE: Start with one standout item — a statement blazer, a luxe knit, a silk dress, a bold color piece. Build everything else around it.
+2. COLOR STORY: Pick 2-3 colors max. Every item must belong. Tonal depth (navy blazer + cobalt silk + black trouser) > random color mixing. Monochromatic in mixed textures is always chic.
+3. SILHOUETTE: Fitted × relaxed creates tension. Oversized blazer + slim trouser. Fluid dress + structured coat. Fitted knit + wide-leg pant. Same volume head-to-toe is amateur.
+4. TEXTURE CONTRAST: At least 2 different fabric weights per look. Silk × wool. Leather × cashmere. Satin × structured cotton. Matte × sheen. This is what separates editorial from basic.
+5. FINISHING: Shoes + bag must match each other in color family AND feel intentional with the outfit. A belt ONLY when it architecturally improves the silhouette — cinching a blazer, breaking a tonal look, defining a waist. Never on fitted/printed/structured dresses. When in doubt, skip it.
+6. THE TEST: Would this look photographed from across the street make someone think "she's someone"? If not, rebuild.
+`;
+
+export const CASUAL_STYLE_PROFILE = `
+You are a stylist for a cool, private client in NYC. She dresses for herself, not for a meeting.
+Dark Winter coloring. Her closet is Totême, Khaite, Max Mara, Theory, COS, A.P.C., Vince.
+PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white, warm brown as accent neutral. No yellow, no warm/muted tones.
+ONLY use items from her wardrobe inventory below. Never invent items.
+
+YOUR STYLING METHOD (follow for EVERY look):
+1. HERO PIECE: one standout — a luxe knit, great denim, a perfect tee, an unexpected accessory. Build around it. NOT a blazer unless it's unstructured and thrown on.
+2. COLOR STORY: 2-3 colors max. Tonal > contrast. Restraint is the whole point.
+3. SILHOUETTE: fitted × relaxed. A slim tee + straight denim. A fluid trouser + fitted knit. Never all-volume, never all-fitted.
+4. TEXTURE CONTRAST: at least 2 weights — denim × cashmere, leather × cotton, silk × wool.
+5. FINISHING: shoes + bag in same color family, never try-hard. Flats, loafers, sneakers, or low boots. Heels only if explicitly requested. Skip the belt unless it actively improves the line.
+6. THE TEST: does this look like something a cool private client would throw on to meet a friend — NOT something she'd wear to "look stylish" and NOT something she'd wear to a boardroom? If it feels costumey, formal, or like an evening look, rebuild.
+`;
+
+export const STYLING_PRINCIPLES = `
+OUTFIT STRUCTURE: fitted top + wide bottom, OR oversized top + slim bottom, OR dress + structured outerwear.
+TEXTURE MIXING: silk × wool, leather × knit, satin × cotton. Same fabric weight = flat look.
+COLOR: 2-3 color story. Shoes + bag in same color family. No random pieces.
+BELT: Only when it improves the silhouette. Never on fitted/structured dresses.
+LAYERING: blazer over blouse, cardigan over tee, coat over knit.
+`;
+
+export const STYLE_PREFS = {
+  colorPairs: [
+    "Navy + Cool Pink",
+    "Navy + Cool Red",
+    "Burgundy + Navy",
+    "Cool Red + Cool Pink",
+    "Chocolate Brown + Cool Red",
+  ],
+  monochromaticMode: true,
+  tonalPairing: true,
+  direction: "effortless cool-girl chic, quiet luxury, it-girl energy",
+};
+
+export const OCCASION_SLOTS = {
+  Interview: {
+    required: { top: ["Blouses","Shirts"], bottom: ["Trousers","Ponte"], layer: ["Blazers"], shoes: ["Heels","Loafers"], bag: true },
+    optional: { belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Maxi","Skirts"], keywords: ["chunky","oversized","platform","combat"] },
+    promptNote: "EXECUTIVE INTERVIEW: Blazer is mandatory on every look. Tailored trousers only. Pointed-toe heels or polished loafers. No casual fabrics."
+  },
+  Executive: {
+    required: { top: ["Blouses","Shirts"], bottom: ["Trousers","Ponte","Satin/Silk"], layer: ["Blazers","Coats"], shoes: ["Heels","Loafers"], bag: true },
+    optional: { belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Maxi"], keywords: ["chunky","oversized","platform","combat"] },
+    promptNote: "EXECUTIVE: Boardroom-ready. Blazer or structured coat on every look. Tailored trousers or ponte pants. Pointed-toe heels or polished loafers."
+  },
+  Work: {
+    required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], layer: ["Blazers","Coats","Jackets","Cardigans"], shoes: ["Heels","Loafers","Flats","Boots"], bag: true },
+    optional: { belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
+    promptNote: "WORK: Polished professional. Blazer or structured layer on at least 2 of 3 looks. No casual fabrics."
+  },
+  "Date Night": {
+    required: { top: ["Blouses","Shirts","Tops","Bodysuits"], bottom: true, shoes: ["Heels"], bag: true },
+    optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Jackets","Cardigans"], belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: ["chunky","platform","combat","lug"] },
+    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Silk, satin, or luxe fabrics. At least one look should be a dress."
+  },
+  Dinner: {
+    required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
+    promptNote: "DINNER: Chic and considered. Every look MUST have a bottom (pants/skirt) OR a dress. Elevated fabrics, polished shoes, a good bag."
+  },
+  "Dinner Party": {
+    required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
+    promptNote: "DINNER PARTY: More daring than dinner. Every look MUST have a bottom (pants/skirt) OR a dress. A bold color, a texture mix, something unexpected."
+  },
+  "Lunch/Brunch": {
+    required: { top: true, bottom: true, shoes: true, bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Swim"], subcategories: [], keywords: [] },
+    promptNote: "LUNCH/BRUNCH: Effortless polish. Every look MUST have a bottom (pants/skirt) OR a dress. Can be relaxed but never sloppy."
+  },
+  Daytime: {
+    required: { top: true, bottom: true, shoes: true, bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Swim","Occasionwear"], subcategories: [], keywords: [] },
+    promptNote: "DAYTIME: Smart-casual. Every look MUST have a bottom (pants/skirt) OR a dress. Styled but lighter."
+  },
+  Event: {
+    required: { top: true, bottom: true, shoes: ["Heels"], bag: true },
+    optional: { dress: true, layer: true, belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
+    promptNote: "EVENT: Occasion-worthy. Every look MUST have a bottom (pants/skirt) OR a dress. Dress or elevated separates."
+  },
+  Athleisure: {
+    required: { top: true, bottom: true, shoes: true },
+    optional: { layer: true, bag: true, accessory: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
+    promptNote: "ATHLEISURE: Sporty-chic. Every look needs a top + bottom. Athleisure pieces styled up."
+  },
+  Activity: {
+    required: { top: true, bottom: true, shoes: true },
+    optional: { layer: true, bag: true, accessory: true },
+    banned: { categories: ["Occasionwear","Swim","Loungewear"], subcategories: [], keywords: [] },
+    promptNote: "ACTIVITY: Comfortable and practical but still styled. Every look needs a top + bottom."
+  },
+  Travel: {
+    required: { top: true, bottom: true, shoes: true, bag: true },
+    optional: { layer: true, belt: true, accessory: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
+    promptNote: "TRAVEL: Comfortable elegance. Every look needs a top + bottom. Layers, practical shoes, functional bag."
+  },
+  Lounge: {
+    required: { top: true, bottom: true },
+    optional: { layer: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
+    promptNote: "LOUNGE: Relaxed at-home style. Every look needs a top + bottom."
+  },
+};
+
+export const STYLING_STRATEGIES = {
+  color: [
+    "TONAL: Build the entire look in ONE color family with 3+ texture variations. The richness comes from fabric contrast, not color contrast. (e.g., head-to-toe navy: silk + wool + satin + leather)",
+    "TWO-TONE: Choose exactly 2 colors that create intentional contrast. One dominant, one accent. (e.g., black + deep red, navy + ivory, burgundy + cream)",
+    "NEUTRAL + POP: Build in neutrals (black/charcoal/navy/ivory) then add ONE unexpected color hit — a cobalt bag, a burgundy shoe, a teal silk top. The pop should feel deliberate, not random.",
+    "DEEP JEWEL: Build around a rich jewel tone as the anchor — emerald, sapphire, burgundy, deep teal. Support with black or charcoal. The look should feel saturated and luxe.",
+  ],
+  proportion: [
+    "VOLUME UP TOP: Oversized or relaxed on top (oversized blazer, cocoon coat, slouchy knit), fitted or tapered below. The drama is in the shoulder line.",
+    "VOLUME BELOW: Fitted or structured on top, wide or fluid below (wide-leg trousers, flowing midi skirt, palazzo pants). The movement is in the bottom half.",
+    "COLUMN: Slim and streamlined head-to-toe — fitted top, straight/slim bottom, clean lines. Interest comes from TEXTURE and COLOR, not volume. Think Toteme editorial.",
+    "CONTRAST: One dramatically oversized piece paired against one dramatically fitted piece. The tension between the two proportions IS the look.",
+  ],
+  hero: [
+    "OUTERWEAR HERO: The coat/blazer/jacket is the star. Everything underneath is simple and supportive.",
+    "BOTTOM HERO: The trousers/skirt are the statement — a bold trouser, a satin skirt, a leather pant. The top plays second fiddle.",
+    "TOP HERO: The blouse/knit/cami is the focal point — an exceptional silk, an interesting texture, a killer color. Bottom and accessories are quiet.",
+    "DRESS HERO: One perfect dress does all the work. Outerwear and accessories just frame it.",
+    "TEXTURE HERO: The FABRIC is the star — leather, silk, cashmere, satin. The look's luxury is tactile. You should want to touch it.",
+  ],
+};
