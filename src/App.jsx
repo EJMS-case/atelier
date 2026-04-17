@@ -11,6 +11,7 @@ import { getLocalWeatherLabel } from "./lib/weather.js";
 import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import CalendarView from "./features/planner/CalendarView.jsx";
+import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
 
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
 const STYLE_PROFILE = `
@@ -2458,6 +2459,7 @@ export default function App() {
       {view === "favorites" && (
         <SavedView
           items={items}
+          apiKey={apiKey}
           favorites={favorites}
           toggleFav={toggleFav}
           isFav={isFav}
@@ -4718,7 +4720,7 @@ function OutfitBuilder({ items, onSave, onClose }) {
 }
 
 // ── LOOKS VIEW (saved outfits without a wear date) ──────────────────────────
-function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook }) {
+function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, apiKey }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -4750,8 +4752,9 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook 
 
   if (showBuilder) {
     return (
-      <OutfitBuilder
+      <SilhouetteBuilder
         items={items}
+        apiKey={apiKey}
         onSave={async (log) => {
           await onSaveLook(log);
           setShowBuilder(false);
@@ -4834,7 +4837,7 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook 
 }
 
 // ── SAVED VIEW (wrapper with sub-tabs: Looks | History | Favorites) ─────────
-function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook }) {
+function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, apiKey }) {
   const [tab, setTab] = useState("looks");
   return (
     <div style={s.page}>
@@ -4846,7 +4849,7 @@ function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDel
         ))}
       </div>
       {tab === "looks" && (
-        <LooksView items={items} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook}/>
+        <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook}/>
       )}
       {tab === "history" && (
         <OutfitHistory nested items={items} onWearAgain={onWearAgain} onDelete={onDeleteLog} onUnlog={onUnlog} isFav={isFav} toggleFav={toggleFav}/>
