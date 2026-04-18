@@ -1,6 +1,13 @@
 // ── STYLING VALIDATOR ─────────────────────────────────────────────────────────
 // Wraps the Anthropic API call with structured validation and auto-retry.
 // Ensures every generated look meets hard constraints before reaching the UI.
+// Structured output comes via Anthropic tool-use + a Zod shape check, then
+// runs through the 9 semantic validators below (item-ID resolution, exclusion
+// compliance, lower-half coverage, etc.).
+
+import { invokeToolRaw } from "../lib/ai/toolUse.js";
+import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
+import { logAiError } from "../lib/ai/logError.js";
 
 const MAX_RETRIES = 2;
 
@@ -422,48 +429,41 @@ export async function generateValidatedLooks({
       messageContent = userContent;
     }
 
-    // Call the API
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 4500,
-        temperature: 0.7,
-        messages: [{ role: "user", content: messageContent }],
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `API error ${res.status}`);
-    }
-
-    const data = await res.json();
-    const text = data.content?.map(b => b.text || "").join("") || "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    const jsonMatch = clean.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      lastFailures = [{ type: "parse", message: "No valid JSON found in API response.", hard: true }];
-      continue;
-    }
-
-    let parsed;
+    // Tool-use call — Claude is forced to invoke LooksTool, response arrives
+    // as a single tool_use content block with `input` matching the schema.
+    let toolBlock, raw;
     try {
-      parsed = JSON.parse(jsonMatch[0]);
+      ({ toolBlock, raw } = await invokeToolRaw({
+        apiKey,
+        model: "claude-sonnet-4-5",
+        maxTokens: 4500,
+        temperature: 0.7,
+        content: messageContent,
+        tool: LooksTool,
+      }));
     } catch (e) {
-      lastFailures = [{ type: "parse", message: `JSON parse error: ${e.message}`, hard: true }];
+      logAiError("stylist_outfit:http", { attempt }, e);
+      throw e;
+    }
+
+    if (!toolBlock) {
+      lastFailures = [{ type: "parse", message: "Model did not call the return_looks tool.", hard: true }];
+      logAiError("stylist_outfit:no_tool_use", raw, "missing tool_use block");
       continue;
     }
 
-    // Normalize the response to the new format
-    parsed = normalizeResponse(parsed);
+    const shapeCheck = LooksResponseSchema.safeParse(toolBlock.input);
+    if (!shapeCheck.success) {
+      const issueList = shapeCheck.error.issues.slice(0, 5).map(i =>
+        `${i.path.join(".") || "(root)"}: ${i.message}`
+      ).join("; ");
+      lastFailures = [{ type: "parse", message: `Schema validation failed: ${issueList}`, hard: true }];
+      logAiError("stylist_outfit:schema", { input: toolBlock.input, issues: shapeCheck.error.issues }, issueList);
+      continue;
+    }
+
+    // Normalize the response to the old-format callers expect
+    let parsed = normalizeResponse(shapeCheck.data);
 
     // Run all validation checks
     const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots);

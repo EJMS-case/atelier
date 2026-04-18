@@ -13,6 +13,14 @@ import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } fro
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, filterByWeather, shuffle } from "../../utils/item-helpers.js";
 import { moodPromptFor } from "../../features/stylist/moods.js";
+import { invokeTool } from "./toolUse.js";
+import {
+  ElevationSchema, ElevationTool,
+  KnitSchema, KnitTool,
+  ColorAnalysisSchema, ColorAnalysisTool,
+  GapsSchema, GapsTool,
+  CompletionsSchema, CompletionsTool,
+} from "./schemas.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 
@@ -177,7 +185,7 @@ OCCASION: ${look.occasion}
 CURRENT ITEMS:
 ${currentItems}
 
-Your task: Suggest exactly 3 specific pieces to purchase that would meaningfully elevate this look. Be specific, shoppable, and direct.
+Your task: Suggest exactly 3 specific pieces that would meaningfully elevate this look. Return them through the return_elevation tool.
 
 ELEVATION RULES:
 - Suggest pieces from these brands: Totême, Max Mara, Theory, COS, A.P.C., Khaite, Vince, Club Monaco, Banana Republic, Reformation, Sezane, Mango, & Other Stories, Arket, Massimo Dutti, Ganni, Zimmermann
@@ -185,96 +193,35 @@ ELEVATION RULES:
 - Every piece must work with her Dark Winter palette (cool, deep, jewel tones — no warm/muted)
 - Mix adds and swaps — don't only suggest additions
 - Be specific: "Totême double-breasted wool blazer in navy" not just "a navy blazer"
+- For swaps, \`swapTarget\` is the exact name of the current item being replaced; for adds it is null.`;
 
-You MUST respond with ONLY this exact JSON structure — no text before or after, no markdown:
-{
-  "elevatedLookName": "evocative 2-4 word name for the elevated version",
-  "elevatedWhy": "one sentence on why the elevated version is more powerful",
-  "elevations": [
-    {
-      "type": "add",
-      "swapTarget": null,
-      "category": "Outerwear",
-      "item": "Brand + specific item name",
-      "description": "one sentence: color, fabric, silhouette",
-      "price": "$XXX–$XXX",
-      "why": "why this specific piece elevates this specific look",
-      "colorNote": "why this works for Dark Winter coloring"
-    },
-    {
-      "type": "swap",
-      "swapTarget": "exact name of item being replaced",
-      "category": "Shoes",
-      "item": "Brand + specific item name",
-      "description": "one sentence: color, fabric, silhouette",
-      "price": "$XXX–$XXX",
-      "why": "why swapping this in is an upgrade",
-      "colorNote": "why this works for Dark Winter coloring"
-    },
-    {
-      "type": "add",
-      "swapTarget": null,
-      "category": "Accessories",
-      "item": "Brand + specific item name",
-      "description": "one sentence: color, fabric, silhouette",
-      "price": "$XXX–$XXX",
-      "why": "why this accessory completes the look",
-      "colorNote": "why this works for Dark Winter coloring"
-    }
-  ]
-}`;
-
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 1500,
-      messages: [{ role: "user", content: prompt }]
-    })
+  return invokeTool({
+    apiKey,
+    model: "claude-sonnet-4-5",
+    maxTokens: 1500,
+    content: prompt,
+    tool: ElevationTool,
+    schema: ElevationSchema,
+    kind: "stylist_elevation",
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
-  }
-
-  const data = await res.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  const jsonMatch = clean.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("No valid JSON in elevation response");
-  return JSON.parse(jsonMatch[0]);
 }
 
 // ── CLASSIFY KNIT (weight / fit) ────────────────────────────────────────────
 export async function classifyKnitAI(imgStr, apiKey) {
   const source = buildImgSource(imgStr);
   if (!source) throw new Error("No image");
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 200,
-      messages: [{ role: "user", content: [
-        { type: "image", source },
-        { type: "text", text: `Classify this knit garment. Respond ONLY with valid JSON:
-{
-  "weight": "Chunky/Winter" | "Fine/Summer",
-  "fit": "Cropped" | "Oversized",
-  "confidence": "High" | "Medium" | "Low",
-  "summary": "e.g. 'oversized chunky winter knit'"
-}` },
-      ]}],
-    }),
+  return invokeTool({
+    apiKey,
+    model: "claude-sonnet-4-5",
+    maxTokens: 200,
+    content: [
+      { type: "image", source },
+      { type: "text", text: "Classify this knit garment by weight and fit, then return via the classify_knit tool. `summary` is a short phrase like 'oversized chunky winter knit'." },
+    ],
+    tool: KnitTool,
+    schema: KnitSchema,
+    kind: "knit_classify",
   });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = await res.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  const match = text.replace(/```json|```/g, "").trim().match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("No JSON");
-  return JSON.parse(match[0]);
 }
 
 // ── ANALYZE COLOR (undertone + Dark Winter match + optional pairings) ───────
@@ -290,7 +237,7 @@ export async function analyzeColorAI(imgStr, apiKey, wardrobeItems = null) {
 
   const prompt = `You are a professional color analyst specializing in seasonal color analysis for fashion.
 
-Analyze this garment for undertone and Dark Winter palette compatibility.
+Analyze this garment for undertone and Dark Winter palette compatibility, then return your analysis via the return_color_analysis tool.
 
 Dark Winter: cool undertones, high contrast. Best colors: black, navy, deep jewel tones, cool reds, burgundy, deep teal, icy pastels, cobalt, sapphire.
 
@@ -298,49 +245,20 @@ WARM EXCEPTION RULE — CRITICAL:
 If the piece is a warm brown (chocolate, espresso, caramel, cognac, tan, taupe, mocha) OR a warm red (brick, rust, terracotta, tomato, orange-red, burnt sienna): set darkWinterMatch to "Warm Exception". These are FULLY APPROVED in this wardrobe. Never flag them.
 ${wardrobeContext}
 
-Respond ONLY with valid JSON, no markdown:
-{
-  "undertone": "Cool" | "Warm" | "Neutral",
-  "confidence": "High" | "Medium" | "Low",
-  "darkWinterMatch": "Strong match" | "Borderline" | "Avoid" | "Warm Exception",
-  "reasoning": "1-2 sentences explaining the undertone observation and palette verdict",
-  "colorDescription": "what color this actually is, e.g. 'dusty blush with peach undertones'"${wardrobeItems ? `,
-  "pairingCount": 0,
-  "pairingItemIds": [],
-  "dimensions": {
-    "undertoneScore": {"score": "Pass or Fail or Exception", "note": "one sentence"},
-    "visualCohesion": {"score": "High or Medium or Low", "note": "one sentence on how it works with owned pieces"},
-    "colorPaletteFit": {"score": "Strong or Borderline or Avoid", "note": "one sentence"},
-    "textureFabric": {"score": "Excellent or Good or Poor", "note": "one sentence on fabric suitability"},
-    "layeringPotential": {"score": "High or Medium or Low", "note": "one sentence"},
-    "practicality": {"score": "High or Medium or Low", "note": "one sentence on versatility"},
-    "similarityFlag": {"flagged": false, "note": "does this duplicate something already owned?"}
-  }` : ""}
-}`;
+${wardrobeItems ? "Fill in pairingCount, pairingItemIds (up to 5), and dimensions." : "Omit pairingCount, pairingItemIds, and dimensions."}`;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 900,
-      messages: [{ role: "user", content: [
-        { type: "image", source },
-        { type: "text", text: prompt },
-      ]}],
-    }),
+  return invokeTool({
+    apiKey,
+    model: "claude-sonnet-4-5",
+    maxTokens: 900,
+    content: [
+      { type: "image", source },
+      { type: "text", text: prompt },
+    ],
+    tool: ColorAnalysisTool,
+    schema: ColorAnalysisSchema,
+    kind: "color_analyze",
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
-  }
-  const data = await res.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  const match = clean.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("No JSON in response");
-  return JSON.parse(match[0]);
 }
 
 // ── STYLE PROFILE (editorial monthly snapshot) ──────────────────────────────
@@ -376,16 +294,15 @@ export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []
   const catCounts = {};
   items.forEach(it => { catCounts[it.category] = (catCounts[it.category] || 0) + 1; });
 
-  let prompt;
   if (mode === "gap") {
     const taxStr = Object.entries(TAXONOMY).map(([cat, subs]) =>
       `${cat}: ${subs.length ? subs.join(", ") : "(no subcategories)"} — owned: ${catCounts[cat] || 0}`
     ).join("\n");
 
-    prompt = `${STYLE_PROFILE}
+    const prompt = `${STYLE_PROFILE}
 ${STYLING_PRINCIPLES}
 
-You are a wardrobe strategist analyzing gaps in this client's wardrobe.
+You are a wardrobe strategist analyzing gaps in this client's wardrobe. Return your findings through the return_gaps tool.
 
 FULL TAXONOMY (category: subcategories — item count):
 ${taxStr}
@@ -398,30 +315,25 @@ Analyze the wardrobe against the full taxonomy. Identify:
 2. THIN subcategories (<2 items that should have more for a complete wardrobe)
 3. Strategic gaps (missing versatile pieces that would unlock more outfits)
 
-For each gap, suggest ONE specific product to buy. Be specific: brand, color, fabric, silhouette. Use brands she loves: The Row, Totême, Loro Piana, Khaite, Max Mara, Theory, COS, Vince.
+For each gap, suggest ONE specific product to buy. Be specific: brand, color, fabric, silhouette. Use brands she loves: The Row, Totême, Loro Piana, Khaite, Max Mara, Theory, COS, Vince.`;
 
-Respond ONLY with valid JSON:
-{
-  "gaps": [
-    {
-      "priority": "high" | "medium" | "low",
-      "category": "Tops",
-      "subcategory": "Button-Downs",
-      "reason": "why this gap matters",
-      "suggestion": "Brand + specific item",
-      "description": "color, fabric, silhouette",
-      "price": "$XXX–$XXX",
-      "colorNote": "why this works for Dark Winter"
-    }
-  ]
-}`;
-  } else {
-    const selectedItems = selectedIds.map(id => items.find(i => i.id === id)).filter(Boolean);
-    const outfitStr = selectedItems.map(it =>
-      `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}`
-    ).join("\n");
+    return invokeTool({
+      apiKey,
+      model: "claude-sonnet-4-5",
+      maxTokens: 2000,
+      content: prompt,
+      tool: GapsTool,
+      schema: GapsSchema,
+      kind: "shopping_gaps",
+    });
+  }
 
-    prompt = `${STYLE_PROFILE}
+  const selectedItems = selectedIds.map(id => items.find(i => i.id === id)).filter(Boolean);
+  const outfitStr = selectedItems.map(it =>
+    `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}`
+  ).join("\n");
+
+  const prompt = `${STYLE_PROFILE}
 ${STYLING_PRINCIPLES}
 
 You are completing an outfit. The client has selected these pieces:
@@ -432,40 +344,22 @@ ${outfitStr}
 FULL WARDROBE (for context):
 ${inventory}
 
-Analyze what's missing from this outfit to make it complete and elevated. Consider:
+Analyze what's missing from this outfit to make it complete and elevated, then return suggestions via the return_completions tool. Consider:
 - Does it need shoes? A bag? Outerwear?
 - Could a specific accessory elevate it?
 - Is there a texture or color gap?
 
-Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific with brands, colors, fabrics.
+Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific with brands, colors, fabrics.`;
 
-Respond ONLY with valid JSON:
-{
-  "completions": [
-    {
-      "type": "essential" | "elevating",
-      "category": "Shoes",
-      "suggestion": "Brand + specific item",
-      "description": "color, fabric, silhouette",
-      "price": "$XXX–$XXX",
-      "why": "why this completes the look",
-      "colorNote": "why this works for Dark Winter"
-    }
-  ]
-}`;
-  }
-
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+  return invokeTool({
+    apiKey,
+    model: "claude-sonnet-4-5",
+    maxTokens: 2000,
+    content: prompt,
+    tool: CompletionsTool,
+    schema: CompletionsSchema,
+    kind: "shopping_completions",
   });
-  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error?.message || `API error ${res.status}`); }
-  const data = await res.json();
-  const text = data.content?.map(b => b.text || "").join("") || "";
-  const match = text.replace(/```json|```/g, "").trim().match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("No valid JSON in response");
-  return JSON.parse(match[0]);
 }
 
 // ── COLOR NAME → HEX (small helper used by insights) ────────────────────────
