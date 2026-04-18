@@ -22,7 +22,7 @@
   --color-ink-2: #2E2622;
   --color-text: #4A3E36;
   --color-text-2: #6B5E54;
-  --color-text-muted: #9A8E84;
+  --color-text-muted: #73695f;
 
   /* Borders + dividers */
   --color-border: #E8E0D8;
@@ -32,7 +32,7 @@
 
   /* Brand + status */
   --color-accent: #C4A882;
-  --color-success: #3D7A4E;
+  --color-success: #306e50;
   --color-danger: #C0392B;
 }
 
