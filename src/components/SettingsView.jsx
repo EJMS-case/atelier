@@ -47,7 +47,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   };
 
   const handleAiCategorize = async () => {
-    if (!apiKey || orphans.length === 0) return;
+    if (!key || orphans.length === 0) return;
     setAiCatRunning(true);
     for (const imageId of orphans) {
       const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/wardrobe-images/${imageId}`;
@@ -67,7 +67,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-api-key": apiKey,
+            "x-api-key": key,
             "anthropic-version": "2023-06-01",
             "anthropic-dangerous-direct-browser-access": "true",
           },
@@ -333,10 +333,10 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
               </button>
               {orphans.length > 0 && (
                 <button style={{...s.btnPrimary, flex:1, background: aiCatRunning ? "#6B5E54" : "#1C1814"}}
-                  onClick={handleAiCategorize} disabled={aiCatRunning || !apiKey}>
+                  onClick={handleAiCategorize} disabled={aiCatRunning || !key}>
                   {aiCatRunning ? (
                     <><span style={s.spinnerSm}/>  Categorizing...</>
-                  ) : apiKey ? "AI Categorize All" : "Add API key above"}
+                  ) : key ? "AI Categorize All" : "Add API key above"}
                 </button>
               )}
             </div>

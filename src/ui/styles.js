@@ -27,7 +27,7 @@ export const s = {
 
   // Filter (legacy — kept for queue rows etc.)
   chipRow: { display:"flex", gap:8, flexWrap:"wrap", marginBottom:24 },
-  chip: { background:"none", border:"1px solid #C8BFB4", color:"#6B5E54", fontSize:11, letterSpacing:"0.08em", padding:"5px 13px", borderRadius:20, cursor:"pointer", transition:"all 0.15s ease" },
+  chip: { background:"none", borderWidth:1, borderStyle:"solid", borderColor:"#C8BFB4", color:"#6B5E54", fontSize:11, letterSpacing:"0.08em", padding:"5px 13px", borderRadius:20, cursor:"pointer", transition:"all 0.15s ease" },
   chipActive: { background:"#1C1814", borderColor:"#1C1814", color:"#F5F1EC", fontWeight:500, boxShadow:"0 2px 8px rgba(28,24,20,0.25)" },
 
   // Grid

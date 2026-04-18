@@ -48,10 +48,7 @@ import ColorAdvisorView from "./components/ColorAdvisorView.jsx";
 import SettingsView from "./components/SettingsView.jsx";
 import StyleInsightsView from "./components/StyleInsightsView.jsx";
 import ShoppingView from "./components/ShoppingView.jsx";
-import OutfitHistory from "./components/OutfitHistory.jsx";
-import LooksView from "./components/LooksView.jsx";
 import SavedView from "./components/SavedView.jsx";
-import FavoritesView from "./components/FavoritesView.jsx";
 import PlannerWrapper from "./components/PlannerWrapper.jsx";
 
 
