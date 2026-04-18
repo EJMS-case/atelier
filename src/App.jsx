@@ -32,8 +32,9 @@ import {
 } from "./utils/item-helpers.js";
 import {
   STORAGE_KEY, API_KEY_STORE, RMBG_KEY_STORE, SETS_META_KEY,
+  STYLE_PREFS_KEY, ABOUT_ME_KEY, THEME_KEY, RECENT_LOOKS_KEY, INSIGHTS_DISMISSED_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
-  loadSetsMeta, saveSetsMeta,
+  loadSetsMeta, saveSetsMeta, migrateLocalStorage,
 } from "./utils/storage.js";
 import { compressImage, imageToBase64, removeBackground } from "./utils/images.js";
 import { sb, SUPABASE_URL, SUPABASE_KEY, SB_HEADERS, STORAGE_HEADERS, BUCKET } from "./lib/supabase.js";
@@ -42,8 +43,9 @@ import {
   generateStyleProfile, generateShoppingRecs, buildImgSource, colorHex,
 } from "./lib/ai/stylist.js";
 
-
-
+// Rename any pre-namespace localStorage keys from older app builds. Runs once
+// per browser; no-op afterward. Must fire before any load*() helpers below.
+migrateLocalStorage();
 
 
 // ── DARK WINTER COLOR SWATCHES ────────────────────────────────────────────────
@@ -401,12 +403,12 @@ export default function App() {
     }
   }, []);
   const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem("atelier:theme") === "dark" ? "dark" : "light"; }
+    try { return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"; }
     catch { return "light"; }
   });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("atelier:theme", theme); } catch {}
+    try { localStorage.setItem(THEME_KEY, theme); } catch {}
   }, [theme]);
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
@@ -415,7 +417,7 @@ export default function App() {
   const [allLooks,   setAllLooks]   = useState(() => {
     // Lazy-init from localStorage so anti-repeat history persists across sessions
     try {
-      const raw = localStorage.getItem("atelier-recent-looks");
+      const raw = localStorage.getItem(RECENT_LOOKS_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   }); // history of all generated looks for anti-repeat
@@ -446,7 +448,7 @@ export default function App() {
 
   // ── Persist allLooks to localStorage so anti-repeat history survives reloads
   useEffect(() => {
-    try { localStorage.setItem("atelier-recent-looks", JSON.stringify(allLooks)); } catch {}
+    try { localStorage.setItem(RECENT_LOOKS_KEY, JSON.stringify(allLooks)); } catch {}
   }, [allLooks]);
 
   // ── Flash sync status briefly
@@ -2462,14 +2464,14 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
 }
 
 // ── SETTINGS VIEW ─────────────────────────────────────────────────────────────
-const STYLE_PREFS_KEY = "atelier-style-prefs-v1";
+// STYLE_PREFS_KEY / ABOUT_ME_KEY live in utils/storage.js so they're migrated
+// with the rest of the namespaced keys.
 function loadStylePrefs() {
   try { return JSON.parse(localStorage.getItem(STYLE_PREFS_KEY)) || STYLE_PREFS; }
   catch { return STYLE_PREFS; }
 }
 function saveStylePrefsLocal(prefs) { localStorage.setItem(STYLE_PREFS_KEY, JSON.stringify(prefs)); }
 
-const ABOUT_ME_KEY = "atelier-about-me-v1";
 function loadAboutMe() {
   try { return JSON.parse(localStorage.getItem(ABOUT_ME_KEY)) || {}; }
   catch { return {}; }
@@ -4003,9 +4005,9 @@ function StyleInsightsView({ items, apiKey, onBack }) {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileErr, setProfileErr] = useState("");
   const [dismissed, setDismissed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("atelier-insights-dismissed") || "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(INSIGHTS_DISMISSED_KEY) || "[]"); } catch { return []; }
   });
-  const dismiss = (key) => { const next = [...dismissed, key]; setDismissed(next); localStorage.setItem("atelier-insights-dismissed", JSON.stringify(next)); };
+  const dismiss = (key) => { const next = [...dismissed, key]; setDismissed(next); localStorage.setItem(INSIGHTS_DISMISSED_KEY, JSON.stringify(next)); };
   const isDismissed = (key) => dismissed.includes(key);
 
   useEffect(() => {
