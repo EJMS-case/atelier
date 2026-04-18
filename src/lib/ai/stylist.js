@@ -177,9 +177,7 @@ export async function generateElevation(look, lookItems, apiKey) {
     `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.notes ? ` — ${it.notes}` : ""}`
   ).join("\n");
 
-  const prompt = `${STYLE_PROFILE}
-
-You are a world-class stylist elevating an existing outfit. Here is the current look:
+  const dynamic = `You are a world-class stylist elevating an existing outfit. Here is the current look:
 LOOK NAME: "${look.name}"
 OCCASION: ${look.occasion}
 CURRENT ITEMS:
@@ -199,7 +197,10 @@ ELEVATION RULES:
     apiKey,
     model: "claude-sonnet-4-5",
     maxTokens: 1500,
-    content: prompt,
+    content: [
+      { type: "text", text: STYLE_PROFILE, cache_control: { type: "ephemeral" } },
+      { type: "text", text: dynamic },
+    ],
     tool: ElevationTool,
     schema: ElevationSchema,
     kind: "stylist_elevation",
@@ -299,10 +300,7 @@ export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []
       `${cat}: ${subs.length ? subs.join(", ") : "(no subcategories)"} — owned: ${catCounts[cat] || 0}`
     ).join("\n");
 
-    const prompt = `${STYLE_PROFILE}
-${STYLING_PRINCIPLES}
-
-You are a wardrobe strategist analyzing gaps in this client's wardrobe. Return your findings through the return_gaps tool.
+    const dynamic = `You are a wardrobe strategist analyzing gaps in this client's wardrobe. Return your findings through the return_gaps tool.
 
 FULL TAXONOMY (category: subcategories — item count):
 ${taxStr}
@@ -321,7 +319,10 @@ For each gap, suggest ONE specific product to buy. Be specific: brand, color, fa
       apiKey,
       model: "claude-sonnet-4-5",
       maxTokens: 2000,
-      content: prompt,
+      content: [
+        { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
+        { type: "text", text: dynamic },
+      ],
       tool: GapsTool,
       schema: GapsSchema,
       kind: "shopping_gaps",
@@ -333,10 +334,7 @@ For each gap, suggest ONE specific product to buy. Be specific: brand, color, fa
     `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}`
   ).join("\n");
 
-  const prompt = `${STYLE_PROFILE}
-${STYLING_PRINCIPLES}
-
-You are completing an outfit. The client has selected these pieces:
+  const dynamic = `You are completing an outfit. The client has selected these pieces:
 
 SELECTED OUTFIT:
 ${outfitStr}
@@ -355,7 +353,10 @@ Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. B
     apiKey,
     model: "claude-sonnet-4-5",
     maxTokens: 2000,
-    content: prompt,
+    content: [
+      { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
+      { type: "text", text: dynamic },
+    ],
     tool: CompletionsTool,
     schema: CompletionsSchema,
     kind: "shopping_completions",
