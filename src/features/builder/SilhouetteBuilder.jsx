@@ -8,12 +8,12 @@ import { useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 
 const PALETTE = {
-  ink:    "#1C1814",
-  soft:   "#4A3E36",
-  muted:  "#9A8E84",
-  bg:     "#F5F1EC",
-  cream:  "#FDF8F0",
-  line:   "#D6CDC1",
+  ink:    "var(--color-ink)",
+  soft:   "var(--color-text)",
+  muted:  "var(--color-text-muted)",
+  bg:     "var(--color-surface)",
+  cream:  "var(--color-bg)",
+  line:   "var(--color-border-strong)",
   accent: "#6D1A2E",
 };
 
@@ -30,7 +30,7 @@ const SLOTS = [
 // Silhouette SVG — minimalist, visible only during editing.
 const Silhouette = ({ style }) => (
   <svg viewBox="0 0 200 400" style={{ width: "100%", height: "100%", ...style }} aria-hidden="true">
-    <path fill="none" stroke="#D6CDC1" strokeWidth="1.5"
+    <path fill="none" style={{ stroke: "var(--color-border-strong)" }} strokeWidth="1.5"
       d="M100 20 q-18 0 -18 22 q0 12 6 20 q-28 6 -40 34 q-6 14 -6 34 l8 80 l6 4 l-10 120 l14 4 l6 -80 l4 0 l6 80 l14 -4 l-10 -120 l6 -4 l8 -80 q0 -20 -6 -34 q-12 -28 -40 -34 q6 -8 6 -20 q0 -22 -18 -22 z"
       transform="translate(0 0)"/>
   </svg>

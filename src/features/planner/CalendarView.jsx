@@ -8,12 +8,12 @@ import { buildPackingList } from "./tripPacker.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 const PALETTE = {
-  ink:     "#1C1814",
-  soft:    "#4A3E36",
-  muted:   "#9A8E84",
-  bg:      "#F5F1EC",
-  cream:   "#FDF8F0",
-  line:    "#D6CDC1",
+  ink:     "var(--color-ink)",
+  soft:    "var(--color-text)",
+  muted:   "var(--color-text-muted)",
+  bg:      "var(--color-surface)",
+  cream:   "var(--color-bg)",
+  line:    "var(--color-border-strong)",
   accent:  "#6D1A2E",
 };
 

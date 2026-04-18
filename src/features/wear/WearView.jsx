@@ -6,11 +6,11 @@ import { useMemo } from "react";
 import { costPerWear, mostWornItems, neglectedItems } from "./wearApi.js";
 
 const PALETTE = {
-  ink:    "#1C1814",
-  soft:   "#4A3E36",
-  muted:  "#9A8E84",
-  cream:  "#FDF8F0",
-  line:   "#D6CDC1",
+  ink:    "var(--color-ink)",
+  soft:   "var(--color-text)",
+  muted:  "var(--color-text-muted)",
+  cream:  "var(--color-bg)",
+  line:   "var(--color-border-strong)",
   accent: "#6D1A2E",
 };
 
