@@ -372,15 +372,31 @@ export function formatInventory(sampled, getSleeveType) {
     const sleeveTag = (it.category === "Tops" || it.category === "Knits")
       ? ` [sleeve:${getSleeveType(it)}]`
       : "";
-    const colorInfo = it.color_family ? `[${it.color_family}]` : it.color ? `[${it.color}]` : "[?]";
+    // Hex-first color: the stylist reasons better about harmony with actual
+    // pixel values than a palette name. Fall back to the human name when
+    // autodetect never produced a hex.
+    const hex = normalizeHex(it.primary_color_hex);
+    const hex2 = normalizeHex(it.secondary_color_hex);
+    const name = it.color_family || it.color || "";
+    const colorParts = [];
+    if (hex) colorParts.push(hex);
+    if (hex2) colorParts.push(`+${hex2}`);
+    if (name) colorParts.push(name);
+    const colorInfo = colorParts.length ? `[${colorParts.join(" ")}]` : "[?]";
     const parts = [
       `${short} ${colorInfo}`,
       `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}`,
       `${it.name}${knitTag}${sleeveTag}`,
     ];
-    if (it.color && it.color !== it.color_family) parts.push(it.color);
+    if (it.color && it.color !== it.color_family && !hex) parts.push(it.color);
     if (it.brand) parts.push(it.brand);
     if (it.notes) parts.push(it.notes);
     return parts.join(" | ");
   }).join("\n");
+}
+
+function normalizeHex(v) {
+  if (typeof v !== "string") return null;
+  const m = v.trim().match(/^#?([0-9a-f]{6})$/i);
+  return m ? `#${m[1].toUpperCase()}` : null;
 }

@@ -170,6 +170,7 @@ VISUAL REFERENCE: Contact sheet images of every wardrobe item are attached. Each
 
 ────────────────────────────────────────────────────────
 WARDROBE INVENTORY (${closetCount} items — use ONLY these):
+Each item's color field leads with a six-digit hex value (e.g. "#1B2A4A"); treat the hex as ground truth when reasoning about harmony, tonal families, and Dark Winter palette fit. The human name (e.g. "Navy") follows the hex where available. Items without a hex fall back to name-only — rely on the contact sheet photo for those.
 ${closetItems}
 
 ────────────────────────────────────────────────────────
