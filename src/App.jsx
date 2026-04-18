@@ -871,6 +871,155 @@ export default function App() {
   const syncColor = syncStatus === "error" ? "var(--color-danger)"
     : syncStatus === "synced" ? "var(--color-success)" : "var(--color-accent)";
 
+  // Style Me generator — rendered on both Closet and Style views via
+  // `{stylePanelNode}` below. Position:fixed, so DOM location doesn't
+  // matter. Extracted so the Style view has a panel to open (previously
+  // the nav chip would land on an empty "go back and try again" state).
+  const stylePanelNode = (
+    <div style={s.stylePanel}>
+      {!stylePanelOpen ? (
+        /* ── Collapsed: one-tap button ── */
+        <button style={{...s.btnPrimary, width:"100%", padding:"14px 20px"}}
+          onClick={() => setStylePanelOpen(true)}>
+          <Icon path={icons.sparkle} size={15}/> Style Me
+        </button>
+      ) : (
+        /* ── Expanded: full controls ── */
+        <>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+            <div style={s.panelLabel}>✦ STYLE ME</div>
+            <button onClick={() => setStylePanelOpen(false)}
+              style={{background:"none", border:"none", color:"var(--color-text-muted)", fontSize:18, cursor:"pointer", padding:"0 4px", lineHeight:1}}>✕</button>
+          </div>
+
+          {/* WHERE ARE YOU GOING? — occasion pills */}
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>WHERE ARE YOU GOING?</div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            {OCCASIONS.map(o => (
+              <button key={o}
+                style={occasion === o
+                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"6px 12px"}
+                  : {...s.chip, fontSize:11, padding:"6px 12px"}}
+                onClick={() => {
+                  setOccasion(o);
+                  // Auto-set smart defaults per occasion
+                  if (o === "Interview" || o === "Executive") {
+                    setStyleExcludes(new Set(["no-jeans","trousers-only"]));
+                  } else if (o === "Work") {
+                    setStyleExcludes(new Set(["no-jeans"]));
+                  } else {
+                    setStyleExcludes(new Set());
+                  }
+                }}>
+                {o}
+              </button>
+            ))}
+          </div>
+
+          {/* WHAT'S THE WEATHER? */}
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
+            <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)"}}>WHAT'S THE WEATHER?</div>
+            <button
+              onClick={async () => {
+                setWeatherLoading(true);
+                try {
+                  const label = await getLocalWeatherLabel();
+                  setWeather(label);
+                } catch (err) {
+                  console.warn("[F2] auto-weather failed:", err);
+                } finally {
+                  setWeatherLoading(false);
+                }
+              }}
+              disabled={weatherLoading}
+              style={{background:"none", border:"none", color:"var(--color-text)", fontSize:10, letterSpacing:"0.1em", textDecoration:"underline", cursor:"pointer", padding:0}}>
+              {weatherLoading ? "locating…" : "✦ use my location"}
+            </button>
+          </div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            {[
+              ["","Any"],["Hot (85°F+)","Hot"],["Warm (70-84°F)","Warm"],
+              ["Mild (55-69°F)","Mild"],["Cool (40-54°F)","Cool"],
+              ["Cold (below 40°F)","Cold"],["Rainy","Rainy"],
+            ].map(([val,label]) => (
+              <button key={val}
+                style={weather === val
+                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                onClick={() => setWeather(val)}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* MOOD — F2 */}
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>MOOD (OPTIONAL)</div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            <button
+              style={mood === ""
+                ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                : {...s.chip, fontSize:11, padding:"5px 11px"}}
+              onClick={() => setMood("")}>
+              None
+            </button>
+            {MOODS.map(m => (
+              <button key={m.key}
+                style={mood === m.key
+                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                onClick={() => setMood(m.key)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* DON'T INCLUDE — user exclusion toggles */}
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>DON'T INCLUDE</div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            {[
+              ["no-jeans","No Jeans"],
+              ["no-skirts","No Skirts"],
+              ["no-dresses","No Dresses"],
+              ["trousers-only","Trousers Only"],
+              ["no-boots","No Boots"],
+              ["heels-only","Heels Only"],
+              ["no-knits","No Knits"],
+            ].map(([key,label]) => (
+              <button key={key}
+                style={styleExcludes.has(key)
+                  ? {...s.chip, background:"var(--color-danger)", borderColor:"var(--color-danger)", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
+                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                onClick={() => setStyleExcludes(prev => {
+                  const next = new Set(prev);
+                  // Handle mutual exclusivity
+                  if (key === "trousers-only" && !next.has(key)) { next.delete("no-skirts"); }
+                  if (key === "heels-only" && !next.has(key)) { next.delete("no-boots"); }
+                  next.has(key) ? next.delete(key) : next.add(key);
+                  return next;
+                })}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ANYTHING SPECIFIC? */}
+          <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black', 'navy and brown')"
+            value={request} onChange={e=>setRequest(e.target.value)}
+            style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
+
+          {styleErr && <p style={s.err}>{styleErr}</p>}
+          <button style={{...s.btnPrimary, width:"100%"}}
+            onClick={() => { handleStyle(); }}
+            disabled={styling}>
+            {styling
+              ? <><span style={s.spinnerSm}/> Styling…</>
+              : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
+          </button>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div style={s.app}>
       {/* GLOBAL KEYFRAMES */}
@@ -899,7 +1048,13 @@ export default function App() {
           </div>
           <nav style={s.nav}>
             {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
-              <button key={v} onClick={() => setView(v)}
+              <button key={v} onClick={() => {
+                setView(v);
+                // Clicking the Style Me nav always opens the generator
+                // panel — matches the home CTA behavior so there's no
+                // dead-end landing on the Style view with no panel open.
+                if (v === "style") setStylePanelOpen(true);
+              }}
                 style={{...s.navBtn, ...(view===v ? s.navActive : {})}}>
                 {label}
                 {v==="closet" && items.length > 0 &&
@@ -1119,149 +1274,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Style panel — collapsed = just the button, expanded = full controls */}
-          <div style={s.stylePanel}>
-            {!stylePanelOpen ? (
-              /* ── Collapsed: one-tap button ── */
-              <button style={{...s.btnPrimary, width:"100%", padding:"14px 20px"}}
-                onClick={() => setStylePanelOpen(true)}>
-                <Icon path={icons.sparkle} size={15}/> Style Me
-              </button>
-            ) : (
-              /* ── Expanded: full controls ── */
-              <>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
-                  <div style={s.panelLabel}>✦ STYLE ME</div>
-                  <button onClick={() => setStylePanelOpen(false)}
-                    style={{background:"none", border:"none", color:"var(--color-text-muted)", fontSize:18, cursor:"pointer", padding:"0 4px", lineHeight:1}}>✕</button>
-                </div>
-
-                {/* WHERE ARE YOU GOING? — occasion pills */}
-                <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>WHERE ARE YOU GOING?</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  {OCCASIONS.map(o => (
-                    <button key={o}
-                      style={occasion === o
-                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"6px 12px"}
-                        : {...s.chip, fontSize:11, padding:"6px 12px"}}
-                      onClick={() => {
-                        setOccasion(o);
-                        // Auto-set smart defaults per occasion
-                        if (o === "Interview" || o === "Executive") {
-                          setStyleExcludes(new Set(["no-jeans","trousers-only"]));
-                        } else if (o === "Work") {
-                          setStyleExcludes(new Set(["no-jeans"]));
-                        } else {
-                          setStyleExcludes(new Set());
-                        }
-                      }}>
-                      {o}
-                    </button>
-                  ))}
-                </div>
-
-                {/* WHAT'S THE WEATHER? */}
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
-                  <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)"}}>WHAT'S THE WEATHER?</div>
-                  <button
-                    onClick={async () => {
-                      setWeatherLoading(true);
-                      try {
-                        const label = await getLocalWeatherLabel();
-                        setWeather(label);
-                      } catch (err) {
-                        console.warn("[F2] auto-weather failed:", err);
-                      } finally {
-                        setWeatherLoading(false);
-                      }
-                    }}
-                    disabled={weatherLoading}
-                    style={{background:"none", border:"none", color:"var(--color-text)", fontSize:10, letterSpacing:"0.1em", textDecoration:"underline", cursor:"pointer", padding:0}}>
-                    {weatherLoading ? "locating…" : "✦ use my location"}
-                  </button>
-                </div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  {[
-                    ["","Any"],["Hot (85°F+)","Hot"],["Warm (70-84°F)","Warm"],
-                    ["Mild (55-69°F)","Mild"],["Cool (40-54°F)","Cool"],
-                    ["Cold (below 40°F)","Cold"],["Rainy","Rainy"],
-                  ].map(([val,label]) => (
-                    <button key={val}
-                      style={weather === val
-                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                      onClick={() => setWeather(val)}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* MOOD — F2 */}
-                <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>MOOD (OPTIONAL)</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  <button
-                    style={mood === ""
-                      ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                      : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                    onClick={() => setMood("")}>
-                    None
-                  </button>
-                  {MOODS.map(m => (
-                    <button key={m.key}
-                      style={mood === m.key
-                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                      onClick={() => setMood(m.key)}>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* DON'T INCLUDE — user exclusion toggles */}
-                <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>DON'T INCLUDE</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  {[
-                    ["no-jeans","No Jeans"],
-                    ["no-skirts","No Skirts"],
-                    ["no-dresses","No Dresses"],
-                    ["trousers-only","Trousers Only"],
-                    ["no-boots","No Boots"],
-                    ["heels-only","Heels Only"],
-                    ["no-knits","No Knits"],
-                  ].map(([key,label]) => (
-                    <button key={key}
-                      style={styleExcludes.has(key)
-                        ? {...s.chip, background:"var(--color-danger)", borderColor:"var(--color-danger)", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
-                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                      onClick={() => setStyleExcludes(prev => {
-                        const next = new Set(prev);
-                        // Handle mutual exclusivity
-                        if (key === "trousers-only" && !next.has(key)) { next.delete("no-skirts"); }
-                        if (key === "heels-only" && !next.has(key)) { next.delete("no-boots"); }
-                        next.has(key) ? next.delete(key) : next.add(key);
-                        return next;
-                      })}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* ANYTHING SPECIFIC? */}
-                <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black', 'navy and brown')"
-                  value={request} onChange={e=>setRequest(e.target.value)}
-                  style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
-
-                {styleErr && <p style={s.err}>{styleErr}</p>}
-                <button style={{...s.btnPrimary, width:"100%"}}
-                  onClick={() => { handleStyle(); }}
-                  disabled={styling}>
-                  {styling
-                    ? <><span style={s.spinnerSm}/> Styling…</>
-                    : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
-                </button>
-              </>
-            )}
-          </div>
+          {stylePanelNode}
 
           {/* FAB */}
           <button style={s.fab} onClick={() => setView("add")}>
@@ -1343,9 +1356,15 @@ export default function App() {
           ))}
           {!outfits && !styling && (
             <div style={s.empty}>
-              <p style={s.emptyText}>Go back and hit "Style Me" to generate looks.</p>
+              <div style={s.emptyMark}>✦</div>
+              <p style={s.emptyText}>Ready when you are — pick an occasion and generate your first looks.</p>
+              <button style={{...s.btnPrimary, padding:"12px 24px"}}
+                onClick={() => setStylePanelOpen(true)}>
+                <Icon path={icons.sparkle} size={15}/> Open Style Me
+              </button>
             </div>
           )}
+          {stylePanelNode}
         </div>
       )}
 
