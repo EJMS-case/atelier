@@ -6,11 +6,13 @@
 // quirks. If you change one, change the other.
 
 import { z } from "zod";
+import { VIBE_VOCABULARY } from "../../features/stylist/moods.js";
 
 // ── Shared primitives ────────────────────────────────────────────────────────
 
 const HexSchema = z.string().regex(/^#?[0-9a-fA-F]{6}$/);
 const ConfidenceLevel = z.enum(["High", "Medium", "Low"]);
+const VibeEnum = z.enum(VIBE_VOCABULARY);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. autoDetectItem — per-photo garment tagger (src/lib/anthropic.js)
@@ -63,7 +65,7 @@ const LookItemSchema = z.object({
 
 const LookSchema = z.object({
   name: z.string(),
-  vibe: z.string().default(""),
+  vibe: VibeEnum,
   items: z.array(LookItemSchema).min(1),
   silhouette: z.string().default(""),
   focal_point: z.string().default(""),
@@ -91,7 +93,7 @@ export const LooksTool = {
           type: "object",
           properties: {
             name:           { type: "string" },
-            vibe:           { type: "string" },
+            vibe:           { type: "string", enum: VIBE_VOCABULARY },
             items: {
               type: "array",
               minItems: 1,
@@ -110,7 +112,7 @@ export const LooksTool = {
             texture_story:  { type: "string" },
             rationale:      { type: "string" },
           },
-          required: ["name", "items"],
+          required: ["name", "vibe", "items"],
         },
       },
       notes: { type: "string" },

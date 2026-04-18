@@ -3,6 +3,8 @@
 // All content goes in the user message (system param not supported with
 // anthropic-dangerous-direct-browser-access).
 
+import { VIBE_VOCABULARY } from "../features/stylist/moods.js";
+
 /**
  * Build the fully interpolated styling prompt.
  *
@@ -193,7 +195,7 @@ Respond ONLY with valid JSON in this exact shape:
   "looks": [
     {
       "name": "short descriptive name (e.g. 'Navy Silk Column', 'Burgundy Power Blazer')",
-      "vibe": "2-3 word descriptor",
+      "vibe": "ONE of: ${VIBE_VOCABULARY.join(" | ")} — pick the single best fit",
       "items": [{"id": "W001", "role": "hero/supporting/finishing"}],
       "silhouette": "e.g. 'fitted top x wide bottom' or 'column slim'",
       "focal_point": "what draws the eye and why",
