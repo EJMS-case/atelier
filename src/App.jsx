@@ -3347,6 +3347,36 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
   );
 }
 
+// ── SAVED LOOK CARD (shared skeleton for LooksView / History / Favorites) ───
+function SavedLookCard({ log, items, subtitle, headerRight, notes, actions }) {
+  const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
+  const meta = (() => { try { return JSON.parse(log.collage_url); } catch { return {}; } })();
+  return (
+    <div style={s.histCard}>
+      <div style={s.histCardHeader}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
+          <div>
+            {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
+            {subtitle && <div style={s.histDate}>{subtitle}</div>}
+          </div>
+          {headerRight}
+        </div>
+      </div>
+      <div style={s.histThumbs}>
+        {logItems.map(it => (
+          <div key={it.id} style={s.histThumb}>
+            {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
+              : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
+            <div style={s.histThumbName}>{it.name}</div>
+          </div>
+        ))}
+      </div>
+      {notes && <div style={s.histNotes}>{notes}</div>}
+      {actions && <div style={s.histActions}>{actions}</div>}
+    </div>
+  );
+}
+
 // ── OUTFIT HISTORY ───────────────────────────────────────────────────────────
 function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested }) {
   const [logs,       setLogs]       = useState([]);
@@ -3422,55 +3452,43 @@ function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav
           <div style={s.histMonthLabel}>{formatMonth(month)}</div>
           {grouped[month].map(log => {
             const meta = parseMeta(log.collage_url);
-            const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
+            const subtitle = (
+              <>
+                {formatDate(log.date_worn)}
+                {log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+                {meta.mood && <span style={s.histMood}> · {meta.mood}</span>}
+              </>
+            );
             return (
-              <div key={log.id} style={s.histCard}>
-                <div style={s.histCardHeader}>
-                  <div>
-                    {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
-                    <div style={s.histDate}>
-                      {formatDate(log.date_worn)}
-                      {log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
-                      {meta.mood && <span style={s.histMood}> · {meta.mood}</span>}
+              <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+                actions={
+                  <>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
+                        <svg width={15} height={15} viewBox="0 0 24 24"
+                          fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
+                          stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
+                          strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                      </button>
+                      <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
+                        {wearingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Wear this again"}
+                      </button>
+                      <button style={s.histDeleteBtn} onClick={() => handleUnlog(log.id)} disabled={unloggingId === log.id}
+                        title="Move back to Looks (clears the wear date)">
+                        {unloggingId === log.id ? "…" : "Unlog"}
+                      </button>
                     </div>
-                  </div>
-                </div>
-                <div style={s.histThumbs}>
-                  {logItems.map(it => (
-                    <div key={it.id} style={s.histThumb}>
-                      {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
-                        : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                      <div style={s.histThumbName}>{it.name}</div>
-                    </div>
-                  ))}
-                </div>
-                {log.notes && <div style={s.histNotes}>{log.notes}</div>}
-                <div style={s.histActions}>
-                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                    <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                      <svg width={15} height={15} viewBox="0 0 24 24"
-                        fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
-                        stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
-                        strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
-                    </button>
-                    <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
-                      {wearingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Wear this again"}
-                    </button>
-                    <button style={s.histDeleteBtn} onClick={() => handleUnlog(log.id)} disabled={unloggingId === log.id}
-                      title="Move back to Looks (clears the wear date)">
-                      {unloggingId === log.id ? "…" : "Unlog"}
-                    </button>
-                  </div>
-                  {deleteId === log.id ? (
-                    <div style={{ display:"flex", gap:6 }}>
-                      <button style={{...s.histDeleteBtn, color:"var(--color-danger)"}} onClick={() => handleDelete(log.id)}>Confirm</button>
-                      <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
-                    </div>
-                  ) : (
-                    <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
-                  )}
-                </div>
-              </div>
+                    {deleteId === log.id ? (
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button style={{...s.histDeleteBtn, color:"var(--color-danger)"}} onClick={() => handleDelete(log.id)}>Confirm</button>
+                        <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                    )}
+                  </>
+                }
+              />
             );
           })}
         </div>
@@ -3771,54 +3789,42 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook,
       )}
       {!loading && logs.map(log => {
         const meta = parseMeta(log.collage_url);
-        const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
         const pickedDate = dateById[log.id] || today;
+        const subtitle = (
+          <>
+            {log.occasion && <span>{log.occasion}</span>}
+            {meta.mood && <span style={s.histMood}>{log.occasion ? " · " : ""}{meta.mood}</span>}
+          </>
+        );
         return (
-          <div key={log.id} style={s.histCard}>
-            <div style={s.histCardHeader}>
-              <div>
-                {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
-                <div style={s.histDate}>
-                  {log.occasion && <span>{log.occasion}</span>}
-                  {meta.mood && <span style={s.histMood}>{log.occasion ? " · " : ""}{meta.mood}</span>}
+          <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+            actions={
+              <>
+                <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                  <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
+                    <svg width={15} height={15} viewBox="0 0 24 24"
+                      fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
+                      stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
+                      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                  </button>
+                  <input type="date" value={pickedDate}
+                    onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}
+                    style={{ fontSize:12, padding:"4px 6px", border:"1px solid var(--color-border)", borderRadius:6, background:"#FDFBF9", fontFamily:"inherit", color:"#2C2420" }}/>
+                  <button style={s.histWearBtn} onClick={() => handleLog(log.id)} disabled={loggingId === log.id}>
+                    {loggingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Log as worn"}
+                  </button>
                 </div>
-              </div>
-            </div>
-            <div style={s.histThumbs}>
-              {logItems.map(it => (
-                <div key={it.id} style={s.histThumb}>
-                  {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
-                    : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                  <div style={s.histThumbName}>{it.name}</div>
-                </div>
-              ))}
-            </div>
-            {log.notes && <div style={s.histNotes}>{log.notes}</div>}
-            <div style={s.histActions}>
-              <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                  <svg width={15} height={15} viewBox="0 0 24 24"
-                    fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
-                    stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
-                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
-                </button>
-                <input type="date" value={pickedDate}
-                  onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}
-                  style={{ fontSize:12, padding:"4px 6px", border:"1px solid var(--color-border)", borderRadius:6, background:"#FDFBF9", fontFamily:"inherit", color:"#2C2420" }}/>
-                <button style={s.histWearBtn} onClick={() => handleLog(log.id)} disabled={loggingId === log.id}>
-                  {loggingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Log as worn"}
-                </button>
-              </div>
-              {deleteId === log.id ? (
-                <div style={{ display:"flex", gap:6 }}>
-                  <button style={{...s.histDeleteBtn, color:"var(--color-danger)"}} onClick={() => handleDelete(log.id)}>Confirm</button>
-                  <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
-                </div>
-              ) : (
-                <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
-              )}
-            </div>
-          </div>
+                {deleteId === log.id ? (
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button style={{...s.histDeleteBtn, color:"var(--color-danger)"}} onClick={() => handleDelete(log.id)}>Confirm</button>
+                    <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                )}
+              </>
+            }
+          />
         );
       })}
     </div>
@@ -3894,30 +3900,20 @@ function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
         favOutfits.length === 0
           ? <div style={s.empty}><p style={s.emptyText}>No favorite outfits yet. Tap the heart on any outfit in History.</p></div>
           : favOutfits.map(log => {
-              const meta = parseMeta(log.collage_url);
-              const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
+              const subtitle = (
+                <>
+                  {formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+                </>
+              );
               return (
-                <div key={log.id} style={s.histCard}>
-                  <div style={s.histCardHeader}>
-                    <div>
-                      {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
-                      <div style={s.histDate}>{formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}</div>
-                    </div>
+                <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+                  headerRight={
                     <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
                       <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
                         strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
                     </button>
-                  </div>
-                  <div style={s.histThumbs}>
-                    {logItems.map(it => (
-                      <div key={it.id} style={s.histThumb}>
-                        {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/> : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                        <div style={s.histThumbName}>{it.name}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {log.notes && <div style={s.histNotes}>{log.notes}</div>}
-                </div>
+                  }
+                />
               );
             })
       )}
