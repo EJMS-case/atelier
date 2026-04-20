@@ -11,6 +11,7 @@ import { getLocalWeatherLabel } from "./lib/weather.js";
 import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import CalendarView from "./features/planner/CalendarView.jsx";
+import { savePlan } from "./features/planner/plannerApi.js";
 import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
 import MoodboardView from "./features/moodboard/MoodboardView.jsx";
 import WearView from "./features/wear/WearView.jsx";
@@ -726,6 +727,35 @@ export default function App() {
     }
   }, [favorites]);
 
+  const normalizeLooks = (looks, fallbackOccasion) => looks.map(look => ({
+    ...look,
+    items: (look.items || []).map(item =>
+      typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
+    ),
+    itemRoles: (look.items || []).reduce((acc, item) => {
+      if (typeof item === "object" && item.id && item.role) acc[item.id] = item.role;
+      return acc;
+    }, {}),
+    mood: look.vibe || look.mood || "",
+    occasion: look.occasion || fallbackOccasion,
+    styling: look.rationale || look.styling || "",
+    colorStory: look.color_strategy || look.colorStory || "",
+    reasoning: look.rationale || look.reasoning || "",
+  }));
+
+  const handleGenerateForDay = async (dayOccasion = "Work") => {
+    if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
+    if (items.length < 3) throw new Error(`Add at least 3 items first (you have ${items.length}).`);
+    const result = await generateOutfit(items, dayOccasion, weather, "", apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
+    const looks = result?.looks;
+    if (!looks || !Array.isArray(looks) || looks.length === 0) {
+      throw new Error(result?.notes || "AI returned no looks — try again.");
+    }
+    const normalized = normalizeLooks(looks, dayOccasion);
+    setAllLooks(prev => [...prev, ...normalized].slice(-30));
+    return normalized;
+  };
+
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
@@ -743,29 +773,7 @@ export default function App() {
         }
         throw new Error("AI returned no looks — try again.");
       }
-      // Normalize items: new format uses {id, role} objects, legacy uses plain strings
-      // Convert to flat ID arrays for compatibility with LookCard, SaveLookModal, etc.
-      // but preserve the rich data on the look object for new UI fields
-      const normalizedLooks = looks.map(look => ({
-        ...look,
-        // Flatten items to plain ID array for collage/save compatibility
-        items: (look.items || []).map(item =>
-          typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
-        ),
-        // Preserve item roles separately for the new UI
-        itemRoles: (look.items || []).reduce((acc, item) => {
-          if (typeof item === "object" && item.id && item.role) {
-            acc[item.id] = item.role;
-          }
-          return acc;
-        }, {}),
-        // Map new fields to legacy fields for backward compatibility
-        mood: look.vibe || look.mood || "",
-        occasion: look.occasion || occasion,
-        styling: look.rationale || look.styling || "",
-        colorStory: look.color_strategy || look.colorStory || "",
-        reasoning: look.rationale || look.reasoning || "",
-      }));
+      const normalizedLooks = normalizeLooks(looks, occasion);
       setOutfits(normalizedLooks);
       setAllLooks(prev => [...prev, ...normalizedLooks].slice(-30));
       setView("style");
@@ -1098,6 +1106,17 @@ export default function App() {
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onOpenWear={() => setView("favorites")}
+            onGenerateForDay={handleGenerateForDay}
+            onPinLookToDate={async (iso, look) => {
+              await sb.saveOutfitLog({
+                garment_ids: look.items || [],
+                date_worn: null,
+                occasion: look.occasion || "Work",
+                notes: null,
+                collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, styling: look.styling || look.why }),
+              });
+              await savePlan({ date: iso, items: look.items || [], source: "ai", occasion: look.occasion || "Work", notes: null });
+            }}
           />
         </div>
       )}
