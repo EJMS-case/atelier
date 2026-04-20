@@ -527,14 +527,28 @@ export default function App() {
       setRecentlyWornItems([...ids]);
     }).catch(() => {});
 
-    // Load sets metadata from Supabase (falls back to localStorage)
+    // Load sets metadata from Supabase and backfill any local-only sets.
+    // fetchSets() returns null if the `sets` table is missing — in that case
+    // we leave local meta alone so nothing is lost until the migration runs.
     sb.fetchSets().then(sbSets => {
-      if (sbSets && sbSets.length > 0) {
-        const meta = { ...loadSetsMeta() };
-        sbSets.forEach(s => { meta[s.id] = { name: s.name, tags: s.tags || [], created_at: s.created_at }; });
-        setSetsMeta(meta);
-        saveSetsMeta(meta);
-      }
+      if (sbSets == null) return;
+      const localMeta = loadSetsMeta();
+      const merged = { ...localMeta };
+      const remoteIds = new Set();
+      sbSets.forEach(s => {
+        remoteIds.add(s.id);
+        merged[s.id] = { name: s.name, tags: s.tags || [], created_at: s.created_at };
+      });
+      // One-way backfill: push any local-only sets up to Supabase. This is
+      // what propagates device-local set names across devices the first time
+      // the table is available.
+      Object.entries(localMeta).forEach(([id, meta]) => {
+        if (!remoteIds.has(id)) {
+          sb.upsertSet({ id, name: meta?.name || "", tags: meta?.tags || [] }).catch(() => {});
+        }
+      });
+      setSetsMeta(merged);
+      saveSetsMeta(merged);
     }).catch(() => {});
 
     // Try to load API keys from Supabase (cross-device sync)
