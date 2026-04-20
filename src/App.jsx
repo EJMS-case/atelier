@@ -41,7 +41,7 @@ import { compressImage, imageToBase64, removeBackground } from "./utils/images.j
 import { sb, SUPABASE_URL, SUPABASE_KEY, SB_HEADERS, STORAGE_HEADERS, BUCKET } from "./lib/supabase.js";
 import {
   generateOutfit, generateElevation, classifyKnitAI, analyzeColorAI,
-  generateStyleProfile, generateShoppingRecs, buildImgSource, colorHex,
+  streamStyleProfile, generateShoppingRecs, buildImgSource, colorHex,
 } from "./lib/ai/stylist.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -4039,9 +4039,13 @@ function StyleInsightsView({ items, apiKey, onBack }) {
 
   const handleGenerateProfile = async () => {
     if (!apiKey) { setProfileErr("Add your Anthropic API key in Settings."); return; }
-    setProfileLoading(true); setProfileErr("");
-    try { setProfile(await generateStyleProfile(items, outfitLogs, analysis, apiKey)); }
-    catch (e) { setProfileErr(e.message); }
+    setProfileLoading(true); setProfileErr(""); setProfile("");
+    try {
+      const final = await streamStyleProfile(items, outfitLogs, analysis, apiKey, (partial) => {
+        setProfile(partial);
+      });
+      setProfile(final);
+    } catch (e) { setProfileErr(e.message); }
     finally { setProfileLoading(false); }
   };
 

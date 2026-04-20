@@ -263,7 +263,7 @@ ${wardrobeItems ? "Fill in pairingCount, pairingItemIds (up to 5), and dimension
 }
 
 // ── STYLE PROFILE (editorial monthly snapshot) ──────────────────────────────
-export async function generateStyleProfile(items, outfitLogs, analysis, apiKey) {
+function buildProfilePrompt(items, outfitLogs, analysis) {
   const month = new Date().toLocaleDateString("en-US", { month:"long", year:"numeric" });
   const catDist = Object.entries(analysis.catCounts).map(([c, n]) => `${c}: ${n}`).join(", ");
   const colorPairs = analysis.colorPairs.map(p => `${p.pair} (${p.count}x)`).join(", ") || "none yet";
@@ -273,9 +273,11 @@ export async function generateStyleProfile(items, outfitLogs, analysis, apiKey) 
     const logItems = (l.garment_ids || []).map(id => items.find(it => it.id === id)).filter(Boolean);
     return `${l.date_worn}: ${logItems.map(it => `${it.category}:${it.name}`).join(", ")} (${l.occasion || "casual"})`;
   }).join("\n");
+  return `Write a 2-3 sentence monthly style profile for this wardrobe user. Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
+}
 
-  const prompt = `Write a 2-3 sentence monthly style profile for this wardrobe user. Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
-
+export async function generateStyleProfile(items, outfitLogs, analysis, apiKey) {
+  const prompt = buildProfilePrompt(items, outfitLogs, analysis);
   const res = await fetch(API_URL, {
     method: "POST",
     headers: headers(apiKey),
@@ -284,6 +286,45 @@ export async function generateStyleProfile(items, outfitLogs, analysis, apiKey) 
   if (!res.ok) throw new Error("Profile generation failed");
   const data = await res.json();
   return data.content?.map(b => b.text || "").join("") || "";
+}
+
+// Streaming variant: invokes onDelta(textSoFar) as tokens arrive and returns
+// the final string. Falls back to a thrown error if the API call fails.
+export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, onDelta) {
+  const prompt = buildProfilePrompt(items, outfitLogs, analysis);
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] }),
+  });
+  if (!res.ok || !res.body) throw new Error("Profile generation failed");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx + 1);
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        const evt = JSON.parse(payload);
+        if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+          text += evt.delta.text || "";
+          onDelta?.(text);
+        }
+      } catch { /* ignore partial JSON */ }
+    }
+  }
+  return text;
 }
 
 // ── SHOPPING RECS (gap analysis or outfit-completion) ───────────────────────
