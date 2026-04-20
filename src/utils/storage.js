@@ -1,15 +1,57 @@
 // ── LOCAL STORAGE HELPERS ────────────────────────────────────────────────────
 // localStorage is a cache for offline UX. Supabase is the source of truth —
 // losing local data should never lose cross-device data.
+//
+// All Atelier keys share the `atelier:` prefix so they're easy to grep, easy
+// to clear in devtools, and unlikely to collide with other apps sharing the
+// origin. See `STORAGE_KEY_MIGRATIONS` below for the rename map applied once
+// at app startup via `migrateLocalStorage()`.
 
 import { normalizeItem } from "./item-helpers.js";
 
-export const STORAGE_KEY    = "atelier-wardrobe-v1";
-export const API_KEY_STORE  = "atelier-api-key";
-export const RMBG_KEY_STORE = "atelier-rmbg-key";
-export const SETS_META_KEY  = "atelier-sets-meta-v1";
-export const STYLE_PREFS_KEY = "atelier-style-prefs-v1";
-export const ABOUT_ME_KEY    = "atelier-about-me-v1";
+export const STORAGE_KEY           = "atelier:wardrobe:v1";
+export const API_KEY_STORE         = "atelier:api-key";
+export const RMBG_KEY_STORE        = "atelier:rmbg-key";
+export const SETS_META_KEY         = "atelier:sets-meta:v1";
+export const STYLE_PREFS_KEY       = "atelier:style-prefs:v1";
+export const ABOUT_ME_KEY          = "atelier:about-me:v1";
+export const THEME_KEY             = "atelier:theme";
+export const RECENT_LOOKS_KEY      = "atelier:recent-looks";
+export const INSIGHTS_DISMISSED_KEY = "atelier:insights-dismissed";
+export const RECENT_ITEMS_KEY      = "atelier:recently-suggested-items";
+export const SUGGESTION_COUNTS_KEY = "atelier:item-suggestion-counts";
+
+// Old key → new key. Applied once per browser; if the new slot already has a
+// value we leave it alone (migration is idempotent and never overwrites).
+const STORAGE_KEY_MIGRATIONS = {
+  "atelier-wardrobe-v1":             STORAGE_KEY,
+  "atelier-api-key":                 API_KEY_STORE,
+  "atelier-rmbg-key":                RMBG_KEY_STORE,
+  "atelier-sets-meta-v1":            SETS_META_KEY,
+  "atelier-style-prefs-v1":          STYLE_PREFS_KEY,
+  "atelier-about-me-v1":             ABOUT_ME_KEY,
+  "atelier-recent-looks":            RECENT_LOOKS_KEY,
+  "atelier-insights-dismissed":      INSIGHTS_DISMISSED_KEY,
+  "atelier-recently-suggested-items": RECENT_ITEMS_KEY,
+  "atelier-item-suggestion-counts":  SUGGESTION_COUNTS_KEY,
+};
+
+const MIGRATION_FLAG = "atelier:migrated:namespace-v1";
+
+export function migrateLocalStorage() {
+  try {
+    if (localStorage.getItem(MIGRATION_FLAG) === "1") return;
+    for (const [oldKey, newKey] of Object.entries(STORAGE_KEY_MIGRATIONS)) {
+      const oldVal = localStorage.getItem(oldKey);
+      if (oldVal == null) continue;
+      if (localStorage.getItem(newKey) == null) {
+        localStorage.setItem(newKey, oldVal);
+      }
+      localStorage.removeItem(oldKey);
+    }
+    localStorage.setItem(MIGRATION_FLAG, "1");
+  } catch { /* storage unavailable — skip */ }
+}
 
 export function loadLocalItems() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(normalizeItem); }

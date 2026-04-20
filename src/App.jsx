@@ -11,6 +11,7 @@ import { getLocalWeatherLabel } from "./lib/weather.js";
 import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import CalendarView from "./features/planner/CalendarView.jsx";
+import { savePlan } from "./features/planner/plannerApi.js";
 import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
 import MoodboardView from "./features/moodboard/MoodboardView.jsx";
 import WearView from "./features/wear/WearView.jsx";
@@ -32,18 +33,20 @@ import {
 } from "./utils/item-helpers.js";
 import {
   STORAGE_KEY, API_KEY_STORE, RMBG_KEY_STORE, SETS_META_KEY,
+  STYLE_PREFS_KEY, ABOUT_ME_KEY, THEME_KEY, RECENT_LOOKS_KEY, INSIGHTS_DISMISSED_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
-  loadSetsMeta, saveSetsMeta,
+  loadSetsMeta, saveSetsMeta, migrateLocalStorage,
 } from "./utils/storage.js";
 import { compressImage, imageToBase64, removeBackground } from "./utils/images.js";
 import { sb, SUPABASE_URL, SUPABASE_KEY, SB_HEADERS, STORAGE_HEADERS, BUCKET } from "./lib/supabase.js";
 import {
   generateOutfit, generateElevation, classifyKnitAI, analyzeColorAI,
-  generateStyleProfile, generateShoppingRecs, buildImgSource, colorHex,
+  streamStyleProfile, generateShoppingRecs, buildImgSource, colorHex,
 } from "./lib/ai/stylist.js";
 
-
-
+// Rename any pre-namespace localStorage keys from older app builds. Runs once
+// per browser; no-op afterward. Must fire before any load*() helpers below.
+migrateLocalStorage();
 
 
 // ── DARK WINTER COLOR SWATCHES ────────────────────────────────────────────────
@@ -68,10 +71,10 @@ function ColorResultCard({ result }) {
   const { symbol, color, label } = isException
     ? { symbol: "✓", color: "#8B6914", label: "Warm Exception — Fully Approved" }
     : result.darkWinterMatch === "Strong match"
-    ? { symbol: "✅", color: "#3D7A4E", label: "Strong Dark Winter Match" }
+    ? { symbol: "✅", color: "var(--color-success)", label: "Strong Dark Winter Match" }
     : result.darkWinterMatch === "Borderline"
     ? { symbol: "⚠️", color: "#8B6914", label: "Borderline" }
-    : { symbol: "❌", color: "#C0392B", label: "Avoid — Warm-Toned" };
+    : { symbol: "❌", color: "var(--color-danger)", label: "Avoid — Warm-Toned" };
 
   return (
     <div style={s.colorResult}>
@@ -95,9 +98,9 @@ function ColorResultCard({ result }) {
 function ShoppingDimensionsCard({ dimensions }) {
   if (!dimensions) return null;
   const scoreColor = (score) => {
-    if (["Pass","High","Excellent","Strong"].includes(score)) return "#3D7A4E";
+    if (["Pass","High","Excellent","Strong"].includes(score)) return "var(--color-success)";
     if (["Medium","Good","Borderline","Exception"].includes(score)) return "#8B6914";
-    return "#C0392B";
+    return "var(--color-danger)";
   };
   const rows = [
     { key: "undertoneScore",     label: "Undertone" },
@@ -109,8 +112,8 @@ function ShoppingDimensionsCard({ dimensions }) {
     { key: "similarityFlag",     label: "Similarity" },
   ];
   return (
-    <div style={{marginTop:16, border:"1px solid #E8E0D8", borderRadius:8, overflow:"hidden"}}>
-      <div style={{padding:"10px 14px", background:"#F8F4F0", borderBottom:"1px solid #E8E0D8", fontSize:11, fontWeight:500, letterSpacing:"0.06em", color:"#9A8E84", textTransform:"uppercase"}}>
+    <div style={{marginTop:16, border:"1px solid var(--color-border)", borderRadius:8, overflow:"hidden"}}>
+      <div style={{padding:"10px 14px", background:"#F8F4F0", borderBottom:"1px solid var(--color-border)", fontSize:11, fontWeight:500, letterSpacing:"0.06em", color:"var(--color-text-muted)", textTransform:"uppercase"}}>
         Styling Analysis
       </div>
       {rows.map(({key, label}) => {
@@ -118,8 +121,8 @@ function ShoppingDimensionsCard({ dimensions }) {
         if (!dim) return null;
         const score = dim.score ?? (dim.flagged ? "Flagged" : "Clear");
         return (
-          <div key={key} style={{padding:"10px 14px", borderBottom:"1px solid #F0EBE4", display:"flex", gap:12, alignItems:"flex-start"}}>
-            <div style={{minWidth:120, fontSize:11, fontWeight:500, color:"#9A8E84", paddingTop:1}}>{label}</div>
+          <div key={key} style={{padding:"10px 14px", borderBottom:"1px solid var(--color-surface-3)", display:"flex", gap:12, alignItems:"flex-start"}}>
+            <div style={{minWidth:120, fontSize:11, fontWeight:500, color:"var(--color-text-muted)", paddingTop:1}}>{label}</div>
             <div style={{flex:1}}>
               <span style={{fontSize:11, fontWeight:600, color:scoreColor(score), marginRight:8}}>{score}</span>
               {dim.note && <span style={{fontSize:11, color:"#6B5E57"}}>{dim.note}</span>}
@@ -254,7 +257,7 @@ function ColorAdvisorView({ items, apiKey }) {
                     <div key={id} style={s.pairingItem}>
                       {item.image
                         ? <img src={item.image} alt={item.name} style={s.pairingThumb}/>
-                        : <div style={{...s.pairingThumb, background:"#F0EBE4", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#9A8E84"}}>{item.category?.[0]}</div>}
+                        : <div style={{...s.pairingThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-text-muted)"}}>{item.category?.[0]}</div>}
                       <div style={s.pairingName}>{item.name}</div>
                     </div>
                   );
@@ -306,7 +309,7 @@ function ColorAdvisorView({ items, apiKey }) {
                   <div key={item.id} style={s.auditRow}>
                     {item.image
                       ? <img src={item.image} alt={item.name} style={s.auditThumb}/>
-                      : <div style={{...s.auditThumb, background:"#F0EBE4", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#C8BFB4"}}>{item.category?.[0]}</div>}
+                      : <div style={{...s.auditThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-border-muted)"}}>{item.category?.[0]}</div>}
                     <div style={s.auditInfo}>
                       <div style={s.auditName}>{item.name}</div>
                       <div style={s.auditCat}>{item.category}{item.subcategory ? ` · ${item.subcategory}` : ""}</div>
@@ -400,6 +403,14 @@ export default function App() {
       });
     }
   }, []);
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"; }
+    catch { return "light"; }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem(THEME_KEY, theme); } catch {}
+  }, [theme]);
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
@@ -407,7 +418,7 @@ export default function App() {
   const [allLooks,   setAllLooks]   = useState(() => {
     // Lazy-init from localStorage so anti-repeat history persists across sessions
     try {
-      const raw = localStorage.getItem("atelier-recent-looks");
+      const raw = localStorage.getItem(RECENT_LOOKS_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   }); // history of all generated looks for anti-repeat
@@ -438,7 +449,7 @@ export default function App() {
 
   // ── Persist allLooks to localStorage so anti-repeat history survives reloads
   useEffect(() => {
-    try { localStorage.setItem("atelier-recent-looks", JSON.stringify(allLooks)); } catch {}
+    try { localStorage.setItem(RECENT_LOOKS_KEY, JSON.stringify(allLooks)); } catch {}
   }, [allLooks]);
 
   // ── Flash sync status briefly
@@ -716,6 +727,35 @@ export default function App() {
     }
   }, [favorites]);
 
+  const normalizeLooks = (looks, fallbackOccasion) => looks.map(look => ({
+    ...look,
+    items: (look.items || []).map(item =>
+      typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
+    ),
+    itemRoles: (look.items || []).reduce((acc, item) => {
+      if (typeof item === "object" && item.id && item.role) acc[item.id] = item.role;
+      return acc;
+    }, {}),
+    mood: look.vibe || look.mood || "",
+    occasion: look.occasion || fallbackOccasion,
+    styling: look.rationale || look.styling || "",
+    colorStory: look.color_strategy || look.colorStory || "",
+    reasoning: look.rationale || look.reasoning || "",
+  }));
+
+  const handleGenerateForDay = async (dayOccasion = "Work") => {
+    if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
+    if (items.length < 3) throw new Error(`Add at least 3 items first (you have ${items.length}).`);
+    const result = await generateOutfit(items, dayOccasion, weather, "", apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
+    const looks = result?.looks;
+    if (!looks || !Array.isArray(looks) || looks.length === 0) {
+      throw new Error(result?.notes || "AI returned no looks — try again.");
+    }
+    const normalized = normalizeLooks(looks, dayOccasion);
+    setAllLooks(prev => [...prev, ...normalized].slice(-30));
+    return normalized;
+  };
+
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
@@ -733,29 +773,7 @@ export default function App() {
         }
         throw new Error("AI returned no looks — try again.");
       }
-      // Normalize items: new format uses {id, role} objects, legacy uses plain strings
-      // Convert to flat ID arrays for compatibility with LookCard, SaveLookModal, etc.
-      // but preserve the rich data on the look object for new UI fields
-      const normalizedLooks = looks.map(look => ({
-        ...look,
-        // Flatten items to plain ID array for collage/save compatibility
-        items: (look.items || []).map(item =>
-          typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
-        ),
-        // Preserve item roles separately for the new UI
-        itemRoles: (look.items || []).reduce((acc, item) => {
-          if (typeof item === "object" && item.id && item.role) {
-            acc[item.id] = item.role;
-          }
-          return acc;
-        }, {}),
-        // Map new fields to legacy fields for backward compatibility
-        mood: look.vibe || look.mood || "",
-        occasion: look.occasion || occasion,
-        styling: look.rationale || look.styling || "",
-        colorStory: look.color_strategy || look.colorStory || "",
-        reasoning: look.rationale || look.reasoning || "",
-      }));
+      const normalizedLooks = normalizeLooks(looks, occasion);
       setOutfits(normalizedLooks);
       setAllLooks(prev => [...prev, ...normalizedLooks].slice(-30));
       setView("style");
@@ -868,8 +886,157 @@ export default function App() {
     : syncStatus === "synced"  ? "✓ saved"
     : syncStatus === "error"   ? "⚠ offline"
     : null;
-  const syncColor = syncStatus === "error" ? "#C0392B"
-    : syncStatus === "synced" ? "#3D7A4E" : "#C4A882";
+  const syncColor = syncStatus === "error" ? "var(--color-danger)"
+    : syncStatus === "synced" ? "var(--color-success)" : "var(--color-accent)";
+
+  // Style Me generator — rendered on both Closet and Style views via
+  // `{stylePanelNode}` below. Position:fixed, so DOM location doesn't
+  // matter. Extracted so the Style view has a panel to open (previously
+  // the nav chip would land on an empty "go back and try again" state).
+  const stylePanelNode = (
+    <div style={s.stylePanel}>
+      {!stylePanelOpen ? (
+        /* ── Collapsed: one-tap button ── */
+        <button style={{...s.btnPrimary, width:"100%", padding:"14px 20px"}}
+          onClick={() => setStylePanelOpen(true)}>
+          <Icon path={icons.sparkle} size={15}/> Style Me
+        </button>
+      ) : (
+        /* ── Expanded: full controls ── */
+        <>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+            <div style={s.panelLabel}>✦ STYLE ME</div>
+            <button onClick={() => setStylePanelOpen(false)}
+              style={{background:"none", border:"none", color:"var(--color-text-muted)", fontSize:18, cursor:"pointer", padding:"0 4px", lineHeight:1}}>✕</button>
+          </div>
+
+          {/* WHERE ARE YOU GOING? — occasion pills */}
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>WHERE ARE YOU GOING?</div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            {OCCASIONS.map(o => (
+              <button key={o}
+                style={occasion === o
+                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"6px 12px"}
+                  : {...s.chip, fontSize:11, padding:"6px 12px"}}
+                onClick={() => {
+                  setOccasion(o);
+                  // Auto-set smart defaults per occasion
+                  if (o === "Interview" || o === "Executive") {
+                    setStyleExcludes(new Set(["no-jeans","trousers-only"]));
+                  } else if (o === "Work") {
+                    setStyleExcludes(new Set(["no-jeans"]));
+                  } else {
+                    setStyleExcludes(new Set());
+                  }
+                }}>
+                {o}
+              </button>
+            ))}
+          </div>
+
+          {/* WHAT'S THE WEATHER? */}
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
+            <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)"}}>WHAT'S THE WEATHER?</div>
+            <button
+              onClick={async () => {
+                setWeatherLoading(true);
+                try {
+                  const label = await getLocalWeatherLabel();
+                  setWeather(label);
+                } catch (err) {
+                  console.warn("[F2] auto-weather failed:", err);
+                } finally {
+                  setWeatherLoading(false);
+                }
+              }}
+              disabled={weatherLoading}
+              style={{background:"none", border:"none", color:"var(--color-text)", fontSize:10, letterSpacing:"0.1em", textDecoration:"underline", cursor:"pointer", padding:0}}>
+              {weatherLoading ? "locating…" : "✦ use my location"}
+            </button>
+          </div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            {[
+              ["","Any"],["Hot (85°F+)","Hot"],["Warm (70-84°F)","Warm"],
+              ["Mild (55-69°F)","Mild"],["Cool (40-54°F)","Cool"],
+              ["Cold (below 40°F)","Cold"],["Rainy","Rainy"],
+            ].map(([val,label]) => (
+              <button key={val}
+                style={weather === val
+                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                onClick={() => setWeather(val)}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* MOOD — F2 */}
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>MOOD (OPTIONAL)</div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            <button
+              style={mood === ""
+                ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                : {...s.chip, fontSize:11, padding:"5px 11px"}}
+              onClick={() => setMood("")}>
+              None
+            </button>
+            {MOODS.map(m => (
+              <button key={m.key}
+                style={mood === m.key
+                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                onClick={() => setMood(m.key)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* DON'T INCLUDE — user exclusion toggles */}
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>DON'T INCLUDE</div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+            {[
+              ["no-jeans","No Jeans"],
+              ["no-skirts","No Skirts"],
+              ["no-dresses","No Dresses"],
+              ["trousers-only","Trousers Only"],
+              ["no-boots","No Boots"],
+              ["heels-only","Heels Only"],
+              ["no-knits","No Knits"],
+            ].map(([key,label]) => (
+              <button key={key}
+                style={styleExcludes.has(key)
+                  ? {...s.chip, background:"var(--color-danger)", borderColor:"var(--color-danger)", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
+                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                onClick={() => setStyleExcludes(prev => {
+                  const next = new Set(prev);
+                  // Handle mutual exclusivity
+                  if (key === "trousers-only" && !next.has(key)) { next.delete("no-skirts"); }
+                  if (key === "heels-only" && !next.has(key)) { next.delete("no-boots"); }
+                  next.has(key) ? next.delete(key) : next.add(key);
+                  return next;
+                })}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ANYTHING SPECIFIC? */}
+          <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black', 'navy and brown')"
+            value={request} onChange={e=>setRequest(e.target.value)}
+            style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
+
+          {styleErr && <p style={s.err}>{styleErr}</p>}
+          <button style={{...s.btnPrimary, width:"100%"}}
+            onClick={() => { handleStyle(); }}
+            disabled={styling}>
+            {styling
+              ? <><span style={s.spinnerSm}/> Styling…</>
+              : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
+          </button>
+        </>
+      )}
+    </div>
+  );
 
   return (
     <div style={s.app}>
@@ -899,13 +1066,27 @@ export default function App() {
           </div>
           <nav style={s.nav}>
             {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
-              <button key={v} onClick={() => setView(v)}
+              <button key={v} onClick={() => {
+                setView(v);
+                // Clicking the Style Me nav always opens the generator
+                // panel — matches the home CTA behavior so there's no
+                // dead-end landing on the Style view with no panel open.
+                if (v === "style") setStylePanelOpen(true);
+              }}
                 style={{...s.navBtn, ...(view===v ? s.navActive : {})}}>
                 {label}
                 {v==="closet" && items.length > 0 &&
                   <span style={s.badge}>{items.length}</span>}
               </button>
             ))}
+            <button
+              onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+              style={s.navBtn}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
+            >
+              <Icon path={theme === "dark" ? icons.sun : icons.moon} size={15}/>
+            </button>
             <button onClick={() => setView("settings")}
               style={{...s.navBtn, ...(view==="settings" ? s.navActive : {})}}>
               <Icon path={icons.settings} size={15}/>
@@ -925,6 +1106,17 @@ export default function App() {
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onOpenWear={() => setView("favorites")}
+            onGenerateForDay={handleGenerateForDay}
+            onPinLookToDate={async (iso, look) => {
+              await sb.saveOutfitLog({
+                garment_ids: look.items || [],
+                date_worn: null,
+                occasion: look.occasion || "Work",
+                notes: null,
+                collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, styling: look.styling || look.why }),
+              });
+              await savePlan({ date: iso, items: look.items || [], source: "ai", occasion: look.occasion || "Work", notes: null });
+            }}
           />
         </div>
       )}
@@ -942,26 +1134,26 @@ export default function App() {
               onChange={e => setClosetSearch(e.target.value)}
               style={{
                 width:"100%", padding:"10px 14px 10px 36px", boxSizing:"border-box",
-                border:"1px solid #E8E0D8", borderRadius:8, fontSize:13,
+                border:"1px solid var(--color-border)", borderRadius:8, fontSize:13,
                 fontFamily:"'DM Sans',Inter,system-ui,sans-serif",
                 background:"#FDFBF9", color:"#2C2420", outline:"none",
               }}
             />
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none"
-              stroke="#9A8E84" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+              stroke="var(--color-text-muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
               style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }}>
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             {closetSearch && (
               <button onClick={() => setClosetSearch("")}
                 style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
-                  background:"none", border:"none", color:"#9A8E84", cursor:"pointer", fontSize:16, padding:"0 4px" }}>
+                  background:"none", border:"none", color:"var(--color-text-muted)", cursor:"pointer", fontSize:16, padding:"0 4px" }}>
                 ✕
               </button>
             )}
           </div>
           {closetSearch.trim() && (
-            <div style={{ fontSize:11, color:"#9A8E84", marginBottom:8 }}>
+            <div style={{ fontSize:11, color:"var(--color-text-muted)", marginBottom:8 }}>
               {filtered.length} result{filtered.length !== 1 ? "s" : ""} for "{closetSearch.trim()}"
             </div>
           )}
@@ -1056,7 +1248,7 @@ export default function App() {
               <div>
                 {showRecent && (
                   <div style={{ marginBottom: 24 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "#6B5E54", marginBottom: 10, textTransform: "uppercase" }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "var(--color-text-2)", marginBottom: 10, textTransform: "uppercase" }}>
                       Recently Added
                     </div>
                     <div style={s.grid}>
@@ -1072,7 +1264,7 @@ export default function App() {
                 )}
                 {showUncat && (
                   <div style={{ marginBottom: 24 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "#6B5E54", marginBottom: 10, textTransform: "uppercase" }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "var(--color-text-2)", marginBottom: 10, textTransform: "uppercase" }}>
                       Needs Categorizing
                     </div>
                     <div style={s.grid}>
@@ -1119,149 +1311,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Style panel — collapsed = just the button, expanded = full controls */}
-          <div style={s.stylePanel}>
-            {!stylePanelOpen ? (
-              /* ── Collapsed: one-tap button ── */
-              <button style={{...s.btnPrimary, width:"100%", padding:"14px 20px"}}
-                onClick={() => setStylePanelOpen(true)}>
-                <Icon path={icons.sparkle} size={15}/> Style Me
-              </button>
-            ) : (
-              /* ── Expanded: full controls ── */
-              <>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
-                  <div style={s.panelLabel}>✦ STYLE ME</div>
-                  <button onClick={() => setStylePanelOpen(false)}
-                    style={{background:"none", border:"none", color:"#9A8E84", fontSize:18, cursor:"pointer", padding:"0 4px", lineHeight:1}}>✕</button>
-                </div>
-
-                {/* WHERE ARE YOU GOING? — occasion pills */}
-                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>WHERE ARE YOU GOING?</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  {OCCASIONS.map(o => (
-                    <button key={o}
-                      style={occasion === o
-                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"6px 12px"}
-                        : {...s.chip, fontSize:11, padding:"6px 12px"}}
-                      onClick={() => {
-                        setOccasion(o);
-                        // Auto-set smart defaults per occasion
-                        if (o === "Interview" || o === "Executive") {
-                          setStyleExcludes(new Set(["no-jeans","trousers-only"]));
-                        } else if (o === "Work") {
-                          setStyleExcludes(new Set(["no-jeans"]));
-                        } else {
-                          setStyleExcludes(new Set());
-                        }
-                      }}>
-                      {o}
-                    </button>
-                  ))}
-                </div>
-
-                {/* WHAT'S THE WEATHER? */}
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
-                  <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84"}}>WHAT'S THE WEATHER?</div>
-                  <button
-                    onClick={async () => {
-                      setWeatherLoading(true);
-                      try {
-                        const label = await getLocalWeatherLabel();
-                        setWeather(label);
-                      } catch (err) {
-                        console.warn("[F2] auto-weather failed:", err);
-                      } finally {
-                        setWeatherLoading(false);
-                      }
-                    }}
-                    disabled={weatherLoading}
-                    style={{background:"none", border:"none", color:"#4A3E36", fontSize:10, letterSpacing:"0.1em", textDecoration:"underline", cursor:"pointer", padding:0}}>
-                    {weatherLoading ? "locating…" : "✦ use my location"}
-                  </button>
-                </div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  {[
-                    ["","Any"],["Hot (85°F+)","Hot"],["Warm (70-84°F)","Warm"],
-                    ["Mild (55-69°F)","Mild"],["Cool (40-54°F)","Cool"],
-                    ["Cold (below 40°F)","Cold"],["Rainy","Rainy"],
-                  ].map(([val,label]) => (
-                    <button key={val}
-                      style={weather === val
-                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                      onClick={() => setWeather(val)}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* MOOD — F2 */}
-                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>MOOD (OPTIONAL)</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  <button
-                    style={mood === ""
-                      ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                      : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                    onClick={() => setMood("")}>
-                    None
-                  </button>
-                  {MOODS.map(m => (
-                    <button key={m.key}
-                      style={mood === m.key
-                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                      onClick={() => setMood(m.key)}>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* DON'T INCLUDE — user exclusion toggles */}
-                <div style={{fontSize:9, letterSpacing:"0.18em", color:"#9A8E84", marginBottom:6}}>DON'T INCLUDE</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-                  {[
-                    ["no-jeans","No Jeans"],
-                    ["no-skirts","No Skirts"],
-                    ["no-dresses","No Dresses"],
-                    ["trousers-only","Trousers Only"],
-                    ["no-boots","No Boots"],
-                    ["heels-only","Heels Only"],
-                    ["no-knits","No Knits"],
-                  ].map(([key,label]) => (
-                    <button key={key}
-                      style={styleExcludes.has(key)
-                        ? {...s.chip, background:"#C0392B", borderColor:"#C0392B", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
-                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                      onClick={() => setStyleExcludes(prev => {
-                        const next = new Set(prev);
-                        // Handle mutual exclusivity
-                        if (key === "trousers-only" && !next.has(key)) { next.delete("no-skirts"); }
-                        if (key === "heels-only" && !next.has(key)) { next.delete("no-boots"); }
-                        next.has(key) ? next.delete(key) : next.add(key);
-                        return next;
-                      })}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* ANYTHING SPECIFIC? */}
-                <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black', 'navy and brown')"
-                  value={request} onChange={e=>setRequest(e.target.value)}
-                  style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
-
-                {styleErr && <p style={s.err}>{styleErr}</p>}
-                <button style={{...s.btnPrimary, width:"100%"}}
-                  onClick={() => { handleStyle(); }}
-                  disabled={styling}>
-                  {styling
-                    ? <><span style={s.spinnerSm}/> Styling…</>
-                    : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
-                </button>
-              </>
-            )}
-          </div>
+          {stylePanelNode}
 
           {/* FAB */}
           <button style={s.fab} onClick={() => setView("add")}>
@@ -1301,7 +1351,7 @@ export default function App() {
           )}
           {/* Notes when fewer than 3 looks generated */}
           {outfitNotes && outfits && outfits.length < 3 && (
-            <div style={{background:"#FDF8F0", border:"1px solid #E8D9BE", borderRadius:8, padding:"12px 16px", margin:"0 16px 16px", fontSize:12, color:"#6B4E1A", lineHeight:1.5}}>
+            <div style={{background:"var(--color-bg)", border:"1px solid #E8D9BE", borderRadius:8, padding:"12px 16px", margin:"0 16px 16px", fontSize:12, color:"#6B4E1A", lineHeight:1.5}}>
               <span style={{fontWeight:600}}>Note:</span> {outfitNotes}
             </div>
           )}
@@ -1343,9 +1393,15 @@ export default function App() {
           ))}
           {!outfits && !styling && (
             <div style={s.empty}>
-              <p style={s.emptyText}>Go back and hit "Style Me" to generate looks.</p>
+              <div style={s.emptyMark}>✦</div>
+              <p style={s.emptyText}>Ready when you are — pick an occasion and generate your first looks.</p>
+              <button style={{...s.btnPrimary, padding:"12px 24px"}}
+                onClick={() => setStylePanelOpen(true)}>
+                <Icon path={icons.sparkle} size={15}/> Open Style Me
+              </button>
             </div>
           )}
+          {stylePanelNode}
         </div>
       )}
 
@@ -1621,11 +1677,11 @@ function FilterBar({ items, activeFilters, onChange }) {
                   ...s.swatchBtn,
                   background: family.hex,
                   boxShadow: isActive("color", family.name)
-                    ? `0 0 0 2px #1C1814, 0 0 0 4px ${family.hex}`
+                    ? `0 0 0 2px var(--color-ink), 0 0 0 4px ${family.hex}`
                     : expandedColor === family.name
-                    ? `0 0 0 2px #C4A882`
+                    ? `0 0 0 2px var(--color-accent)`
                     : "none",
-                  border: family.name === "White" || family.name === "Neutral" ? "1px solid #E8E0D8" : "none",
+                  border: family.name === "White" || family.name === "Neutral" ? "1px solid var(--color-border)" : "none",
                 }}
                 title={family.name}
               />
@@ -1638,8 +1694,8 @@ function FilterBar({ items, activeFilters, onChange }) {
                       style={{
                         ...s.shadeSwatch,
                         background: shade.hex,
-                        boxShadow: isActive("color", shade.name) ? `0 0 0 2px #1C1814` : "none",
-                        border: shade.name === "White" || shade.name === "Ivory" || shade.name === "Neutral" ? "1px solid #E8E0D8" : "none",
+                        boxShadow: isActive("color", shade.name) ? `0 0 0 2px var(--color-ink)` : "none",
+                        border: shade.name === "White" || shade.name === "Ivory" || shade.name === "Neutral" ? "1px solid var(--color-border)" : "none",
                       }}
                       title={shade.name}
                     />
@@ -1675,7 +1731,7 @@ function FilterBar({ items, activeFilters, onChange }) {
                 </button>
               ))}
               {filteredBrands.length === 0 && (
-                <span style={{fontSize:11, color:"#9A8E84"}}>No brands found</span>
+                <span style={{fontSize:11, color:"var(--color-text-muted)"}}>No brands found</span>
               )}
             </div>
           </div>
@@ -1842,12 +1898,12 @@ function SetEditModal({ setId, meta, groupItems, allItems, onSave, onDelete, onC
                 <div key={it.id} style={ss.modalItem} onClick={() => onEditItem(it)}>
                   {it.image
                     ? <img src={it.image} alt={it.name} style={ss.modalItemThumb}/>
-                    : <div style={{...ss.modalItemThumb, background:"#F0EBE4", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#C8BFB4"}}>{(it.category || "?")[0]}</div>}
+                    : <div style={{...ss.modalItemThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-border-muted)"}}>{(it.category || "?")[0]}</div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "#1C1814", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
-                    <div style={{ fontSize: 10, color: "#9A8E84", letterSpacing: "0.06em" }}>{it.category}{it.subcategory ? ` · ${it.subcategory}` : ""}</div>
+                    <div style={{ fontSize: 13, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+                    <div style={{ fontSize: 10, color: "var(--color-text-muted)", letterSpacing: "0.06em" }}>{it.category}{it.subcategory ? ` · ${it.subcategory}` : ""}</div>
                   </div>
-                  <span style={{ fontSize: 11, color: "#C8BFB4" }}>→</span>
+                  <span style={{ fontSize: 11, color: "var(--color-border-muted)" }}>→</span>
                 </div>
               ))}
             </div>
@@ -1860,7 +1916,7 @@ function SetEditModal({ setId, meta, groupItems, allItems, onSave, onDelete, onC
             Save Set
           </button>
           <button
-            style={{ background: "none", border: "none", fontSize: 11, color: confirmDelete ? "#C0392B" : "#9A8E84", cursor: "pointer", padding: "6px 0", letterSpacing: "0.04em" }}
+            style={{ background: "none", border: "none", fontSize: 11, color: confirmDelete ? "var(--color-danger)" : "var(--color-text-muted)", cursor: "pointer", padding: "6px 0", letterSpacing: "0.04em" }}
             onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}>
             {confirmDelete ? "Tap again to confirm — this unlinks all pieces" : "Delete Set"}
           </button>
@@ -1884,7 +1940,7 @@ function SetPanel({ item, allItems, onClose }) {
           <div key={it.id} style={s.setPanelItem}>
             {it.image
               ? <img src={it.image} alt={it.name} style={s.setPanelThumb}/>
-              : <div style={{...s.setPanelThumb, background:"#F0EBE4", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, color:"#C8BFB4"}}>{it.category?.[0]}</div>}
+              : <div style={{...s.setPanelThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, color:"var(--color-border-muted)"}}>{it.category?.[0]}</div>}
             <div style={s.setPanelName}>{it.name}</div>
             <div style={s.setPanelCat}>{it.category}</div>
           </div>
@@ -1926,8 +1982,8 @@ function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav }
         {onToggleFav && (
           <button style={s.iconBtn} onClick={onToggleFav} title="Favorite">
             <svg width={13} height={13} viewBox="0 0 24 24"
-              fill={isFavorited ? "#C0392B" : "none"}
-              stroke={isFavorited ? "#C0392B" : "currentColor"}
+              fill={isFavorited ? "var(--color-danger)" : "none"}
+              stroke={isFavorited ? "var(--color-danger)" : "currentColor"}
               strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
               <path d={icons.heart}/>
             </svg>
@@ -1936,7 +1992,7 @@ function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav }
         <button style={s.iconBtn} onClick={onEdit} title="Edit">
           <Icon path={icons.edit} size={13}/>
         </button>
-        <button style={{...s.iconBtn, color: confirm ? "#C0392B" : "#C8BFB4"}}
+        <button style={{...s.iconBtn, color: confirm ? "var(--color-danger)" : "var(--color-border-muted)"}}
           onClick={() => confirm ? onDelete(item.id) : setConfirm(true)}
           title={confirm ? "Confirm" : "Delete"}>
           {confirm ? "✓" : <Icon path={icons.trash} size={13}/>}
@@ -2202,7 +2258,7 @@ function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
 
           <div style={s.queueActions}>
             {!allDone && (
-              <p style={{fontSize:12,color:"#9A8E84",textAlign:"center",margin:"0 0 8px"}}>
+              <p style={{fontSize:12,color:"var(--color-text-muted)",textAlign:"center",margin:"0 0 8px"}}>
                 Cleaning photos & auto-detecting details… you can edit any field while waiting
               </p>
             )}
@@ -2282,7 +2338,7 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
             <div style={s.fieldLabel}>Color hex</div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               {form.primary_color_hex && (
-                <span style={{width:26,height:26,borderRadius:4,border:"1px solid #D6CDC1",background:form.primary_color_hex,flexShrink:0}}/>
+                <span style={{width:26,height:26,borderRadius:4,border:"1px solid var(--color-border-strong)",background:form.primary_color_hex,flexShrink:0}}/>
               )}
               <input style={{...s.input,flex:1,fontFamily:"monospace"}} placeholder="#5D3A1A"
                 value={form.primary_color_hex}
@@ -2332,7 +2388,7 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
             value={form.price_paid}
             onChange={e => setForm(f => ({...f, price_paid: e.target.value ? Number(e.target.value) : ""}))}/>
           {item.wear_count > 0 && costPerWear(item) !== null && (
-            <div style={{fontSize:11, color:"#4A3E36", marginTop:4}}>
+            <div style={{fontSize:11, color:"var(--color-text)", marginTop:4}}>
               Cost-per-wear so far: <strong>${costPerWear(item).toFixed(2)}</strong> · {item.wear_count} wears
             </div>
           )}
@@ -2406,7 +2462,7 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
           })()}
         </select>
         {form.set_id && (
-          <label style={{display:"flex", alignItems:"center", gap:8, fontSize:12, color:"#4A3E36", cursor:"pointer"}}>
+          <label style={{display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--color-text)", cursor:"pointer"}}>
             <input type="checkbox" checked={form.is_separable}
               onChange={e => setForm(f => ({ ...f, is_separable: e.target.checked }))}/>
             Show as individual piece in its own category (separable)
@@ -2418,7 +2474,7 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
         onClick={() => onSave(form)} disabled={!form.name.trim()}>
         Save Changes
       </button>
-      <button style={{...s.btnSecondary,width:"100%",color:confirm?"#C0392B":"#9A8E84"}}
+      <button style={{...s.btnSecondary,width:"100%",color:confirm?"var(--color-danger)":"var(--color-text-muted)"}}
         onClick={() => confirm ? onDelete() : setConfirm(true)}>
         {confirm ? "Tap again to confirm delete" : "Delete Item"}
       </button>
@@ -2427,14 +2483,14 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
 }
 
 // ── SETTINGS VIEW ─────────────────────────────────────────────────────────────
-const STYLE_PREFS_KEY = "atelier-style-prefs-v1";
+// STYLE_PREFS_KEY / ABOUT_ME_KEY live in utils/storage.js so they're migrated
+// with the rest of the namespaced keys.
 function loadStylePrefs() {
   try { return JSON.parse(localStorage.getItem(STYLE_PREFS_KEY)) || STYLE_PREFS; }
   catch { return STYLE_PREFS; }
 }
 function saveStylePrefsLocal(prefs) { localStorage.setItem(STYLE_PREFS_KEY, JSON.stringify(prefs)); }
 
-const ABOUT_ME_KEY = "atelier-about-me-v1";
 function loadAboutMe() {
   try { return JSON.parse(localStorage.getItem(ABOUT_ME_KEY)) || {}; }
   catch { return {}; }
@@ -2620,7 +2676,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
           </button>
         </div>
         <p style={{...s.settingsSub,marginTop:6}}>
-          Get your key at <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{color:"#1C1814"}}>console.anthropic.com</a>
+          Get your key at <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{color:"var(--color-ink)"}}>console.anthropic.com</a>
         </p>
       </div>
 
@@ -2639,7 +2695,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
           </button>
         </div>
         <p style={{...s.settingsSub,marginTop:6}}>
-          Get your free key at <a href="https://www.remove.bg/api" target="_blank" rel="noreferrer" style={{color:"#1C1814"}}>remove.bg/api</a>
+          Get your free key at <a href="https://www.remove.bg/api" target="_blank" rel="noreferrer" style={{color:"var(--color-ink)"}}>remove.bg/api</a>
         </p>
       </div>
 
@@ -2651,8 +2707,8 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
         <div style={s.fieldLabel}>Favorite color-blocking pairs</div>
         {prefs.colorPairs.map((pair, i) => (
           <div key={i} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
-            <span style={{flex:1, fontSize:12, color:"#4A3E36"}}>{pair}</span>
-            <button onClick={() => removePair(i)} style={{background:"none",border:"none",color:"#C8BFB4",cursor:"pointer",fontSize:13}}>✕</button>
+            <span style={{flex:1, fontSize:12, color:"var(--color-text)"}}>{pair}</span>
+            <button onClick={() => removePair(i)} style={{background:"none",border:"none",color:"var(--color-border-muted)",cursor:"pointer",fontSize:13}}>✕</button>
           </div>
         ))}
         <div style={{display:"flex", gap:8, marginTop:6, marginBottom:14}}>
@@ -2664,7 +2720,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
 
         <div style={s.fieldLabel}>Style modes</div>
         {[["monochromaticMode","Monochromatic looks"],["tonalPairing","Tonal pairing (e.g. navy + powder blue)"]].map(([key,label]) => (
-          <label key={key} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#4A3E36",cursor:"pointer",marginBottom:8}}>
+          <label key={key} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--color-text)",cursor:"pointer",marginBottom:8}}>
             <input type="checkbox" checked={prefs[key]}
               onChange={e => updatePrefs({ ...prefs, [key]: e.target.checked })}/>
             {label}
@@ -2676,7 +2732,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
       <div style={s.settingsCard}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}} onClick={() => setAboutMeOpen(v => !v)}>
           <div style={s.settingsTitle}>✦ About Me</div>
-          <span style={{fontSize:12, color:"#9A8E84"}}>{aboutMeOpen ? "▲ Collapse" : "▼ Expand"}</span>
+          <span style={{fontSize:12, color:"var(--color-text-muted)"}}>{aboutMeOpen ? "▲ Collapse" : "▼ Expand"}</span>
         </div>
         <p style={s.settingsSub}>Body descriptors + life context injected into outfit generation. Optional — add what's relevant.</p>
         {aboutMeOpen && (
@@ -2725,18 +2781,18 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
             <div style={{...s.auditProgressTrack, marginBottom:8}}>
               <div style={{...s.auditProgressBar, width:`${(batchProgress.done/batchProgress.total)*100}%`}}/>
             </div>
-            <div style={{fontSize:11, color:"#6B5E54", marginBottom:8}}>
+            <div style={{fontSize:11, color:"var(--color-text-2)", marginBottom:8}}>
               {batchProgress.done} / {batchProgress.total} done
               {batchProgress.errors > 0 && ` · ${batchProgress.errors} skipped`}
             </div>
-            <button style={{...s.btnPrimary, background:"#C0392B", width:"100%"}}
+            <button style={{...s.btnPrimary, background:"var(--color-danger)", width:"100%"}}
               onClick={() => { batchStop.current = true; }}>
               Stop
             </button>
           </div>
         )}
         {batchDone && (
-          <div style={{fontSize:12, color:"#3D7A4E", fontWeight:500}}>
+          <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500}}>
             ✓ Done — {batchProgress.done - batchProgress.errors} updated
             {batchProgress.errors > 0 && `, ${batchProgress.errors} skipped`}
             <button style={{...s.btnPrimary, width:"100%", marginTop:8}}
@@ -2756,7 +2812,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
       <div style={{...s.settingsCard, marginTop:16}}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}} onClick={() => setRecoverOpen(v => !v)}>
           <div style={s.settingsTitle}>✦ Recover Lost Items</div>
-          <span style={{fontSize:12, color:"#9A8E84"}}>{recoverOpen ? "▲ Collapse" : "▼ Expand"}</span>
+          <span style={{fontSize:12, color:"var(--color-text-muted)"}}>{recoverOpen ? "▲ Collapse" : "▼ Expand"}</span>
         </div>
         <p style={s.settingsSub}>Scan Supabase Storage for photos that aren't linked to any wardrobe item.</p>
         {recoverOpen && (
@@ -2768,7 +2824,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
                 ) : "Scan Storage"}
               </button>
               {orphans.length > 0 && (
-                <button style={{...s.btnPrimary, flex:1, background: aiCatRunning ? "#6B5E54" : "#1C1814"}}
+                <button style={{...s.btnPrimary, flex:1, background: aiCatRunning ? "var(--color-text-2)" : "var(--color-ink)"}}
                   onClick={handleAiCategorize} disabled={aiCatRunning || !apiKey}>
                   {aiCatRunning ? (
                     <><span style={s.spinnerSm}/>  Categorizing...</>
@@ -2777,13 +2833,13 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
               )}
             </div>
             {scanDone && orphans.length === 0 && (
-              <div style={{fontSize:12, color:"#3D7A4E", fontWeight:500, marginBottom:8}}>
+              <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500, marginBottom:8}}>
                 No orphaned photos found — all storage images are linked to wardrobe items.
               </div>
             )}
             {orphans.length > 0 && (
               <div>
-                <div style={{fontSize:12, color:"#6B5E54", marginBottom:10}}>
+                <div style={{fontSize:12, color:"var(--color-text-2)", marginBottom:10}}>
                   Found {orphans.length} unlinked photo{orphans.length !== 1 ? "s" : ""}. Fill in details and add to wardrobe.
                 </div>
                 <div style={{display:"flex", flexDirection:"column", gap:14}}>
@@ -2791,9 +2847,9 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
                     const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/wardrobe-images/${imageId}`;
                     const meta = orphanMeta[imageId] || { name: "Item", category: "Tops" };
                     return (
-                      <div key={imageId} style={{display:"flex", gap:12, alignItems:"flex-start", background:"#F5F1EC", borderRadius:8, padding:12}}>
+                      <div key={imageId} style={{display:"flex", gap:12, alignItems:"flex-start", background:"var(--color-surface)", borderRadius:8, padding:12}}>
                         <img src={imageUrl} alt="orphan"
-                          style={{width:72, height:90, objectFit:"contain", borderRadius:5, background:"#fff", flexShrink:0, border:"1px solid #E8E0D8"}}/>
+                          style={{width:72, height:90, objectFit:"contain", borderRadius:5, background:"#fff", flexShrink:0, border:"1px solid var(--color-border)"}}/>
                         <div style={{flex:1, display:"flex", flexDirection:"column", gap:6}}>
                           <div style={s.fieldLabel}>Name</div>
                           <input style={{...s.input, width:"100%", boxSizing:"border-box", fontSize:12}}
@@ -2806,7 +2862,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
                             {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                           {meta.color_family && (
-                            <div style={{fontSize:11, color:"#9A8E84"}}>Color: {meta.color_family}</div>
+                            <div style={{fontSize:11, color:"var(--color-text-muted)"}}>Color: {meta.color_family}</div>
                           )}
                           <button style={{...s.btnPrimary, marginTop:4, fontSize:11, padding:"7px 14px"}}
                             onClick={() => handleAddOrphan(imageId)}>
@@ -2825,16 +2881,16 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
 
       {/* ── Force Sync ── */}
       {onForceSync && (
-        <div style={{...s.settingsCard, marginTop:16, borderColor: fSyncDone?.failed > 0 ? "#C0392B" : fSyncDone ? "#3D7A4E" : "#E8DDD5"}}>
+        <div style={{...s.settingsCard, marginTop:16, borderColor: fSyncDone?.failed > 0 ? "var(--color-danger)" : fSyncDone ? "var(--color-success)" : "#E8DDD5"}}>
           <div style={s.settingsTitle}>Sync Wardrobe to Cloud</div>
           <p style={s.settingsSub}>
             Saves all {items.length} items from this browser directly to Supabase — use this after a bulk upload or if items aren't appearing on other devices. Do this before refreshing.
           </p>
           {fSyncProg && (
             <div style={{marginBottom:10}}>
-              <div style={{height:6, background:"#F0E8E0", borderRadius:3, overflow:"hidden", marginBottom:6}}>
+              <div style={{height:6, background:"var(--color-border-soft)", borderRadius:3, overflow:"hidden", marginBottom:6}}>
                 <div style={{height:"100%", width:`${Math.round((fSyncProg.done/fSyncProg.total)*100)}%`,
-                  background: fSyncProg.failed > 0 ? "#C0392B" : "#8B6F5E", borderRadius:3, transition:"width 0.3s"}}/>
+                  background: fSyncProg.failed > 0 ? "var(--color-danger)" : "#8B6F5E", borderRadius:3, transition:"width 0.3s"}}/>
               </div>
               <div style={{fontSize:11, color:"#6B6460"}}>
                 {fSyncRunning
@@ -2843,7 +2899,7 @@ function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateIte
               </div>
             </div>
           )}
-          <button style={{...s.settingsBtn, background: fSyncDone && !fSyncDone.failed ? "#3D7A4E" : "#8B6F5E"}}
+          <button style={{...s.settingsBtn, background: fSyncDone && !fSyncDone.failed ? "var(--color-success)" : "#8B6F5E"}}
             onClick={async () => {
               setFSyncRunning(true); setFSyncDone(null);
               setFSyncProg({ done: 0, total: items.length, failed: 0 });
@@ -3116,7 +3172,7 @@ function LookCard({ look, items, apiKey, onSaveLook, onRate }) {
                   setRated(1);
                   onRate(look, 1);
                 }}
-                style={{background: rated === 1 ? "#3D7A4E" : "none", border:"1px solid " + (rated === 1 ? "#3D7A4E" : "#D6CDC1"), color: rated === 1 ? "#fff" : "#4A3E36", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
+                style={{background: rated === 1 ? "var(--color-success)" : "none", border:"1px solid " + (rated === 1 ? "var(--color-success)" : "var(--color-border-strong)"), color: rated === 1 ? "#fff" : "var(--color-text)", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
                 ♥
               </button>
               <button
@@ -3126,7 +3182,7 @@ function LookCard({ look, items, apiKey, onSaveLook, onRate }) {
                   setRated(-1);
                   onRate(look, -1);
                 }}
-                style={{background: rated === -1 ? "#C0392B" : "none", border:"1px solid " + (rated === -1 ? "#C0392B" : "#D6CDC1"), color: rated === -1 ? "#fff" : "#4A3E36", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
+                style={{background: rated === -1 ? "var(--color-danger)" : "none", border:"1px solid " + (rated === -1 ? "var(--color-danger)" : "var(--color-border-strong)"), color: rated === -1 ? "#fff" : "var(--color-text)", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
                 ✕
               </button>
             </>
@@ -3150,20 +3206,20 @@ function LookCard({ look, items, apiKey, onSaveLook, onRate }) {
         <div style={s.lookMeta}>
           {/* New styling fields */}
           {look.color_strategy && (
-            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>COLOR</span><span style={{fontSize:12,color:"#4A3E36"}}>{look.color_strategy}</span></div>
+            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>COLOR</span><span style={{fontSize:12,color:"var(--color-text)"}}>{look.color_strategy}</span></div>
           )}
           {look.silhouette && (
-            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>SILHOUETTE</span><span style={{fontSize:12,color:"#4A3E36"}}>{look.silhouette}</span></div>
+            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>SILHOUETTE</span><span style={{fontSize:12,color:"var(--color-text)"}}>{look.silhouette}</span></div>
           )}
           {look.texture_story && (
-            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>TEXTURE</span><span style={{fontSize:12,color:"#4A3E36"}}>{look.texture_story}</span></div>
+            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>TEXTURE</span><span style={{fontSize:12,color:"var(--color-text)"}}>{look.texture_story}</span></div>
           )}
           {look.focal_point && (
-            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>FOCAL POINT</span><span style={{fontSize:12,color:"#4A3E36"}}>{look.focal_point}</span></div>
+            <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>FOCAL POINT</span><span style={{fontSize:12,color:"var(--color-text)"}}>{look.focal_point}</span></div>
           )}
           {/* Legacy fields */}
           {look.accessories && <div style={s.metaRow}><span style={s.metaIcon}>✦</span><span>{look.accessories}</span></div>}
-          {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"#6B5E54"}}>{look.why}</div>}
+          {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"var(--color-text-2)"}}>{look.why}</div>}
         </div>
       )}
 
@@ -3211,7 +3267,7 @@ function LookCard({ look, items, apiKey, onSaveLook, onRate }) {
                 <div style={s.elevSugColor}>✓ {e.colorNote}</div>
                 <a href={`https://www.google.com/search?q=${encodeURIComponent(e.item)}`}
                   target="_blank" rel="noreferrer"
-                  style={{display:"inline-block",marginTop:8,fontSize:11,color:"#1C1814",fontWeight:500,letterSpacing:"0.05em",textDecoration:"none",borderBottom:"1px solid #1C1814"}}>
+                  style={{display:"inline-block",marginTop:8,fontSize:11,color:"var(--color-ink)",fontWeight:500,letterSpacing:"0.05em",textDecoration:"none",borderBottom:"1px solid var(--color-ink)"}}>
                   Search this item →
                 </a>
               </div>
@@ -3265,7 +3321,7 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
         {saved ? (
           <div style={{ padding:"40px 20px", textAlign:"center" }}>
             <div style={{ fontSize:28, marginBottom:10 }}>✓</div>
-            <div style={{ fontSize:14, color:"#3D7A4E", letterSpacing:"0.06em" }}>
+            <div style={{ fontSize:14, color:"var(--color-success)", letterSpacing:"0.06em" }}>
               {logAsWorn ? "Logged in your history" : "Saved to your looks"}
             </div>
           </div>
@@ -3306,6 +3362,36 @@ function SaveLookModal({ look, lookItems, onSave, onClose }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── SAVED LOOK CARD (shared skeleton for LooksView / History / Favorites) ───
+function SavedLookCard({ log, items, subtitle, headerRight, notes, actions }) {
+  const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
+  const meta = (() => { try { return JSON.parse(log.collage_url); } catch { return {}; } })();
+  return (
+    <div style={s.histCard}>
+      <div style={s.histCardHeader}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
+          <div>
+            {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
+            {subtitle && <div style={s.histDate}>{subtitle}</div>}
+          </div>
+          {headerRight}
+        </div>
+      </div>
+      <div style={s.histThumbs}>
+        {logItems.map(it => (
+          <div key={it.id} style={s.histThumb}>
+            {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
+              : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
+            <div style={s.histThumbName}>{it.name}</div>
+          </div>
+        ))}
+      </div>
+      {notes && <div style={s.histNotes}>{notes}</div>}
+      {actions && <div style={s.histActions}>{actions}</div>}
     </div>
   );
 }
@@ -3385,55 +3471,43 @@ function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav
           <div style={s.histMonthLabel}>{formatMonth(month)}</div>
           {grouped[month].map(log => {
             const meta = parseMeta(log.collage_url);
-            const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
+            const subtitle = (
+              <>
+                {formatDate(log.date_worn)}
+                {log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+                {meta.mood && <span style={s.histMood}> · {meta.mood}</span>}
+              </>
+            );
             return (
-              <div key={log.id} style={s.histCard}>
-                <div style={s.histCardHeader}>
-                  <div>
-                    {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
-                    <div style={s.histDate}>
-                      {formatDate(log.date_worn)}
-                      {log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
-                      {meta.mood && <span style={s.histMood}> · {meta.mood}</span>}
+              <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+                actions={
+                  <>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
+                        <svg width={15} height={15} viewBox="0 0 24 24"
+                          fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
+                          stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
+                          strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                      </button>
+                      <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
+                        {wearingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Wear this again"}
+                      </button>
+                      <button style={s.histDeleteBtn} onClick={() => handleUnlog(log.id)} disabled={unloggingId === log.id}
+                        title="Move back to Looks (clears the wear date)">
+                        {unloggingId === log.id ? "…" : "Unlog"}
+                      </button>
                     </div>
-                  </div>
-                </div>
-                <div style={s.histThumbs}>
-                  {logItems.map(it => (
-                    <div key={it.id} style={s.histThumb}>
-                      {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
-                        : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                      <div style={s.histThumbName}>{it.name}</div>
-                    </div>
-                  ))}
-                </div>
-                {log.notes && <div style={s.histNotes}>{log.notes}</div>}
-                <div style={s.histActions}>
-                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                    <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                      <svg width={15} height={15} viewBox="0 0 24 24"
-                        fill={isFav("outfit", log.id) ? "#C0392B" : "none"}
-                        stroke={isFav("outfit", log.id) ? "#C0392B" : "#C8BFB4"}
-                        strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
-                    </button>
-                    <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
-                      {wearingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Wear this again"}
-                    </button>
-                    <button style={s.histDeleteBtn} onClick={() => handleUnlog(log.id)} disabled={unloggingId === log.id}
-                      title="Move back to Looks (clears the wear date)">
-                      {unloggingId === log.id ? "…" : "Unlog"}
-                    </button>
-                  </div>
-                  {deleteId === log.id ? (
-                    <div style={{ display:"flex", gap:6 }}>
-                      <button style={{...s.histDeleteBtn, color:"#C0392B"}} onClick={() => handleDelete(log.id)}>Confirm</button>
-                      <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
-                    </div>
-                  ) : (
-                    <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
-                  )}
-                </div>
-              </div>
+                    {deleteId === log.id ? (
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button style={{...s.histDeleteBtn, color:"var(--color-danger)"}} onClick={() => handleDelete(log.id)}>Confirm</button>
+                        <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                    )}
+                  </>
+                }
+              />
             );
           })}
         </div>
@@ -3521,7 +3595,7 @@ function OutfitBuilder({ items, onSave, onClose }) {
       <div style={s.page}>
         <div style={{ ...s.empty, padding: "120px 20px" }}>
           <div style={{ fontSize: 28, marginBottom: 10 }}>✓</div>
-          <div style={{ fontSize: 14, color: "#3D7A4E", letterSpacing: "0.06em" }}>Saved to your looks</div>
+          <div style={{ fontSize: 14, color: "var(--color-success)", letterSpacing: "0.06em" }}>Saved to your looks</div>
         </div>
       </div>
     );
@@ -3531,13 +3605,13 @@ function OutfitBuilder({ items, onSave, onClose }) {
     <div style={s.page}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <h2 style={{ ...s.pageTitle, fontFamily: "'DM Serif Display',Georgia,serif", margin: 0 }}>Build a Look</h2>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "#9A8E84", fontSize: 24, cursor: "pointer", padding: 0, lineHeight: 1 }}>&times;</button>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--color-text-muted)", fontSize: 24, cursor: "pointer", padding: 0, lineHeight: 1 }}>&times;</button>
       </div>
 
       {/* Selection tray */}
       {selected.length > 0 && (
-        <div style={{ background: "#fff", border: "1px solid #E8E0D8", borderRadius: 10, padding: "12px 16px", marginBottom: 16, boxShadow: "0 2px 12px rgba(28,24,20,0.04)" }}>
-          <div style={{ fontSize: 9, letterSpacing: "0.18em", color: "#9A8E84", marginBottom: 8, fontFamily: "sans-serif" }}>
+        <div style={{ background: "#fff", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, boxShadow: "0 2px 12px rgba(28,24,20,0.04)" }}>
+          <div style={{ fontSize: 9, letterSpacing: "0.18em", color: "var(--color-text-muted)", marginBottom: 8, fontFamily: "sans-serif" }}>
             YOUR LOOK · {selected.length} {selected.length === 1 ? "PIECE" : "PIECES"}
           </div>
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
@@ -3545,11 +3619,11 @@ function OutfitBuilder({ items, onSave, onClose }) {
               <div key={it.id} style={{ flexShrink: 0, width: 56, textAlign: "center", position: "relative", cursor: "pointer" }}
                 onClick={() => toggleItem(it.id)}>
                 {it.image
-                  ? <img src={it.image} alt={it.name} style={{ width: 56, height: 68, objectFit: "contain", borderRadius: 6, background: "#F5F1EC" }} />
-                  : <div style={{ width: 56, height: 68, borderRadius: 6, background: "#F5F1EC", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#C8BFB4" }}>{it.category?.[0]}</div>
+                  ? <img src={it.image} alt={it.name} style={{ width: 56, height: 68, objectFit: "contain", borderRadius: 6, background: "var(--color-surface)" }} />
+                  : <div style={{ width: 56, height: 68, borderRadius: 6, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "var(--color-border-muted)" }}>{it.category?.[0]}</div>
                 }
-                <div style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: "#1C1814", color: "#F5F1EC", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>✕</div>
-                <div style={{ fontSize: 8, color: "#9A8E84", marginTop: 3, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+                <div style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: "var(--color-ink)", color: "var(--color-surface)", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>✕</div>
+                <div style={{ fontSize: 8, color: "var(--color-text-muted)", marginTop: 3, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
               </div>
             ))}
           </div>
@@ -3558,9 +3632,9 @@ function OutfitBuilder({ items, onSave, onClose }) {
             {CATEGORY_ORDER.filter(c => ["Tops", "Knits", "Bottoms", "Dresses", "Outerwear", "Shoes", "Bags"].includes(c)).map(cat => (
               <span key={cat} style={{
                 fontSize: 9, letterSpacing: "0.06em", padding: "2px 8px", borderRadius: 10,
-                background: categoriesInOutfit.includes(cat) ? "#E8F5EC" : "#F5F1EC",
-                color: categoriesInOutfit.includes(cat) ? "#3D7A4E" : "#C8BFB4",
-                border: `1px solid ${categoriesInOutfit.includes(cat) ? "#B8D9C0" : "#E8E0D8"}`,
+                background: categoriesInOutfit.includes(cat) ? "#E8F5EC" : "var(--color-surface)",
+                color: categoriesInOutfit.includes(cat) ? "var(--color-success)" : "var(--color-border-muted)",
+                border: `1px solid ${categoriesInOutfit.includes(cat) ? "#B8D9C0" : "var(--color-border)"}`,
               }}>{cat}</span>
             ))}
           </div>
@@ -3569,16 +3643,16 @@ function OutfitBuilder({ items, onSave, onClose }) {
 
       {/* Save form — inline when items selected */}
       {selected.length > 0 && (
-        <div style={{ background: "#fff", border: "1px solid #E8E0D8", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+        <div style={{ background: "#fff", border: "1px solid var(--color-border)", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 9, letterSpacing: "0.18em", color: "#9A8E84", display: "block", marginBottom: 5, fontFamily: "sans-serif" }}>NAME</label>
+              <label style={{ fontSize: 9, letterSpacing: "0.18em", color: "var(--color-text-muted)", display: "block", marginBottom: 5, fontFamily: "sans-serif" }}>NAME</label>
               <input value={lookName} onChange={e => setLookName(e.target.value)}
                 placeholder="e.g. Monday Power Look"
                 style={{ ...s.modalInput, fontSize: 12 }} />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 9, letterSpacing: "0.18em", color: "#9A8E84", display: "block", marginBottom: 5, fontFamily: "sans-serif" }}>OCCASION</label>
+              <label style={{ fontSize: 9, letterSpacing: "0.18em", color: "var(--color-text-muted)", display: "block", marginBottom: 5, fontFamily: "sans-serif" }}>OCCASION</label>
               <select value={occasion} onChange={e => setOccasion(e.target.value)}
                 style={{ ...s.modalInput, fontSize: 12 }}>
                 {OCCASIONS.map(o => <option key={o}>{o}</option>)}
@@ -3599,24 +3673,24 @@ function OutfitBuilder({ items, onSave, onClose }) {
           value={builderSearch} onChange={e => setBuilderSearch(e.target.value)}
           style={{
             width: "100%", padding: "10px 14px 10px 36px", boxSizing: "border-box",
-            border: "1px solid #E8E0D8", borderRadius: 8, fontSize: 13,
+            border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 13,
             fontFamily: "'DM Sans',Inter,system-ui,sans-serif",
             background: "#FDFBF9", color: "#2C2420", outline: "none",
           }} />
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none"
-          stroke="#9A8E84" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          stroke="var(--color-text-muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
           style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
           <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
         {builderSearch && (
           <button onClick={() => setBuilderSearch("")}
-            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#9A8E84", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>
             ✕
           </button>
         )}
       </div>
       {builderSearch.trim() && (
-        <div style={{ fontSize: 11, color: "#9A8E84", marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
           {filtered.length} result{filtered.length !== 1 ? "s" : ""} for "{builderSearch.trim()}"
         </div>
       )}
@@ -3636,13 +3710,13 @@ function OutfitBuilder({ items, onSave, onClose }) {
                 onClick={() => toggleItem(item.id)}
                 style={{
                   ...s.card, cursor: "pointer", position: "relative",
-                  border: isSelected ? "2px solid #1C1814" : "1px solid #E8E0D8",
+                  border: isSelected ? "2px solid var(--color-ink)" : "1px solid var(--color-border)",
                   boxShadow: isSelected ? "0 2px 12px rgba(28,24,20,0.12)" : "none",
                 }}>
                 {isSelected && (
                   <div style={{
                     position: "absolute", top: 8, right: 8, width: 22, height: 22,
-                    borderRadius: "50%", background: "#1C1814", color: "#F5F1EC",
+                    borderRadius: "50%", background: "var(--color-ink)", color: "var(--color-surface)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 12, fontWeight: 600, zIndex: 2, fontFamily: "sans-serif",
                   }}>{selected.indexOf(item.id) + 1}</div>
@@ -3656,7 +3730,7 @@ function OutfitBuilder({ items, onSave, onClose }) {
                 <div style={s.cardBody}>
                   <div style={s.cardCat}>{item.category}{item.subcategory ? ` · ${item.subcategory}` : ""}</div>
                   <div style={s.cardName}>{item.name}</div>
-                  {item.brand && <div style={{ fontSize: 11, color: "#9A8E84", fontStyle: "italic" }}>{item.brand}</div>}
+                  {item.brand && <div style={{ fontSize: 11, color: "var(--color-text-muted)", fontStyle: "italic" }}>{item.brand}</div>}
                   {item.color && <div style={s.cardColor}>{item.color}</div>}
                 </div>
               </div>
@@ -3734,54 +3808,42 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook,
       )}
       {!loading && logs.map(log => {
         const meta = parseMeta(log.collage_url);
-        const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
         const pickedDate = dateById[log.id] || today;
+        const subtitle = (
+          <>
+            {log.occasion && <span>{log.occasion}</span>}
+            {meta.mood && <span style={s.histMood}>{log.occasion ? " · " : ""}{meta.mood}</span>}
+          </>
+        );
         return (
-          <div key={log.id} style={s.histCard}>
-            <div style={s.histCardHeader}>
-              <div>
-                {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
-                <div style={s.histDate}>
-                  {log.occasion && <span>{log.occasion}</span>}
-                  {meta.mood && <span style={s.histMood}>{log.occasion ? " · " : ""}{meta.mood}</span>}
+          <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+            actions={
+              <>
+                <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                  <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
+                    <svg width={15} height={15} viewBox="0 0 24 24"
+                      fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
+                      stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
+                      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                  </button>
+                  <input type="date" value={pickedDate}
+                    onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}
+                    style={{ fontSize:12, padding:"4px 6px", border:"1px solid var(--color-border)", borderRadius:6, background:"#FDFBF9", fontFamily:"inherit", color:"#2C2420" }}/>
+                  <button style={s.histWearBtn} onClick={() => handleLog(log.id)} disabled={loggingId === log.id}>
+                    {loggingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Log as worn"}
+                  </button>
                 </div>
-              </div>
-            </div>
-            <div style={s.histThumbs}>
-              {logItems.map(it => (
-                <div key={it.id} style={s.histThumb}>
-                  {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
-                    : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                  <div style={s.histThumbName}>{it.name}</div>
-                </div>
-              ))}
-            </div>
-            {log.notes && <div style={s.histNotes}>{log.notes}</div>}
-            <div style={s.histActions}>
-              <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                  <svg width={15} height={15} viewBox="0 0 24 24"
-                    fill={isFav("outfit", log.id) ? "#C0392B" : "none"}
-                    stroke={isFav("outfit", log.id) ? "#C0392B" : "#C8BFB4"}
-                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
-                </button>
-                <input type="date" value={pickedDate}
-                  onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}
-                  style={{ fontSize:12, padding:"4px 6px", border:"1px solid #E8E0D8", borderRadius:6, background:"#FDFBF9", fontFamily:"inherit", color:"#2C2420" }}/>
-                <button style={s.histWearBtn} onClick={() => handleLog(log.id)} disabled={loggingId === log.id}>
-                  {loggingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Log as worn"}
-                </button>
-              </div>
-              {deleteId === log.id ? (
-                <div style={{ display:"flex", gap:6 }}>
-                  <button style={{...s.histDeleteBtn, color:"#C0392B"}} onClick={() => handleDelete(log.id)}>Confirm</button>
-                  <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
-                </div>
-              ) : (
-                <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
-              )}
-            </div>
-          </div>
+                {deleteId === log.id ? (
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button style={{...s.histDeleteBtn, color:"var(--color-danger)"}} onClick={() => handleDelete(log.id)}>Confirm</button>
+                    <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                )}
+              </>
+            }
+          />
         );
       })}
     </div>
@@ -3857,30 +3919,20 @@ function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
         favOutfits.length === 0
           ? <div style={s.empty}><p style={s.emptyText}>No favorite outfits yet. Tap the heart on any outfit in History.</p></div>
           : favOutfits.map(log => {
-              const meta = parseMeta(log.collage_url);
-              const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
+              const subtitle = (
+                <>
+                  {formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+                </>
+              );
               return (
-                <div key={log.id} style={s.histCard}>
-                  <div style={s.histCardHeader}>
-                    <div>
-                      {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
-                      <div style={s.histDate}>{formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}</div>
-                    </div>
+                <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+                  headerRight={
                     <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                      <svg width={16} height={16} viewBox="0 0 24 24" fill="#C0392B" stroke="#C0392B"
+                      <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
                         strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
                     </button>
-                  </div>
-                  <div style={s.histThumbs}>
-                    {logItems.map(it => (
-                      <div key={it.id} style={s.histThumb}>
-                        {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/> : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
-                        <div style={s.histThumbName}>{it.name}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {log.notes && <div style={s.histNotes}>{log.notes}</div>}
-                </div>
+                  }
+                />
               );
             })
       )}
@@ -3900,7 +3952,7 @@ function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
                   </div>
                   <div style={s.cardActions}>
                     <button style={s.heartBtn} onClick={() => toggleFav("piece", item.id)}>
-                      <svg width={13} height={13} viewBox="0 0 24 24" fill="#C0392B" stroke="#C0392B"
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
                         strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
                     </button>
                   </div>
@@ -3968,9 +4020,9 @@ function StyleInsightsView({ items, apiKey, onBack }) {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileErr, setProfileErr] = useState("");
   const [dismissed, setDismissed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("atelier-insights-dismissed") || "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(INSIGHTS_DISMISSED_KEY) || "[]"); } catch { return []; }
   });
-  const dismiss = (key) => { const next = [...dismissed, key]; setDismissed(next); localStorage.setItem("atelier-insights-dismissed", JSON.stringify(next)); };
+  const dismiss = (key) => { const next = [...dismissed, key]; setDismissed(next); localStorage.setItem(INSIGHTS_DISMISSED_KEY, JSON.stringify(next)); };
   const isDismissed = (key) => dismissed.includes(key);
 
   useEffect(() => {
@@ -3987,9 +4039,13 @@ function StyleInsightsView({ items, apiKey, onBack }) {
 
   const handleGenerateProfile = async () => {
     if (!apiKey) { setProfileErr("Add your Anthropic API key in Settings."); return; }
-    setProfileLoading(true); setProfileErr("");
-    try { setProfile(await generateStyleProfile(items, outfitLogs, analysis, apiKey)); }
-    catch (e) { setProfileErr(e.message); }
+    setProfileLoading(true); setProfileErr(""); setProfile("");
+    try {
+      const final = await streamStyleProfile(items, outfitLogs, analysis, apiKey, (partial) => {
+        setProfile(partial);
+      });
+      setProfile(final);
+    } catch (e) { setProfileErr(e.message); }
     finally { setProfileLoading(false); }
   };
 
@@ -4035,7 +4091,7 @@ function StyleInsightsView({ items, apiKey, onBack }) {
           <div style={si.divider}/><div style={{...si.sectionLabel,marginBottom:8}}>WARDROBE ANCHORS</div>
           {analysis.wardrobeAnchors.map((a, i) => (
             <div key={i} style={si.insightRow}>
-              <div style={si.anchorThumb}>{a.item.image ? <img src={a.item.image} alt="" style={si.anchorImg}/> : <span style={{color:"#C8BFB4"}}>{a.item.category?.[0]}</span>}</div>
+              <div style={si.anchorThumb}>{a.item.image ? <img src={a.item.image} alt="" style={si.anchorImg}/> : <span style={{color:"var(--color-border-muted)"}}>{a.item.category?.[0]}</span>}</div>
               <div style={si.insightText}><strong>{a.item.name}</strong> — worn {a.count} times.</div>
             </div>
           ))}
@@ -4067,10 +4123,10 @@ function StyleInsightsView({ items, apiKey, onBack }) {
           {analysis.underutilized.map(item => {
             const days = item.last_worn ? Math.floor((Date.now() - new Date(item.last_worn).getTime()) / 86400000) : null;
             return (<div key={item.id} style={si.underutilCard}><div style={si.underutilImg}>
-              {item.image ? <img src={item.image} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{color:"#C8BFB4",fontSize:22}}>{item.category?.[0]}</span>}
-            </div><div style={si.underutilMeta}><div style={{fontSize:10,letterSpacing:"0.1em",color:"#9A8E84"}}>{item.category}</div>
+              {item.image ? <img src={item.image} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{color:"var(--color-border-muted)",fontSize:22}}>{item.category?.[0]}</span>}
+            </div><div style={si.underutilMeta}><div style={{fontSize:10,letterSpacing:"0.1em",color:"var(--color-text-muted)"}}>{item.category}</div>
               <div style={{fontSize:12,marginTop:2}}>{item.name}</div>
-              <div style={{fontSize:10,color:"#C4A882",marginTop:3}}>{days ? `${days} days ago` : "Never worn"}</div>
+              <div style={{fontSize:10,color:"var(--color-accent)",marginTop:3}}>{days ? `${days} days ago` : "Never worn"}</div>
             </div></div>);
           })}
         </div>
@@ -4082,7 +4138,7 @@ function StyleInsightsView({ items, apiKey, onBack }) {
         <div style={si.pairGrid}>
           {analysis.colorPairs.map((p, i) => { const [a, b] = p.pair.split(" + "); return (
             <div key={i} style={si.pairChip}><span style={{...si.swatchDot, background:colorHex(a), width:18, height:18}}/>
-              <span style={{fontSize:10,color:"#9A8E84"}}>+</span><span style={{...si.swatchDot, background:colorHex(b), width:18, height:18}}/>
+              <span style={{fontSize:10,color:"var(--color-text-muted)"}}>+</span><span style={{...si.swatchDot, background:colorHex(b), width:18, height:18}}/>
               <span style={{fontSize:11,marginLeft:4}}>{p.count}×</span></div>
           ); })}
         </div>
@@ -4119,7 +4175,7 @@ function ShoppingView({ items, apiKey, onBack }) {
     finally { setLoading(false); }
   };
 
-  const priorityColor = { high: "#C0392B", medium: "#8B6914", low: "#3D7A4E" };
+  const priorityColor = { high: "var(--color-danger)", medium: "#8B6914", low: "var(--color-success)" };
 
   return (
     <div style={s.page}>
@@ -4144,15 +4200,15 @@ function ShoppingView({ items, apiKey, onBack }) {
           <div style={s.advisorNote}>Select pieces from your wardrobe, and AI will suggest what to buy to complete or elevate the outfit.</div>
           <div style={{...s.grid, marginBottom:20}}>
             {items.filter(it => it.image).slice(0, 30).map(item => (
-              <div key={item.id} style={{...s.card, border: selectedIds.includes(item.id) ? "2px solid #1C1814" : "1px solid #E8E0D8", cursor:"pointer"}}
+              <div key={item.id} style={{...s.card, border: selectedIds.includes(item.id) ? "2px solid var(--color-ink)" : "1px solid var(--color-border)", cursor:"pointer"}}
                 onClick={() => toggleItem(item.id)}>
                 <div style={{...s.cardImg, height:120}}>
                   <img src={item.image} alt={item.name} style={s.cardPhoto}/>
                   {selectedIds.includes(item.id) && (
-                    <div style={{position:"absolute",top:6,right:6,background:"#1C1814",color:"#F5F1EC",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>✓</div>
+                    <div style={{position:"absolute",top:6,right:6,background:"var(--color-ink)",color:"var(--color-surface)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>✓</div>
                   )}
                 </div>
-                <div style={{padding:"6px 8px"}}><div style={{fontSize:10,color:"#9A8E84"}}>{item.category}</div><div style={{fontSize:11}}>{item.name}</div></div>
+                <div style={{padding:"6px 8px"}}><div style={{fontSize:10,color:"var(--color-text-muted)"}}>{item.category}</div><div style={{fontSize:11}}>{item.name}</div></div>
               </div>
             ))}
           </div>
@@ -4166,7 +4222,7 @@ function ShoppingView({ items, apiKey, onBack }) {
 
       {results && mode === "gap" && results.gaps && (
         <div>
-          <div style={{fontSize:11,letterSpacing:"0.2em",color:"#9A8E84",marginBottom:16,fontFamily:"sans-serif"}}>
+          <div style={{fontSize:11,letterSpacing:"0.2em",color:"var(--color-text-muted)",marginBottom:16,fontFamily:"sans-serif"}}>
             {results.gaps.length} GAPS FOUND
           </div>
           {results.gaps.map((gap, i) => (
@@ -4174,14 +4230,14 @@ function ShoppingView({ items, apiKey, onBack }) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <div style={{fontSize:9,letterSpacing:"0.12em",padding:"2px 8px",borderRadius:3,fontFamily:"sans-serif",
                   background: gap.priority === "high" ? "#FFF0F0" : gap.priority === "medium" ? "#FFF8EC" : "#F0FFF4",
-                  color: priorityColor[gap.priority] || "#6B5E54"}}>{gap.priority?.toUpperCase()}</div>
-                <div style={{fontSize:10,color:"#C4A882"}}>{gap.price}</div>
+                  color: priorityColor[gap.priority] || "var(--color-text-2)"}}>{gap.priority?.toUpperCase()}</div>
+                <div style={{fontSize:10,color:"var(--color-accent)"}}>{gap.price}</div>
               </div>
-              <div style={{fontSize:10,letterSpacing:"0.1em",color:"#9A8E84",marginBottom:4}}>{gap.category}{gap.subcategory ? ` · ${gap.subcategory}` : ""}</div>
+              <div style={{fontSize:10,letterSpacing:"0.1em",color:"var(--color-text-muted)",marginBottom:4}}>{gap.category}{gap.subcategory ? ` · ${gap.subcategory}` : ""}</div>
               <div style={{fontSize:14,marginBottom:4}}>{gap.suggestion}</div>
-              <div style={{fontSize:12,color:"#6B5E54",marginBottom:6,lineHeight:1.5}}>{gap.description}</div>
-              <div style={{fontSize:11,color:"#4A3E36",lineHeight:1.5,marginBottom:4,fontStyle:"italic"}}>{gap.reason}</div>
-              {gap.colorNote && <div style={{fontSize:10,color:"#3D7A4E"}}>✓ {gap.colorNote}</div>}
+              <div style={{fontSize:12,color:"var(--color-text-2)",marginBottom:6,lineHeight:1.5}}>{gap.description}</div>
+              <div style={{fontSize:11,color:"var(--color-text)",lineHeight:1.5,marginBottom:4,fontStyle:"italic"}}>{gap.reason}</div>
+              {gap.colorNote && <div style={{fontSize:10,color:"var(--color-success)"}}>✓ {gap.colorNote}</div>}
             </div>
           ))}
         </div>
@@ -4189,7 +4245,7 @@ function ShoppingView({ items, apiKey, onBack }) {
 
       {results && mode === "complete" && results.completions && (
         <div>
-          <div style={{fontSize:11,letterSpacing:"0.2em",color:"#9A8E84",marginBottom:16,fontFamily:"sans-serif"}}>
+          <div style={{fontSize:11,letterSpacing:"0.2em",color:"var(--color-text-muted)",marginBottom:16,fontFamily:"sans-serif"}}>
             {results.completions.length} SUGGESTIONS
           </div>
           {results.completions.map((comp, i) => (
@@ -4197,14 +4253,14 @@ function ShoppingView({ items, apiKey, onBack }) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span style={{fontSize:9,letterSpacing:"0.12em",padding:"2px 8px",borderRadius:3,fontFamily:"sans-serif",
                   background: comp.type === "essential" ? "#E8F5EC" : "#EDE8FF",
-                  color: comp.type === "essential" ? "#3D7A4E" : "#5B4E8E"}}>{comp.type === "essential" ? "ESSENTIAL" : "ELEVATING"}</span>
-                <div style={{fontSize:10,color:"#C4A882"}}>{comp.price}</div>
+                  color: comp.type === "essential" ? "var(--color-success)" : "#5B4E8E"}}>{comp.type === "essential" ? "ESSENTIAL" : "ELEVATING"}</span>
+                <div style={{fontSize:10,color:"var(--color-accent)"}}>{comp.price}</div>
               </div>
-              <div style={{fontSize:10,letterSpacing:"0.1em",color:"#9A8E84",marginBottom:4}}>{comp.category}</div>
+              <div style={{fontSize:10,letterSpacing:"0.1em",color:"var(--color-text-muted)",marginBottom:4}}>{comp.category}</div>
               <div style={{fontSize:14,marginBottom:4}}>{comp.suggestion}</div>
-              <div style={{fontSize:12,color:"#6B5E54",marginBottom:6,lineHeight:1.5}}>{comp.description}</div>
-              <div style={{fontSize:11,color:"#4A3E36",lineHeight:1.5,marginBottom:4}}>{comp.why}</div>
-              {comp.colorNote && <div style={{fontSize:10,color:"#3D7A4E"}}>✓ {comp.colorNote}</div>}
+              <div style={{fontSize:12,color:"var(--color-text-2)",marginBottom:6,lineHeight:1.5}}>{comp.description}</div>
+              <div style={{fontSize:11,color:"var(--color-text)",lineHeight:1.5,marginBottom:4}}>{comp.why}</div>
+              {comp.colorNote && <div style={{fontSize:10,color:"var(--color-success)"}}>✓ {comp.colorNote}</div>}
             </div>
           ))}
         </div>

@@ -8,12 +8,12 @@ import {
 } from "./moodboardApi.js";
 
 const PALETTE = {
-  ink:   "#1C1814",
-  soft:  "#4A3E36",
-  muted: "#9A8E84",
-  bg:    "#F5F1EC",
-  cream: "#FDF8F0",
-  line:  "#D6CDC1",
+  ink:   "var(--color-ink)",
+  soft:  "var(--color-text)",
+  muted: "var(--color-text-muted)",
+  bg:    "var(--color-surface)",
+  cream: "var(--color-bg)",
+  line:  "var(--color-border-strong)",
 };
 
 export default function MoodboardView({ items }) {
@@ -167,7 +167,7 @@ function BoardEditor({ board, items, onBack }) {
             onChange={e => e.target.files[0] && addInspoFromFile(e.target.files[0])}/>
         </label>
         {selected && (
-          <button onClick={removeSelected} style={{ ...buttonSecondary, color: "#C0392B", borderColor: "#C0392B" }}>Remove layer</button>
+          <button onClick={removeSelected} style={{ ...buttonSecondary, color: "var(--color-danger)", borderColor: "var(--color-danger)" }}>Remove layer</button>
         )}
         <button onClick={handleSave} disabled={saving}
           style={{ ...buttonPrimary, marginLeft: "auto" }}>

@@ -2,8 +2,8 @@
 // Tracks which items have been suggested and how often, enabling cold-item
 // boosting and recently-suggested avoidance in the sampling pipeline.
 
-const RECENT_ITEMS_KEY = "atelier-recently-suggested-items";
-const SUGGESTION_COUNTS_KEY = "atelier-item-suggestion-counts";
+import { RECENT_ITEMS_KEY, SUGGESTION_COUNTS_KEY } from "./storage.js";
+
 const MAX_RECENT_GENERATIONS = 3;
 
 /**

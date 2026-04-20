@@ -35,3 +35,22 @@ export function moodPromptFor(moodKey) {
   const m = MOODS.find(m => m.key === moodKey);
   return m ? m.prompt : "";
 }
+
+// ── Vibe vocabulary ─────────────────────────────────────────────────────────
+// Finite set of vibes the AI may assign to a generated look. Kept as a plain
+// array so it can be imported into both the Zod schema (enum) and the prompt
+// (one canonical source). Picked to cover the dominant editorial / day-to-day
+// styles without exploding into synonyms.
+export const VIBE_VOCABULARY = [
+  "Quiet Luxury",
+  "Romantic",
+  "Edgy",
+  "Sporty",
+  "Effortless",
+  "Editorial",
+  "Polished Classic",
+  "Modern Minimal",
+  "Power Dressing",
+  "Downtown Cool",
+];
+

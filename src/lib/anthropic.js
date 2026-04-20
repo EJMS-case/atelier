@@ -1,15 +1,9 @@
 // ── ANTHROPIC API WRAPPER ────────────────────────────────────────────────────
-// Centralizes calls to the Claude API for Atelier features.
-// Note: system parameter does NOT work with anthropic-dangerous-direct-browser-access,
-// so all instructions go into the user message.
+// Centralizes the auto-detect call for new closet photos. Structured output is
+// produced via Anthropic tool-use + a Zod runtime schema (see ai/schemas.js).
 
-const API_URL = "https://api.anthropic.com/v1/messages";
-const HEADERS = (apiKey) => ({
-  "Content-Type": "application/json",
-  "x-api-key": apiKey,
-  "anthropic-version": "2023-06-01",
-  "anthropic-dangerous-direct-browser-access": "true",
-});
+import { invokeTool } from "./ai/toolUse.js";
+import { AutoDetectSchema, AutoDetectTool } from "./ai/schemas.js";
 
 // ── F1: AUTO-DETECT CLOTHING ITEM FROM PHOTO ─────────────────────────────────
 // Returns a structured object matching the wardrobe_items schema. The caller
@@ -33,7 +27,7 @@ const AUTODETECT_TAXONOMY = {
   Accessories:  ["Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
 };
 
-const DETECT_PROMPT = `You are a wardrobe-cataloging assistant for a private client. Look at the single clothing item in the attached photo and return strict JSON describing it.
+const DETECT_PROMPT = `You are a wardrobe-cataloging assistant for a private client. Look at the single clothing item in the attached photo and describe it using the record_clothing_item tool.
 
 Use ONLY categories and subcategories from this taxonomy. If uncertain, pick the closest match and lower \`confidence\`.
 
@@ -49,24 +43,8 @@ RULES:
 - \`brand\` only if a logo is clearly visible — otherwise null. Don't guess from style.
 - \`material\` one word when obvious ("silk", "cotton", "wool", "leather", "denim", "cashmere", "linen", "satin", "knit"), else null.
 - \`pattern\` one of: "solid", "striped", "plaid", "floral", "abstract", "animal", "polka-dot" — else null.
-- \`tags\` up to 4 short descriptors that could help future styling ("fluid", "structured", "cropped", "oversized", "tailored", "sporty", "eveningwear", "workwear"). Lowercase only.
-- \`confidence\` 0–1 self-rating of overall accuracy.
-
-Respond with JSON ONLY. No prose, no code fences.
-
-{
-  "category": "...",
-  "subcategory": "...",
-  "primary_color": "...",
-  "primary_color_hex": "#......",
-  "secondary_color": null,
-  "secondary_color_hex": null,
-  "brand": null,
-  "material": null,
-  "pattern": null,
-  "tags": [],
-  "confidence": 0.0
-}`;
+- \`tags\` up to 4 short lowercase descriptors that could help future styling ("fluid", "structured", "cropped", "oversized", "tailored", "sporty", "eveningwear", "workwear").
+- \`confidence\` 0–1 self-rating of overall accuracy.`;
 
 /**
  * Run AI auto-detection on a single clothing photo.
@@ -86,37 +64,29 @@ export async function autoDetectItem(base64DataUrl, apiKey, opts = {}) {
   const [, mime, data] = match;
   const model = opts.model || "claude-haiku-4-5-20251001";
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: HEADERS(apiKey),
-    body: JSON.stringify({
+  let detected;
+  try {
+    detected = await invokeTool({
+      apiKey,
       model,
-      max_tokens: 600,
+      maxTokens: 600,
       temperature: 0,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mime, data } },
-          { type: "text", text: DETECT_PROMPT },
-        ],
-      }],
-    }),
-    signal: opts.signal,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Detect failed ${res.status}`);
+      content: [
+        { type: "image", source: { type: "base64", media_type: mime, data } },
+        { type: "text", text: DETECT_PROMPT },
+      ],
+      tool: AutoDetectTool,
+      schema: AutoDetectSchema,
+      kind: "autodetect_item",
+      signal: opts.signal,
+    });
+  } catch {
+    // Soft-fail: caller treats null as "try manual entry". Error is already
+    // logged to ai_errors by invokeTool.
+    return null;
   }
 
-  const body = await res.json();
-  const text = body.content?.map(b => b.text || "").join("") || "";
-  const json = text.replace(/```json|```/g, "").trim().match(/\{[\s\S]*\}/);
-  if (!json) return null;
-
-  let parsed;
-  try { parsed = JSON.parse(json[0]); } catch { return null; }
-  return sanitize(parsed);
+  return sanitize(detected);
 }
 
 function sanitize(raw) {

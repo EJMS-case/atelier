@@ -3,6 +3,8 @@
 // All content goes in the user message (system param not supported with
 // anthropic-dangerous-direct-browser-access).
 
+import { VIBE_VOCABULARY } from "../features/stylist/moods.js";
+
 /**
  * Build the fully interpolated styling prompt.
  *
@@ -170,6 +172,7 @@ VISUAL REFERENCE: Contact sheet images of every wardrobe item are attached. Each
 
 ────────────────────────────────────────────────────────
 WARDROBE INVENTORY (${closetCount} items — use ONLY these):
+Each item's color field leads with a six-digit hex value (e.g. "#1B2A4A"); treat the hex as ground truth when reasoning about harmony, tonal families, and Dark Winter palette fit. The human name (e.g. "Navy") follows the hex where available. Items without a hex fall back to name-only — rely on the contact sheet photo for those.
 ${closetItems}
 
 ────────────────────────────────────────────────────────
@@ -192,7 +195,7 @@ Respond ONLY with valid JSON in this exact shape:
   "looks": [
     {
       "name": "short descriptive name (e.g. 'Navy Silk Column', 'Burgundy Power Blazer')",
-      "vibe": "2-3 word descriptor",
+      "vibe": "ONE of: ${VIBE_VOCABULARY.join(" | ")} — pick the single best fit",
       "items": [{"id": "W001", "role": "hero/supporting/finishing"}],
       "silhouette": "e.g. 'fitted top x wide bottom' or 'column slim'",
       "focal_point": "what draws the eye and why",

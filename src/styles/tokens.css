@@ -1,0 +1,59 @@
+/* ── ATELIER DESIGN TOKENS ─────────────────────────────────────────────────
+ * Single source of truth for palette colors. Referenced from inline styles
+ * across src/** as var(--color-*). Adding a dark-mode override here plus a
+ * `document.documentElement.dataset.theme = 'dark'` flip is all that's needed
+ * to theme the app — no Tailwind, no CSS framework, just custom properties.
+ *
+ * All light values are 1:1 mappings of the hex that was hardcoded prior to
+ * tokenization — no visual change is intended from the sweep itself.
+ * Contrast adjustments (e.g. raising --color-text-muted for AA) land in a
+ * follow-on commit so any regression is easy to bisect.
+ */
+
+:root {
+  /* Backgrounds */
+  --color-bg: #FDF8F0;
+  --color-surface: #F5F1EC;
+  --color-surface-2: #FAFAF8;
+  --color-surface-3: #F0EBE4;
+
+  /* Ink + text */
+  --color-ink: #1C1814;
+  --color-ink-2: #2E2622;
+  --color-text: #4A3E36;
+  --color-text-2: #6B5E54;
+  --color-text-muted: #73695f;
+
+  /* Borders + dividers */
+  --color-border: #E8E0D8;
+  --color-border-strong: #D6CDC1;
+  --color-border-muted: #C8BFB4;
+  --color-border-soft: #F0E8E0;
+
+  /* Brand + status */
+  --color-accent: #C4A882;
+  --color-success: #306e50;
+  --color-danger: #C0392B;
+}
+
+[data-theme="dark"] {
+  --color-bg: #151210;
+  --color-surface: #1C1814;
+  --color-surface-2: #24201B;
+  --color-surface-3: #2A2420;
+
+  --color-ink: #F5F1EC;
+  --color-ink-2: #E8E0D8;
+  --color-text: #E0D6CA;
+  --color-text-2: #B8ADA0;
+  --color-text-muted: #8A7F74;
+
+  --color-border: #2E2622;
+  --color-border-strong: #3A322C;
+  --color-border-muted: #44392F;
+  --color-border-soft: #24201B;
+
+  --color-accent: #C4A882;
+  --color-success: #4E9866;
+  --color-danger: #D45848;
+}
