@@ -31,7 +31,10 @@ export const sb = {
   // Self-healing upsert: strips unknown columns on PGRST204 and retries. This
   // protects old clients from breaking when a new migration hasn't run yet.
   async upsert(item) {
-    const { image, ...rest } = item;
+    const { image, pending_sync, ...rest } = item;
+    // `pending_sync` is a UI-only flag for the local cross-device delete-
+    // protection path; it must never hit Supabase.
+    void pending_sync;
     let payload = image && !image.startsWith("data:") ? { ...rest, image } : { ...rest };
     if (payload.set_id === "") payload.set_id = null;
 

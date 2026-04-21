@@ -37,6 +37,7 @@ const STORAGE_KEY_MIGRATIONS = {
 };
 
 const MIGRATION_FLAG = "atelier:migrated:namespace-v1";
+const PENDING_SYNC_RECONCILED_FLAG = "atelier:migrated:pending-sync-v1";
 
 export function migrateLocalStorage() {
   try {
@@ -50,6 +51,27 @@ export function migrateLocalStorage() {
       localStorage.removeItem(oldKey);
     }
     localStorage.setItem(MIGRATION_FLAG, "1");
+  } catch { /* storage unavailable — skip */ }
+}
+
+// One-shot: the first time the pending-sync delete-protection code ships,
+// mark every existing local item as pending_sync so they're preserved on
+// the next merge and pushed up to Supabase by the retry path. Without this
+// any pre-existing local-only item (never successfully synced to Supabase)
+// would be dropped as "deleted elsewhere" on the first reload. Subsequent
+// reloads use the normal rule: only newly-added items carry the flag.
+export function reconcilePendingSyncFlag() {
+  try {
+    if (localStorage.getItem(PENDING_SYNC_RECONCILED_FLAG) === "1") return;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const items = JSON.parse(raw);
+      if (Array.isArray(items)) {
+        const marked = items.map(it => ({ ...it, pending_sync: true }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(marked));
+      }
+    }
+    localStorage.setItem(PENDING_SYNC_RECONCILED_FLAG, "1");
   } catch { /* storage unavailable — skip */ }
 }
 
