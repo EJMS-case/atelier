@@ -148,7 +148,13 @@ export function normalizeItem(item) {
 }
 
 // ── MERGE ───────────────────────────────────────────────────────────────────
-// Supabase metadata + local images, NEVER lose local-only items.
+// Supabase is source of truth. Merge uses Supabase's row set as the base,
+// overlays local images (cached base64/URLs), and preserves *only* local-only
+// items flagged `pending_sync: true` — those are items created on this device
+// that haven't yet succeeded in Supabase. A local item missing from Supabase
+// without that flag is treated as "deleted on another device" and dropped,
+// so deletes propagate cross-device instead of being resurrected by the
+// next merge.
 export function mergeItems(sbItems, localItems) {
   const localMap = {};
   localItems.forEach(it => { localMap[it.id] = it; });
@@ -159,7 +165,7 @@ export function mergeItems(sbItems, localItems) {
     image: localMap[it.id]?.image || it.image || null,
   }));
   localItems.forEach(it => {
-    if (!sbMap[it.id]) merged.push(it);
+    if (!sbMap[it.id] && it.pending_sync) merged.push(it);
   });
   return merged.map(normalizeItem);
 }

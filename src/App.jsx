@@ -35,7 +35,7 @@ import {
   STORAGE_KEY, API_KEY_STORE, RMBG_KEY_STORE, SETS_META_KEY,
   STYLE_PREFS_KEY, ABOUT_ME_KEY, THEME_KEY, RECENT_LOOKS_KEY, INSIGHTS_DISMISSED_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
-  loadSetsMeta, saveSetsMeta, migrateLocalStorage,
+  loadSetsMeta, saveSetsMeta, migrateLocalStorage, reconcilePendingSyncFlag,
 } from "./utils/storage.js";
 import { compressImage, imageToBase64, removeBackground } from "./utils/images.js";
 import { sb, SUPABASE_URL, SUPABASE_KEY, SB_HEADERS, STORAGE_HEADERS, BUCKET } from "./lib/supabase.js";
@@ -47,6 +47,11 @@ import {
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
 migrateLocalStorage();
+
+// Mark every existing local item as `pending_sync: true` once, so the new
+// delete-protection merge (which drops local-only items without that flag)
+// doesn't discard pre-existing unsynced data on first reload. No-op after.
+reconcilePendingSyncFlag();
 
 
 // ── DARK WINTER COLOR SWATCHES ────────────────────────────────────────────────
@@ -485,12 +490,13 @@ export default function App() {
         setItems(merged);
         saveLocalItems(merged);
 
-        // Push ALL local items that are missing from Supabase (aggressive sync)
+        // Push up only the local-only items still flagged pending_sync.
+        // Without this filter, an aggressive "sync everything local" would
+        // re-create items that another device legitimately deleted.
         const sbIds = new Set(sbItems.map(it => it.id));
-        const localOnly = freshLocal.filter(it => !sbIds.has(it.id));
-        if (localOnly.length > 0) {
-          // Batch upsert local-only items to Supabase (this backfills missing data)
-          migrateAndSync(localOnly, setItems, flashSync);
+        const pendingLocalOnly = freshLocal.filter(it => !sbIds.has(it.id) && it.pending_sync);
+        if (pendingLocalOnly.length > 0) {
+          migrateAndSync(pendingLocalOnly, setItems, flashSync);
         }
 
         // Migrate any base64 images in the merged set to Storage
@@ -602,7 +608,12 @@ export default function App() {
   }, [setsMeta]);
 
   const addItems = useCallback(async (newItems) => {
-    const optimistic = [...items, ...newItems];
+    // Mark every new item pending_sync until Supabase confirms it. The merge
+    // logic uses this flag to preserve local-only items on reload — without
+    // it, an item uploaded optimistically could be dropped as "deleted
+    // elsewhere" if the user reloads before upsert finishes.
+    const pendingNew = newItems.map(it => ({ ...it, pending_sync: true }));
+    const optimistic = [...items, ...pendingNew];
     setItems(optimistic);
     saveLocalItems(optimistic);
     flashSync("syncing");
@@ -612,8 +623,8 @@ export default function App() {
     let failedImages = [];
     let anyFailed = false;
 
-    for (let i = 0; i < newItems.length; i += BATCH) {
-      const batch = newItems.slice(i, i + BATCH);
+    for (let i = 0; i < pendingNew.length; i += BATCH) {
+      const batch = pendingNew.slice(i, i + BATCH);
       await Promise.all(batch.map(async (item) => {
         try {
           let toSave = item;
@@ -629,15 +640,19 @@ export default function App() {
             }
           }
           await sb.upsert(toSave);
-          saved.push(toSave);
-          setItems(prev => prev.map(it => it.id === toSave.id ? toSave : it));
+          // Upsert confirmed — strip the pending flag so future merges treat
+          // the item as "lives in Supabase" rather than "local-only retry".
+          const { pending_sync, ...confirmed } = toSave;
+          void pending_sync;
+          saved.push(confirmed);
+          setItems(prev => prev.map(it => it.id === toSave.id ? confirmed : it));
         } catch(e) {
           console.error("Failed to save item to Supabase:", item.name, e);
-          saved.push(item);
+          saved.push(item); // keep pending_sync: true; retry on next reload
           anyFailed = true;
         }
       }));
-      if (i + BATCH < newItems.length) await new Promise(r => setTimeout(r, 300));
+      if (i + BATCH < pendingNew.length) await new Promise(r => setTimeout(r, 300));
     }
 
     saveLocalItems(saved);
