@@ -8,6 +8,7 @@
 import { invokeToolRaw } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
+import { STYLING_STATIC_PREAMBLE } from "../prompts/styling-system-prompt.js";
 
 const MAX_RETRIES = 2;
 
@@ -554,24 +555,28 @@ export async function generateValidatedLooks({
       userContent += `\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
     }
 
-    // Build message content — multimodal if contact sheets available
-    let messageContent;
-    if (contactSheets.length > 0) {
-      messageContent = [
-        { type: "text", text: userContent },
-        ...contactSheets.map(dataUri => ({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: "image/jpeg",
-            data: dataUri.replace(/^data:image\/jpeg;base64,/, ""),
-          },
-        })),
-        { type: "text", text: "The contact sheet images above show every wardrobe item as a labeled thumbnail. Each ID (W001, W002…) matches the text inventory. USE THESE VISUALS to assess actual colors, textures, patterns, fabric weight, and silhouette when selecting items and building looks. Trust what you SEE in the photos over the text descriptions when they conflict." },
-      ];
-    } else {
-      messageContent = userContent;
-    }
+    // Build message content. The static stylist preamble goes first with
+    // cache_control so back-to-back generations (and the retry loop above)
+    // share an ephemeral prompt cache — the big rules/method block is the
+    // biggest cacheable prefix we have; inventory and dynamic constraints
+    // follow uncached.
+    const messageContent = [
+      { type: "text", text: STYLING_STATIC_PREAMBLE, cache_control: { type: "ephemeral" } },
+      { type: "text", text: userContent },
+      ...(contactSheets.length > 0
+        ? [
+            ...contactSheets.map(dataUri => ({
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/jpeg",
+                data: dataUri.replace(/^data:image\/jpeg;base64,/, ""),
+              },
+            })),
+            { type: "text", text: "The contact sheet images above show every wardrobe item as a labeled thumbnail. Each ID (W001, W002…) matches the text inventory. USE THESE VISUALS to assess actual colors, textures, patterns, fabric weight, and silhouette when selecting items and building looks. Trust what you SEE in the photos over the text descriptions when they conflict." },
+          ]
+        : []),
+    ];
 
     // Tool-use call — Claude is forced to invoke LooksTool, response arrives
     // as a single tool_use content block with `input` matching the schema.
