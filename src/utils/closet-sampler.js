@@ -366,31 +366,43 @@ export function sampleClosetItems({
  * @returns {string}
  */
 export function formatInventory(sampled, getSleeveType) {
+  const SLEEVE_SHORT = { long: "L", short: "S", sleeveless: "N", threeQuarter: "3Q", unknown: "?" };
   return sampled.map((it, i) => {
     const short = `W${String(i + 1).padStart(3, "0")}`;
-    const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `, ${it.knit_fit}` : ""}]` : "";
-    const sleeveTag = (it.category === "Tops" || it.category === "Knits")
-      ? ` [sleeve:${getSleeveType(it)}]`
-      : "";
+    const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `,${it.knit_fit}` : ""}]` : "";
+    let sleeveTag = "";
+    if (it.category === "Tops" || it.category === "Knits") {
+      const raw = getSleeveType(it);
+      const code = SLEEVE_SHORT[raw] || raw;
+      if (code && code !== "?") sleeveTag = ` [${code}]`;
+    }
     // Hex-first color: the stylist reasons better about harmony with actual
     // pixel values than a palette name. Fall back to the human name when
     // autodetect never produced a hex.
     const hex = normalizeHex(it.primary_color_hex);
     const hex2 = normalizeHex(it.secondary_color_hex);
-    const name = it.color_family || it.color || "";
+    const colorName = it.color_family || it.color || "";
     const colorParts = [];
     if (hex) colorParts.push(hex);
     if (hex2) colorParts.push(`+${hex2}`);
-    if (name) colorParts.push(name);
+    // When we have a hex, the name is redundant — the model reads the hex.
+    if (!hex && colorName) colorParts.push(colorName);
     const colorInfo = colorParts.length ? `[${colorParts.join(" ")}]` : "[?]";
+
+    const name = it.name || "";
+    const nameLower = name.toLowerCase();
     const parts = [
       `${short} ${colorInfo}`,
-      `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}`,
-      `${it.name}${knitTag}${sleeveTag}`,
+      `${it.category}${it.subcategory ? `>${it.subcategory}` : ""}`,
+      `${name}${knitTag}${sleeveTag}`,
     ];
-    if (it.color && it.color !== it.color_family && !hex) parts.push(it.color);
-    if (it.brand) parts.push(it.brand);
-    if (it.notes) parts.push(it.notes);
+    // Brand only if it's not already in the item name (common pattern).
+    if (it.brand && !nameLower.includes(it.brand.toLowerCase())) parts.push(it.brand);
+    // Notes often contain sparse prose — cap at 60 chars to keep lines short.
+    if (it.notes) {
+      const n = it.notes.length > 60 ? it.notes.slice(0, 57).trimEnd() + "…" : it.notes;
+      parts.push(n);
+    }
     return parts.join(" | ");
   }).join("\n");
 }

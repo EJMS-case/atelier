@@ -136,22 +136,22 @@ export const OCCASION_SLOTS = {
 
 export const STYLING_STRATEGIES = {
   color: [
-    "TONAL: Build the entire look in ONE color family with 3+ texture variations. The richness comes from fabric contrast, not color contrast. (e.g., head-to-toe navy: silk + wool + satin + leather)",
-    "TWO-TONE: Choose exactly 2 colors that create intentional contrast. One dominant, one accent. (e.g., black + deep red, navy + ivory, burgundy + cream)",
-    "NEUTRAL + POP: Build in neutrals (black/charcoal/navy/ivory) then add ONE unexpected color hit — a cobalt bag, a burgundy shoe, a teal silk top. The pop should feel deliberate, not random.",
-    "DEEP JEWEL: Build around a rich jewel tone as the anchor — emerald, sapphire, burgundy, deep teal. Support with black or charcoal. The look should feel saturated and luxe.",
+    "TONAL: One color family, 3+ texture variations. Richness from fabric, not contrast (e.g. head-to-toe navy in silk/wool/satin/leather).",
+    "TWO-TONE: Exactly 2 colors, one dominant + one accent (black+deep red, navy+ivory, burgundy+cream).",
+    "NEUTRAL + POP: Neutrals (black/charcoal/navy/ivory) + ONE deliberate color hit — cobalt bag, burgundy shoe, teal silk top.",
+    "DEEP JEWEL: Rich jewel-tone anchor (emerald, sapphire, burgundy, deep teal) + black or charcoal. Saturated and luxe.",
   ],
   proportion: [
-    "VOLUME UP TOP: Oversized or relaxed on top (oversized blazer, cocoon coat, slouchy knit), fitted or tapered below. The drama is in the shoulder line.",
-    "VOLUME BELOW: Fitted or structured on top, wide or fluid below (wide-leg trousers, flowing midi skirt, palazzo pants). The movement is in the bottom half.",
-    "COLUMN: Slim and streamlined head-to-toe — fitted top, straight/slim bottom, clean lines. Interest comes from TEXTURE and COLOR, not volume. Think Toteme editorial.",
-    "CONTRAST: One dramatically oversized piece paired against one dramatically fitted piece. The tension between the two proportions IS the look.",
+    "VOLUME UP TOP: Oversized/relaxed top (oversized blazer, cocoon coat, slouchy knit), fitted/tapered below. Drama in the shoulder line.",
+    "VOLUME BELOW: Fitted/structured top, wide/fluid below (wide-leg trousers, midi skirt, palazzo). Movement in the bottom half.",
+    "COLUMN: Slim and streamlined head-to-toe. Interest from TEXTURE and COLOR, not volume. Toteme editorial.",
+    "CONTRAST: One dramatically oversized piece vs one dramatically fitted piece. The tension IS the look.",
   ],
   hero: [
-    "OUTERWEAR HERO: The coat/blazer/jacket is the star. Everything underneath is simple and supportive.",
-    "BOTTOM HERO: The trousers/skirt are the statement — a bold trouser, a satin skirt, a leather pant. The top plays second fiddle.",
-    "TOP HERO: The blouse/knit/cami is the focal point — an exceptional silk, an interesting texture, a killer color. Bottom and accessories are quiet.",
-    "DRESS HERO: One perfect dress does all the work. Outerwear and accessories just frame it.",
-    "TEXTURE HERO: The FABRIC is the star — leather, silk, cashmere, satin. The look's luxury is tactile. You should want to touch it.",
+    "OUTERWEAR HERO: Coat/blazer/jacket is the star; everything underneath supports.",
+    "BOTTOM HERO: Trousers/skirt is the statement — bold trouser, satin skirt, leather pant. Top plays second.",
+    "TOP HERO: Blouse/knit/cami is the focal point — exceptional silk, interesting texture, killer color. Bottom quiet.",
+    "DRESS HERO: One perfect dress does the work. Outerwear + accessories just frame it.",
+    "TEXTURE HERO: Fabric is the star — leather, silk, cashmere, satin. Luxury is tactile.",
   ],
 };

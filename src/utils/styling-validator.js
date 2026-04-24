@@ -525,7 +525,9 @@ function normalizeResponse(parsed) {
  *
  * @param {Object} params
  * @param {string}    params.apiKey
- * @param {string}    params.prompt         - the fully interpolated prompt
+ * @param {string}    params.staticPreamble - stable rules/method block (prompt-cached)
+ * @param {string}    params.dynamicBody    - request-specific body (occasion, weather, inventory)
+ * @param {string}    [params.prompt]       - legacy fallback: full combined prompt
  * @param {Object}    params.idMap          - short ID → real ID
  * @param {Object[]}  params.allItems       - full closet for resolution
  * @param {string[]}  params.activeExclusions
@@ -535,6 +537,8 @@ function normalizeResponse(parsed) {
  */
 export async function generateValidatedLooks({
   apiKey,
+  staticPreamble,
+  dynamicBody,
   prompt,
   idMap,
   allItems,
@@ -544,33 +548,47 @@ export async function generateValidatedLooks({
   weather = "",
   contactSheets = [],
 }) {
+  // Back-compat: callers may still pass a single `prompt` string.
+  if (!staticPreamble && !dynamicBody && prompt) {
+    dynamicBody = prompt;
+  }
+
   let lastFailures = [];
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    // Build the user turn — on retry, append failures
-    let userContent = prompt;
+    // Append retry failures to the dynamic body — never to the cached preamble.
+    let dynamicText = dynamicBody;
     if (attempt > 0 && lastFailures.length > 0) {
       const failureList = lastFailures.map(f => `- ${f.message}`).join("\n");
-      userContent += `\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
+      dynamicText += `\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
     }
 
-    // Build message content — multimodal if contact sheets available
-    let messageContent;
+    // Build message content — always an array. Cache the static preamble so
+    // retries + back-to-back generations reuse the same prefix.
+    const messageContent = [];
+    if (staticPreamble) {
+      messageContent.push({
+        type: "text",
+        text: staticPreamble,
+        cache_control: { type: "ephemeral" },
+      });
+    }
+    messageContent.push({ type: "text", text: dynamicText });
     if (contactSheets.length > 0) {
-      messageContent = [
-        { type: "text", text: userContent },
-        ...contactSheets.map(dataUri => ({
+      for (const dataUri of contactSheets) {
+        messageContent.push({
           type: "image",
           source: {
             type: "base64",
             media_type: "image/jpeg",
             data: dataUri.replace(/^data:image\/jpeg;base64,/, ""),
           },
-        })),
-        { type: "text", text: "The contact sheet images above show every wardrobe item as a labeled thumbnail. Each ID (W001, W002…) matches the text inventory. USE THESE VISUALS to assess actual colors, textures, patterns, fabric weight, and silhouette when selecting items and building looks. Trust what you SEE in the photos over the text descriptions when they conflict." },
-      ];
-    } else {
-      messageContent = userContent;
+        });
+      }
+      messageContent.push({
+        type: "text",
+        text: "The contact sheet images above show every wardrobe item as a labeled thumbnail. Each ID (W001, W002…) matches the text inventory. USE THESE VISUALS to assess actual colors, textures, patterns, fabric weight, and silhouette when selecting items and building looks. Trust what you SEE in the photos over the text descriptions when they conflict.",
+      });
     }
 
     // Tool-use call — Claude is forced to invoke LooksTool, response arrives
