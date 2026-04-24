@@ -32,6 +32,7 @@ HARD RULES:
 - HC6 Weather in the REQUEST below is NON-NEGOTIABLE. If weather says hot, you may not pick a wool coat, period — regardless of how stylish it is.
 - HC7 Exclusions in the REQUEST below are NON-NEGOTIABLE. An excluded item simply DOES NOT EXIST for you.
 - HC8 Occasion bans in the REQUEST below are NON-NEGOTIABLE.
+- HC9 Coord sets: items tagged [SET:LOCKED partners:Wxxx,...] are pieces of a matching coord (e.g. a top + pants sold/styled as one). A LOCKED item may ONLY appear in a look if at least one of its listed partners is in the same look. Never split a LOCKED coord across different looks, and never pair a LOCKED piece with a conflicting substitute. Items tagged [SET:SEPARABLE partners:...] may appear alone or together — treat them as normal separates.
 
 ★ LOOK NAMING RULE — CRITICAL ★
 The \`name\` field must accurately describe the DOMINANT color of the items you picked. If you call a look "Navy Silk Column", there MUST be navy items (hex in the navy range, or color_family "Navy") in it. If you call a look "Burgundy Power", it MUST contain burgundy items. A name that doesn't match the items is AUTOMATIC FAILURE. When in doubt, name the look after the hero piece's ACTUAL color from its hex/color_family — don't aspire, describe.

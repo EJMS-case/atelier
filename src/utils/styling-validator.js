@@ -464,6 +464,40 @@ function checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots) {
   return failures;
 }
 
+/**
+ * Check: Coord sets — a LOCKED item (set_id && !is_separable) must appear in
+ * a look that also contains at least one of its set partners. If a partner
+ * exists in the sampled pool (idMap) but none are in the same look, the
+ * look is split and must be rebuilt.
+ */
+function checkCoordSets(response, idMap, allItems) {
+  const failures = [];
+  const inSample = new Set(Object.values(idMap));
+
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const lookIds = new Set(resolved.map(it => it.id));
+    const locked = resolved.filter(it => it.set_id && !it.is_separable);
+    for (const piece of locked) {
+      const partnersInSample = allItems.filter(o =>
+        o.set_id === piece.set_id && o.id !== piece.id && inSample.has(o.id)
+      );
+      if (partnersInSample.length === 0) continue; // no partners available — AI can't be faulted
+      const hasPartnerInLook = partnersInSample.some(p => lookIds.has(p.id));
+      if (!hasPartnerInLook) {
+        failures.push(`Look ${i + 1} ("${look.name}") uses LOCKED coord piece "${piece.name}" without any of its set partners.`);
+      }
+    }
+  });
+  return failures;
+}
+
 // ── Run all checks ───────────────────────────────────────────────────────────
 
 function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather) {
@@ -482,6 +516,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkNameMatchesItems(response, idMap, allItems).map(f => ({ type: "name_color", message: f, hard: true })));
   allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
+  allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
 
   // Soft checks (warn, trigger retry, but won't throw after MAX_RETRIES)
   allFailures.push(...checkItemCount(response).map(f => ({ type: "item_count", message: f, hard: false })));

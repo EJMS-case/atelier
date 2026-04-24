@@ -1235,12 +1235,6 @@ export default function App() {
                       group={group}
                       index={gi}
                       onEdit={() => setEditingSet(group.setId)}
-                      onOpen={() => {
-                        // Navigate to view showing this set's items
-                        setActiveFilters(f => ({ ...f, category: [], subcategory: [], sets: "Sets Only" }));
-                        // We'll just open the edit modal for now
-                        setEditingSet(group.setId);
-                      }}
                     />
                   ))}
                 </div>
@@ -1843,7 +1837,7 @@ function FilterBar({ items, activeFilters, onChange }) {
 }
 
 // ── SET CARD — 2-column grid card with mini collage ──────────────────────────
-function SetCard({ group, index, onEdit, onOpen }) {
+function SetCard({ group, index, onEdit }) {
   const thumbItems = group.items.slice(0, 4);
   const name = group.name || `Set ${index + 1}`;
   return (
@@ -2478,6 +2472,11 @@ function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: sets
             if (val === "__new__") {
               const newId = crypto.randomUUID();
               setForm(f => ({ ...f, set_id: newId }));
+            } else if (val === "") {
+              // Clearing set membership must also clear is_separable — otherwise
+              // a stale `true` flag leaks in and the "Part of Set" badge + filter
+              // silently treat the orphan as separable.
+              setForm(f => ({ ...f, set_id: "", is_separable: false }));
             } else {
               setForm(f => ({ ...f, set_id: val }));
             }
