@@ -6,6 +6,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
+import { OCCASIONS } from "../../constants/taxonomy.js";
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -36,11 +37,16 @@ const Silhouette = ({ style }) => (
   </svg>
 );
 
-export default function SilhouetteBuilder({ items, onSave, onClose, apiKey }) {
+export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSchedule, onClose, apiKey }) {
   const [selections, setSelections] = useState({}); // { slotKey: itemId }
   const [activeSlot, setActiveSlot] = useState(SLOTS[0].key);
   const [name, setName] = useState("");
+  const [saveMode, setSaveMode] = useState("looks"); // "looks" | "favorite" | "schedule"
+  const [occasion, setOccasion] = useState("Work");
+  const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState("");
+  const [saveErr, setSaveErr] = useState("");
   const [evaluation, setEvaluation] = useState(null);
   const [evaluating, setEvaluating] = useState(false);
   const [evalErr, setEvalErr] = useState("");
@@ -108,16 +114,46 @@ export default function SilhouetteBuilder({ items, onSave, onClose, apiKey }) {
   async function handleSave() {
     if (pickedItems.length < 2) return;
     setSaving(true);
+    setSaveErr("");
     try {
+      const garmentIds = pickedItems.map(p => p.item.id);
+
+      if (saveMode === "schedule") {
+        if (!onSchedule) throw new Error("Scheduling unavailable.");
+        await onSchedule({
+          date: scheduleDate,
+          items: garmentIds,
+          source: "manual",
+          occasion,
+          notes: name || null,
+        });
+        setSaved(`Scheduled for ${scheduleDate}`);
+        setTimeout(onClose, 1000);
+        return;
+      }
+
       const collageUrl = await compositeSaveImage();
       const log = {
-        garment_ids: pickedItems.map(p => p.item.id),
+        garment_ids: garmentIds,
         date_worn: null,
-        occasion: "Manual",
+        occasion,
         notes: name || null,
         collage_url: collageUrl,
       };
-      await onSave(log);
+      const savedLog = await onSave(log);
+
+      if (saveMode === "favorite") {
+        if (!onFavoriteLook) throw new Error("Favoriting unavailable.");
+        if (!savedLog?.id) throw new Error("Saved log id missing — can't favorite.");
+        await onFavoriteLook(savedLog);
+        setSaved("Saved & favorited");
+      } else {
+        setSaved("Saved to Looks");
+      }
+      setTimeout(onClose, 900);
+    } catch (e) {
+      console.error(e);
+      setSaveErr(e.message || "Save failed.");
     } finally {
       setSaving(false);
     }
@@ -228,6 +264,37 @@ export default function SilhouetteBuilder({ items, onSave, onClose, apiKey }) {
         placeholder="Name this look (optional)"
         style={{ width: "100%", padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, marginBottom: 10, background: "#fff" }}/>
 
+      {/* Save-mode segmented control */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 8, border: `1px solid ${PALETTE.line}`, borderRadius: 6, padding: 3, background: "#fff" }}>
+        {[["looks","Save"],["favorite","Favorite"],["schedule","Schedule"]].map(([k, label]) => (
+          <button key={k} onClick={() => setSaveMode(k)}
+            style={{
+              flex: 1,
+              padding: "7px 4px",
+              border: "none",
+              borderRadius: 4,
+              background: saveMode === k ? PALETTE.ink : "transparent",
+              color: saveMode === k ? PALETTE.bg : PALETTE.soft,
+              fontSize: 11,
+              letterSpacing: "0.06em",
+              cursor: "pointer",
+              fontWeight: saveMode === k ? 600 : 400,
+            }}>{label}</button>
+        ))}
+      </div>
+
+      {/* Occasion + (when scheduling) date */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <select value={occasion} onChange={e => setOccasion(e.target.value)}
+          style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff" }}>
+          {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+        </select>
+        {saveMode === "schedule" && (
+          <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
+            style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff", fontFamily: "inherit" }}/>
+        )}
+      </div>
+
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <button onClick={handleEvaluate} disabled={evaluating}
           style={{ flex: 1, padding: 12, background: "transparent", border: `1px solid ${PALETTE.ink}`, borderRadius: 6, color: PALETTE.ink, fontSize: 12, letterSpacing: "0.08em", cursor: "pointer" }}>
@@ -235,10 +302,12 @@ export default function SilhouetteBuilder({ items, onSave, onClose, apiKey }) {
         </button>
         <button onClick={handleSave} disabled={saving || pickedItems.length < 2}
           style={{ flex: 1, padding: 12, background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 12, letterSpacing: "0.08em", cursor: "pointer", opacity: saving || pickedItems.length < 2 ? 0.5 : 1 }}>
-          {saving ? "Saving…" : "Save look"}
+          {saving ? "Saving…" : saveMode === "schedule" ? "Schedule" : saveMode === "favorite" ? "Save & Favorite" : "Save look"}
         </button>
       </div>
 
+      {saved && <p style={{ fontSize: 12, color: "var(--color-success)", marginBottom: 8 }}>✓ {saved}</p>}
+      {saveErr && <p style={{ fontSize: 12, color: PALETTE.accent, marginBottom: 8 }}>{saveErr}</p>}
       {evalErr && <p style={{ fontSize: 12, color: PALETTE.accent }}>{evalErr}</p>}
       {evaluation && (
         <div style={{ background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 8, padding: 14 }}>
