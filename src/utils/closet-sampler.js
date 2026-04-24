@@ -347,6 +347,29 @@ export function sampleClosetItems({
     });
   }
 
+  // ── 7b. Coord-set cohesion: whenever a sampled item belongs to a set, pull
+  //        in its partners from the original pool so the AI can see the full
+  //        coord group. Without this a LOCKED piece may arrive in the prompt
+  //        without its partner, forcing the stylist to either drop it or
+  //        pair it with mismatched pieces.
+  {
+    const needed = new Set();
+    for (const it of sampled) {
+      if (!it.set_id) continue;
+      pool.forEach(other => {
+        if (other.set_id === it.set_id && !sampledIds.has(other.id)) needed.add(other.id);
+      });
+    }
+    if (needed.size > 0) {
+      pool.forEach(p => {
+        if (needed.has(p.id)) {
+          sampled.push(p);
+          sampledIds.add(p.id);
+        }
+      });
+    }
+  }
+
   // ── 8. Build short ID map ──
   const idMap = {};
   const reverseMap = {};
@@ -367,14 +390,30 @@ export function sampleClosetItems({
  */
 export function formatInventory(sampled, getSleeveType) {
   const SLEEVE_SHORT = { long: "L", short: "S", sleeveless: "N", threeQuarter: "3Q", unknown: "?" };
-  return sampled.map((it, i) => {
-    const short = `W${String(i + 1).padStart(3, "0")}`;
+
+  const shortById = {};
+  sampled.forEach((it, i) => { shortById[it.id] = `W${String(i + 1).padStart(3, "0")}`; });
+
+  const setIndex = {};
+  sampled.forEach(it => {
+    if (!it.set_id) return;
+    (setIndex[it.set_id] ||= []).push({ short: shortById[it.id] });
+  });
+
+  return sampled.map((it) => {
+    const short = shortById[it.id];
     const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `,${it.knit_fit}` : ""}]` : "";
     let sleeveTag = "";
     if (it.category === "Tops" || it.category === "Knits") {
       const raw = getSleeveType(it);
       const code = SLEEVE_SHORT[raw] || raw;
       if (code && code !== "?") sleeveTag = ` [${code}]`;
+    }
+    let setTag = "";
+    if (it.set_id && setIndex[it.set_id]?.length > 1) {
+      const partners = setIndex[it.set_id].filter(p => p.short !== short).map(p => p.short).join(",");
+      const mode = it.is_separable ? "SEPARABLE" : "LOCKED";
+      setTag = ` [SET:${mode} partners:${partners}]`;
     }
     // Hex-first color: the stylist reasons better about harmony with actual
     // pixel values than a palette name. Fall back to the human name when
@@ -394,7 +433,7 @@ export function formatInventory(sampled, getSleeveType) {
     const parts = [
       `${short} ${colorInfo}`,
       `${it.category}${it.subcategory ? `>${it.subcategory}` : ""}`,
-      `${name}${knitTag}${sleeveTag}`,
+      `${name}${knitTag}${sleeveTag}${setTag}`,
     ];
     // Brand only if it's not already in the item name (common pattern).
     if (it.brand && !nameLower.includes(it.brand.toLowerCase())) parts.push(it.brand);
