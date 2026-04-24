@@ -1508,11 +1508,19 @@ export default function App() {
             flashSync("synced");
           }}
           onSaveLook={async (log) => {
-            await sb.saveOutfitLog(log);
+            const result = await sb.saveOutfitLog(log);
             // F6 — if the save included date_worn, bump counts too
             if (log.date_worn) {
               bumpWearCounts(log.garment_ids || []);
             }
+            return Array.isArray(result) ? result[0] : result;
+          }}
+          onFavoriteLook={async (savedLog) => {
+            const result = await sb.addFavorite("outfit", savedLog.id);
+            setFavorites(prev => [...(Array.isArray(result) ? result : [result]), ...prev]);
+          }}
+          onSchedule={async (plan) => {
+            await savePlan(plan);
           }}
           onStyleItem={(it) => {
             setRequest(`use my ${it.color ? it.color + " " : ""}${it.subcategory || it.category} "${it.name}"`);
@@ -3775,7 +3783,7 @@ function OutfitBuilder({ items, onSave, onClose }) {
 }
 
 // ── LOOKS VIEW (saved outfits without a wear date) ──────────────────────────
-function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, apiKey }) {
+function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -3811,11 +3819,13 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook,
         items={items}
         apiKey={apiKey}
         onSave={async (log) => {
-          await onSaveLook(log);
-          setShowBuilder(false);
+          const saved = await onSaveLook(log);
           setLoading(true);
           loadLogs();
+          return saved;
         }}
+        onFavoriteLook={onFavoriteLook}
+        onSchedule={onSchedule}
         onClose={() => setShowBuilder(false)}
       />
     );
@@ -3880,7 +3890,7 @@ function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook,
 }
 
 // ── SAVED VIEW (wrapper with sub-tabs: Looks | History | Favorites) ─────────
-function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, apiKey, onStyleItem }) {
+function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onStyleItem }) {
   const [tab, setTab] = useState("looks");
   return (
     <div style={s.page}>
@@ -3892,7 +3902,7 @@ function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDel
         ))}
       </div>
       {tab === "looks" && (
-        <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook}/>
+        <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule}/>
       )}
       {tab === "boards" && (
         <MoodboardView items={items}/>
