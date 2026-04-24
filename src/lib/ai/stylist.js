@@ -124,7 +124,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     hero: heroStrategies[i % heroStrategies.length],
   }));
 
-  const prompt = buildStylingPrompt({
+  const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
     weather,
     freeTextRequest: request || null,
@@ -152,7 +152,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
 
   const result = await generateValidatedLooks({
     apiKey,
-    prompt,
+    staticPreamble,
+    dynamicBody,
     idMap,
     allItems: items,
     activeExclusions,
