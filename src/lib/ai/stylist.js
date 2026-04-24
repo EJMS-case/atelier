@@ -158,6 +158,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     activeExclusions,
     occasionSlots: slots,
     occasion,
+    weather,
     contactSheets,
   });
 

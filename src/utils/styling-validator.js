@@ -324,9 +324,149 @@ function checkCategoryBalance(response, idMap, allItems) {
   return failures;
 }
 
+/**
+ * Check 10: The look's NAME must match the dominant color of its items.
+ * This catches the common failure where the model confabulates a name
+ * ("Navy Silk Column") that doesn't reflect the actual picked items
+ * (which are black, burgundy, etc.). Dark-Winter naming is strict here
+ * — navy ≠ black, burgundy ≠ red, cool pink ≠ blush.
+ */
+function checkNameMatchesItems(response, idMap, allItems) {
+  const failures = [];
+  // Longer keywords first so "cool red" wins over "red", "deep teal" over "teal".
+  const colorKeywords = Object.keys(COLOR_SYNONYMS).sort((a, b) => b.length - a.length);
+
+  response.looks.forEach((look, i) => {
+    const name = (look.name || "").toLowerCase();
+    if (!name) return;
+
+    // Find the dominant color keyword claimed in the name (first match).
+    let claimedKeyword = null;
+    for (const kw of colorKeywords) {
+      if (new RegExp(`\\b${kw.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "i").test(name)) {
+        claimedKeyword = kw;
+        break;
+      }
+    }
+    if (!claimedKeyword) return; // name claims no color — nothing to verify
+
+    const claimedFamily = COLOR_SYNONYMS[claimedKeyword];
+
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const families = resolved.flatMap(it => [
+      normalizeColor(it.color_family),
+      normalizeColor(it.color),
+    ]).filter(Boolean);
+
+    if (!families.includes(claimedFamily)) {
+      const itemColors = resolved.map(it => it.color_family || it.color || "?").join(", ");
+      failures.push(
+        `Look ${i + 1} name "${look.name}" claims "${claimedKeyword}" but no item matches the ${claimedFamily} color family. Item colors: ${itemColors}. Either rename the look to match the actual colors, or swap in items from the ${claimedFamily} family.`
+      );
+    }
+  });
+  return failures;
+}
+
+/**
+ * Check 11: Weather compliance. Second line of defense — the sampler
+ * pre-filters the pool by weather, but items with sparse data (no notes,
+ * generic names) can still leak through. This re-checks each picked item
+ * against the selected weather and rejects overtly wrong matches.
+ */
+function checkWeatherCompliance(response, idMap, allItems, weather) {
+  if (!weather) return [];
+  const w = weather.toLowerCase();
+  if (w === "any" || w === "") return [];
+
+  const isHot = /hot|85/i.test(w);
+  const isWarm = /warm|70-84/i.test(w);
+  const isCool = /cool|40-54/i.test(w);
+  const isCold = /cold|below 40/i.test(w);
+  if (!isHot && !isWarm && !isCool && !isCold) return [];
+
+  const failures = [];
+
+  response.looks.forEach((look, i) => {
+    (look.items || []).forEach((item) => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      const resolved = allItems.find(it => it.id === realId);
+      if (!resolved) return;
+
+      const text = ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.subcategory || "")).toLowerCase();
+      const sw = (resolved.season_weight || "").toLowerCase();
+      const heavy = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i.test(text);
+      const lightOnly = /tank|sleeveless|sandal|bikini|swim|shorts/i.test(text) || resolved.subcategory === "Sandals" || resolved.subcategory === "Tanks";
+
+      if (isHot || isWarm) {
+        if (resolved.category === "Knits" && !(isWarm && resolved.knit_weight === "Fine/Summer")) {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is a knit — too warm for ${weather}.`);
+        }
+        if (heavy) {
+          failures.push(`Look ${i + 1}: "${resolved.name}" uses a heavy fabric (wool/cashmere/heavy) — wrong for ${weather}.`);
+        }
+        if (resolved.subcategory === "Coats" || resolved.subcategory === "Boots") {
+          failures.push(`Look ${i + 1}: "${resolved.name}" (${resolved.subcategory}) is wrong for ${weather} — pick lighter.`);
+        }
+        if (sw === "winter") {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is marked Winter — wrong for ${weather}.`);
+        }
+      }
+      if (isCool || isCold) {
+        if (lightOnly) {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is too light for ${weather} — needs more coverage.`);
+        }
+        if (sw === "summer") {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is marked Summer — wrong for ${weather}.`);
+        }
+      }
+    });
+  });
+  return failures;
+}
+
+/**
+ * Check 12: Exactly one pair of shoes and (usually) one bag per look.
+ * Soft check — shoes become hard for all non-Lounge occasions. Bag
+ * enforcement depends on the occasion slots (some let it be optional).
+ */
+function checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots) {
+  const failures = [];
+  const lounge = occasion === "Lounge";
+  const bagRequired = !!occasionSlots?.required?.bag;
+
+  response.looks.forEach((look, i) => {
+    const cats = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId)?.category;
+    }).filter(Boolean);
+
+    const shoes = cats.filter(c => c === "Shoes").length;
+    const bags = cats.filter(c => c === "Bags").length;
+
+    if (!lounge && shoes === 0) {
+      failures.push(`Look ${i + 1} has no shoes. Every non-lounge look needs exactly 1 pair.`);
+    }
+    if (bagRequired && bags === 0) {
+      failures.push(`Look ${i + 1} has no bag — ${occasion} requires one.`);
+    }
+  });
+  return failures;
+}
+
 // ── Run all checks ───────────────────────────────────────────────────────────
 
-function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots) {
+function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather) {
   const allFailures = [];
 
   // Hard checks (must pass)
@@ -339,6 +479,9 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
   allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots).map(f => ({ type: "occasion", message: f, hard: true })));
   allFailures.push(...checkCategoryBalance(response, idMap, allItems).map(f => ({ type: "category_balance", message: f, hard: true })));
+  allFailures.push(...checkNameMatchesItems(response, idMap, allItems).map(f => ({ type: "name_color", message: f, hard: true })));
+  allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
+  allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
 
   // Soft checks (warn, trigger retry, but won't throw after MAX_RETRIES)
   allFailures.push(...checkItemCount(response).map(f => ({ type: "item_count", message: f, hard: false })));
@@ -398,6 +541,7 @@ export async function generateValidatedLooks({
   activeExclusions = [],
   occasionSlots = {},
   occasion = "Work",
+  weather = "",
   contactSheets = [],
 }) {
   let lastFailures = [];
@@ -466,7 +610,7 @@ export async function generateValidatedLooks({
     let parsed = normalizeResponse(shapeCheck.data);
 
     // Run all validation checks
-    const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots);
+    const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather);
     const hardFailures = failures.filter(f => f.hard);
 
     if (hardFailures.length === 0) {
@@ -517,24 +661,10 @@ function resolveIds(parsed, idMap, allItems, occasion) {
     if (!look.occasion) look.occasion = occasion;
   });
 
-  // Post-validate: filter looks that have lower-half coverage
-  const validLooks = parsed.looks.filter(look => {
-    const resolved = (look.items || [])
-      .map(item => allItems.find(it => it.id === item.id))
-      .filter(Boolean);
-    if (resolved.length < 3) return false;
-    const hasBottom = resolved.some(it => it.category === "Bottoms");
-    const hasDress = resolved.some(it =>
-      it.category === "Dresses" || it.category === "Occasionwear" ||
-      it.category === "Jumpsuits"
-    );
-    return hasBottom || hasDress;
-  });
-
-  // Use valid looks if available, otherwise fall back to all looks
-  if (validLooks.length > 0) {
-    parsed.looks = validLooks;
-  }
-
+  // Trust the hard checks that already ran — they proved every look has
+  // lower-half coverage. A second, stricter filter here was silently dropping
+  // valid Sets-based looks (the old post-filter didn't include "Sets" in its
+  // dress categories). Leaving the looks as-is keeps the UI honest when the
+  // validator says "3 looks passed".
   return parsed;
 }
