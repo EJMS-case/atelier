@@ -1179,6 +1179,10 @@ export default function App() {
                   persistItems(updated);
                 }
                 flashSync("synced");
+              }}
+              onStyleItem={(it) => {
+                setRequest(`use my ${it.color ? it.color + " " : ""}${it.subcategory || it.category} "${it.name}"`);
+                setStylePanelOpen(true);
               }}/>
           ))}
           {!outfits && !styling && (

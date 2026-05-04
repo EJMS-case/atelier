@@ -256,7 +256,7 @@ function checkItemCount(response) {
   response.looks.forEach((look, i) => {
     const count = (look.items || []).length;
     if (count < 4) {
-      failures.push(`Look ${i + 1} has only ${count} items (minimum 4 required).`);
+      failures.push(`Look ${i + 1} has only ${count} items — minimum 4 required. Looks with only accessories/shoes/outerwear and no clothing are not valid.`);
     }
     if (count > 7) {
       failures.push(`Look ${i + 1} has ${count} items (maximum 7 allowed).`);
@@ -305,7 +305,7 @@ function checkHeroDiversity(response, idMap, allItems) {
  */
 function checkCategoryBalance(response, idMap, allItems) {
   const failures = [];
-  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Outerwear: 1, Knits: 1 };
+  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Outerwear: 1, Knits: 1, Tops: 1 };
 
   response.looks.forEach((look, i) => {
     const catCounts = {};
@@ -322,6 +322,13 @@ function checkCategoryBalance(response, idMap, allItems) {
       if ((catCounts[cat] || 0) > max) {
         failures.push(`Look ${i + 1} has ${catCounts[cat]} ${cat} items (max ${max} allowed). Remove extras.`);
       }
+    }
+
+    // Combined tops-family check: Tops + Knits together must not exceed 1.
+    // Knits includes pullovers which are functionally tops, not layers.
+    const topsFamilyCount = (catCounts["Tops"] || 0) + (catCounts["Knits"] || 0);
+    if (topsFamilyCount > 1) {
+      failures.push(`Look ${i + 1} has ${topsFamilyCount} tops-family items (Tops + Knits combined). Max 1 — use either a knit OR a top, not both.`);
     }
   });
   return failures;
@@ -548,8 +555,14 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
 
+  // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
+  // Over-maximum is soft — acceptable to show, just noisy.
+  checkItemCount(response).forEach(f => {
+    const isUnder = f.includes("minimum");
+    allFailures.push({ type: "item_count", message: f, hard: isUnder });
+  });
+
   // Soft checks (warn, trigger retry, but won't throw after MAX_RETRIES)
-  allFailures.push(...checkItemCount(response).map(f => ({ type: "item_count", message: f, hard: false })));
   allFailures.push(...checkHeroDiversity(response, idMap, allItems).map(f => ({ type: "hero_diversity", message: f, hard: false })));
 
   return allFailures;

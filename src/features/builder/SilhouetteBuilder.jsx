@@ -4,7 +4,7 @@
 // silhouette. On save the silhouette is stripped and only the items are
 // exported on a white background.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
 
@@ -28,14 +28,6 @@ const SLOTS = [
   { key: "accessory", label: "ACCESSORY", match: (it) => ["Accessories", "Belts"].includes(it.category), optional: true },
 ];
 
-// Silhouette SVG — minimalist, visible only during editing.
-const Silhouette = ({ style }) => (
-  <svg viewBox="0 0 200 400" style={{ width: "100%", height: "100%", ...style }} aria-hidden="true">
-    <path fill="none" style={{ stroke: "var(--color-border-strong)" }} strokeWidth="1.5"
-      d="M100 20 q-18 0 -18 22 q0 12 6 20 q-28 6 -40 34 q-6 14 -6 34 l8 80 l6 4 l-10 120 l14 4 l6 -80 l4 0 l6 80 l14 -4 l-10 -120 l6 -4 l8 -80 q0 -20 -6 -34 q-12 -28 -40 -34 q6 -8 6 -20 q0 -22 -18 -22 z"
-      transform="translate(0 0)"/>
-  </svg>
-);
 
 export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSchedule, onClose, apiKey }) {
   const [selections, setSelections] = useState({}); // { slotKey: itemId }
@@ -50,13 +42,36 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [evaluation, setEvaluation] = useState(null);
   const [evaluating, setEvaluating] = useState(false);
   const [evalErr, setEvalErr] = useState("");
+  const [search, setSearch] = useState("");
+  const [subcatFilter, setSubcatFilter] = useState("");
   const canvasRef = useRef(null);
 
+  // Reset search + subcategory filter when the active slot changes
+  useEffect(() => { setSearch(""); setSubcatFilter(""); }, [activeSlot]);
+
   const slotDef = SLOTS.find(s => s.key === activeSlot);
+
+  const subcatsForSlot = useMemo(() => {
+    const def = SLOTS.find(s => s.key === activeSlot);
+    const all = (items || []).filter(it => def?.match(it));
+    return [...new Set(all.map(it => it.subcategory).filter(Boolean))].sort();
+  }, [activeSlot, items]);
+
   const poolForSlot = useMemo(() => {
     const def = SLOTS.find(s => s.key === activeSlot);
-    return (items || []).filter(it => def?.match(it));
-  }, [activeSlot, items]);
+    let pool = (items || []).filter(it => def?.match(it));
+    if (subcatFilter) pool = pool.filter(it => it.subcategory === subcatFilter);
+    if (search) {
+      const q = search.toLowerCase();
+      pool = pool.filter(it =>
+        (it.name || "").toLowerCase().includes(q) ||
+        (it.color || "").toLowerCase().includes(q) ||
+        (it.brand || "").toLowerCase().includes(q) ||
+        (it.subcategory || "").toLowerCase().includes(q)
+      );
+    }
+    return pool;
+  }, [activeSlot, items, search, subcatFilter]);
 
   const pickedItems = Object.entries(selections)
     .map(([slot, id]) => ({ slot, item: items.find(i => i.id === id) }))
@@ -179,9 +194,8 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         <div style={{ width: 40 }}/>
       </div>
 
-      {/* Canvas area — silhouette + live stacks */}
-      <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 14, overflow: "hidden" }}>
-        <Silhouette style={{ position: "absolute", inset: 0 }}/>
+      {/* Canvas area — plain white, no silhouette */}
+      <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 14, overflow: "hidden" }}>
         {/* Item overlays — crude positioning by slot */}
         {pickedItems.map(({ slot, item }) => {
           const zoneCss = {
@@ -222,6 +236,32 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
           </button>
         ))}
       </div>
+
+      {/* Search bar */}
+      <input
+        type="search"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder={`Search ${slotDef?.label.toLowerCase() || "items"}…`}
+        style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 12, marginBottom: 6, background: "#fff", boxSizing: "border-box" }}
+      />
+
+      {/* Subcategory filter chips */}
+      {subcatsForSlot.length > 1 && (
+        <div style={{ display: "flex", gap: 5, overflowX: "auto", marginBottom: 8, paddingBottom: 2 }}>
+          <button
+            onClick={() => setSubcatFilter("")}
+            style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, border: `1px solid ${subcatFilter === "" ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === "" ? PALETTE.ink : "transparent", color: subcatFilter === "" ? PALETTE.cream : PALETTE.muted, cursor: "pointer", whiteSpace: "nowrap" }}>
+            All
+          </button>
+          {subcatsForSlot.map(sub => (
+            <button key={sub} onClick={() => setSubcatFilter(sub === subcatFilter ? "" : sub)}
+              style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, border: `1px solid ${subcatFilter === sub ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === sub ? PALETTE.ink : "transparent", color: subcatFilter === sub ? PALETTE.cream : PALETTE.muted, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {sub}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Horizontal picker — tap to add/remove for the active slot */}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 12px", scrollSnapType: "x mandatory" }}>

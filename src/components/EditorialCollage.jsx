@@ -63,20 +63,20 @@ function buildCollageLayout(items, suggestionSlots = []) {
       // Dress + Layer (cardigan/blazer over dress)
       place("layer",  { x:1,  y:1,  w:44, h:50 });
       place("dress",  { x:47, y:1,  w:48, h:56 });
-      if (hasBelt) place("belt", { x:20, y:52, w:40, h:14 });
+      if (hasBelt) place("belt", { x:30, y:54, w:20, h:8 });
       if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
       if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
     } else if (hasTop) {
       // Dress + Top (e.g. bodysuit under dress, or top layered)
       place("top",    { x:1,  y:1,  w:40, h:44 });
       place("dress",  { x:43, y:1,  w:52, h:56 });
-      if (hasBelt) place("belt", { x:20, y:52, w:40, h:14 });
+      if (hasBelt) place("belt", { x:30, y:54, w:20, h:8 });
       if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
       if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
     } else {
       // Dress only (no layer or top)
       place("dress",  { x:18, y:1,  w:52, h:58 });
-      if (hasBelt) place("belt", { x:14, y:52, w:44, h:14 });
+      if (hasBelt) place("belt", { x:29, y:54, w:20, h:8 });
       if (hasShoes) place("shoes", { x:1, y:64, w:32, h:28 });
       if (hasBag) place("bag", { x:55, y:64, w:32, h:28 });
     }
@@ -86,21 +86,21 @@ function buildCollageLayout(items, suggestionSlots = []) {
       // Layer + Top + Bottom
       place("layer",  { x:1,  y:1,  w:46, h:44 });
       place("top",    { x:49, y:1,  w:46, h:40 });
-      if (hasBelt) place("belt", { x:1, y:43, w:46, h:14 });
+      if (hasBelt) place("belt", { x:2, y:44, w:20, h:8 });
       place("bottom", { x:1,  y:48, w:44, h:46 });
       if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
       if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
     } else if (hasLayer) {
       // Layer + Bottom (no separate top — layer IS the top)
       place("layer",  { x:14, y:1,  w:52, h:44 });
-      if (hasBelt) place("belt", { x:4, y:40, w:46, h:14 });
+      if (hasBelt) place("belt", { x:14, y:42, w:20, h:8 });
       place("bottom", { x:1,  y:48, w:44, h:46 });
       if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
       if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
     } else {
       // Top + Bottom (no layer)
       place("top",    { x:14, y:1,  w:52, h:44 });
-      if (hasBelt) place("belt", { x:4, y:40, w:46, h:14 });
+      if (hasBelt) place("belt", { x:14, y:42, w:20, h:8 });
       place("bottom", { x:1,  y:48, w:44, h:46 });
       if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
       if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
@@ -136,7 +136,7 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
 // Positions pieces as floating, slightly overlapping items on a clean background
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
-export default function EditorialCollage({ lookItems, suggestionSlots = [] }) {
+export default function EditorialCollage({ lookItems, suggestionSlots = [], onItemClick }) {
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
@@ -148,16 +148,19 @@ export default function EditorialCollage({ lookItems, suggestionSlots = [] }) {
   return (
     <div style={s.collageCanvas}>
       {slots.map((slot, i) => (
-        <div key={slot.id || i} style={{
-          position: "absolute",
-          left: `${slot.x}%`,
-          top: `${slot.y}%`,
-          width: `${slot.w}%`,
-          height: `${slot.h}%`,
-          transform: `rotate(${slot.rotate}deg)`,
-          zIndex: slot.zIndex,
-          filter: "drop-shadow(0 4px 14px rgba(28,24,20,0.18))",
-        }}>
+        <div key={slot.id || i}
+          onClick={!slot.isSuggestion && onItemClick ? () => onItemClick(slot) : undefined}
+          style={{
+            position: "absolute",
+            left: `${slot.x}%`,
+            top: `${slot.y}%`,
+            width: `${slot.w}%`,
+            height: `${slot.h}%`,
+            transform: `rotate(${slot.rotate}deg)`,
+            zIndex: slot.zIndex,
+            filter: "drop-shadow(0 4px 14px rgba(28,24,20,0.18))",
+            cursor: !slot.isSuggestion && onItemClick ? "pointer" : "default",
+          }}>
           {slot.isSuggestion ? (
             <div style={s.elevSlotPh}>
               <div style={s.elevSlotBrand}>{slot.item?.split(" ").slice(0,2).join(" ")}</div>
