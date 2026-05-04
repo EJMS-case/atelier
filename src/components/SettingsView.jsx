@@ -134,9 +134,15 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefs(updated); };
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
 
+  // Only process items that still have a background. The has_bg flag is set
+  // by stripBackground() on upload — true means "we couldn't strip it" or
+  // "uploaded before bg removal was wired up". Skipping the rest saves real
+  // money on the Remove.bg API.
+  const itemsNeedingBg = items.filter(it => it.image && it.has_bg !== false);
+
   const handleBatchBgRemoval = async () => {
     if (!rmbg) return;
-    const toProcess = items.filter(it => it.image);
+    const toProcess = itemsNeedingBg;
     if (!toProcess.length) return;
     batchStop.current = false;
     setBatchRunning(true); setBatchDone(false);
@@ -150,7 +156,8 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         const cleaned = await removeBackground(base64, rmbg);
         const compressed = await compressImage(cleaned, 600, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
-        if (onUpdateItem) await onUpdateItem(item.id, { image: url });
+        // Flip has_bg so the next run skips this item.
+        if (onUpdateItem) await onUpdateItem(item.id, { image: url, has_bg: false });
       } catch { errors++; }
       setBatchProgress({ done: i + 1, total: toProcess.length, errors });
     }
@@ -273,16 +280,18 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         )}
       </div>
 
-      {/* Batch Background Removal */}
+      {/* Batch Background Removal — targets only items still flagged has_bg */}
       <div style={s.settingsCard}>
-        <div style={s.settingsTitle}>✦ Retroactive Background Removal</div>
+        <div style={s.settingsTitle}>✦ Clean Up White Backgrounds</div>
         <p style={s.settingsSub}>
-          Re-processes all {items.filter(it=>it.image).length} wardrobe photos through Remove.bg to get transparent PNG backgrounds for cleaner collages. Uses 1 credit per item.
+          {itemsNeedingBg.length === 0
+            ? "All your photos already have transparent backgrounds — nothing to do."
+            : `${itemsNeedingBg.length} of your ${items.length} pieces still have a white background. Run Remove.bg on those to make them transparent. Uses 1 credit per item.`}
         </p>
-        {!batchRunning && !batchDone && (
+        {!batchRunning && !batchDone && itemsNeedingBg.length > 0 && (
           <button style={{...s.btnPrimary, width:"100%"}} onClick={handleBatchBgRemoval}
-            disabled={!rmbg || items.filter(it=>it.image).length === 0}>
-            {!rmbg ? "Add Remove.bg key above first" : `Process All ${items.filter(it=>it.image).length} Photos`}
+            disabled={!rmbg}>
+            {!rmbg ? "Add Remove.bg key above first" : `Clean ${itemsNeedingBg.length} Photo${itemsNeedingBg.length===1?"":"s"}`}
           </button>
         )}
         {batchRunning && (

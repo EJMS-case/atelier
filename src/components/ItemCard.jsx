@@ -3,7 +3,7 @@ import { s } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import SetPanel from "./SetPanel.jsx";
 
-export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav }) {
+export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, onStyleItem }) {
   const [confirm,  setConfirm]  = useState(false);
   const [showSet,  setShowSet]  = useState(false);
   const isPartOfSet = item.set_id && item.is_separable;
@@ -31,6 +31,11 @@ export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited
         {item.notes && <div style={s.cardNotes}>{item.notes}</div>}
       </div>
       <div style={s.cardActions}>
+        {onStyleItem && (
+          <button style={s.iconBtn} onClick={() => onStyleItem(item)} title="Style with this piece">
+            <Icon path={icons.sparkle} size={13}/>
+          </button>
+        )}
         {onToggleFav && (
           <button style={s.iconBtn} onClick={onToggleFav} title="Favorite">
             <svg width={13} height={13} viewBox="0 0 24 24"

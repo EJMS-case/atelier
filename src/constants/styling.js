@@ -54,83 +54,41 @@ export const STYLE_PREFS = {
 };
 
 export const OCCASION_SLOTS = {
-  Interview: {
-    required: { top: ["Blouses","Shirts"], bottom: ["Trousers","Ponte"], layer: ["Blazers"], shoes: ["Heels","Loafers"], bag: true },
-    optional: { belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Maxi","Skirts"], keywords: ["chunky","oversized","platform","combat"] },
-    promptNote: "EXECUTIVE INTERVIEW: Blazer is mandatory on every look. Tailored trousers only. Pointed-toe heels or polished loafers. No casual fabrics."
-  },
-  Executive: {
-    required: { top: ["Blouses","Shirts"], bottom: ["Trousers","Ponte","Satin/Silk"], layer: ["Blazers","Coats"], shoes: ["Heels","Loafers"], bag: true },
-    optional: { belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Maxi"], keywords: ["chunky","oversized","platform","combat"] },
-    promptNote: "EXECUTIVE: Boardroom-ready. Blazer or structured coat on every look. Tailored trousers or ponte pants. Pointed-toe heels or polished loafers."
-  },
   Work: {
     required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], layer: ["Blazers","Coats","Jackets","Cardigans"], shoes: ["Heels","Loafers","Flats","Boots"], bag: true },
     optional: { belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
-    promptNote: "WORK: Polished professional. Blazer or structured layer on at least 2 of 3 looks. No casual fabrics."
+    promptNote: "WORK: Polished professional — covers everyday office, executive meetings, and interviews. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, or ponte pants. No casual fabrics, no jeans, no sneakers.",
+  },
+  Casual: {
+    required: { top: true, bottom: true, shoes: true },
+    optional: { dress: true, layer: true, bag: true, belt: true, accessory: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
+    promptNote: "CASUAL: Off-duty NYC — covers daytime, brunch, errands, low-key activities. Every look needs a top + bottom (or a dress). Elevated but never trying. Denim welcome. Loafers, flats, low boots, or clean sneakers if she has them.",
   },
   "Date Night": {
     required: { top: ["Blouses","Shirts","Tops","Bodysuits"], bottom: true, shoes: ["Heels"], bag: true },
     optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Jackets","Cardigans"], belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: ["chunky","platform","combat","lug"] },
-    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Silk, satin, or luxe fabrics. At least one look should be a dress."
+    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Silk, satin, or luxe fabrics. At least one of the 3 looks should be a dress.",
   },
   Dinner: {
     required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
     optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
-    promptNote: "DINNER: Chic and considered. Every look MUST have a bottom (pants/skirt) OR a dress. Elevated fabrics, polished shoes, a good bag."
-  },
-  "Dinner Party": {
-    required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
-    optional: { dress: true, layer: true, belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
-    promptNote: "DINNER PARTY: More daring than dinner. Every look MUST have a bottom (pants/skirt) OR a dress. A bold color, a texture mix, something unexpected."
-  },
-  "Lunch/Brunch": {
-    required: { top: true, bottom: true, shoes: true, bag: true },
-    optional: { dress: true, layer: true, belt: true, accessory: true },
-    banned: { categories: ["Swim"], subcategories: [], keywords: [] },
-    promptNote: "LUNCH/BRUNCH: Effortless polish. Every look MUST have a bottom (pants/skirt) OR a dress. Can be relaxed but never sloppy."
-  },
-  Daytime: {
-    required: { top: true, bottom: true, shoes: true, bag: true },
-    optional: { dress: true, layer: true, belt: true, accessory: true },
-    banned: { categories: ["Swim","Occasionwear"], subcategories: [], keywords: [] },
-    promptNote: "DAYTIME: Smart-casual. Every look MUST have a bottom (pants/skirt) OR a dress. Styled but lighter."
-  },
-  Event: {
-    required: { top: true, bottom: true, shoes: ["Heels"], bag: true },
-    optional: { dress: true, layer: true, belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: [] },
-    promptNote: "EVENT: Occasion-worthy. Every look MUST have a bottom (pants/skirt) OR a dress. Dress or elevated separates."
-  },
-  Athleisure: {
-    required: { top: true, bottom: true, shoes: true },
-    optional: { layer: true, bag: true, accessory: true },
-    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "ATHLEISURE: Sporty-chic. Every look needs a top + bottom. Athleisure pieces styled up."
-  },
-  Activity: {
-    required: { top: true, bottom: true, shoes: true },
-    optional: { layer: true, bag: true, accessory: true },
-    banned: { categories: ["Occasionwear","Swim","Loungewear"], subcategories: [], keywords: [] },
-    promptNote: "ACTIVITY: Comfortable and practical but still styled. Every look needs a top + bottom."
+    promptNote: "DINNER: Chic and considered — covers dinners, dinner parties, occasion events. Every look MUST have a bottom (pants/skirt) OR a dress. Elevated fabrics, polished shoes, a real bag. One look may push slightly bolder (a saturated color, a texture moment).",
   },
   Travel: {
     required: { top: true, bottom: true, shoes: true, bag: true },
     optional: { layer: true, belt: true, accessory: true },
     banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "TRAVEL: Comfortable elegance. Every look needs a top + bottom. Layers, practical shoes, functional bag."
+    promptNote: "TRAVEL: Comfortable elegance. Every look needs a top + bottom. Layers, practical shoes, functional bag.",
   },
   Lounge: {
     required: { top: true, bottom: true },
     optional: { layer: true },
     banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "LOUNGE: Relaxed at-home style. Every look needs a top + bottom."
+    promptNote: "LOUNGE: Relaxed at-home style. Every look needs a top + bottom.",
   },
 };
 

@@ -16,63 +16,64 @@ export function getSleeveType(item) {
 }
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
+// Accepts either a single weather string ("Hot (85°F+)") or a combined label
+// ("Hot + Rainy") produced by the multi-select chip row. Each component
+// applies its filter independently — the strictest constraint wins (e.g.
+// Cold + Rainy keeps coats AND rejects suede). This is what unblocks her
+// "I want Hot + Rainy" UX without inventing new buckets.
 export function filterByWeather(items, weather) {
-  const w = (weather || "").toLowerCase();
-  if (!w || w === "any") return items;
+  const raw = (weather || "").toLowerCase();
+  if (!raw || raw === "any") return items;
 
-  const isHot  = /hot|85/i.test(w);
-  const isWarm = /warm|70-84/i.test(w);
-  const isMild = /mild|55-69/i.test(w);
-  const isCool = /cool|40-54/i.test(w);
-  const isCold = /cold|below 40/i.test(w);
+  const isHot   = /hot|85/.test(raw);
+  const isWarm  = /warm|70-84/.test(raw);
+  const isMild  = /mild|55-69/.test(raw);
+  const isCool  = /cool|40-54/.test(raw);
+  const isCold  = /cold|below 40/.test(raw);
+  const isRainy = /rain/.test(raw);
 
   return items.filter(it => {
     const sleeve = getSleeveType(it);
     const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "")).toLowerCase();
     const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit/i.test(nameNotes);
     const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
+    const isDelicateSurface = /suede|silk|satin/i.test(nameNotes);
+
+    if (it.category === "Swim") return false;
 
     if (isHot) {
       if (it.category === "Knits") return false;
       if (isKnitDress) return false;
       if (it.subcategory === "Sweater Dress") return false;
       if (it.subcategory === "Boots") return false;
-      if (it.subcategory === "Coats") return false;
+      if (it.category === "Outerwear") return false; // hot = no outerwear, period
       if (it.subcategory === "Jackets" && isHeavyFabric) return false;
       if (it.category === "Tops" && sleeve === "long") return false;
       if (it.category === "Dresses" && /long.?sleeve/i.test(nameNotes)) return false;
       if (isHeavyFabric) return false;
-      if (it.category === "Swim") return false;
-      return true;
     }
     if (isWarm) {
       if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
       if (isKnitDress) return false;
       if (it.subcategory === "Sweater Dress") return false;
       if (it.subcategory === "Coats") return false;
-      if (it.subcategory === "Boots") return false; // F2 — no boots above ~70°F
+      if (it.subcategory === "Boots") return false;
       if (isHeavyFabric) return false;
-      if (it.category === "Swim") return false;
-      return true;
     }
     if (isMild) {
       if (it.subcategory === "Sandals") return false;
-      if (it.category === "Swim") return false;
-      return true;
     }
-    if (isCool) {
+    if (isCool || isCold) {
       if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
       if (it.subcategory === "Sandals") return false;
       if (it.subcategory === "Shorts") return false;
-      if (it.category === "Swim") return false;
-      return true;
     }
-    if (isCold) {
-      if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
+    if (isRainy) {
+      // Rainy can be combined with any temperature. The temperature filter
+      // already pruned weight; rainy adds: drop sandals + drop suede outers.
       if (it.subcategory === "Sandals") return false;
-      if (it.subcategory === "Shorts") return false;
-      if (it.category === "Swim") return false;
-      return true;
+      if (it.category === "Outerwear" && isDelicateSurface) return false;
+      if (it.category === "Shoes" && isDelicateSurface) return false;
     }
     return true;
   });

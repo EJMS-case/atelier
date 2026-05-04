@@ -112,6 +112,7 @@ export function buildStylingPrompt({
   availabilityNote,
   stylingDirections = [],
   moodPrompt = "",
+  requestedShortIds = [],
 }) {
   const aboutMeBlock = formatAboutMe(aboutMe);
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
@@ -128,6 +129,13 @@ export function buildStylingPrompt({
 
   const requestBlock = freeTextRequest
     ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis takes priority over general styling rules. Honor it exactly.\n`
+    : "";
+
+  // Items the sampler matched against the free-text request. The AI tends to
+  // ignore "include my red blazer" — pinning the matched IDs explicitly fixes
+  // that. The validator also enforces ≥1 of these IDs appears in the output.
+  const requiredItemsBlock = requestedShortIds.length > 0
+    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. AT LEAST ONE of these IDs must appear as a hero or supporting item in the FIRST look. Do not substitute, do not skip. Build the rest of the look around it.\n`
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
@@ -163,7 +171,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${moodBlock}
+${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}
 CLIENT DETAILS
 ${aboutMeBlock}
 ${stylePrefsBlock}${recentBlock}
@@ -227,11 +235,16 @@ function formatStylePrefs(prefs) {
 function formatWeather(weather) {
   if (!weather) return "";
   const w = weather.toLowerCase();
-  if (/hot|85/i.test(w)) return "⚠️ WEATHER: HOT — This is a HARD CONSTRAINT. NO long sleeves, NO heavy layers, NO boots, NO wool, NO cashmere. Lightweight and breathable fabrics ONLY (silk, linen, cotton). Sandals, open shoes, or light flats. Violating this = failed look.";
-  if (/warm|70-84/i.test(w)) return "⚠️ WEATHER: WARM — This is a HARD CONSTRAINT. Light layers ONLY. NO heavy knits, NO coats, NO wool outerwear. Short sleeves, sleeveless, or very light long sleeves only.";
-  if (/mild|55-69/i.test(w)) return "⚠️ WEATHER: MILD — Dress in layers. Light outerwear welcome. Both short and long sleeves acceptable.";
-  if (/cool|40-54/i.test(w)) return "⚠️ WEATHER: COOL — This is a HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes.";
-  if (/cold|below 40/i.test(w)) return "⚠️ WEATHER: COLD — This is a HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected.";
-  if (/rain/i.test(w)) return "⚠️ WEATHER: RAINY — Practical footwear (boots or closed shoes), water-resistant outerwear preferred. No suede, no delicate fabrics on outer layers.";
-  return `⚠️ WEATHER: ${weather}. Dress appropriately — this is a hard constraint.`;
+  // Multi-select aware: a label like "Hot + Rainy" hits both branches and the
+  // model gets BOTH constraint blocks. Order is intentional — temperature
+  // first (governs fabric/sleeve/layer), then rainy (governs surface/footwear).
+  const parts = [];
+  if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. The Outerwear category does not exist for you in this generation. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Sandals, open shoes, or light flats. Any look containing a coat, blazer, or jacket is an automatic failure.");
+  if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers ONLY. NO heavy knits, NO coats, NO wool outerwear, NO boots. Short sleeves, sleeveless, or very light long sleeves only. An unstructured linen blazer is the heaviest layer allowed.");
+  if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — Dress in layers. Light outerwear welcome. Both short and long sleeves acceptable.");
+  if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes.");
+  if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected.");
+  if (/rain/.test(w)) parts.push("⚠️ WEATHER: RAINY — Practical footwear only (boots or closed leather shoes — no suede, no satin, no fabric heels). Water-resistant outerwear preferred. No suede or silk on outer layers.");
+  if (parts.length === 0) return `⚠️ WEATHER: ${weather}. Dress appropriately — this is a hard constraint.`;
+  return parts.join("\n\n");
 }
