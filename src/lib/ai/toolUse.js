@@ -85,6 +85,70 @@ export async function invokeTool({
 }
 
 /**
+ * Streaming variant — fires onDelta(accumulatedPartialJson) as the model
+ * generates the tool input. Returns { toolBlock, raw } like invokeToolRaw
+ * when the stream is complete. The toolBlock.input is the fully accumulated
+ * and parsed JSON object.
+ */
+export async function invokeToolStream({
+  apiKey, model, maxTokens, temperature, content, tool, signal,
+}, onDelta) {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      ...(typeof temperature === "number" ? { temperature } : {}),
+      stream: true,
+      messages: [{ role: "user", content }],
+      tools: [tool],
+      tool_choice: { type: "tool", name: tool.name },
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let inputJson = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx + 1);
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        const evt = JSON.parse(payload);
+        if (evt.type === "content_block_delta" && evt.delta?.type === "input_json_delta") {
+          inputJson += evt.delta.partial_json || "";
+          onDelta?.(inputJson);
+        }
+      } catch { /* ignore malformed SSE lines */ }
+    }
+  }
+
+  let input;
+  try {
+    input = JSON.parse(inputJson);
+  } catch {
+    return { toolBlock: null, raw: null };
+  }
+  return { toolBlock: { type: "tool_use", name: tool.name, input }, raw: null };
+}
+
+/**
  * Low-level variant that returns the raw parsed input WITHOUT throwing on
  * schema failure — the caller handles retries. Still logs failures.
  */

@@ -12,7 +12,7 @@ function buildCollageLayout(items, suggestionSlots = []) {
     const sub  = item.subcategory || "";
     const name = item.name        || "";
     if (cat === "Outerwear") return "layer";
-    if (cat === "Knits")     return "layer";  // Cardigans & pullovers are layers
+    if (cat === "Knits")     return sub === "Cardigans" ? "layer" : "top";
     if (cat === "Bottoms")   return "bottom";
     if (cat === "Shoes")     return "shoes";
     if (cat === "Dresses" || cat === "Jumpsuits" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";

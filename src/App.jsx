@@ -485,18 +485,26 @@ export default function App() {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null); setOutfitNotes(null);
+    let streamedAny = false;
     try {
-      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
+      const onLook = (look) => {
+        const normalized = normalizeLooks([look], occasion);
+        setOutfits(prev => [...(prev || []), ...normalized]);
+        if (!streamedAny) {
+          streamedAny = true;
+          setView("style");
+          setStyling("partial"); // switch from full-page spinner to subtle banner
+        }
+      };
+      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook });
       const looks = result?.looks;
       // Capture notes for partial results
       if (result?.notes) setOutfitNotes(result.notes);
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
-        // If notes explain why fewer than 3 looks, show that
-        if (result?.notes) {
-          throw new Error(result.notes);
-        }
+        if (result?.notes) throw new Error(result.notes);
         throw new Error("AI returned no looks — try again.");
       }
+      // Replace streamed looks with the final validated set (may differ if retry happened)
       const normalizedLooks = normalizeLooks(looks, occasion);
       setOutfits(normalizedLooks);
       setAllLooks(prev => [...prev, ...normalizedLooks].slice(-30));
@@ -1133,10 +1141,16 @@ export default function App() {
               Build manually
             </button>
           </div>
-          {styling && (
+          {styling === true && (
             <div style={s.empty}>
               <span style={s.spinner}/>
               <p style={s.emptyText}>Styling your wardrobe…</p>
+            </div>
+          )}
+          {styling === "partial" && (
+            <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 16px 2px", fontSize:12, color:"var(--color-text-muted)"}}>
+              <span style={s.spinner}/>
+              Generating more looks…
             </div>
           )}
           {/* Notes when fewer than 3 looks generated */}

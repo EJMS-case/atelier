@@ -29,6 +29,18 @@ const SLOTS = [
 ];
 
 
+// Default canvas positions (% of canvas width/height) per slot.
+// These match the fixed CSS zones that were here before drag was added.
+const DEFAULT_POSITIONS = {
+  outerwear: { x:  0, y: 10, w: 100, h: 68 },
+  top:       { x: 12, y: 12, w:  76, h: 38 },
+  dress:     { x: 12, y: 12, w:  76, h: 80 },
+  bottom:    { x: 12, y: 42, w:  76, h: 48 },
+  shoes:     { x: 20, y: 76, w:  60, h: 22 },
+  bag:       { x: 68, y: 44, w:  28, h: 16 },
+  accessory: { x: 68, y: 14, w:  28, h: 16 },
+};
+
 export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSchedule, onClose, apiKey }) {
   const [selections, setSelections] = useState({}); // { slotKey: itemId }
   const [activeSlot, setActiveSlot] = useState(SLOTS[0].key);
@@ -44,6 +56,10 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [evalErr, setEvalErr] = useState("");
   const [search, setSearch] = useState("");
   const [subcatFilter, setSubcatFilter] = useState("");
+  // Per-slot canvas positions { x, y, w, h } as % of canvas dimensions
+  const [positions, setPositions] = useState(() => ({ ...DEFAULT_POSITIONS }));
+  // Active drag/resize state
+  const [dragState, setDragState] = useState(null);
   const canvasRef = useRef(null);
 
   // Reset search + subcategory filter when the active slot changes
@@ -85,17 +101,16 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Convert % positions to absolute pixels on the 600×800 save canvas
     const zoneFor = (slot) => {
-      switch (slot) {
-        case "outerwear": return { x:   0, y:  80, w: 600, h: 320 };
-        case "top":       return { x:  80, y: 100, w: 440, h: 260 };
-        case "dress":     return { x:  80, y: 100, w: 440, h: 520 };
-        case "bottom":    return { x:  80, y: 360, w: 440, h: 260 };
-        case "shoes":     return { x: 120, y: 620, w: 360, h: 140 };
-        case "bag":       return { x: 440, y: 380, w: 140, h: 160 };
-        case "accessory": return { x: 440, y: 140, w: 140, h: 120 };
-        default: return null;
-      }
+      const p = positions[slot] || DEFAULT_POSITIONS[slot];
+      if (!p) return null;
+      return {
+        x: p.x / 100 * 600,
+        y: p.y / 100 * 800,
+        w: p.w / 100 * 600,
+        h: p.h / 100 * 800,
+      };
     };
 
     async function drawItem({ slot, item }) {
@@ -194,27 +209,86 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         <div style={{ width: 40 }}/>
       </div>
 
-      {/* Canvas area — plain white, no silhouette */}
-      <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 14, overflow: "hidden" }}>
-        {/* Item overlays — crude positioning by slot */}
+      {/* Canvas area — plain white, draggable items */}
+      <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 6, overflow: "hidden", touchAction: "none" }}>
         {pickedItems.map(({ slot, item }) => {
-          const zoneCss = {
-            outerwear: { top: "10%", bottom: "22%", left:  "0%", right:  "0%" },
-            top:       { top: "12%", bottom: "50%", left: "12%", right: "12%" },
-            dress:     { top: "12%", bottom:  "8%", left: "12%", right: "12%" },
-            bottom:    { top: "42%", bottom: "10%", left: "12%", right: "12%" },
-            shoes:     { top: "76%", bottom:  "2%", left: "20%", right: "20%" },
-            bag:       { top: "44%", bottom: "40%", left: "68%", right:  "4%" },
-            accessory: { top: "14%", bottom: "70%", left: "68%", right:  "4%" },
-          }[slot];
-          if (!zoneCss) return null;
+          const pos = positions[slot] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
           return (
-            <div key={slot + item.id} style={{ position: "absolute", ...zoneCss, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-              {item.image && <img src={item.image} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}/>}
+            <div key={slot + item.id}
+              style={{
+                position: "absolute",
+                left: `${pos.x}%`, top: `${pos.y}%`,
+                width: `${pos.w}%`, height: `${pos.h}%`,
+                cursor: "move",
+                userSelect: "none",
+                touchAction: "none",
+              }}
+              onPointerDown={(e) => {
+                if (e.target.dataset.resize) return; // let resize handle its own handler
+                e.preventDefault();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                const rect = canvasRef.current.getBoundingClientRect();
+                setDragState({ slot, type: "move", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+              }}
+              onPointerMove={(e) => {
+                if (!dragState || dragState.slot !== slot || dragState.type !== "move") return;
+                const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
+                const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
+                setPositions(prev => ({
+                  ...prev,
+                  [slot]: {
+                    ...dragState.startPos,
+                    x: Math.max(0, Math.min(100 - dragState.startPos.w, dragState.startPos.x + dx)),
+                    y: Math.max(0, Math.min(100 - dragState.startPos.h, dragState.startPos.y + dy)),
+                  }
+                }));
+              }}
+              onPointerUp={() => setDragState(null)}
+            >
+              {item.image && <img src={item.image} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}/>}
+              {/* Resize handle — bottom-right corner */}
+              <div
+                data-resize="1"
+                style={{ position: "absolute", bottom: 0, right: 0, width: 18, height: 18, cursor: "se-resize", display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  const rect = canvasRef.current.getBoundingClientRect();
+                  setDragState({ slot, type: "resize", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                }}
+                onPointerMove={(e) => {
+                  if (!dragState || dragState.slot !== slot || dragState.type !== "resize") return;
+                  const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
+                  const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
+                  setPositions(prev => ({
+                    ...prev,
+                    [slot]: {
+                      ...dragState.startPos,
+                      w: Math.max(8, Math.min(100 - dragState.startPos.x, dragState.startPos.w + dx)),
+                      h: Math.max(8, Math.min(100 - dragState.startPos.y, dragState.startPos.h + dy)),
+                    }
+                  }));
+                }}
+                onPointerUp={() => setDragState(null)}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.35 }}>
+                  <path d="M2 10 L10 2 M6 10 L10 6" stroke="#1C1814" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
             </div>
           );
         })}
       </div>
+      {/* Reset layout button — only shown when positions differ from defaults */}
+      {pickedItems.length > 0 && (
+        <div style={{ textAlign: "right", marginBottom: 8 }}>
+          <button onClick={() => setPositions({ ...DEFAULT_POSITIONS })}
+            style={{ background: "none", border: "none", fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
+            Reset layout
+          </button>
+        </div>
+      )}
 
       {/* Slot selector */}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, paddingBottom: 4 }}>

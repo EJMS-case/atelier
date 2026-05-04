@@ -5,7 +5,7 @@
 // runs through the 9 semantic validators below (item-ID resolution, exclusion
 // compliance, lower-half coverage, etc.).
 
-import { invokeToolRaw } from "../lib/ai/toolUse.js";
+import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 
@@ -596,6 +596,48 @@ function normalizeResponse(parsed) {
   return parsed;
 }
 
+// ── Partial-look extractor for streaming ────────────────────────────────────
+// Scans an accumulating partial-JSON string for complete look objects (depth-2
+// inside the "looks" array) and returns all it finds. Uses brace-depth counting
+// so it doesn't need a full JSON parser — safe to call on every SSE delta.
+
+function extractCompleteLooks(partialJson) {
+  const start = partialJson.indexOf('"looks"');
+  if (start === -1) return [];
+
+  const looks = [];
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let lookStart = -1;
+
+  for (let i = start; i < partialJson.length; i++) {
+    const ch = partialJson[i];
+    if (escape) { escape = false; continue; }
+    if (inString && ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+
+    if (ch === "{") {
+      depth++;
+      if (depth === 2) lookStart = i;
+    } else if (ch === "}") {
+      if (depth === 2 && lookStart !== -1) {
+        const slice = partialJson.slice(lookStart, i + 1);
+        try {
+          const parsed = JSON.parse(slice);
+          if (parsed.name && Array.isArray(parsed.items) && parsed.items.length > 0) {
+            looks.push(parsed);
+          }
+        } catch { /* incomplete object — skip */ }
+        lookStart = -1;
+      }
+      depth--;
+    }
+  }
+  return looks;
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────────
 
 /**
@@ -626,6 +668,7 @@ export async function generateValidatedLooks({
   weather = "",
   contactSheets = [],
   forceIncludeIds = [],
+  onLook,
 }) {
   // Back-compat: callers may still pass a single `prompt` string.
   if (!staticPreamble && !dynamicBody && prompt) {
@@ -673,16 +716,57 @@ export async function generateValidatedLooks({
 
     // Tool-use call — Claude is forced to invoke LooksTool, response arrives
     // as a single tool_use content block with `input` matching the schema.
+    // Attempt 0 streams so looks can surface one by one; retries use the
+    // non-streaming path (simpler, and streaming isn't needed on a correction).
     let toolBlock, raw;
     try {
-      ({ toolBlock, raw } = await invokeToolRaw({
-        apiKey,
-        model: "claude-sonnet-4-5",
-        maxTokens: 4500,
-        temperature: 0.7,
-        content: messageContent,
-        tool: LooksTool,
-      }));
+      if (attempt === 0 && onLook) {
+        let streamedCount = 0;
+        const streamedIds = new Set(); // track IDs already surfaced to caller
+        ({ toolBlock, raw } = await invokeToolStream(
+          {
+            apiKey,
+            model: "claude-sonnet-4-5",
+            maxTokens: 4500,
+            temperature: 0.7,
+            content: messageContent,
+            tool: LooksTool,
+          },
+          (partial) => {
+            const found = extractCompleteLooks(partial);
+            for (let idx = streamedCount; idx < found.length; idx++) {
+              const rawLook = found[idx];
+              // Quick per-look structural validation before surfacing.
+              const candidate = normalizeResponse({ looks: [rawLook] });
+              const cFailures = [
+                ...checkStructure(candidate),
+                ...checkItemsExist(candidate, idMap),
+                ...checkLowerHalf(candidate, idMap, allItems),
+              ];
+              // Also guard against duplicating items already shown.
+              const newIds = (candidate.looks[0]?.items || []).map(it =>
+                String(typeof it === "string" ? it : it.id).replace(/^ID:/i, "").trim()
+              );
+              const hasDupe = newIds.some(id => streamedIds.has(id));
+              if (cFailures.length === 0 && !hasDupe) {
+                const resolved = resolveIds(candidate, idMap, allItems, occasion);
+                newIds.forEach(id => streamedIds.add(id)); // short IDs for cross-look dupe check
+                onLook(resolved.looks[0]);
+              }
+            }
+            streamedCount = found.length;
+          }
+        ));
+      } else {
+        ({ toolBlock, raw } = await invokeToolRaw({
+          apiKey,
+          model: "claude-sonnet-4-5",
+          maxTokens: 4500,
+          temperature: 0.7,
+          content: messageContent,
+          tool: LooksTool,
+        }));
+      }
     } catch (e) {
       logAiError("stylist_outfit:http", { attempt }, e);
       throw e;

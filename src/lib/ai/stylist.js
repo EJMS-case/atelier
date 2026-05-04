@@ -46,7 +46,7 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
-  const { mood = "", feedbackScores = {}, recentlyWornItems = [] } = extras;
+  const { mood = "", feedbackScores = {}, recentlyWornItems = [], onLook } = extras;
 
   // Defend against legacy occasion strings ("Interview"/"Executive"/"Daytime"/…)
   // that may still arrive from saved planner entries or older callers.
@@ -166,6 +166,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     weather,
     contactSheets,
     forceIncludeIds,
+    onLook,
   });
 
   if (result.looks) {
