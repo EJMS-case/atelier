@@ -53,6 +53,7 @@ import ItemCard from "./components/ItemCard.jsx";
 import BulkAddView from "./components/BulkAddView.jsx";
 import EditItemView from "./components/EditItemView.jsx";
 import LookCard from "./components/LookCard.jsx";
+import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
@@ -115,6 +116,7 @@ export default function App() {
   const [request,    setRequest]    = useState("");
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
+  const [manualBuilderOpen, setManualBuilderOpen] = useState(false);
   const [weatherLoading, setWeatherLoading] = useState(false); // F2 — auto-location fetch
   const [feedbackScores, setFeedbackScores] = useState({});    // F2 — aggregate item scores
   const [recentlyWornItems, setRecentlyWornItems] = useState([]); // F2 — item IDs worn in last 3 days
@@ -1100,11 +1102,36 @@ export default function App() {
       )}
 
       {/* ── LOOKS ── */}
-      {view === "style" && (
+      {view === "style" && manualBuilderOpen && (
+        <SilhouetteBuilder
+          items={items}
+          apiKey={apiKey}
+          onSave={async (log) => {
+            const result = await sb.saveOutfitLog(log);
+            if (log.date_worn) {
+              bumpWearCounts(log.garment_ids || []);
+            }
+            return Array.isArray(result) ? result[0] : result;
+          }}
+          onFavoriteLook={async (savedLog) => {
+            const result = await sb.addFavorite("outfit", savedLog.id);
+            setFavorites(prev => [...(Array.isArray(result) ? result : [result]), ...prev]);
+          }}
+          onSchedule={async (plan) => { await savePlan(plan); }}
+          onClose={() => setManualBuilderOpen(false)}
+        />
+      )}
+
+      {view === "style" && !manualBuilderOpen && (
         <div style={s.page}>
           <div style={s.pageHeader}>
             <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
             <h2 style={s.pageTitle}>Your Looks</h2>
+            <button
+              onClick={() => setManualBuilderOpen(true)}
+              style={{...s.btnSecondary, padding:"6px 12px", fontSize:12, marginLeft:"auto"}}>
+              Build manually
+            </button>
           </div>
           {styling && (
             <div style={s.empty}>
@@ -1161,6 +1188,10 @@ export default function App() {
               <button style={{...s.btnPrimary, padding:"12px 24px"}}
                 onClick={() => setStylePanelOpen(true)}>
                 <Icon path={icons.sparkle} size={15}/> Open Style Me
+              </button>
+              <button style={{...s.btnSecondary, padding:"10px 20px", marginTop:10}}
+                onClick={() => setManualBuilderOpen(true)}>
+                Build a look manually
               </button>
             </div>
           )}

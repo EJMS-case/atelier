@@ -620,6 +620,7 @@ export async function generateValidatedLooks({
   }
 
   let lastFailures = [];
+  let lastParsed = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     // Append retry failures to the dynamic body — never to the cached preamble.
@@ -703,15 +704,39 @@ export async function generateValidatedLooks({
     }
 
     lastFailures = failures;
+    lastParsed = parsed;
     console.warn(`[Atelier Validator] Attempt ${attempt + 1} failed with ${failures.length} issues:`,
       failures.map(f => f.message));
   }
 
-  // All retries exhausted — if we have a parseable response, return it with warnings
-  // Otherwise throw
-  if (lastFailures.every(f => !f.hard)) {
-    // Only soft failures — acceptable
-    console.warn("[Atelier Validator] Returning response with soft failures after max retries.");
+  // All retries exhausted. Try to salvage the last parsed response by dropping
+  // any look that triggered a hard per-look failure (messages start with "Look N").
+  // Cross-cutting hard failures (parse, schema, structure, no_duplicates without
+  // a "Look N" prefix) doom the whole batch.
+  if (lastParsed?.looks?.length) {
+    const lookFailureRegex = /^Look (\d+)/;
+    const globalHardFailures = lastFailures.filter(f => f.hard && !lookFailureRegex.test(f.message));
+    if (globalHardFailures.length === 0) {
+      const badIndices = new Set();
+      const dropReasons = [];
+      for (const f of lastFailures) {
+        if (!f.hard) continue;
+        const m = f.message.match(lookFailureRegex);
+        if (m) {
+          badIndices.add(parseInt(m[1], 10) - 1);
+          dropReasons.push(f.message);
+        }
+      }
+      const surviving = lastParsed.looks.filter((_, idx) => !badIndices.has(idx));
+      if (surviving.length > 0) {
+        const dropped = lastParsed.looks.length - surviving.length;
+        const salvaged = { ...lastParsed, looks: surviving };
+        const noteSuffix = `${dropped} look${dropped === 1 ? "" : "s"} dropped after retries: ${dropReasons.join("; ")}`;
+        salvaged.notes = salvaged.notes ? `${salvaged.notes} · ${noteSuffix}` : noteSuffix;
+        console.warn("[Atelier Validator] Salvaging response — dropped", dropped, "look(s):", dropReasons);
+        return resolveIds(salvaged, idMap, allItems, occasion);
+      }
+    }
   }
 
   throw new ValidationError(
