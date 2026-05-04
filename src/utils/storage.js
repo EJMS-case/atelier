@@ -8,6 +8,7 @@
 // at app startup via `migrateLocalStorage()`.
 
 import { normalizeItem } from "./item-helpers.js";
+import { STYLE_PREFS } from "../constants/styling.js";
 
 export const STORAGE_KEY           = "atelier:wardrobe:v1";
 export const API_KEY_STORE         = "atelier:api-key";
@@ -106,4 +107,24 @@ export function loadSetsMeta() {
 }
 export function saveSetsMeta(meta) {
   try { localStorage.setItem(SETS_META_KEY, JSON.stringify(meta)); } catch {}
+}
+
+export function loadStylePrefs() {
+  try { return JSON.parse(localStorage.getItem(STYLE_PREFS_KEY)) || STYLE_PREFS; }
+  catch { return STYLE_PREFS; }
+}
+export function saveStylePrefs(prefs) { localStorage.setItem(STYLE_PREFS_KEY, JSON.stringify(prefs)); }
+
+export function loadAboutMe() {
+  try { return JSON.parse(localStorage.getItem(ABOUT_ME_KEY)) || {}; }
+  catch { return {}; }
+}
+export function saveAboutMe(data) { localStorage.setItem(ABOUT_ME_KEY, JSON.stringify(data)); }
+
+export function loadInsightsDismissed() {
+  try { return JSON.parse(localStorage.getItem(INSIGHTS_DISMISSED_KEY) || "[]"); }
+  catch { return []; }
+}
+export function saveInsightsDismissed(list) {
+  try { localStorage.setItem(INSIGHTS_DISMISSED_KEY, JSON.stringify(list)); } catch {}
 }
