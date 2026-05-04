@@ -791,7 +791,6 @@ export default function App() {
     setStyling(true); setStyleErr(""); setOutfits(null); setOutfitNotes(null);
     try {
       const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
-      console.log("Generation result:", JSON.stringify(result).slice(0, 500));
       const looks = result?.looks;
       // Capture notes for partial results
       if (result?.notes) setOutfitNotes(result.notes);

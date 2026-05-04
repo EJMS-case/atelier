@@ -140,12 +140,9 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     moodPrompt: moodPromptFor(mood),
   });
 
-  console.log("[Atelier] Generating looks for:", occasion, "| Weather:", weather || "any", "| Items sampled:", sampled.length, "| Exclusions:", activeExclusions);
-
   let contactSheets = [];
   try {
     contactSheets = await generateContactSheets(sampled, reverseMap);
-    console.log("[Atelier] Generated", contactSheets.length, "contact sheet(s) for", sampled.length, "items");
   } catch (e) {
     console.warn("[Atelier] Contact sheet generation failed, falling back to text-only:", e.message);
   }
