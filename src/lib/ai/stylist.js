@@ -5,7 +5,7 @@
 // Callers are responsible for UI state.
 
 import { STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
-import { TAXONOMY } from "../../constants/taxonomy.js";
+import { TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory } from "../../utils/closet-sampler.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
@@ -48,7 +48,10 @@ export function buildImgSource(imgStr) {
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
   const { mood = "", feedbackScores = {}, recentlyWornItems = [] } = extras;
 
-  const baseSlots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Daytime;
+  // Defend against legacy occasion strings ("Interview"/"Executive"/"Daytime"/…)
+  // that may still arrive from saved planner entries or older callers.
+  occasion = normalizeOccasion(occasion) || "Casual";
+  const baseSlots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Casual;
   const w = (weather || "").toLowerCase();
   const isHotOrWarm = /hot|warm|85|70-84/i.test(w);
   const slots = (() => {
@@ -87,7 +90,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const recentlySuggestedItems = getRecentlySuggestedItems();
   const itemSuggestionCounts = loadSuggestionCounts();
 
-  const { sampled, idMap, reverseMap } = sampleClosetItems({
+  const { sampled, idMap, reverseMap, forceIncludeIds = [] } = sampleClosetItems({
     items,
     occasion,
     styleExcludes,
@@ -101,6 +104,9 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     feedbackScores,
     userId: apiKey ? apiKey.slice(-8) : "default",
   });
+  const requestedShortIds = forceIncludeIds
+    .map(id => reverseMap[id])
+    .filter(Boolean);
 
   if (sampled.length < 5) {
     throw new Error(`Only ${sampled.length} items available after filtering. Try a different occasion or add more items.`);
@@ -138,6 +144,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     availabilityNote,
     stylingDirections,
     moodPrompt: moodPromptFor(mood),
+    requestedShortIds,
   });
 
   let contactSheets = [];
@@ -158,6 +165,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     occasion,
     weather,
     contactSheets,
+    forceIncludeIds,
   });
 
   if (result.looks) {

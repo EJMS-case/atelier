@@ -4,7 +4,10 @@
 
 import { RECENT_ITEMS_KEY, SUGGESTION_COUNTS_KEY } from "./storage.js";
 
-const MAX_RECENT_GENERATIONS = 3;
+// Bumped 3 → 8: with only 3 generations of memory, by the 4th "Style Me" tap
+// the AI was free to recycle the same hero pieces. 8 generations (~24 looks of
+// memory) gives the closet enough time to actually rotate.
+const MAX_RECENT_GENERATIONS = 8;
 
 /**
  * Load the rolling list of recently suggested item IDs (from the last 3 generations).

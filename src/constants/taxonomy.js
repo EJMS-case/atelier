@@ -42,10 +42,32 @@ export const CATEGORIES = CATEGORY_ORDER;
 
 export const SET_TAGS = ["Work","Weekend","Evening","Travel","Casual","Date Night","Seasonal","Formal","Vacation"];
 
+// Tightened to six. Anything finer was overlapping (Dinner / Dinner Party /
+// Lunch / Daytime read identically to the AI). Older saved logs that still
+// reference the legacy labels are normalized at read time — see OCCASION_ALIASES.
 export const OCCASIONS = [
-  "Interview","Executive","Work","Date Night","Dinner","Dinner Party",
-  "Lunch/Brunch","Daytime","Event","Athleisure","Activity","Travel","Lounge",
+  "Work", "Casual", "Date Night", "Dinner", "Travel", "Lounge",
 ];
+
+// Map deprecated occasion labels → the bucket they now live in. Used by any
+// code reading historical outfit_logs / planner entries / favorites.
+export const OCCASION_ALIASES = {
+  Interview: "Work",
+  Executive: "Work",
+  "Lunch/Brunch": "Casual",
+  Daytime: "Casual",
+  Athleisure: "Casual",
+  Activity: "Casual",
+  Weekend: "Casual",
+  "Dinner Party": "Dinner",
+  Event: "Dinner",
+  Evening: "Dinner",
+};
+
+export function normalizeOccasion(o) {
+  if (!o) return o;
+  return OCCASION_ALIASES[o] || o;
+}
 
 // Given a category + subcategory value (may be L2 or L3), find the L2 parent.
 export function getSubcatL2(category, subcategory) {

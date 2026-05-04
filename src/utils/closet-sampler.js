@@ -44,27 +44,23 @@ const OCCASION_PREFILTERS = {
     removeSubcategories: new Set(["Blazers", "Heels", "Cocktail Dresses", "Gowns", "Formal Separates"]),
     removeKeywords: ["structured", "tailored", "suit"],
   },
-  Athleisure: {
+  Casual: {
+    // Casual is the new home for athleisure / brunch / daytime / activity. Strip
+    // the obviously formal stuff and let everything else through; this is the
+    // bucket where the closet should breathe widest.
     removeCategories: new Set(["Occasionwear"]),
-    removeSubcategories: new Set(["Blazers", "Heels", "Cocktail Dresses", "Gowns", "Formal Separates"]),
-    removeKeywords: ["silk", "satin", "structured"],
-  },
-  Activity: {
-    removeCategories: new Set(["Occasionwear"]),
-    removeSubcategories: new Set(["Heels", "Blazers", "Cocktail Dresses", "Gowns"]),
-    removeKeywords: ["delicate", "silk", "satin"],
+    removeSubcategories: new Set(["Cocktail Dresses", "Gowns", "Formal Separates"]),
+    removeKeywords: [],
   },
   Travel: {
     removeCategories: new Set([]),
     removeSubcategories: new Set(["Stiletto"]),
     removeKeywords: ["stiletto"],
   },
-  Interview: {
-    removeCategories: new Set(["Athleisure", "Loungewear", "Swim"]),
-    removeSubcategories: new Set(["Jeans"]),
-    removeKeywords: ["ripped", "distressed"],
-  },
-  Executive: {
+  Work: {
+    // Covers everyday office through interview/executive — drop only the
+    // categorically wrong stuff at the sample stage. The OCCASION_SLOTS banned
+    // list does the finer-grained no-jeans / no-tee enforcement.
     removeCategories: new Set(["Athleisure", "Loungewear", "Swim"]),
     removeSubcategories: new Set(["Jeans"]),
     removeKeywords: ["ripped", "distressed"],
@@ -120,16 +116,23 @@ function getBucket(item) {
 }
 
 const BUCKET_TARGETS = {
-  tops: 30,
-  bottoms: 22,
-  dresses: 15,
-  outerwear: 15,
-  shoes: 18,
-  bags: 10,
-  accessories: 8,
+  tops: 24,
+  bottoms: 18,
+  dresses: 12,
+  outerwear: 10,
+  shoes: 14,
+  bags: 8,
+  accessories: 6,
 };
+// Total ~92 items per generation — was 160. Smaller pool = faster API calls
+// AND the cold-boost (40 items) becomes a much larger fraction of what the AI
+// sees, so under-rotated pieces actually surface instead of being drowned out.
 
-const TOTAL_TARGET = Object.values(BUCKET_TARGETS).reduce((a, b) => a + b, 0); // 160
+const TOTAL_TARGET = Object.values(BUCKET_TARGETS).reduce((a, b) => a + b, 0);
+
+// Number of "coldest" pieces to forcibly include in every generation.
+// Was 20 — bumped to 40 so the closet rotates more aggressively.
+const COLD_BOOST_SIZE = 40;
 
 /**
  * Fuzzy-match the free-text request against item fields to find force-include items.
@@ -293,7 +296,7 @@ export function sampleClosetItems({
     const bScore = (itemSuggestionCounts[b.id] || 0) - (feedbackScores[b.id] || 0);
     return aScore - bScore;
   });
-  const coldBoost = coldItems.slice(0, 20);
+  const coldBoost = coldItems.slice(0, COLD_BOOST_SIZE);
   const coldIds = new Set(coldBoost.map(it => it.id));
 
   // ── 6. Bucket remaining pool ──
@@ -379,7 +382,10 @@ export function sampleClosetItems({
     reverseMap[it.id] = short;
   });
 
-  return { sampled, idMap, reverseMap };
+  // forceIncludeIds = the items we believe she actually asked for in the
+  // free-text request. Surface them so the validator can require ≥1 in the
+  // generated looks (otherwise the AI tends to ignore "include my red blazer").
+  return { sampled, idMap, reverseMap, forceIncludeIds: [...forceIds] };
 }
 
 /**

@@ -9,7 +9,10 @@ import { invokeToolRaw } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 
-const MAX_RETRIES = 2;
+// Was 2. Each retry is a full Anthropic call (~5–8s) — three total tries
+// blew past 20s for the user. Capping at 1 retry: if the first response
+// passes, we ship it; if it fails, we get one chance to fix.
+const MAX_RETRIES = 1;
 
 // ── Validation Error ─────────────────────────────────────────────────────────
 export class ValidationError extends Error {
@@ -465,6 +468,32 @@ function checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots) {
 }
 
 /**
+ * Check: Must-include items. When the free-text request named specific
+ * pieces, the sampler resolved them to forceIncludeIds — at least one must
+ * appear in the generated looks. The AI tends to substitute pieces it likes
+ * better unless we enforce this hard.
+ */
+function checkRequestedItems(response, idMap, forceIncludeIds) {
+  if (!forceIncludeIds || forceIncludeIds.length === 0) return [];
+  // forceIncludeIds are real Supabase IDs; idMap is shortId → realId.
+  const requested = new Set(forceIncludeIds);
+  const usedRealIds = new Set();
+  response.looks.forEach(look => {
+    (look.items || []).forEach(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      usedRealIds.add(realId);
+    });
+  });
+  const matched = [...requested].filter(id => usedRealIds.has(id));
+  if (matched.length === 0) {
+    return [`She explicitly asked for these item IDs: ${[...requested].join(", ")}. NONE of them appear in any look. At least one must be included in the first look — rebuild.`];
+  }
+  return [];
+}
+
+/**
  * Check: Coord sets — a LOCKED item (set_id && !is_separable) must appear in
  * a look that also contains at least one of its set partners. If a partner
  * exists in the sampled pool (idMap) but none are in the same look, the
@@ -500,7 +529,7 @@ function checkCoordSets(response, idMap, allItems) {
 
 // ── Run all checks ───────────────────────────────────────────────────────────
 
-function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather) {
+function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds = []) {
   const allFailures = [];
 
   // Hard checks (must pass)
@@ -517,6 +546,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
+  allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
 
   // Soft checks (warn, trigger retry, but won't throw after MAX_RETRIES)
   allFailures.push(...checkItemCount(response).map(f => ({ type: "item_count", message: f, hard: false })));
@@ -582,6 +612,7 @@ export async function generateValidatedLooks({
   occasion = "Work",
   weather = "",
   contactSheets = [],
+  forceIncludeIds = [],
 }) {
   // Back-compat: callers may still pass a single `prompt` string.
   if (!staticPreamble && !dynamicBody && prompt) {
@@ -663,7 +694,7 @@ export async function generateValidatedLooks({
     let parsed = normalizeResponse(shapeCheck.data);
 
     // Run all validation checks
-    const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather);
+    const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds);
     const hardFailures = failures.filter(f => f.hard);
 
     if (hardFailures.length === 0) {

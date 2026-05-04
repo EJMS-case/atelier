@@ -16,7 +16,7 @@ import HomeView from "./features/home/HomeView.jsx";
 import { s, si, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
 import {
-  CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, CATEGORIES, SET_TAGS, OCCASIONS, getSubcatL2,
+  CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, CATEGORIES, SET_TAGS, OCCASIONS, getSubcatL2, normalizeOccasion,
 } from "./constants/taxonomy.js";
 import {
   STYLE_PROFILE, CASUAL_STYLE_PROFILE, STYLING_PRINCIPLES,
@@ -107,7 +107,10 @@ export default function App() {
   const [styling,    setStyling]    = useState(false);
   const [styleErr,   setStyleErr]   = useState("");
   const [occasion,   setOccasion]   = useState("Work");
-  const [weather,    setWeather]    = useState("");
+  // Weather is a Set so user can combine "Hot + Rainy" or "Cold + Rainy".
+  // Empty Set === "Any". Stored as Set in state, joined to a string when
+  // passed downstream so older filter/prompt code keeps working.
+  const [weather,    setWeather]    = useState(() => new Set());
   const [mood,       setMood]       = useState(""); // F2 — mood tag key
   const [request,    setRequest]    = useState("");
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
@@ -418,6 +421,15 @@ export default function App() {
     } catch { flashSync("error"); }
   }, [items, persistItems]);
 
+  // Pre-fill the Style Me request with a phrasing the sampler / validator
+  // can recognize, then jump to the panel. Used by ItemCard's spark button.
+  const styleWithItem = useCallback((it) => {
+    const desc = `${it.color ? it.color + " " : ""}${it.subcategory || it.category}`.trim();
+    setRequest(`include my ${desc} "${it.name}"`);
+    setView("style");
+    setStylePanelOpen(true);
+  }, [setView]);
+
   const isFav = useCallback((type, refId) =>
     favorites.some(f => f.type === type && f.reference_id === refId),
   [favorites]);
@@ -449,10 +461,15 @@ export default function App() {
     reasoning: look.rationale || look.reasoning || "",
   }));
 
+  // Join the multi-weather Set into a single label the downstream code
+  // already understands ("Hot (85°F+) + Rainy"). The filter / prompt parse
+  // each word independently, so this is the cleanest bridge.
+  const weatherLabel = [...weather].join(" + ");
+
   const handleGenerateForDay = async (dayOccasion = "Work") => {
     if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
     if (items.length < 3) throw new Error(`Add at least 3 items first (you have ${items.length}).`);
-    const result = await generateOutfit(items, dayOccasion, weather, "", apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
+    const result = await generateOutfit(items, dayOccasion, weatherLabel, "", apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
     const looks = result?.looks;
     if (!looks || !Array.isArray(looks) || looks.length === 0) {
       throw new Error(result?.notes || "AI returned no looks — try again.");
@@ -467,7 +484,7 @@ export default function App() {
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null); setOutfitNotes(null);
     try {
-      const result = await generateOutfit(items, occasion, weather, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
+      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
       const looks = result?.looks;
       // Capture notes for partial results
       if (result?.notes) setOutfitNotes(result.notes);
@@ -615,7 +632,10 @@ export default function App() {
               style={{background:"none", border:"none", color:"var(--color-text-muted)", fontSize:18, cursor:"pointer", padding:"0 4px", lineHeight:1}}>✕</button>
           </div>
 
-          {/* WHERE ARE YOU GOING? — occasion pills */}
+          {/* WHERE ARE YOU GOING? — occasion pills.
+              No auto-override of styleExcludes anymore — clicking an occasion
+              changes the occasion only. Her exclusion toggles below are HER
+              decision and stay sticky across occasion changes. */}
           <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>WHERE ARE YOU GOING?</div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
             {OCCASIONS.map(o => (
@@ -623,23 +643,16 @@ export default function App() {
                 style={occasion === o
                   ? {...s.chip, ...s.chipActive, fontSize:11, padding:"6px 12px"}
                   : {...s.chip, fontSize:11, padding:"6px 12px"}}
-                onClick={() => {
-                  setOccasion(o);
-                  // Auto-set smart defaults per occasion
-                  if (o === "Interview" || o === "Executive") {
-                    setStyleExcludes(new Set(["no-jeans","trousers-only"]));
-                  } else if (o === "Work") {
-                    setStyleExcludes(new Set(["no-jeans"]));
-                  } else {
-                    setStyleExcludes(new Set());
-                  }
-                }}>
+                onClick={() => setOccasion(o)}>
                 {o}
               </button>
             ))}
           </div>
 
-          {/* WHAT'S THE WEATHER? */}
+          {/* WHAT'S THE WEATHER? — multi-select. Temperature chips are
+              mutually exclusive (Hot xor Cold etc.); Rainy is a separate
+              modifier so "Cold + Rainy" / "Hot + Rainy" / "Warm + Rainy"
+              all work. Empty = Any. */}
           <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
             <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)"}}>WHAT'S THE WEATHER?</div>
             <button
@@ -647,7 +660,14 @@ export default function App() {
                 setWeatherLoading(true);
                 try {
                   const label = await getLocalWeatherLabel();
-                  setWeather(label);
+                  setWeather(prev => {
+                    const next = new Set(prev);
+                    // Drop any prior temperature chip — keep the user's Rainy if set.
+                    ["Hot (85°F+)","Warm (70-84°F)","Mild (55-69°F)","Cool (40-54°F)","Cold (below 40°F)"].forEach(t => next.delete(t));
+                    if (label === "Rainy") next.add("Rainy");
+                    else if (label) next.add(label);
+                    return next;
+                  });
                 } catch (err) {
                   console.warn("[F2] auto-weather failed:", err);
                 } finally {
@@ -660,19 +680,55 @@ export default function App() {
             </button>
           </div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-            {[
-              ["","Any"],["Hot (85°F+)","Hot"],["Warm (70-84°F)","Warm"],
-              ["Mild (55-69°F)","Mild"],["Cool (40-54°F)","Cool"],
-              ["Cold (below 40°F)","Cold"],["Rainy","Rainy"],
-            ].map(([val,label]) => (
-              <button key={val}
-                style={weather === val
-                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                onClick={() => setWeather(val)}>
-                {label}
-              </button>
-            ))}
+            {(() => {
+              const TEMP_CHIPS = [
+                ["Hot (85°F+)","Hot"],
+                ["Warm (70-84°F)","Warm"],
+                ["Mild (55-69°F)","Mild"],
+                ["Cool (40-54°F)","Cool"],
+                ["Cold (below 40°F)","Cold"],
+              ];
+              const TEMPS = new Set(TEMP_CHIPS.map(([v]) => v));
+              const isAny = weather.size === 0;
+              const toggleTemp = (val) => setWeather(prev => {
+                const next = new Set(prev);
+                if (next.has(val)) { next.delete(val); return next; }
+                // Drop any other temperature chip — only one temp at a time.
+                TEMP_CHIPS.forEach(([v]) => next.delete(v));
+                next.add(val);
+                return next;
+              });
+              const toggleRainy = () => setWeather(prev => {
+                const next = new Set(prev);
+                if (next.has("Rainy")) next.delete("Rainy"); else next.add("Rainy");
+                return next;
+              });
+              return (
+                <>
+                  <button
+                    style={isAny
+                      ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                      : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                    onClick={() => setWeather(new Set())}>Any</button>
+                  {TEMP_CHIPS.map(([val,label]) => (
+                    <button key={val}
+                      style={weather.has(val)
+                        ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                        : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                      onClick={() => toggleTemp(val)}>
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    style={weather.has("Rainy")
+                      ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
+                      : {...s.chip, fontSize:11, padding:"5px 11px"}}
+                    onClick={toggleRainy}>
+                    + Rainy
+                  </button>
+                </>
+              );
+            })()}
           </div>
 
           {/* MOOD — F2 */}
@@ -726,9 +782,14 @@ export default function App() {
           </div>
 
           {/* ANYTHING SPECIFIC? */}
-          <input placeholder="Anything specific? (e.g. 'use my red blazer', 'all black', 'navy and brown')"
+          <input placeholder="Anything specific? (e.g. 'include my red blazer', 'all black', 'navy and brown')"
             value={request} onChange={e=>setRequest(e.target.value)}
             style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
+          {request && (
+            <div style={{fontSize:10, color:"var(--color-text-muted)", marginTop:-4, marginBottom:8, fontStyle:"italic"}}>
+              ✦ Items matching your request will be force-included in look 1.
+            </div>
+          )}
 
           {styleErr && <p style={s.err}>{styleErr}</p>}
           <button style={{...s.btnPrimary, width:"100%"}}
@@ -956,7 +1017,8 @@ export default function App() {
                           onDelete={deleteItem}
                           onEdit={() => { setEditItem(item); setView("edit"); }}
                           isFavorited={isFav("piece", item.id)}
-                          onToggleFav={() => toggleFav("piece", item.id)}/>
+                          onToggleFav={() => toggleFav("piece", item.id)}
+                          onStyleItem={styleWithItem}/>
                       ))}
                     </div>
                   </div>
@@ -972,7 +1034,8 @@ export default function App() {
                           onDelete={deleteItem}
                           onEdit={() => { setEditItem(item); setView("edit"); }}
                           isFavorited={isFav("piece", item.id)}
-                          onToggleFav={() => toggleFav("piece", item.id)}/>
+                          onToggleFav={() => toggleFav("piece", item.id)}
+                          onStyleItem={styleWithItem}/>
                       ))}
                     </div>
                   </div>
@@ -994,7 +1057,8 @@ export default function App() {
                   onDelete={deleteItem}
                   onEdit={() => { setEditItem(item); setView("edit"); }}
                   isFavorited={isFav("piece", item.id)}
-                  onToggleFav={() => toggleFav("piece", item.id)}/>
+                  onToggleFav={() => toggleFav("piece", item.id)}
+                  onStyleItem={styleWithItem}/>
               ))}
             </div>
           ))}
