@@ -13,7 +13,7 @@ export const TAXONOMY = {
   Dresses:      ["Maxi","Midi","Mini","Sweater Dress"],
   Sets:         ["Day Sets","Night Sets"],
   Jumpsuits:    [],
-  Loungewear:   ["Hoodies / Sweatshirts","Tops"],
+  Loungewear:   ["Bottoms","Hoodies / Sweatshirts","Tops"],
   Athleisure:   ["Bra/Crop Top","Dresses","Long Sleeve","Pants","Short Sleeve","Shorts","Skirts"],
   Swim:         ["Swimsuits","Cover-Ups"],
   Outerwear:    ["Blazers","Coats","Jackets"],
