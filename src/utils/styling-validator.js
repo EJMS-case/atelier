@@ -875,6 +875,34 @@ export async function generateValidatedLooks({
       failures.map(f => f.message));
   }
 
+  // Salvage step 1: dedupe items across looks. Cross-look duplicates are a
+  // common AI failure ("two looks both use the burgundy heels") that the
+  // existing per-look salvage couldn't recover from because the failure
+  // message starts with "Item …" not "Look N". Strip the duplicate from
+  // the later look — earlier looks keep the item they were built around —
+  // then re-run validation. Looks that now fall under the item-count
+  // minimum will be caught by the per-look salvage below.
+  if (lastParsed?.looks?.length) {
+    const hadDuplicates = lastFailures.some(f => f.type === "no_duplicates" && f.hard);
+    if (hadDuplicates) {
+      const seen = new Set();
+      lastParsed.looks.forEach(look => {
+        if (!Array.isArray(look.items)) return;
+        look.items = look.items.filter(item => {
+          const id = typeof item === "string" ? item : item.id;
+          const cleanId = String(id).replace(/^ID:/i, "").trim();
+          if (seen.has(cleanId)) return false;
+          seen.add(cleanId);
+          return true;
+        });
+      });
+      // Re-run the full check suite against the deduped looks so the salvage
+      // logic below operates on an accurate failure list.
+      lastFailures = runAllChecks(lastParsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds);
+      console.warn("[Atelier Validator] Cross-look duplicates auto-deduplicated; re-validated.");
+    }
+  }
+
   // All retries exhausted. Try to salvage the last parsed response by dropping
   // any look that triggered a hard per-look failure (messages start with "Look N").
   // Cross-cutting hard failures (parse, schema, structure, no_duplicates without
