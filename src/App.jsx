@@ -995,6 +995,7 @@ export default function App() {
                 onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
                 onClose={() => setEditingSet(null)}
                 onEditItem={(item) => { setEditItem(item); setView("edit"); setEditingSet(null); }}
+                onAddItem={(item) => updateItem(item.id, { set_id: editingSet, is_separable: true })}
               />
             )}
           </>)}
