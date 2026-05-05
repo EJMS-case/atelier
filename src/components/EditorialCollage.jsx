@@ -1,8 +1,8 @@
 import { s } from "../ui/styles.js";
 
 // Build layout positions based on item categories
-function buildCollageLayout(items, suggestionSlots = []) {
-  const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
+function buildCollageLayout(items) {
+  const all = items;
 
   const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
   const BAG_RE   = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette)\b/i;
@@ -57,53 +57,60 @@ function buildCollageLayout(items, suggestionSlots = []) {
     }
   };
 
+  // Garment slots are kept TALL because most clothing photos are portrait —
+  // a tall slot lets objectFit:contain render the piece large; a short-wide
+  // slot leaves whitespace and the garment looks smaller than its neighbours.
   if (hasDress) {
     // ── DRESS-BASED LAYOUT ──
     if (hasLayer) {
-      // Dress + Layer (cardigan/blazer over dress)
-      place("layer",  { x:1,  y:1,  w:44, h:50 });
-      place("dress",  { x:47, y:1,  w:48, h:56 });
-      if (hasBelt) place("belt", { x:30, y:54, w:20, h:8 });
-      if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
-      if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
+      // Dress + Layer — both tall, side by side
+      place("layer",  { x:1,  y:1,  w:42, h:64 });
+      place("dress",  { x:46, y:1,  w:50, h:70 });
+      if (hasBelt) place("belt", { x:28, y:66, w:20, h:6 });
+      if (hasShoes) place("shoes", { x:1, y:68, w:32, h:26 });
+      if (hasBag) place("bag", { x:62, y:74, w:30, h:24 });
     } else if (hasTop) {
-      // Dress + Top (e.g. bodysuit under dress, or top layered)
-      place("top",    { x:1,  y:1,  w:40, h:44 });
-      place("dress",  { x:43, y:1,  w:52, h:56 });
-      if (hasBelt) place("belt", { x:30, y:54, w:20, h:8 });
-      if (hasShoes) place("shoes", { x:1, y:56, w:30, h:28 });
-      if (hasBag) place("bag", { x:55, y:62, w:32, h:28 });
+      // Dress + Top — dress dominant, top smaller on left
+      place("top",    { x:1,  y:1,  w:40, h:48 });
+      place("dress",  { x:44, y:1,  w:52, h:70 });
+      if (hasBelt) place("belt", { x:28, y:64, w:20, h:6 });
+      if (hasShoes) place("shoes", { x:1, y:54, w:32, h:28 });
+      if (hasBag) place("bag", { x:62, y:74, w:30, h:24 });
     } else {
-      // Dress only (no layer or top)
-      place("dress",  { x:18, y:1,  w:52, h:58 });
-      if (hasBelt) place("belt", { x:29, y:54, w:20, h:8 });
-      if (hasShoes) place("shoes", { x:1, y:64, w:32, h:28 });
-      if (hasBag) place("bag", { x:55, y:64, w:32, h:28 });
+      // Dress only
+      place("dress",  { x:22, y:1,  w:52, h:72 });
+      if (hasBelt) place("belt", { x:30, y:64, w:20, h:7 });
+      if (hasShoes) place("shoes", { x:1, y:74, w:32, h:24 });
+      if (hasBag) place("bag", { x:62, y:74, w:32, h:24 });
     }
   } else {
     // ── SEPARATES-BASED LAYOUT (top + bottom) ──
     if (hasLayer && hasTop) {
-      // Layer + Top + Bottom
-      place("layer",  { x:1,  y:1,  w:46, h:44 });
-      place("top",    { x:49, y:1,  w:46, h:40 });
-      if (hasBelt) place("belt", { x:2, y:44, w:20, h:8 });
-      place("bottom", { x:1,  y:48, w:44, h:46 });
-      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
-      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
+      // Layer + Top + Bottom — layer dominant on left, top + bottom stack right
+      place("layer",  { x:1,  y:1,  w:44, h:66 });
+      place("top",    { x:48, y:1,  w:48, h:34 });
+      place("bottom", { x:48, y:38, w:44, h:38 });
+      if (hasBelt) place("belt", { x:48, y:76, w:20, h:6 });
+      if (hasShoes) place("shoes", { x:1, y:70, w:32, h:26 });
+      if (hasBag) place("bag", { x:72, y:76, w:24, h:22 });
     } else if (hasLayer) {
-      // Layer + Bottom (no separate top — layer IS the top)
-      place("layer",  { x:14, y:1,  w:52, h:44 });
-      if (hasBelt) place("belt", { x:14, y:42, w:20, h:8 });
-      place("bottom", { x:1,  y:48, w:44, h:46 });
-      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
-      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
+      // Layer + Bottom (no separate top — layer IS the top).
+      // Give layer a tall hero slot; bottom sits compact on the right so
+      // a long coat doesn't get dwarfed by a wide skirt rendering.
+      place("layer",  { x:1,  y:1,  w:48, h:74 });
+      place("bottom", { x:54, y:1,  w:42, h:50 });
+      if (hasBelt) place("belt", { x:54, y:52, w:20, h:6 });
+      if (hasBag) place("bag", { x:54, y:62, w:24, h:24 });
+      if (hasShoes) place("shoes", { x:78, y:62, w:20, h:24 });
     } else {
-      // Top + Bottom (no layer)
-      place("top",    { x:14, y:1,  w:52, h:44 });
-      if (hasBelt) place("belt", { x:14, y:42, w:20, h:8 });
-      place("bottom", { x:1,  y:48, w:44, h:46 });
-      if (hasBag) place("bag", { x:47, y:48, w:30, h:26 });
-      if (hasShoes) place("shoes", { x:47, y:74, w:30, h:24 });
+      // Top + Bottom (no layer). Bottom is taller — pants/long skirts are
+      // mostly portrait, so a tall slot keeps them visually similar in scale
+      // to the top instead of looking stubby next to a wide blouse.
+      place("top",    { x:18, y:1,  w:46, h:42 });
+      if (hasBelt) place("belt", { x:14, y:40, w:22, h:6 });
+      place("bottom", { x:1,  y:46, w:48, h:52 });
+      if (hasBag) place("bag", { x:54, y:48, w:28, h:26 });
+      if (hasShoes) place("shoes", { x:54, y:76, w:28, h:22 });
     }
   }
 
@@ -136,20 +143,20 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
 // Positions pieces as floating, slightly overlapping items on a clean background
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
-export default function EditorialCollage({ lookItems, suggestionSlots = [], onItemClick }) {
+export default function EditorialCollage({ lookItems, onItemClick }) {
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
   // Assign editorial positions based on category and count
   // Each slot: { item, x, y, w, h, rotate, zIndex }
-  const slots = buildCollageLayout(sorted, suggestionSlots);
+  const slots = buildCollageLayout(sorted);
 
   return (
     <div style={s.collageCanvas}>
       {slots.map((slot, i) => (
         <div key={slot.id || i}
-          onClick={!slot.isSuggestion && onItemClick ? () => onItemClick(slot) : undefined}
+          onClick={onItemClick ? () => onItemClick(slot) : undefined}
           style={{
             position: "absolute",
             left: `${slot.x}%`,
@@ -159,16 +166,9 @@ export default function EditorialCollage({ lookItems, suggestionSlots = [], onIt
             transform: `rotate(${slot.rotate}deg)`,
             zIndex: slot.zIndex,
             filter: "drop-shadow(0 4px 14px rgba(28,24,20,0.18))",
-            cursor: !slot.isSuggestion && onItemClick ? "pointer" : "default",
+            cursor: onItemClick ? "pointer" : "default",
           }}>
-          {slot.isSuggestion ? (
-            <div style={s.elevSlotPh}>
-              <div style={s.elevSlotBrand}>{slot.item?.split(" ").slice(0,2).join(" ")}</div>
-              <div style={s.elevSlotItem}>{slot.item?.split(" ").slice(2).join(" ")}</div>
-              <div style={s.elevSlotPrice}>{slot.price}</div>
-              <div style={s.elevSlotBadge}>{slot.type === "swap" ? "SWAP" : "ADD"}</div>
-            </div>
-          ) : slot.image ? (
+          {slot.image ? (
             <img src={slot.image} alt={slot.name}
               style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
           ) : (

@@ -183,6 +183,35 @@ function checkLowerHalf(response, idMap, allItems) {
 }
 
 /**
+ * Check 4b: Every separates look (no dress/jumpsuit/set) needs an upper-half
+ * garment — a Top or a Knit. A skirt + coat with nothing underneath isn't an
+ * outfit, it's a half-undressed mistake. Outerwear is a layer, not a top.
+ */
+function checkUpperHalf(response, idMap, allItems) {
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const hasDress = resolved.some(it =>
+      it.category === "Dresses" || it.category === "Occasionwear" ||
+      it.category === "Jumpsuits" || it.category === "Sets"
+    );
+    if (hasDress) return;
+
+    const hasTop = resolved.some(it => it.category === "Tops" || it.category === "Knits");
+    if (!hasTop) {
+      failures.push(`Look ${i + 1} ("${look.name}") has no top or knit — every separates look needs an upper-half garment. Outerwear is a layer, not a top.`);
+    }
+  });
+  return failures;
+}
+
+/**
  * Check 5: Exclusion filter compliance.
  */
 function checkExclusions(response, idMap, allItems, activeExclusions) {
@@ -305,7 +334,7 @@ function checkHeroDiversity(response, idMap, allItems) {
  */
 function checkCategoryBalance(response, idMap, allItems) {
   const failures = [];
-  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Outerwear: 1, Knits: 1, Tops: 1 };
+  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Outerwear: 1, Knits: 1, Tops: 1, Bottoms: 1 };
 
   response.looks.forEach((look, i) => {
     const catCounts = {};
@@ -425,6 +454,14 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
         }
         if (resolved.subcategory === "Coats" || resolved.subcategory === "Boots") {
           failures.push(`Look ${i + 1}: "${resolved.name}" (${resolved.subcategory}) is wrong for ${weather} — pick lighter.`);
+        }
+        // Outerwear is a hot-weather hard fail; for warm, only allow if the item
+        // is explicitly tagged as light (linen/cotton/unstructured/unlined).
+        if (resolved.category === "Outerwear") {
+          const isLight = /linen|cotton|seersucker|unstructured|unlined|lightweight|sheer/i.test(text);
+          if (isHot || !isLight) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear — wrong for ${weather}. Skip the layer or pick an unstructured linen blazer.`);
+          }
         }
         if (sw === "winter") {
           failures.push(`Look ${i + 1}: "${resolved.name}" is marked Winter — wrong for ${weather}.`);
@@ -546,6 +583,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkItemsExist(response, idMap).map(f => ({ type: "items_exist", message: f, hard: true })));
   allFailures.push(...checkNoDuplicates(response).map(f => ({ type: "no_duplicates", message: f, hard: true })));
   allFailures.push(...checkLowerHalf(response, idMap, allItems).map(f => ({ type: "lower_half", message: f, hard: true })));
+  allFailures.push(...checkUpperHalf(response, idMap, allItems).map(f => ({ type: "upper_half", message: f, hard: true })));
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
   allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots).map(f => ({ type: "occasion", message: f, hard: true })));
   allFailures.push(...checkCategoryBalance(response, idMap, allItems).map(f => ({ type: "category_balance", message: f, hard: true })));
@@ -591,9 +629,39 @@ function normalizeResponse(parsed) {
     if (!look.color_strategy) look.color_strategy = look.colorStory || "";
     if (!look.texture_story) look.texture_story = "";
     if (!look.rationale) look.rationale = look.reasoning || look.styling || "";
+    look.rationale = scrubRationale(look.rationale);
     return look;
   });
+  // The top-level `notes` field is internal — never surface salvage/retry
+  // commentary to the user. App.jsx no longer renders it, but clear it here
+  // too so downstream consumers (saved looks, planner) don't see it either.
+  delete parsed.notes;
   return parsed;
+}
+
+// Defensive cleanup of rationale prose. The model still occasionally drops in
+// "LOOK 1:" prefixes, all-caps section labels (TEXTURE HERO:, VOLUME BELOW:,
+// OUTERWEAR HERO:, etc.), and W-ID parentheticals — patterns we explicitly
+// disallow in the prompt. Strip them client-side as a fallback so users never
+// see debug-style text.
+function scrubRationale(text) {
+  if (!text) return "";
+  let out = String(text).trim();
+  // Drop a leading "Look 1:" / "LOOK 2:" / "Look #1 —" prefix.
+  out = out.replace(/^\s*look\s*#?\s*\d+\s*[:\-—–.]\s*/i, "");
+  // Drop ALL-CAPS section labels followed by colon — at start of string OR
+  // after a sentence boundary. Matches "TEXTURE HERO:", "VOLUME BELOW:",
+  // "OUTERWEAR HERO:", "TONAL color approach:", etc. Allow up to 5 words,
+  // each starting uppercase, ≤2 lowercase chars total.
+  out = out.replace(/(^|[.!?]\s+|\n)(?:[A-Z][A-Z0-9+\-/]{1,}(?:\s+[A-Z][A-Z0-9+\-/]{1,}){0,4}(?:\s+[a-z]{2,12}){0,2}\s*:\s*)/g, "$1");
+  // Strip "✦" markers, leading dashes / asterisks the model uses for fake bullets.
+  out = out.replace(/(^|\n)\s*[•✦*\-–]\s+/g, "$1");
+  // Strip W-ID parentheticals: "(W055)", " W093", "(W030, W055)".
+  out = out.replace(/\s*\((?:W\d{2,4}(?:\s*,\s*W\d{2,4})*)\)/gi, "");
+  out = out.replace(/\bW\d{2,4}\b/g, "");
+  // Collapse multiple spaces / leftover whitespace.
+  out = out.replace(/\s{2,}/g, " ").replace(/\s+([.,;:!?])/g, "$1").trim();
+  return out;
 }
 
 // ── Partial-look extractor for streaming ────────────────────────────────────
@@ -727,7 +795,7 @@ export async function generateValidatedLooks({
           {
             apiKey,
             model: "claude-sonnet-4-5",
-            maxTokens: 4500,
+            maxTokens: 3500,
             temperature: 0.7,
             content: messageContent,
             tool: LooksTool,
@@ -742,6 +810,7 @@ export async function generateValidatedLooks({
                 ...checkStructure(candidate),
                 ...checkItemsExist(candidate, idMap),
                 ...checkLowerHalf(candidate, idMap, allItems),
+                ...checkUpperHalf(candidate, idMap, allItems),
               ];
               // Also guard against duplicating items already shown.
               const newIds = (candidate.looks[0]?.items || []).map(it =>
@@ -761,7 +830,7 @@ export async function generateValidatedLooks({
         ({ toolBlock, raw } = await invokeToolRaw({
           apiKey,
           model: "claude-sonnet-4-5",
-          maxTokens: 4500,
+          maxTokens: 3500,
           temperature: 0.7,
           content: messageContent,
           tool: LooksTool,
@@ -827,10 +896,10 @@ export async function generateValidatedLooks({
       const surviving = lastParsed.looks.filter((_, idx) => !badIndices.has(idx));
       if (surviving.length > 0) {
         const dropped = lastParsed.looks.length - surviving.length;
+        // Salvage info is logged for debugging only — never surfaced to the user.
         const salvaged = { ...lastParsed, looks: surviving };
-        const noteSuffix = `${dropped} look${dropped === 1 ? "" : "s"} dropped after retries: ${dropReasons.join("; ")}`;
-        salvaged.notes = salvaged.notes ? `${salvaged.notes} · ${noteSuffix}` : noteSuffix;
-        console.warn("[Atelier Validator] Salvaging response — dropped", dropped, "look(s):", dropReasons);
+        delete salvaged.notes;
+        console.warn(`[Atelier Validator] Salvaging response — dropped ${dropped} look(s):`, dropReasons);
         return resolveIds(salvaged, idMap, allItems, occasion);
       }
     }

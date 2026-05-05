@@ -91,7 +91,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
                     onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}
                     style={{ fontSize:12, padding:"4px 6px", border:"1px solid var(--color-border)", borderRadius:6, background:"#FDFBF9", fontFamily:"inherit", color:"#2C2420" }}/>
                   <button style={s.histWearBtn} onClick={() => handleLog(log.id)} disabled={loggingId === log.id}>
-                    {loggingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Log as worn"}
+                    {loggingId === log.id ? <><span style={s.spinnerSm}/> Logging…</> : "Log as worn"}
                   </button>
                 </div>
                 {deleteId === log.id ? (

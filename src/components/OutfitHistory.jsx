@@ -97,7 +97,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
                           strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
                       </button>
                       <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
-                        {wearingId === log.id ? <><span style={s.spinnerElevate}/> Logging…</> : "Wear this again"}
+                        {wearingId === log.id ? <><span style={s.spinnerSm}/> Logging…</> : "Wear this again"}
                       </button>
                       <button style={s.histDeleteBtn} onClick={() => handleUnlog(log.id)} disabled={unloggingId === log.id}
                         title="Move back to Looks (clears the wear date)">

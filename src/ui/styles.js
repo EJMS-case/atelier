@@ -54,7 +54,7 @@ export const s = {
   // Spinners
   spinner: { display:"inline-block", width:28, height:28, border:"2px solid var(--color-border)", borderTop:"2px solid var(--color-ink)", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
   spinnerSm: { display:"inline-block", width:13, height:13, border:"2px solid rgba(255,255,255,0.3)", borderTop:"2px solid #fff", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
-  spinnerElevate: { display:"inline-block", width:11, height:11, border:"1.5px solid var(--color-border-muted)", borderTop:"1.5px solid var(--color-ink)", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
+  spinnerSm: { display:"inline-block", width:11, height:11, border:"1.5px solid var(--color-border-muted)", borderTop:"1.5px solid var(--color-ink)", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
 
   // Style panel
   stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid var(--color-border)", padding:"14px 20px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", maxHeight:"80vh", overflowY:"auto" },
@@ -118,40 +118,6 @@ export const s = {
   lookMeta: { padding:"14px 22px 18px", display:"flex", flexDirection:"column", gap:8, borderTop:"1px solid var(--color-border-soft)" },
   metaRow: { fontSize:12, color:"var(--color-text)", lineHeight:1.6, display:"flex", gap:8, alignItems:"flex-start" },
   metaIcon: { flexShrink:0, color:"var(--color-accent)", marginTop:1 },
-
-  // ── Elevate feature
-  elevateBar: { padding:"12px 18px 14px", borderTop:"1px solid var(--color-border-soft)" },
-  elevateBtn: { width:"100%", background:"none", border:"1.5px solid var(--color-ink)", borderRadius:4, padding:"10px 16px", fontSize:11, letterSpacing:"0.14em", color:"var(--color-ink)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7, fontFamily:"'DM Sans',sans-serif", transition:"all 0.2s" },
-  elevatedSection: { borderTop:"2px solid var(--color-ink)" },
-  elevDivider: { display:"flex", alignItems:"center", gap:10, padding:"14px 18px 10px" },
-  elevDividerLine: { flex:1, height:1, background:"var(--color-border)" },
-  elevDividerLabel: { fontSize:9, letterSpacing:"0.25em", color:"var(--color-text-muted)", fontFamily:"sans-serif" },
-  elevHeader: { padding:"0 18px 14px" },
-  elevName: { fontSize:18, fontWeight:400, letterSpacing:"0.04em", marginBottom:4 },
-  elevWhy: { fontSize:12, color:"var(--color-text-2)", fontStyle:"italic", lineHeight:1.5 },
-
-  elevSlotPh: { width:"100%", height:"100%", minHeight:100, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4, padding:10, background:"linear-gradient(135deg, var(--color-surface) 0%, #EDE8E2 100%)", border:"1.5px dashed var(--color-border-muted)", position:"relative" },
-  elevSlotBrand: { fontSize:10, letterSpacing:"0.1em", color:"var(--color-text-2)", fontWeight:600 },
-  elevSlotItem:  { fontSize:9, color:"var(--color-text-muted)", textAlign:"center", lineHeight:1.4 },
-  elevSlotPrice: { fontSize:10, color:"var(--color-accent)", marginTop:2, letterSpacing:"0.06em" },
-  elevSlotBadge: { position:"absolute", top:6, right:6, background:"var(--color-ink)", color:"var(--color-surface)", fontSize:7, letterSpacing:"0.1em", padding:"2px 5px", borderRadius:2, fontFamily:"sans-serif" },
-
-  elevSuggestions: { display:"flex", flexDirection:"column", gap:10, padding:"0 16px 16px" },
-  elevSuggestionCard: { background:"var(--color-surface-2)", border:"1px solid var(--color-border)", borderRadius:8, padding:"12px 14px" },
-  elevSugHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 },
-  elevSugBadge: (type) => ({
-    fontSize:9, letterSpacing:"0.12em",
-    background: type==="swap" ? "#EDE8FF" : "#E8F5EC",
-    color: type==="swap" ? "#5B4E8E" : "var(--color-success)",
-    padding:"2px 7px", borderRadius:3,
-    fontFamily:"sans-serif",
-  }),
-  elevSugPrice:  { fontSize:11, color:"var(--color-accent)", letterSpacing:"0.04em" },
-  elevSugItem:   { fontSize:14, fontWeight:400, letterSpacing:"0.03em", marginBottom:3 },
-  elevSugDesc:   { fontSize:11, color:"var(--color-text-2)", marginBottom:4, lineHeight:1.5 },
-  elevSugSwap:   { fontSize:10, color:"var(--color-text-muted)", fontStyle:"italic", marginBottom:4 },
-  elevSugWhy:    { fontSize:12, color:"var(--color-text)", lineHeight:1.5, marginBottom:4 },
-  elevSugColor:  { fontSize:10, color:"var(--color-success)", letterSpacing:"0.04em" },
 
   // ── Color Advisor
   modeTabs: { display:"flex", gap:4, marginBottom:24, background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, padding:4 },
@@ -222,7 +188,8 @@ export const s = {
   knitEdit:    { background:"none", border:"1px solid var(--color-border-muted)", borderRadius:4, padding:"5px 12px", fontSize:11, color:"var(--color-text-2)", cursor:"pointer", letterSpacing:"0.06em" },
 
   // ── Save button
-  saveBtn: { background:"var(--color-success)", color:"#fff", border:"none", borderRadius:4, padding:"10px 16px", fontSize:11, letterSpacing:"0.1em", cursor:"pointer", fontFamily:"Georgia,serif" },
+  saveBar: { padding:"12px 18px 14px", borderTop:"1px solid var(--color-border-soft)", display:"flex" },
+  saveBtn: { flex:1, background:"var(--color-success)", color:"#fff", border:"none", borderRadius:4, padding:"10px 16px", fontSize:11, letterSpacing:"0.1em", cursor:"pointer", fontFamily:"Georgia,serif" },
 
   // ── Heart button
   heartBtn: { background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", alignItems:"center" },

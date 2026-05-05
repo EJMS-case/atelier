@@ -2,6 +2,60 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Generator audit: kill conflicts, clean up rationale, faster — 2026-05-05
+
+### Why
+Recent generations leaked debug-style text into the user-facing rationale ("LOOK 1 follows the TONAL directive…", "TEXTURE HERO:", "VOLUME BELOW:", "Fresh items: W094, W042…") and the orange "Note:" box surfaced internal salvage commentary ("1 look dropped after retries…"). Two root causes:
+
+1. The static preamble re-stated rules already in the dynamic REQUEST block (HC6 weather, HC7 exclusions, HC8 occasion bans, full CASUAL RIDER, full DIFFERENTIATION list, full pre-return BUILD 3 LOOKS checklist). The model was reading every rule twice and parroting the structure back into prose.
+2. The STYLING DIRECTIONS block formatted briefs with `LOOK 1:` / `Color approach:` / `Proportion:` / `Hero strategy:` headers, and the strategy strings themselves started with all-caps labels (`TONAL:`, `VOLUME BELOW:`, `TEXTURE HERO:`). The model literally copied those into rationales.
+
+### Changed — Prompt (`src/prompts/styling-system-prompt.js`)
+- Static preamble rewritten and cut roughly in half. Removed: HC6/HC7/HC8 weather/exclusion/occasion repeats (the dynamic body already enforces them), CASUAL RIDER block, DIFFERENTIATION list, and the BUILD 3 LOOKS pre-return checklist (the validator catches all of those). Vibe descriptions condensed to a single line listing the canonical names.
+- Hard rules collapsed from HC1–HC9 to HC1–HC7. HC6 is now one line that points at the REQUEST blocks instead of restating them.
+- New, much stricter `RATIONALE WRITING STYLE` section with a concrete GOOD/BAD example so the model has a positive target.
+- `STYLING DIRECTIONS` block rewritten as flat prose ("For the first look — color: …  | proportion: …  | hero: …"). No `LOOK N:` headers, no per-row `Color approach:` labels.
+- New `stripStrategyLabel` helper trims the all-caps label prefix (`TONAL:`, `VOLUME BELOW:`, `TEXTURE HERO:`, etc.) off every strategy string before injection so those tokens never reach the model.
+- Top-level `notes` field is explicitly told to stay empty.
+
+### Changed — Validator (`src/utils/styling-validator.js`)
+- `normalizeResponse` now scrubs `look.rationale` and deletes the top-level `notes` field on every response. New `scrubRationale` strips leftover `LOOK N:` prefixes, all-caps section labels, leading bullet markers, and W-ID parentheticals (`(W055)`, bare `W093`) — defensive layer in case the model still slips up.
+- Salvage path no longer writes a `notes` field on the returned object — drop reasons are logged via `console.warn` only.
+- `maxTokens` cut from 4500 → 3500 on both streaming and retry calls. The looks fit comfortably in the smaller budget; this trims a couple of seconds off cold generations.
+
+### Changed — App (`src/App.jsx`)
+- Removed `outfitNotes` state, `setOutfitNotes` setter, and the orange "Note:" box that rendered them. Notes were always internal-debug content; the user-facing UI no longer leaks them.
+- `LookCard` no longer receives the now-unused `apiKey` prop (the elevate flow that needed it was removed earlier in this branch).
+
+### Changed — Collage (`src/components/EditorialCollage.jsx`)
+- Top + Bottom layout rebalanced: the bottom slot got taller (52% h) and slightly narrower, the top got smaller (42% h). Pants and long skirts are mostly portrait, so a tall slot keeps them on visual par with a wide blouse instead of looking stubby — fixes the "blouse is huge, pants tiny" effect from the Teal Tonal Volume look.
+
+### Performance
+- Static preamble shrinks roughly 40% (fewer cached tokens, faster prompt-cache hits).
+- maxTokens 4500 → 3500 trims output time on every call.
+- Net main-bundle: 495.99 kB → 484.71 kB (−11 kB after this audit + the earlier Elevate removal).
+
+## [Unreleased] — Remove "Elevate this Look" — 2026-05-05
+
+### Removed
+The Elevate flow on each look card never produced reliably useful suggestions — the model invented brand/price combos that didn't anchor in the closet, and the swap/add UI competed with the simpler Save flow. Pulling the whole feature.
+
+- `generateElevation` (caller in `src/lib/ai/stylist.js`)
+- `ElevationSchema`, `ElevationEntrySchema`, `ElevationTool` (`src/lib/ai/schemas.js`)
+- `LookCard` elevate state + handler + "✦ Elevate this Look" / "ELEVATED" / suggestion-card UI
+- `EditorialCollage` `suggestionSlots` parameter and the `isSuggestion` placeholder branch
+- `s.elevate*`, `s.elev*`, `s.elevSlot*`, `s.elevSug*`, and `s.elevatedSection` style entries
+- `icons.elevate` SVG path
+- `App.jsx` import of `generateElevation`
+
+### Changed
+- Renamed shared spinner style `s.spinnerElevate` → `s.spinnerSm` (it was always a generic small spinner; the elevate-specific name was misleading). Updated callers in `LooksView` and `OutfitHistory`.
+- `LookCard` now shows a single full-width Save button under the look meta instead of the split Elevate/Save row.
+
+### Notes
+- No data migration. The feature touched no persistent state.
+- Backend `STYLE_PROFILE` import in `stylist.js` is still used by other helpers, so nothing else to clean.
+
 ## [Unreleased] — App.jsx refactor (phase 2: AI helpers) — 2026-04-17
 
 ### Changed

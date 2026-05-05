@@ -122,59 +122,7 @@ export const LooksTool = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. generateElevation — 3 shoppable upgrades for a saved look
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ElevationEntrySchema = z.object({
-  type: z.enum(["add", "swap"]),
-  swapTarget: z.string().nullable().optional(),
-  category: z.string(),
-  item: z.string(),
-  description: z.string(),
-  price: z.string(),
-  why: z.string(),
-  colorNote: z.string(),
-});
-
-export const ElevationSchema = z.object({
-  elevatedLookName: z.string(),
-  elevatedWhy: z.string(),
-  elevations: z.array(ElevationEntrySchema).min(1),
-});
-
-export const ElevationTool = {
-  name: "return_elevation",
-  description: "Return 3 shoppable elevations for the provided outfit.",
-  input_schema: {
-    type: "object",
-    properties: {
-      elevatedLookName: { type: "string" },
-      elevatedWhy:      { type: "string" },
-      elevations: {
-        type: "array",
-        minItems: 1,
-        items: {
-          type: "object",
-          properties: {
-            type:        { type: "string", enum: ["add", "swap"] },
-            swapTarget:  { type: ["string", "null"] },
-            category:    { type: "string" },
-            item:        { type: "string" },
-            description: { type: "string" },
-            price:       { type: "string" },
-            why:         { type: "string" },
-            colorNote:   { type: "string" },
-          },
-          required: ["type", "category", "item", "description", "price", "why", "colorNote"],
-        },
-      },
-    },
-    required: ["elevatedLookName", "elevatedWhy", "elevations"],
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. classifyKnitAI — weight + fit classifier
+// 3. classifyKnitAI — weight + fit classifier
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const KnitSchema = z.object({
@@ -200,7 +148,7 @@ export const KnitTool = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. analyzeColorAI — undertone + Dark Winter palette analyzer
+// 4. analyzeColorAI — undertone + Dark Winter palette analyzer
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DimensionScoreSchema = z.object({
@@ -275,7 +223,7 @@ export const ColorAnalysisTool = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. generateShoppingRecs (mode="gap") — wardrobe gap analysis
+// 5. generateShoppingRecs (mode="gap") — wardrobe gap analysis
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GapEntrySchema = z.object({
@@ -322,7 +270,7 @@ export const GapsTool = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. generateShoppingRecs (mode="completion") — outfit completion
+// 6. generateShoppingRecs (mode="completion") — outfit completion
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CompletionEntrySchema = z.object({
