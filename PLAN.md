@@ -91,7 +91,7 @@ Each feature = its own branch `feature/<name>` → `npm run build` green → PR 
 2. Horizontal swipe deck per slot (touch + mouse), tap to lock in. Keep filter bar for power users.
 3. **Silhouette preview:** simple SVG figure (I'll commit a minimal vector — no external art). Items composite on top with CSS masks.
 4. On save: hide silhouette, composite items on white bg, export PNG to Supabase Storage → store as the look's `collage_url`.
-5. "Evaluate my look" button → calls Claude with the final item set + styling principles → returns ≤3 elevation tips (reuses existing `generateElevation` logic).
+5. "Evaluate my look" button → calls Claude with the final item set + styling principles → returns ≤3 styling tips (see `src/features/builder/evaluateLook.js`).
 6. Saved looks surface in F3 picker and become eligible F2 picks.
 7. **Acceptance test:** save a look in <30s; appears in both F3 and F2 within the same session.
 

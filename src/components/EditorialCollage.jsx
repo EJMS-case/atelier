@@ -1,8 +1,8 @@
 import { s } from "../ui/styles.js";
 
 // Build layout positions based on item categories
-function buildCollageLayout(items, suggestionSlots = []) {
-  const all = [...items, ...suggestionSlots.map(s => ({...s, isSuggestion:true}))];
+function buildCollageLayout(items) {
+  const all = items;
 
   const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
   const BAG_RE   = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette)\b/i;
@@ -141,20 +141,20 @@ function buildCollageLayout(items, suggestionSlots = []) {
 
 // Positions pieces as floating, slightly overlapping items on a clean background
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
-export default function EditorialCollage({ lookItems, suggestionSlots = [], onItemClick }) {
+export default function EditorialCollage({ lookItems, onItemClick }) {
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
   // Assign editorial positions based on category and count
   // Each slot: { item, x, y, w, h, rotate, zIndex }
-  const slots = buildCollageLayout(sorted, suggestionSlots);
+  const slots = buildCollageLayout(sorted);
 
   return (
     <div style={s.collageCanvas}>
       {slots.map((slot, i) => (
         <div key={slot.id || i}
-          onClick={!slot.isSuggestion && onItemClick ? () => onItemClick(slot) : undefined}
+          onClick={onItemClick ? () => onItemClick(slot) : undefined}
           style={{
             position: "absolute",
             left: `${slot.x}%`,
@@ -164,16 +164,9 @@ export default function EditorialCollage({ lookItems, suggestionSlots = [], onIt
             transform: `rotate(${slot.rotate}deg)`,
             zIndex: slot.zIndex,
             filter: "drop-shadow(0 4px 14px rgba(28,24,20,0.18))",
-            cursor: !slot.isSuggestion && onItemClick ? "pointer" : "default",
+            cursor: onItemClick ? "pointer" : "default",
           }}>
-          {slot.isSuggestion ? (
-            <div style={s.elevSlotPh}>
-              <div style={s.elevSlotBrand}>{slot.item?.split(" ").slice(0,2).join(" ")}</div>
-              <div style={s.elevSlotItem}>{slot.item?.split(" ").slice(2).join(" ")}</div>
-              <div style={s.elevSlotPrice}>{slot.price}</div>
-              <div style={s.elevSlotBadge}>{slot.type === "swap" ? "SWAP" : "ADD"}</div>
-            </div>
-          ) : slot.image ? (
+          {slot.image ? (
             <img src={slot.image} alt={slot.name}
               style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
           ) : (

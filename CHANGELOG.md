@@ -2,6 +2,27 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Remove "Elevate this Look" — 2026-05-05
+
+### Removed
+The Elevate flow on each look card never produced reliably useful suggestions — the model invented brand/price combos that didn't anchor in the closet, and the swap/add UI competed with the simpler Save flow. Pulling the whole feature.
+
+- `generateElevation` (caller in `src/lib/ai/stylist.js`)
+- `ElevationSchema`, `ElevationEntrySchema`, `ElevationTool` (`src/lib/ai/schemas.js`)
+- `LookCard` elevate state + handler + "✦ Elevate this Look" / "ELEVATED" / suggestion-card UI
+- `EditorialCollage` `suggestionSlots` parameter and the `isSuggestion` placeholder branch
+- `s.elevate*`, `s.elev*`, `s.elevSlot*`, `s.elevSug*`, and `s.elevatedSection` style entries
+- `icons.elevate` SVG path
+- `App.jsx` import of `generateElevation`
+
+### Changed
+- Renamed shared spinner style `s.spinnerElevate` → `s.spinnerSm` (it was always a generic small spinner; the elevate-specific name was misleading). Updated callers in `LooksView` and `OutfitHistory`.
+- `LookCard` now shows a single full-width Save button under the look meta instead of the split Elevate/Save row.
+
+### Notes
+- No data migration. The feature touched no persistent state.
+- Backend `STYLE_PROFILE` import in `stylist.js` is still used by other helpers, so nothing else to clean.
+
 ## [Unreleased] — App.jsx refactor (phase 2: AI helpers) — 2026-04-17
 
 ### Changed

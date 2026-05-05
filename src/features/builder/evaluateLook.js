@@ -1,8 +1,7 @@
 // ── F4 — AI LOOK EVALUATION ──────────────────────────────────────────────────
 // Sends the manually-built look to Claude and asks for ≤3 concrete styling
-// tips to elevate it. Kept separate from the richer generateElevation() in
-// App.jsx because this is narrower — it rates what's already there rather
-// than proposing new purchases.
+// tips to elevate it. Rates what's already there rather than proposing new
+// purchases.
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 

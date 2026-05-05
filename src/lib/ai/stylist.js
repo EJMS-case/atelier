@@ -1,6 +1,6 @@
 // ── AI STYLING HELPERS ───────────────────────────────────────────────────────
-// All Anthropic API callers for outfit generation, elevation, knit
-// classification, color analysis, style profile, and shopping recs live here.
+// All Anthropic API callers for outfit generation, knit classification,
+// color analysis, style profile, and shopping recs live here.
 // Each function returns parsed JSON (or a string for generateStyleProfile).
 // Callers are responsible for UI state.
 
@@ -15,7 +15,6 @@ import { getSleeveType, filterByWeather, shuffle } from "../../utils/item-helper
 import { moodPromptFor } from "../../features/stylist/moods.js";
 import { invokeTool } from "./toolUse.js";
 import {
-  ElevationSchema, ElevationTool,
   KnitSchema, KnitTool,
   ColorAnalysisSchema, ColorAnalysisTool,
   GapsSchema, GapsTool,
@@ -177,42 +176,6 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   }
 
   return result;
-}
-
-// ── GENERATE ELEVATION (3 specific pieces to upgrade an existing look) ──────
-export async function generateElevation(look, lookItems, apiKey) {
-  const currentItems = lookItems.map(it =>
-    `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.notes ? ` — ${it.notes}` : ""}`
-  ).join("\n");
-
-  const dynamic = `You are a world-class stylist elevating an existing outfit. Here is the current look:
-LOOK NAME: "${look.name}"
-OCCASION: ${look.occasion}
-CURRENT ITEMS:
-${currentItems}
-
-Your task: Suggest exactly 3 specific pieces that would meaningfully elevate this look. Return them through the return_elevation tool.
-
-ELEVATION RULES:
-- Suggest pieces from these brands: Totême, Max Mara, Theory, COS, A.P.C., Khaite, Vince, Club Monaco, Banana Republic, Reformation, Sezane, Mango, & Other Stories, Arket, Massimo Dutti, Ganni, Zimmermann
-- Include one splurge piece ($150–$350), one mid-range ($75–$175), one accessible ($30–$100)
-- Every piece must work with her Dark Winter palette (cool, deep, jewel tones — no warm/muted)
-- Mix adds and swaps — don't only suggest additions
-- Be specific: "Totême double-breasted wool blazer in navy" not just "a navy blazer"
-- For swaps, \`swapTarget\` is the exact name of the current item being replaced; for adds it is null.`;
-
-  return invokeTool({
-    apiKey,
-    model: "claude-sonnet-4-5",
-    maxTokens: 1500,
-    content: [
-      { type: "text", text: STYLE_PROFILE, cache_control: { type: "ephemeral" } },
-      { type: "text", text: dynamic },
-    ],
-    tool: ElevationTool,
-    schema: ElevationSchema,
-    kind: "stylist_elevation",
-  });
 }
 
 // ── CLASSIFY KNIT (weight / fit) ────────────────────────────────────────────

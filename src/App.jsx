@@ -38,7 +38,7 @@ import { compressImage } from "./utils/images.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import {
-  generateOutfit, generateElevation, classifyKnitAI, analyzeColorAI,
+  generateOutfit, classifyKnitAI, analyzeColorAI,
 } from "./lib/ai/stylist.js";
 import SettingsView from "./components/SettingsView.jsx";
 import StyleInsightsView from "./components/StyleInsightsView.jsx";
