@@ -629,9 +629,39 @@ function normalizeResponse(parsed) {
     if (!look.color_strategy) look.color_strategy = look.colorStory || "";
     if (!look.texture_story) look.texture_story = "";
     if (!look.rationale) look.rationale = look.reasoning || look.styling || "";
+    look.rationale = scrubRationale(look.rationale);
     return look;
   });
+  // The top-level `notes` field is internal — never surface salvage/retry
+  // commentary to the user. App.jsx no longer renders it, but clear it here
+  // too so downstream consumers (saved looks, planner) don't see it either.
+  delete parsed.notes;
   return parsed;
+}
+
+// Defensive cleanup of rationale prose. The model still occasionally drops in
+// "LOOK 1:" prefixes, all-caps section labels (TEXTURE HERO:, VOLUME BELOW:,
+// OUTERWEAR HERO:, etc.), and W-ID parentheticals — patterns we explicitly
+// disallow in the prompt. Strip them client-side as a fallback so users never
+// see debug-style text.
+function scrubRationale(text) {
+  if (!text) return "";
+  let out = String(text).trim();
+  // Drop a leading "Look 1:" / "LOOK 2:" / "Look #1 —" prefix.
+  out = out.replace(/^\s*look\s*#?\s*\d+\s*[:\-—–.]\s*/i, "");
+  // Drop ALL-CAPS section labels followed by colon — at start of string OR
+  // after a sentence boundary. Matches "TEXTURE HERO:", "VOLUME BELOW:",
+  // "OUTERWEAR HERO:", "TONAL color approach:", etc. Allow up to 5 words,
+  // each starting uppercase, ≤2 lowercase chars total.
+  out = out.replace(/(^|[.!?]\s+|\n)(?:[A-Z][A-Z0-9+\-/]{1,}(?:\s+[A-Z][A-Z0-9+\-/]{1,}){0,4}(?:\s+[a-z]{2,12}){0,2}\s*:\s*)/g, "$1");
+  // Strip "✦" markers, leading dashes / asterisks the model uses for fake bullets.
+  out = out.replace(/(^|\n)\s*[•✦*\-–]\s+/g, "$1");
+  // Strip W-ID parentheticals: "(W055)", " W093", "(W030, W055)".
+  out = out.replace(/\s*\((?:W\d{2,4}(?:\s*,\s*W\d{2,4})*)\)/gi, "");
+  out = out.replace(/\bW\d{2,4}\b/g, "");
+  // Collapse multiple spaces / leftover whitespace.
+  out = out.replace(/\s{2,}/g, " ").replace(/\s+([.,;:!?])/g, "$1").trim();
+  return out;
 }
 
 // ── Partial-look extractor for streaming ────────────────────────────────────
@@ -765,7 +795,7 @@ export async function generateValidatedLooks({
           {
             apiKey,
             model: "claude-sonnet-4-5",
-            maxTokens: 4500,
+            maxTokens: 3500,
             temperature: 0.7,
             content: messageContent,
             tool: LooksTool,
@@ -800,7 +830,7 @@ export async function generateValidatedLooks({
         ({ toolBlock, raw } = await invokeToolRaw({
           apiKey,
           model: "claude-sonnet-4-5",
-          maxTokens: 4500,
+          maxTokens: 3500,
           temperature: 0.7,
           content: messageContent,
           tool: LooksTool,
@@ -866,10 +896,10 @@ export async function generateValidatedLooks({
       const surviving = lastParsed.looks.filter((_, idx) => !badIndices.has(idx));
       if (surviving.length > 0) {
         const dropped = lastParsed.looks.length - surviving.length;
+        // Salvage info is logged for debugging only — never surfaced to the user.
         const salvaged = { ...lastParsed, looks: surviving };
-        const noteSuffix = `${dropped} look${dropped === 1 ? "" : "s"} dropped after retries: ${dropReasons.join("; ")}`;
-        salvaged.notes = salvaged.notes ? `${salvaged.notes} · ${noteSuffix}` : noteSuffix;
-        console.warn("[Atelier Validator] Salvaging response — dropped", dropped, "look(s):", dropReasons);
+        delete salvaged.notes;
+        console.warn(`[Atelier Validator] Salvaging response — dropped ${dropped} look(s):`, dropReasons);
         return resolveIds(salvaged, idMap, allItems, occasion);
       }
     }

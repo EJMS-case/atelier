@@ -97,7 +97,6 @@ export default function App() {
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
-  const [outfitNotes, setOutfitNotes] = useState(null); // notes from AI when fewer than 3 looks
   const [allLooks,   setAllLooks]   = useState(() => {
     // Lazy-init from localStorage so anti-repeat history persists across sessions
     try {
@@ -484,7 +483,7 @@ export default function App() {
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
-    setStyling(true); setStyleErr(""); setOutfits(null); setOutfitNotes(null);
+    setStyling(true); setStyleErr(""); setOutfits(null);
     let streamedAny = false;
     try {
       const onLook = (look) => {
@@ -498,10 +497,7 @@ export default function App() {
       };
       const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook });
       const looks = result?.looks;
-      // Capture notes for partial results
-      if (result?.notes) setOutfitNotes(result.notes);
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
-        if (result?.notes) throw new Error(result.notes);
         throw new Error("AI returned no looks — try again.");
       }
       // Replace streamed looks with the final validated set (may differ if retry happened)
@@ -1153,14 +1149,8 @@ export default function App() {
               Generating more looks…
             </div>
           )}
-          {/* Notes when fewer than 3 looks generated */}
-          {outfitNotes && outfits && outfits.length < 3 && (
-            <div style={{background:"var(--color-bg)", border:"1px solid #E8D9BE", borderRadius:8, padding:"12px 16px", margin:"0 16px 16px", fontSize:12, color:"#6B4E1A", lineHeight:1.5}}>
-              <span style={{fontWeight:600}}>Note:</span> {outfitNotes}
-            </div>
-          )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={i} look={look} items={items} apiKey={apiKey}
+            <LookCard key={i} look={look} items={items}
               onRate={async (lk, rating) => {
                 try {
                   const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);

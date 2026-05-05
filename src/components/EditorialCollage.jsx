@@ -103,12 +103,14 @@ function buildCollageLayout(items) {
       if (hasBag) place("bag", { x:54, y:62, w:24, h:24 });
       if (hasShoes) place("shoes", { x:78, y:62, w:20, h:24 });
     } else {
-      // Top + Bottom (no layer)
-      place("top",    { x:14, y:1,  w:52, h:50 });
-      if (hasBelt) place("belt", { x:14, y:48, w:20, h:6 });
-      place("bottom", { x:1,  y:56, w:48, h:42 });
-      if (hasBag) place("bag", { x:54, y:54, w:30, h:28 });
-      if (hasShoes) place("shoes", { x:54, y:80, w:30, h:18 });
+      // Top + Bottom (no layer). Bottom is taller — pants/long skirts are
+      // mostly portrait, so a tall slot keeps them visually similar in scale
+      // to the top instead of looking stubby next to a wide blouse.
+      place("top",    { x:18, y:1,  w:46, h:42 });
+      if (hasBelt) place("belt", { x:14, y:40, w:22, h:6 });
+      place("bottom", { x:1,  y:46, w:48, h:52 });
+      if (hasBag) place("bag", { x:54, y:48, w:28, h:26 });
+      if (hasShoes) place("shoes", { x:54, y:76, w:28, h:22 });
     }
   }
 
