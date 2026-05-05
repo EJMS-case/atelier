@@ -26,10 +26,11 @@ Any look that violates any of these is AUTOMATICALLY REBUILT.
 HARD RULES:
 - HC1 Inventory only. NEVER invent items. Reference every item by its W-ID from the inventory in the REQUEST section below.
 - HC2 5–7 items per look.
-- HC3 Every look has a lower half — Bottoms, Dress, Jumpsuit, or Set.
+- HC3 Every look has a lower half — Bottoms, Dress, Jumpsuit, or Set. Maximum ONE Bottoms item per look — never stack two skirts, two pants, or a skirt + pencil skirt. Pick one.
+- HC3b Every separates look (no dress / jumpsuit / set) MUST include a Tops or Knits item. Outerwear is a LAYER, not a top — a coat with a bare bottom and no shirt under it is an automatic failure.
 - HC4 No item appears in more than one look.
 - HC5 Exactly ONE Shoes item per look. Exactly ONE Bags item per look (unless occasion doesn't require a bag).
-- HC6 Weather in the REQUEST below is NON-NEGOTIABLE. If weather says hot, you may not pick a wool coat, period — regardless of how stylish it is.
+- HC6 Weather in the REQUEST below is NON-NEGOTIABLE. If weather says hot or warm, you may not pick a wool coat, period — regardless of how stylish it is. For WARM, the only allowed outerwear is an explicitly unstructured linen/cotton blazer; otherwise skip the layer entirely.
 - HC7 Exclusions in the REQUEST below are NON-NEGOTIABLE. An excluded item simply DOES NOT EXIST for you.
 - HC8 Occasion bans in the REQUEST below are NON-NEGOTIABLE.
 - HC9 Coord sets: items tagged [SET:LOCKED partners:Wxxx,...] are pieces of a matching coord (e.g. a top + pants sold/styled as one). A LOCKED item may ONLY appear in a look if at least one of its listed partners is in the same look. Never split a LOCKED coord across different looks, and never pair a LOCKED piece with a conflicting substitute. Items tagged [SET:SEPARABLE partners:...] may appear alone or together — treat them as normal separates.
@@ -87,8 +88,10 @@ BUILD 3 LOOKS. Before returning, check each one:
 - Every item respects the weather and occasion? (No? → swap.)
 - Any excluded item type present? (Yes? → remove and rebuild.)
 - Exactly one shoe and one bag? (No? → fix.)
+- For separates: is there a Top or Knit AND exactly one Bottoms? (No? → add a top, drop the second bottom.)
 - 2–3 color palette, ≥2 fabric weights, clear hero + focal point? (No? → rebuild.)
 - Three looks differ in color, silhouette, hero, and footwear? (No? → rebuild one.)
+- Does the rationale text only describe items that are actually in the items array? (No? → rewrite — never reference a piece you didn't pick.)
 
 Return your result via the return_looks tool. For each item, set \`role\` to "hero" | "supporting" | "finishing" (exactly one hero per look). Vibe must be one of: ${VIBE_VOCABULARY.join(" | ")}.`;
 
@@ -240,7 +243,7 @@ function formatWeather(weather) {
   // first (governs fabric/sleeve/layer), then rainy (governs surface/footwear).
   const parts = [];
   if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. The Outerwear category does not exist for you in this generation. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Sandals, open shoes, or light flats. Any look containing a coat, blazer, or jacket is an automatic failure.");
-  if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers ONLY. NO heavy knits, NO coats, NO wool outerwear, NO boots. Short sleeves, sleeveless, or very light long sleeves only. An unstructured linen blazer is the heaviest layer allowed.");
+  if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers ONLY. NO heavy knits, NO coats (incl. wool/cashmere/trench/floral wool), NO wool outerwear of any kind, NO boots. Short sleeves, sleeveless, or very light long sleeves only. The ONLY allowed outerwear is an explicitly unstructured linen or cotton blazer; if no such item exists in the inventory, skip the layer entirely.");
   if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — Dress in layers. Light outerwear welcome. Both short and long sleeves acceptable.");
   if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes.");
   if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected.");

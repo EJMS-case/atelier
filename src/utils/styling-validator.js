@@ -183,6 +183,35 @@ function checkLowerHalf(response, idMap, allItems) {
 }
 
 /**
+ * Check 4b: Every separates look (no dress/jumpsuit/set) needs an upper-half
+ * garment — a Top or a Knit. A skirt + coat with nothing underneath isn't an
+ * outfit, it's a half-undressed mistake. Outerwear is a layer, not a top.
+ */
+function checkUpperHalf(response, idMap, allItems) {
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const hasDress = resolved.some(it =>
+      it.category === "Dresses" || it.category === "Occasionwear" ||
+      it.category === "Jumpsuits" || it.category === "Sets"
+    );
+    if (hasDress) return;
+
+    const hasTop = resolved.some(it => it.category === "Tops" || it.category === "Knits");
+    if (!hasTop) {
+      failures.push(`Look ${i + 1} ("${look.name}") has no top or knit — every separates look needs an upper-half garment. Outerwear is a layer, not a top.`);
+    }
+  });
+  return failures;
+}
+
+/**
  * Check 5: Exclusion filter compliance.
  */
 function checkExclusions(response, idMap, allItems, activeExclusions) {
@@ -305,7 +334,7 @@ function checkHeroDiversity(response, idMap, allItems) {
  */
 function checkCategoryBalance(response, idMap, allItems) {
   const failures = [];
-  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Outerwear: 1, Knits: 1, Tops: 1 };
+  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Outerwear: 1, Knits: 1, Tops: 1, Bottoms: 1 };
 
   response.looks.forEach((look, i) => {
     const catCounts = {};
@@ -425,6 +454,14 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
         }
         if (resolved.subcategory === "Coats" || resolved.subcategory === "Boots") {
           failures.push(`Look ${i + 1}: "${resolved.name}" (${resolved.subcategory}) is wrong for ${weather} — pick lighter.`);
+        }
+        // Outerwear is a hot-weather hard fail; for warm, only allow if the item
+        // is explicitly tagged as light (linen/cotton/unstructured/unlined).
+        if (resolved.category === "Outerwear") {
+          const isLight = /linen|cotton|seersucker|unstructured|unlined|lightweight|sheer/i.test(text);
+          if (isHot || !isLight) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear — wrong for ${weather}. Skip the layer or pick an unstructured linen blazer.`);
+          }
         }
         if (sw === "winter") {
           failures.push(`Look ${i + 1}: "${resolved.name}" is marked Winter — wrong for ${weather}.`);
@@ -546,6 +583,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkItemsExist(response, idMap).map(f => ({ type: "items_exist", message: f, hard: true })));
   allFailures.push(...checkNoDuplicates(response).map(f => ({ type: "no_duplicates", message: f, hard: true })));
   allFailures.push(...checkLowerHalf(response, idMap, allItems).map(f => ({ type: "lower_half", message: f, hard: true })));
+  allFailures.push(...checkUpperHalf(response, idMap, allItems).map(f => ({ type: "upper_half", message: f, hard: true })));
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
   allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots).map(f => ({ type: "occasion", message: f, hard: true })));
   allFailures.push(...checkCategoryBalance(response, idMap, allItems).map(f => ({ type: "category_balance", message: f, hard: true })));
@@ -742,6 +780,7 @@ export async function generateValidatedLooks({
                 ...checkStructure(candidate),
                 ...checkItemsExist(candidate, idMap),
                 ...checkLowerHalf(candidate, idMap, allItems),
+                ...checkUpperHalf(candidate, idMap, allItems),
               ];
               // Also guard against duplicating items already shown.
               const newIds = (candidate.looks[0]?.items || []).map(it =>
