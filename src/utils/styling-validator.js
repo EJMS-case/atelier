@@ -242,17 +242,17 @@ function checkOccasion(response, idMap, allItems, occasionSlots) {
 }
 
 /**
- * Check 7: Item count per look (5-7 items).
+ * Check 7: Item count per look (4-6 items).
  */
 function checkItemCount(response) {
   const failures = [];
   response.looks.forEach((look, i) => {
     const count = (look.items || []).length;
-    if (count < 4) {
-      failures.push(`Look ${i + 1} has only ${count} items — minimum 4 required. Looks with only accessories/shoes/outerwear and no clothing are not valid.`);
+    if (count < 3) {
+      failures.push(`Look ${i + 1} has only ${count} items — minimum 3 required. Looks with only accessories/shoes/outerwear and no clothing are not valid.`);
     }
-    if (count > 7) {
-      failures.push(`Look ${i + 1} has ${count} items (maximum 7 allowed).`);
+    if (count > 6) {
+      failures.push(`Look ${i + 1} has ${count} items (maximum 6 allowed).`);
     }
   });
   return failures;

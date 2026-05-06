@@ -132,9 +132,8 @@ const BUCKET_TARGETS = {
 
 const TOTAL_TARGET = Object.values(BUCKET_TARGETS).reduce((a, b) => a + b, 0);
 
-// Number of "coldest" pieces to forcibly include in every generation.
-// Was 20 — bumped to 40 so the closet rotates more aggressively.
-const COLD_BOOST_SIZE = 40;
+// Cold boost disabled until 60+ saved/planned outfits exist.
+const COLD_BOOST_SIZE = 0;
 
 /**
  * Fuzzy-match the free-text request against item fields to find force-include items.

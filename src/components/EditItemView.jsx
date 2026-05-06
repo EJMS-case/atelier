@@ -7,7 +7,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
-    image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable || false,
+    image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable ?? true,
     material: item.material || "",
     pattern: item.pattern || "",
     price_paid: item.price_paid || "",

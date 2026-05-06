@@ -23,7 +23,7 @@ export const STYLING_STATIC_PREAMBLE = `You are Atelier, senior personal stylist
 
 HARD RULES (any violation = automatic rebuild):
 - HC1 Inventory only. NEVER invent items. Reference items by their W-ID from the REQUEST inventory.
-- HC2 5–7 items per look.
+- HC2 4–6 items per look.
 - HC3 Every look has a lower half (Bottoms, Dress, Jumpsuit, or Set). Maximum ONE Bottoms item per look — never stack two skirts or skirt + pencil-skirt.
 - HC3b Every separates look (no dress / jumpsuit / set) MUST include a Tops or Knits item. Outerwear is a layer, not a top.
 - HC4 No item appears in more than one look.
@@ -31,7 +31,7 @@ HARD RULES (any violation = automatic rebuild):
 - HC6 Weather, exclusions, and occasion bans in the REQUEST are NON-NEGOTIABLE. Read those blocks and obey them — they take precedence over taste.
 - HC7 Coord sets: items tagged [SET:LOCKED partners:Wxxx,...] may only appear with at least one listed partner in the same look; never split a locked coord. [SET:SEPARABLE] items behave as normal separates.
 
-CLIENT (permanent): Dark Winter — cool undertones, high contrast. Palette: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm brown + warm red are approved accent neutrals. No yellow, no warm/muted. NYC. Closet: Totême, Khaite, Max Mara, Theory, COS, A.P.C., Vince.
+CLIENT: Dark Winter coloring. For tops and any piece worn close to the face, favor cool high-contrast options from the Dark Winter palette. For everything else, trust what's in her closet — she chose it.
 
 STYLING METHOD (every look):
 1. Hero — one standout piece; everything else supports it.
@@ -72,7 +72,6 @@ export function buildStylingPrompt({
   freeTextRequest,
   activeExclusions = [],
   recentlySuggestedItems = [],
-  aboutMe = {},
   stylePreferences = {},
   closetItems,
   closetCount,
@@ -82,7 +81,6 @@ export function buildStylingPrompt({
   moodPrompt = "",
   requestedShortIds = [],
 }) {
-  const aboutMeBlock = formatAboutMe(aboutMe);
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
   const exclusionBlock = activeExclusions.length > 0
@@ -132,8 +130,6 @@ REQUEST
 
 OCCASION: ${occasionNote}
 ${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}
-CLIENT DETAILS
-${aboutMeBlock}
 ${stylePrefsBlock}${recentBlock}
 ${availabilityNote}
 ${directionsBlock}
@@ -151,26 +147,6 @@ Seed: ${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatAboutMe(aboutMe) {
-  if (!aboutMe || Object.values(aboutMe).every(v => v == null || v === "")) {
-    return "No body/context details provided.";
-  }
-  const lines = [];
-  if (aboutMe.height != null && aboutMe.height !== "")
-    lines.push(`Height: ${aboutMe.height}`);
-  if (aboutMe.torsoLength != null && aboutMe.torsoLength !== "")
-    lines.push(`Torso/proportion note: ${aboutMe.torsoLength}`);
-  if (aboutMe.fitNotes != null && aboutMe.fitNotes !== "")
-    lines.push(`Fit preferences: ${aboutMe.fitNotes}`);
-  if (aboutMe.proportions != null && aboutMe.proportions !== "")
-    lines.push(`Body proportions: ${aboutMe.proportions}`);
-  if (aboutMe.ageRange != null && aboutMe.ageRange !== "")
-    lines.push(`Age range: ${aboutMe.ageRange}`);
-  if (aboutMe.professionalContext != null && aboutMe.professionalContext !== "")
-    lines.push(`Professional context: ${aboutMe.professionalContext}`);
-  return lines.length > 0 ? lines.join("\n") : "No body/context details provided.";
-}
 
 function formatStylePrefs(prefs) {
   if (!prefs) return "";

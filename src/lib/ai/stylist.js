@@ -66,14 +66,6 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     return { ...baseSlots, required: restRequired, optional: newOptional, promptNote: newPromptNote || baseSlots.promptNote };
   })();
 
-  const normalizedAboutMe = {
-    height: aboutMe.height || null,
-    torsoLength: aboutMe.torsoLength || null,
-    fitNotes: aboutMe.fitNotes || null,
-    proportions: aboutMe.proportions || null,
-    ageRange: aboutMe.ageRange || null,
-    professionalContext: aboutMe.professionalContext || null,
-  };
 
   const EXCLUDE_LABELS = {
     "no-jeans": "No Jeans",
@@ -135,7 +127,6 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     freeTextRequest: request || null,
     activeExclusions,
     recentlySuggestedItems,
-    aboutMe: normalizedAboutMe,
     stylePreferences: stylePrefs,
     closetItems: inventory,
     closetCount: sampled.length,
