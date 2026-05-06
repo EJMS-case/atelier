@@ -4,7 +4,7 @@ import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 
-export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested }) {
+export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem }) {
   const [logs,       setLogs]       = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filterOcc,  setFilterOcc]  = useState("All");
@@ -86,7 +86,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
               </>
             );
             return (
-              <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+              <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
                 actions={
                   <>
                     <div style={{ display:"flex", gap:8, alignItems:"center" }}>

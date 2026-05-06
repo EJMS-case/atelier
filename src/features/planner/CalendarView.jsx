@@ -60,7 +60,7 @@ const btnSecondary = {
  * @param {Object[]} props.outfitLogs   - saved outfits for the "pick saved" picker
  * @param {() => void} props.onGoToStyleMe
  */
-export default function CalendarView({ items, outfitLogs, onGoToStyleMe }) {
+export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditItem }) {
   const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
@@ -164,6 +164,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe }) {
           onPickSaved={(log) => handleAssignSaved(activeDay, log)}
           onGoToStyleMe={() => { setActiveDay(null); onGoToStyleMe?.(); }}
           onClear={() => handleClear(activeDay)}
+          onEditItem={onEditItem ? (it) => { setActiveDay(null); onEditItem(it); } : undefined}
         />
       )}
 
@@ -192,7 +193,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe }) {
 }
 
 // ── Day Assignment Modal ─────────────────────────────────────────────────────
-function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToStyleMe, onClear }) {
+function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToStyleMe, onClear, onEditItem }) {
   const [tab, setTab] = useState("saved");
   const dateLabel = new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   const planItems = plan?.items
@@ -215,7 +216,9 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>CURRENTLY PLANNED</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {planItems.map(it => (
-                <div key={it.id} style={{ width: 56, height: 56, background: "#fff", borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
+                <div key={it.id}
+                  onClick={onEditItem ? () => onEditItem(it) : undefined}
+                  style={{ width: 56, height: 56, background: "#fff", borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}`, cursor: onEditItem ? "pointer" : "default" }}>
                   {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                 </div>
               ))}

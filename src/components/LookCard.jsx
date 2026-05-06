@@ -3,7 +3,7 @@ import { s } from "../ui/styles.js";
 import EditorialCollage from "./EditorialCollage.jsx";
 import SaveLookModal from "./SaveLookModal.jsx";
 
-export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem }) {
+export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem, onEditItem }) {
   const [expanded,      setExpanded]      = useState(false);
   const [showSave,      setShowSave]      = useState(false);
   const [rated,         setRated]         = useState(0);
@@ -82,10 +82,17 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem 
                 {detailItem.notes && <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 6, fontStyle: "italic" }}>{detailItem.notes}</div>}
               </div>
             </div>
+            {onEditItem && (
+              <button
+                onClick={() => { onEditItem(detailItem); setDetailItem(null); }}
+                style={{ width: "100%", padding: "12px 0", background: "var(--color-ink)", color: "var(--color-bg)", border: "none", borderRadius: 8, fontSize: 13, letterSpacing: "0.06em", cursor: "pointer" }}>
+                ✎ Edit this piece
+              </button>
+            )}
             {onStyleItem && (
               <button
                 onClick={() => { onStyleItem(detailItem); setDetailItem(null); }}
-                style={{ width: "100%", padding: "12px 0", background: "var(--color-ink)", color: "var(--color-bg)", border: "none", borderRadius: 8, fontSize: 13, letterSpacing: "0.06em", cursor: "pointer" }}>
+                style={{ width: "100%", marginTop: 8, padding: "10px 0", background: "transparent", border: "1px solid var(--color-border-strong)", borderRadius: 8, fontSize: 12, color: "var(--color-text)", cursor: "pointer" }}>
                 ✦ Style an outfit around this piece
               </button>
             )}
