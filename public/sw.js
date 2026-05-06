@@ -1,4 +1,4 @@
-const CACHE = "atelier-v1";
+const CACHE = "atelier-v2";
 const PRECACHE = ["/", "/favicon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
