@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
+import { sendBuilderMessage } from "./builderChat.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
 
 const PALETTE = {
@@ -56,6 +57,12 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [evalErr, setEvalErr] = useState("");
   const [search, setSearch] = useState("");
   const [subcatFilter, setSubcatFilter] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]); // [{role,content}]
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatErr, setChatErr] = useState("");
+  const chatEndRef = useRef(null);
   // Per-slot canvas positions { x, y, w, h } as % of canvas dimensions
   const [positions, setPositions] = useState(() => ({ ...DEFAULT_POSITIONS }));
   // Active drag/resize state
@@ -186,6 +193,41 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       setSaveErr(e.message || "Save failed.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  const emptySlots = SLOTS
+    .filter(s => !selections[s.key])
+    .map(s => s.key);
+
+  async function handleChat(e) {
+    e?.preventDefault();
+    const text = chatInput.trim();
+    if (!text || chatLoading) return;
+    if (!apiKey) { setChatErr("Add your Anthropic API key in Settings."); return; }
+    if (pickedItems.length < 1) { setChatErr("Assemble at least one item first."); return; }
+
+    const userMsg = { role: "user", content: text };
+    const next = [...chatMessages, userMsg];
+    setChatMessages(next);
+    setChatInput("");
+    setChatLoading(true);
+    setChatErr("");
+
+    try {
+      const reply = await sendBuilderMessage({
+        messages: next,
+        assembledItems: pickedItems.map(p => p.item),
+        closetItems: items,
+        emptySlots,
+        apiKey,
+      });
+      setChatMessages(prev => [...prev, { role: "assistant", content: reply }]);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    } catch (err) {
+      setChatErr(err.message || "Chat failed.");
+    } finally {
+      setChatLoading(false);
     }
   }
 
@@ -424,7 +466,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       {saveErr && <p style={{ fontSize: 12, color: PALETTE.accent, marginBottom: 8 }}>{saveErr}</p>}
       {evalErr && <p style={{ fontSize: 12, color: PALETTE.accent }}>{evalErr}</p>}
       {evaluation && (
-        <div style={{ background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 8, padding: 14 }}>
+        <div style={{ background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 }}>
             {evaluation.score !== null && (
               <div style={{ fontSize: 28, fontFamily: "serif", color: PALETTE.ink, lineHeight: 1 }}>{evaluation.score}<span style={{ fontSize: 14, color: PALETTE.muted }}>/10</span></div>
@@ -435,6 +477,83 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
             <ul style={{ paddingLeft: 18, fontSize: 12, color: PALETTE.soft, lineHeight: 1.5 }}>
               {evaluation.tips.map((t, i) => <li key={i} style={{ marginBottom: 4 }}>{t}</li>)}
             </ul>
+          )}
+        </div>
+      )}
+
+      {/* ── Stylist chat — appears once at least 1 item is assembled ── */}
+      {pickedItems.length >= 1 && (
+        <div style={{ borderTop: `1px solid ${PALETTE.line}`, paddingTop: 14, marginTop: 4 }}>
+          <button
+            onClick={() => setChatOpen(o => !o)}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: chatOpen ? 10 : 0 }}>
+            <span style={{ fontSize: 11, letterSpacing: "0.14em", color: PALETTE.muted }}>✦ ASK YOUR STYLIST</span>
+            <span style={{ fontSize: 10, color: PALETTE.muted }}>{chatOpen ? "▲" : "▼"}</span>
+          </button>
+
+          {chatOpen && (
+            <>
+              {/* Suggested prompts — only when chat is empty */}
+              {chatMessages.length === 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
+                  {[
+                    "What shoes work with this?",
+                    "What outerwear fits this look?",
+                    "What bag should I use?",
+                    "How can I make this more polished?",
+                  ].map(prompt => (
+                    <button key={prompt}
+                      onClick={() => { setChatInput(prompt); }}
+                      style={{ fontSize: 11, padding: "5px 10px", borderRadius: 12, border: `1px solid ${PALETTE.line}`, background: "transparent", color: PALETTE.soft, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Message thread */}
+              {chatMessages.length > 0 && (
+                <div style={{ maxHeight: 280, overflowY: "auto", marginBottom: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {chatMessages.map((m, i) => (
+                    <div key={i} style={{
+                      alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                      maxWidth: "88%",
+                      background: m.role === "user" ? PALETTE.ink : PALETTE.cream,
+                      color: m.role === "user" ? PALETTE.bg : PALETTE.soft,
+                      borderRadius: m.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+                      padding: "8px 11px",
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                    }}>
+                      {m.content}
+                    </div>
+                  ))}
+                  {chatLoading && (
+                    <div style={{ alignSelf: "flex-start", fontSize: 12, color: PALETTE.muted, padding: "6px 4px" }}>
+                      Styling…
+                    </div>
+                  )}
+                  <div ref={chatEndRef}/>
+                </div>
+              )}
+
+              {chatErr && <p style={{ fontSize: 11, color: PALETTE.accent, marginBottom: 6 }}>{chatErr}</p>}
+
+              {/* Input */}
+              <form onSubmit={handleChat} style={{ display: "flex", gap: 6 }}>
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder="Ask about shoes, outerwear, accessories…"
+                  disabled={chatLoading}
+                  style={{ flex: 1, padding: "9px 11px", border: `1px solid ${PALETTE.line}`, borderRadius: 20, fontSize: 12, background: "#fff", outline: "none" }}
+                />
+                <button type="submit" disabled={chatLoading || !chatInput.trim()}
+                  style={{ padding: "9px 14px", borderRadius: 20, border: "none", background: PALETTE.ink, color: PALETTE.bg, fontSize: 12, cursor: "pointer", opacity: chatLoading || !chatInput.trim() ? 0.4 : 1 }}>
+                  ↑
+                </button>
+              </form>
+            </>
           )}
         </div>
       )}
