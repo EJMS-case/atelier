@@ -148,6 +148,7 @@ function matchesFreeText(item, freeText) {
   const itemSub = (item.subcategory || "").toLowerCase();
   const itemBrand = (item.brand || "").toLowerCase();
   const itemNotes = (item.notes || "").toLowerCase();
+  const itemPattern = (item.pattern || "").toLowerCase();
 
   // Check if request contains item identifiers
   // Split request into meaningful tokens (2+ chars)
@@ -159,7 +160,7 @@ function matchesFreeText(item, freeText) {
 
   for (const token of tokens) {
     if (itemColor.includes(token) || itemName.includes(token)) colorMatch = true;
-    if (itemSub.includes(token) || itemName.includes(token)) typeMatch = true;
+    if (itemSub.includes(token) || itemName.includes(token) || itemPattern.includes(token)) typeMatch = true;
     if (itemBrand.includes(token)) typeMatch = true;
   }
 
@@ -437,18 +438,13 @@ export function formatInventory(sampled, getSleeveType) {
       const mode = it.is_separable ? "SEPARABLE" : "LOCKED";
       setTag = ` [SET:${mode} partners:${partners}]`;
     }
-    // Hex-first color: the stylist reasons better about harmony with actual
-    // pixel values than a palette name. Fall back to the human name when
-    // autodetect never produced a hex.
-    const hex = normalizeHex(it.primary_color_hex);
-    const hex2 = normalizeHex(it.secondary_color_hex);
-    const colorName = it.color_family || it.color || "";
-    const colorParts = [];
-    if (hex) colorParts.push(hex);
-    if (hex2) colorParts.push(`+${hex2}`);
-    // When we have a hex, the name is redundant — the model reads the hex.
-    if (!hex && colorName) colorParts.push(colorName);
-    const colorInfo = colorParts.length ? `[${colorParts.join(" ")}]` : "[?]";
+    // Color: use what the user entered; fall back to normalized family name.
+    const colorName = it.color || it.color_family || "";
+    const colorParts = colorName ? [colorName] : [];
+    if (it.pattern && it.pattern !== "solid" && it.pattern !== "—" && it.pattern !== "") {
+      colorParts.push(it.pattern);
+    }
+    const colorInfo = colorParts.length ? `[${colorParts.join(", ")}]` : "[?]";
 
     const name = it.name || "";
     const nameLower = name.toLowerCase();
@@ -459,17 +455,9 @@ export function formatInventory(sampled, getSleeveType) {
     ];
     // Brand only if it's not already in the item name (common pattern).
     if (it.brand && !nameLower.includes(it.brand.toLowerCase())) parts.push(it.brand);
-    // Notes often contain sparse prose — cap at 60 chars to keep lines short.
-    if (it.notes) {
-      const n = it.notes.length > 60 ? it.notes.slice(0, 57).trimEnd() + "…" : it.notes;
-      parts.push(n);
-    }
+    // Notes are the primary description — pass in full, no truncation.
+    if (it.notes) parts.push(it.notes);
     return parts.join(" | ");
   }).join("\n");
 }
 
-function normalizeHex(v) {
-  if (typeof v !== "string") return null;
-  const m = v.trim().match(/^#?([0-9a-f]{6})$/i);
-  return m ? `#${m[1].toUpperCase()}` : null;
-}

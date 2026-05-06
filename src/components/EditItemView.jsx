@@ -8,16 +8,14 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable || false,
-    // F1 fields — editable inline
+    material: item.material || "",
+    pattern: item.pattern || "",
+    price_paid: item.price_paid || "",
+    // Preserved silently — not shown in UI but passed through on save so existing data isn't wiped
     primary_color_hex: item.primary_color_hex || "",
     secondary_color: item.secondary_color || "",
     secondary_color_hex: item.secondary_color_hex || "",
-    material: item.material || "",
-    pattern: item.pattern || "",
-    tags: Array.isArray(item.tags) ? item.tags : [],
-    price_paid: item.price_paid || "",
   });
-  const [tagsInput, setTagsInput] = useState((item.tags || []).join(", "));
   const [preview, setPreview] = useState(item.image || null);
   const [confirm, setConfirm] = useState(false);
 
@@ -57,26 +55,6 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           </div>
         ))}
 
-        {/* ── F1 — auto-detected fields (all editable) ─────────────── */}
-        <div style={{display:"flex",gap:10}}>
-          <div style={{flex:1}}>
-            <div style={s.fieldLabel}>Color hex</div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
-              {form.primary_color_hex && (
-                <span style={{width:26,height:26,borderRadius:4,border:"1px solid var(--color-border-strong)",background:form.primary_color_hex,flexShrink:0}}/>
-              )}
-              <input style={{...s.input,flex:1,fontFamily:"monospace"}} placeholder="#5D3A1A"
-                value={form.primary_color_hex}
-                onChange={e=>setForm(f=>({...f,primary_color_hex:e.target.value}))}/>
-            </div>
-          </div>
-          <div style={{flex:1}}>
-            <div style={s.fieldLabel}>Secondary color</div>
-            <input style={{...s.input,width:"100%"}} placeholder="optional"
-              value={form.secondary_color}
-              onChange={e=>setForm(f=>({...f,secondary_color:e.target.value}))}/>
-          </div>
-        </div>
         <div style={{display:"flex",gap:10}}>
           <div style={{flex:1}}>
             <div style={s.fieldLabel}>Material</div>
@@ -92,17 +70,6 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
               {["solid","striped","plaid","floral","abstract","animal","polka-dot"].map(p=><option key={p}>{p}</option>)}
             </select>
           </div>
-        </div>
-        <div>
-          <div style={s.fieldLabel}>Tags (comma-separated)</div>
-          <input style={{...s.input,width:"100%"}} placeholder="tailored, fluid, workwear"
-            value={tagsInput}
-            onChange={e => {
-              const v = e.target.value;
-              setTagsInput(v);
-              const tags = v.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
-              setForm(f => ({...f, tags}));
-            }}/>
         </div>
 
         {/* F6 — purchase price for cost-per-wear */}

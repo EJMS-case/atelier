@@ -34,7 +34,7 @@ export function filterByWeather(items, weather) {
 
   return items.filter(it => {
     const sleeve = getSleeveType(it);
-    const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "")).toLowerCase();
+    const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "") + " " + (it.material || "")).toLowerCase();
     const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit/i.test(nameNotes);
     const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
     const isDelicateSurface = /suede|silk|satin/i.test(nameNotes);

@@ -28,7 +28,6 @@ export const AutoDetectSchema = z.object({
   brand: z.string().nullable(),
   material: z.string().nullable(),
   pattern: z.string().nullable(),
-  tags: z.array(z.string()).default([]),
   confidence: z.number().min(0).max(1).nullable(),
 });
 
@@ -47,7 +46,6 @@ export const AutoDetectTool = {
       brand:               { type: ["string", "null"] },
       material:            { type: ["string", "null"] },
       pattern:             { type: ["string", "null"] },
-      tags:                { type: "array", items: { type: "string" }, maxItems: 4 },
       confidence:          { type: ["number", "null"], minimum: 0, maximum: 1 },
     },
     required: ["category", "primary_color", "primary_color_hex", "confidence"],

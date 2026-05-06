@@ -30,7 +30,6 @@ export function applyDetection(queueItem, detection) {
   if (detection.brand && !queueItem.brand) next.brand = detection.brand;
   if (detection.material && !queueItem.material) next.material = detection.material;
   if (detection.pattern && !queueItem.pattern) next.pattern = detection.pattern;
-  if (detection.tags?.length && (!queueItem.tags || queueItem.tags.length === 0)) next.tags = detection.tags;
   if (typeof detection.confidence === "number") next.detection_confidence = detection.confidence;
 
   return next;

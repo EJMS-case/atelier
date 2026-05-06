@@ -589,7 +589,7 @@ export default function App() {
     if (closetSearch.trim()) {
       const q = closetSearch.toLowerCase().trim();
       base = base.filter(it => {
-        const fields = [it.name, it.brand, it.color, it.color_family, it.subcategory, it.category, it.notes].filter(Boolean);
+        const fields = [it.name, it.brand, it.color, it.color_family, it.subcategory, it.category, it.notes, it.pattern].filter(Boolean);
         return fields.some(f => f.toLowerCase().includes(q));
       });
     }

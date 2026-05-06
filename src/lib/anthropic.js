@@ -43,7 +43,6 @@ RULES:
 - \`brand\` only if a logo is clearly visible — otherwise null. Don't guess from style.
 - \`material\` one word when obvious ("silk", "cotton", "wool", "leather", "denim", "cashmere", "linen", "satin", "knit"), else null.
 - \`pattern\` one of: "solid", "striped", "plaid", "floral", "abstract", "animal", "polka-dot" — else null.
-- \`tags\` up to 4 short lowercase descriptors that could help future styling ("fluid", "structured", "cropped", "oversized", "tailored", "sporty", "eveningwear", "workwear").
 - \`confidence\` 0–1 self-rating of overall accuracy.`;
 
 /**
@@ -101,9 +100,6 @@ function sanitize(raw) {
     brand: str(raw.brand),
     material: str(raw.material),
     pattern: str(raw.pattern),
-    tags: Array.isArray(raw.tags)
-      ? raw.tags.filter(t => typeof t === "string" && t.length > 0).slice(0, 4).map(t => t.toLowerCase())
-      : [],
     confidence: typeof raw.confidence === "number" ? Math.max(0, Math.min(1, raw.confidence)) : null,
   };
   if (out.category) {
