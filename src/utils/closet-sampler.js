@@ -263,13 +263,27 @@ export function sampleClosetItems({
     pool = filterByWeather(pool, weather);
   }
 
-  // ── 3b. F2 — drop items worn in the last 3 calendar days entirely ──
-  // (Tiered enforcement: if removing them would leave the pool too small to
-  //  build 3 looks, skip the filter and let sampling continue.)
-  if (recentlyWornItems.length > 0) {
-    const wornSet = new Set(recentlyWornItems);
-    const trimmed = pool.filter(it => !wornSet.has(it.id));
-    if (trimmed.length >= 80) pool = trimmed; // keep headroom for 3 looks
+  // ── 3b. Hard-drop recently-worn or recently-suggested items so the same
+  // pieces don't surface generation after generation. The threshold was
+  // previously 80, which meant narrow occasion pools (e.g. Work + Warm)
+  // never benefited from the filter — the polka-dot skirt the user wore
+  // yesterday kept reappearing today. We now drop them if we'd still have
+  // a workable 30-item pool, which is enough to assemble three looks of
+  // 5–7 items each. Force-included items (matched against the user's
+  // free-text request) bypass this filter so "include my polka-dot skirt"
+  // still works on demand.
+  const norepeatBlocked = new Set([
+    ...(recentlyWornItems || []),
+    ...(recentlySuggestedItems || []),
+  ]);
+  if (norepeatBlocked.size > 0) {
+    const reqText = (freeTextRequest || "").toLowerCase();
+    const trimmed = pool.filter(it => {
+      if (!norepeatBlocked.has(it.id)) return true;
+      // Spare items the user explicitly asked for from this filter.
+      return reqText && matchesFreeText(it, freeTextRequest);
+    });
+    if (trimmed.length >= 30) pool = trimmed;
   }
 
   // ── 3c. F2 — drop items with strong down-vote signal (≤ -3) entirely ──
