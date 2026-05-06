@@ -1,11 +1,11 @@
 // ── F4 — SILHOUETTE BUILDER ──────────────────────────────────────────────────
-// Blank figure with 4 slots (top/bottom/shoes/accessory). Swipe through the
-// closet per slot; tap to lock in. Live preview composites items on the
-// silhouette. On save the silhouette is stripped and only the items are
-// exported on a white background.
+// Blank canvas with clothing slots. Tap a slot, pick from your closet.
+// Drag + resize items on the canvas. Save as a look, favorite, or schedule.
+// Compact canvas (~260px wide) with multi-item support for shoes/bags/accessories.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
+import { sendBuilderMessage } from "./builderChat.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
 
 const PALETTE = {
@@ -28,24 +28,35 @@ const SLOTS = [
   { key: "accessory", label: "ACCESSORY", match: (it) => ["Accessories", "Belts"].includes(it.category), optional: true },
 ];
 
+// Slots that allow up to 2 items (e.g. two shoe options, two accessories)
+const MULTI_SLOTS = new Set(["shoes", "bag", "accessory"]);
+const MAX_PER_SLOT = 2;
 
-// Default canvas positions (% of canvas width/height) per slot.
-// These match the fixed CSS zones that were here before drag was added.
+// Default canvas positions (% of canvas width/height).
+// Multi-slot items use posKey = `${slot}_${index}`.
 const DEFAULT_POSITIONS = {
-  outerwear: { x:  0, y: 10, w: 100, h: 68 },
-  top:       { x: 12, y: 12, w:  76, h: 38 },
-  dress:     { x: 12, y: 12, w:  76, h: 80 },
-  bottom:    { x: 12, y: 42, w:  76, h: 48 },
-  shoes:     { x: 20, y: 76, w:  60, h: 22 },
-  bag:       { x: 68, y: 44, w:  28, h: 16 },
-  accessory: { x: 68, y: 14, w:  28, h: 16 },
+  outerwear:   { x:  0, y:  8, w: 100, h: 68 },
+  top:         { x: 12, y: 10, w:  76, h: 38 },
+  dress:       { x: 12, y: 10, w:  76, h: 80 },
+  bottom:      { x: 12, y: 42, w:  76, h: 48 },
+  shoes_0:     { x: 14, y: 76, w:  36, h: 22 },
+  shoes_1:     { x: 52, y: 76, w:  36, h: 22 },
+  bag_0:       { x: 66, y: 44, w:  30, h: 18 },
+  bag_1:       { x: 66, y: 62, w:  30, h: 18 },
+  accessory_0: { x: 66, y: 12, w:  30, h: 16 },
+  accessory_1: { x: 66, y: 28, w:  30, h: 16 },
 };
 
+function posKeyFor(slot, idx) {
+  return MULTI_SLOTS.has(slot) ? `${slot}_${idx}` : slot;
+}
+
 export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSchedule, onClose, apiKey }) {
-  const [selections, setSelections] = useState({}); // { slotKey: itemId }
+  // selections: { slotKey: itemId[] }
+  const [selections, setSelections] = useState({});
   const [activeSlot, setActiveSlot] = useState(SLOTS[0].key);
   const [name, setName] = useState("");
-  const [saveMode, setSaveMode] = useState("looks"); // "looks" | "favorite" | "schedule"
+  const [saveMode, setSaveMode] = useState("looks");
   const [occasion, setOccasion] = useState("Work");
   const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
@@ -56,14 +67,22 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [evalErr, setEvalErr] = useState("");
   const [search, setSearch] = useState("");
   const [subcatFilter, setSubcatFilter] = useState("");
-  // Per-slot canvas positions { x, y, w, h } as % of canvas dimensions
   const [positions, setPositions] = useState(() => ({ ...DEFAULT_POSITIONS }));
-  // Active drag/resize state
   const [dragState, setDragState] = useState(null);
+  // Stylist chat
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatErr, setChatErr] = useState("");
+  const chatEndRef = useRef(null);
   const canvasRef = useRef(null);
 
-  // Reset search + subcategory filter when the active slot changes
   useEffect(() => { setSearch(""); setSubcatFilter(""); }, [activeSlot]);
+
+  useEffect(() => {
+    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, chatOpen]);
 
   const slotDef = SLOTS.find(s => s.key === activeSlot);
 
@@ -89,9 +108,43 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     return pool;
   }, [activeSlot, items, search, subcatFilter]);
 
-  const pickedItems = Object.entries(selections)
-    .map(([slot, id]) => ({ slot, item: items.find(i => i.id === id) }))
-    .filter(x => x.item);
+  // Flat list of { slot, posKey, item } for rendering and saving
+  const pickedItems = useMemo(() =>
+    Object.entries(selections).flatMap(([slot, ids]) =>
+      (ids || []).map((id, idx) => ({
+        slot,
+        posKey: posKeyFor(slot, idx),
+        item: (items || []).find(i => i.id === id),
+      }))
+    ).filter(x => x.item),
+    [selections, items]
+  );
+
+  const emptySlots = useMemo(() =>
+    SLOTS.filter(s => !(selections[s.key]?.length > 0)).map(s => s.key),
+    [selections]
+  );
+
+  function toggleItem(it) {
+    setSelections(prev => {
+      const curr = prev[activeSlot] || [];
+      if (MULTI_SLOTS.has(activeSlot)) {
+        if (curr.includes(it.id)) {
+          // Deselect
+          const next = curr.filter(id => id !== it.id);
+          return { ...prev, [activeSlot]: next };
+        } else if (curr.length < MAX_PER_SLOT) {
+          return { ...prev, [activeSlot]: [...curr, it.id] };
+        } else {
+          // At max — replace the last one
+          return { ...prev, [activeSlot]: [...curr.slice(0, -1), it.id] };
+        }
+      } else {
+        // Single-select: toggle
+        return { ...prev, [activeSlot]: curr.includes(it.id) ? [] : [it.id] };
+      }
+    });
+  }
 
   async function compositeSaveImage() {
     const canvas = document.createElement("canvas");
@@ -101,29 +154,22 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Convert % positions to absolute pixels on the 600×800 save canvas
-    const zoneFor = (slot) => {
-      const p = positions[slot] || DEFAULT_POSITIONS[slot];
+    const zoneFor = (posKey) => {
+      const p = positions[posKey] || DEFAULT_POSITIONS[posKey];
       if (!p) return null;
-      return {
-        x: p.x / 100 * 600,
-        y: p.y / 100 * 800,
-        w: p.w / 100 * 600,
-        h: p.h / 100 * 800,
-      };
+      return { x: p.x / 100 * 600, y: p.y / 100 * 800, w: p.w / 100 * 600, h: p.h / 100 * 800 };
     };
 
-    async function drawItem({ slot, item }) {
+    async function drawOne({ posKey, item }) {
       if (!item.image) return;
-      const zone = zoneFor(slot);
+      const zone = zoneFor(posKey);
       if (!zone) return;
       await new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = () => {
           const scale = Math.min(zone.w / img.width, zone.h / img.height);
-          const w = img.width * scale;
-          const h = img.height * scale;
+          const w = img.width * scale, h = img.height * scale;
           ctx.drawImage(img, zone.x + (zone.w - w) / 2, zone.y + (zone.h - h) / 2, w, h);
           resolve();
         };
@@ -132,46 +178,32 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       });
     }
 
-    // Draw from back (outerwear) to front (accessories, bags)
     const order = ["outerwear", "dress", "top", "bottom", "bag", "shoes", "accessory"];
     for (const slot of order) {
-      const sel = pickedItems.find(p => p.slot === slot);
-      if (sel) await drawItem(sel);
+      const ids = selections[slot] || [];
+      for (let idx = 0; idx < ids.length; idx++) {
+        const item = (items || []).find(i => i.id === ids[idx]);
+        if (item) await drawOne({ posKey: posKeyFor(slot, idx), item });
+      }
     }
     return canvas.toDataURL("image/jpeg", 0.9);
   }
 
   async function handleSave() {
     if (pickedItems.length < 2) return;
-    setSaving(true);
-    setSaveErr("");
+    setSaving(true); setSaveErr("");
     try {
       const garmentIds = pickedItems.map(p => p.item.id);
-
       if (saveMode === "schedule") {
         if (!onSchedule) throw new Error("Scheduling unavailable.");
-        await onSchedule({
-          date: scheduleDate,
-          items: garmentIds,
-          source: "manual",
-          occasion,
-          notes: name || null,
-        });
+        await onSchedule({ date: scheduleDate, items: garmentIds, source: "manual", occasion, notes: name || null });
         setSaved(`Scheduled for ${scheduleDate}`);
         setTimeout(onClose, 1000);
         return;
       }
-
       const collageUrl = await compositeSaveImage();
-      const log = {
-        garment_ids: garmentIds,
-        date_worn: null,
-        occasion,
-        notes: name || null,
-        collage_url: collageUrl,
-      };
+      const log = { garment_ids: garmentIds, date_worn: null, occasion, notes: name || null, collage_url: collageUrl };
       const savedLog = await onSave(log);
-
       if (saveMode === "favorite") {
         if (!onFavoriteLook) throw new Error("Favoriting unavailable.");
         if (!savedLog?.id) throw new Error("Saved log id missing — can't favorite.");
@@ -184,9 +216,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     } catch (e) {
       console.error(e);
       setSaveErr(e.message || "Save failed.");
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   async function handleEvaluate() {
@@ -201,6 +231,26 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     } finally { setEvaluating(false); }
   }
 
+  async function handleChat(e) {
+    e?.preventDefault();
+    const text = chatInput.trim();
+    if (!text || chatLoading) return;
+    if (!apiKey) { setChatErr("Add your Anthropic API key in Settings."); return; }
+    if (!pickedItems.length) { setChatErr("Add at least one item to the look first."); return; }
+    const userMsg = { role: "user", content: text };
+    const newMessages = [...chatMessages, userMsg];
+    setChatMessages(newMessages);
+    setChatInput("");
+    setChatLoading(true);
+    setChatErr("");
+    try {
+      const reply = await sendBuilderMessage({ messages: newMessages, assembledItems: pickedItems.map(p => p.item), closetItems: items || [], emptySlots, apiKey });
+      setChatMessages(m => [...m, { role: "assistant", content: reply }]);
+    } catch (err) {
+      setChatErr(err.message || "Chat failed.");
+    } finally { setChatLoading(false); }
+  }
+
   return (
     <div style={{ padding: "16px 16px 120px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -209,80 +259,93 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         <div style={{ width: 40 }}/>
       </div>
 
-      {/* Canvas area — plain white, draggable items */}
-      <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 6, overflow: "hidden", touchAction: "none" }}>
-        {pickedItems.map(({ slot, item }) => {
-          const pos = positions[slot] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
-          return (
-            <div key={slot + item.id}
-              style={{
-                position: "absolute",
-                left: `${pos.x}%`, top: `${pos.y}%`,
-                width: `${pos.w}%`, height: `${pos.h}%`,
-                cursor: "move",
-                userSelect: "none",
-                touchAction: "none",
-              }}
-              onPointerDown={(e) => {
-                if (e.target.dataset.resize) return; // let resize handle its own handler
-                e.preventDefault();
-                e.currentTarget.setPointerCapture(e.pointerId);
-                const rect = canvasRef.current.getBoundingClientRect();
-                setDragState({ slot, type: "move", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
-              }}
-              onPointerMove={(e) => {
-                if (!dragState || dragState.slot !== slot || dragState.type !== "move") return;
-                const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
-                const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
-                setPositions(prev => ({
-                  ...prev,
-                  [slot]: {
-                    ...dragState.startPos,
-                    x: Math.max(0, Math.min(100 - dragState.startPos.w, dragState.startPos.x + dx)),
-                    y: Math.max(0, Math.min(100 - dragState.startPos.h, dragState.startPos.y + dy)),
-                  }
-                }));
-              }}
-              onPointerUp={() => setDragState(null)}
-            >
-              {item.image && <img src={item.image} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}/>}
-              {/* Resize handle — bottom-right corner */}
-              <div
-                data-resize="1"
-                style={{ position: "absolute", bottom: 0, right: 0, width: 18, height: 18, cursor: "se-resize", display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}
+      {/* ── Compact canvas ─────────────────────────────────────────────────── */}
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
+        <div
+          ref={canvasRef}
+          style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: 260,
+            aspectRatio: "3/4",
+            background: "#FFFFFF",
+            borderRadius: 10,
+            overflow: "hidden",
+            touchAction: "none",
+            boxShadow: "0 1px 6px rgba(0,0,0,0.08)",
+          }}
+        >
+          {pickedItems.map(({ posKey, item }) => {
+            const pos = positions[posKey] || DEFAULT_POSITIONS[posKey] || { x: 10, y: 10, w: 40, h: 40 };
+            return (
+              <div key={posKey + item.id}
+                style={{
+                  position: "absolute",
+                  left: `${pos.x}%`, top: `${pos.y}%`,
+                  width: `${pos.w}%`, height: `${pos.h}%`,
+                  cursor: "move",
+                  userSelect: "none",
+                  touchAction: "none",
+                }}
                 onPointerDown={(e) => {
+                  if (e.target.dataset.resize) return;
                   e.preventDefault();
-                  e.stopPropagation();
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const rect = canvasRef.current.getBoundingClientRect();
-                  setDragState({ slot, type: "resize", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                  setDragState({ posKey, type: "move", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
                 }}
                 onPointerMove={(e) => {
-                  if (!dragState || dragState.slot !== slot || dragState.type !== "resize") return;
+                  if (!dragState || dragState.posKey !== posKey || dragState.type !== "move") return;
                   const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
                   const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
                   setPositions(prev => ({
                     ...prev,
-                    [slot]: {
+                    [posKey]: {
                       ...dragState.startPos,
-                      w: Math.max(8, Math.min(100 - dragState.startPos.x, dragState.startPos.w + dx)),
-                      h: Math.max(8, Math.min(100 - dragState.startPos.y, dragState.startPos.h + dy)),
+                      x: Math.max(0, Math.min(100 - dragState.startPos.w, dragState.startPos.x + dx)),
+                      y: Math.max(0, Math.min(100 - dragState.startPos.h, dragState.startPos.y + dy)),
                     }
                   }));
                 }}
                 onPointerUp={() => setDragState(null)}
               >
-                <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.35 }}>
-                  <path d="M2 10 L10 2 M6 10 L10 6" stroke="#1C1814" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
+                {item.image && <img src={item.image} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}/>}
+                <div
+                  data-resize="1"
+                  style={{ position: "absolute", bottom: 0, right: 0, width: 18, height: 18, cursor: "se-resize", display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}
+                  onPointerDown={(e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    setDragState({ posKey, type: "resize", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                  }}
+                  onPointerMove={(e) => {
+                    if (!dragState || dragState.posKey !== posKey || dragState.type !== "resize") return;
+                    const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
+                    const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
+                    setPositions(prev => ({
+                      ...prev,
+                      [posKey]: {
+                        ...dragState.startPos,
+                        w: Math.max(8, Math.min(100 - dragState.startPos.x, dragState.startPos.w + dx)),
+                        h: Math.max(8, Math.min(100 - dragState.startPos.y, dragState.startPos.h + dy)),
+                      }
+                    }));
+                  }}
+                  onPointerUp={() => setDragState(null)}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.35 }}>
+                    <path d="M2 10 L10 2 M6 10 L10 6" stroke="#1C1814" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-      {/* Reset layout button — only shown when positions differ from defaults */}
+
       {pickedItems.length > 0 && (
-        <div style={{ textAlign: "right", marginBottom: 8 }}>
+        <div style={{ textAlign: "center", marginBottom: 8 }}>
           <button onClick={() => setPositions({ ...DEFAULT_POSITIONS })}
             style={{ background: "none", border: "none", fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
             Reset layout
@@ -290,28 +353,29 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         </div>
       )}
 
-      {/* Slot selector */}
+      {/* ── Slot selector ───────────────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, paddingBottom: 4 }}>
-        {SLOTS.map(s => (
-          <button key={s.key} onClick={() => setActiveSlot(s.key)}
-            style={{
-              fontSize: 11,
-              padding: "6px 10px",
-              borderRadius: 14,
-              border: `1px solid ${activeSlot === s.key ? PALETTE.ink : PALETTE.line}`,
-              background: activeSlot === s.key ? PALETTE.ink : "transparent",
-              color: activeSlot === s.key ? PALETTE.bg : PALETTE.soft,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-              fontWeight: selections[s.key] ? 600 : 400,
-            }}>
-            {s.label}{selections[s.key] ? " ✓" : ""}
-          </button>
-        ))}
+        {SLOTS.map(s => {
+          const count = (selections[s.key] || []).length;
+          const isActive = activeSlot === s.key;
+          return (
+            <button key={s.key} onClick={() => setActiveSlot(s.key)}
+              style={{
+                fontSize: 11, padding: "6px 10px", borderRadius: 14,
+                border: `1px solid ${isActive ? PALETTE.ink : PALETTE.line}`,
+                background: isActive ? PALETTE.ink : "transparent",
+                color: isActive ? PALETTE.bg : PALETTE.soft,
+                cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                fontWeight: count > 0 ? 600 : 400,
+              }}>
+              {s.label}
+              {count > 0 ? ` ✓${count > 1 ? ` ×${count}` : ""}` : ""}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Search bar */}
+      {/* ── Search ─────────────────────────────────────────────────────────── */}
       <input
         type="search"
         value={search}
@@ -320,11 +384,10 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 12, marginBottom: 6, background: "#fff", boxSizing: "border-box" }}
       />
 
-      {/* Subcategory filter chips */}
+      {/* ── Subcategory filter chips ────────────────────────────────────────── */}
       {subcatsForSlot.length > 1 && (
         <div style={{ display: "flex", gap: 5, overflowX: "auto", marginBottom: 8, paddingBottom: 2 }}>
-          <button
-            onClick={() => setSubcatFilter("")}
+          <button onClick={() => setSubcatFilter("")}
             style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, border: `1px solid ${subcatFilter === "" ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === "" ? PALETTE.ink : "transparent", color: subcatFilter === "" ? PALETTE.cream : PALETTE.muted, cursor: "pointer", whiteSpace: "nowrap" }}>
             All
           </button>
@@ -337,29 +400,26 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         </div>
       )}
 
-      {/* Horizontal picker — tap to add/remove for the active slot */}
+      {/* ── Item picker ────────────────────────────────────────────────────── */}
+      {MULTI_SLOTS.has(activeSlot) && (
+        <div style={{ fontSize: 10, color: PALETTE.muted, marginBottom: 4, letterSpacing: "0.04em" }}>
+          Tap to add up to {MAX_PER_SLOT} · tap again to remove
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 12px", scrollSnapType: "x mandatory" }}>
         {poolForSlot.length === 0 && (
           <div style={{ fontSize: 12, color: PALETTE.muted, padding: "20px 8px" }}>No items in this slot yet.</div>
         )}
         {poolForSlot.map(it => {
-          const picked = selections[activeSlot] === it.id;
+          const picked = (selections[activeSlot] || []).includes(it.id);
           return (
             <button key={it.id}
-              onClick={() => setSelections(prev => {
-                const next = { ...prev };
-                if (picked) delete next[activeSlot]; else next[activeSlot] = it.id;
-                return next;
-              })}
+              onClick={() => toggleItem(it)}
               style={{
-                flexShrink: 0,
-                width: 88,
-                scrollSnapAlign: "start",
+                flexShrink: 0, width: 88, scrollSnapAlign: "start",
                 background: picked ? PALETTE.ink : "#fff",
                 border: `2px solid ${picked ? PALETTE.ink : PALETTE.line}`,
-                borderRadius: 8,
-                padding: 4,
-                cursor: "pointer",
+                borderRadius: 8, padding: 4, cursor: "pointer",
                 color: picked ? PALETTE.bg : PALETTE.soft,
               }}>
               <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 3 }}>
@@ -373,31 +433,20 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         })}
       </div>
 
-      {/* Name + actions */}
+      {/* ── Name + save controls ────────────────────────────────────────────── */}
       <input type="text" value={name} onChange={e => setName(e.target.value)}
         placeholder="Name this look (optional)"
         style={{ width: "100%", padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, marginBottom: 10, background: "#fff" }}/>
 
-      {/* Save-mode segmented control */}
       <div style={{ display: "flex", gap: 4, marginBottom: 8, border: `1px solid ${PALETTE.line}`, borderRadius: 6, padding: 3, background: "#fff" }}>
         {[["looks","Save"],["favorite","Favorite"],["schedule","Schedule"]].map(([k, label]) => (
           <button key={k} onClick={() => setSaveMode(k)}
-            style={{
-              flex: 1,
-              padding: "7px 4px",
-              border: "none",
-              borderRadius: 4,
-              background: saveMode === k ? PALETTE.ink : "transparent",
-              color: saveMode === k ? PALETTE.bg : PALETTE.soft,
-              fontSize: 11,
-              letterSpacing: "0.06em",
-              cursor: "pointer",
-              fontWeight: saveMode === k ? 600 : 400,
-            }}>{label}</button>
+            style={{ flex: 1, padding: "7px 4px", border: "none", borderRadius: 4, background: saveMode === k ? PALETTE.ink : "transparent", color: saveMode === k ? PALETTE.bg : PALETTE.soft, fontSize: 11, letterSpacing: "0.06em", cursor: "pointer", fontWeight: saveMode === k ? 600 : 400 }}>
+            {label}
+          </button>
         ))}
       </div>
 
-      {/* Occasion + (when scheduling) date */}
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <select value={occasion} onChange={e => setOccasion(e.target.value)}
           style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff" }}>
@@ -423,8 +472,9 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       {saved && <p style={{ fontSize: 12, color: "var(--color-success)", marginBottom: 8 }}>✓ {saved}</p>}
       {saveErr && <p style={{ fontSize: 12, color: PALETTE.accent, marginBottom: 8 }}>{saveErr}</p>}
       {evalErr && <p style={{ fontSize: 12, color: PALETTE.accent }}>{evalErr}</p>}
+
       {evaluation && (
-        <div style={{ background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 8, padding: 14 }}>
+        <div style={{ background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 }}>
             {evaluation.score !== null && (
               <div style={{ fontSize: 28, fontFamily: "serif", color: PALETTE.ink, lineHeight: 1 }}>{evaluation.score}<span style={{ fontSize: 14, color: PALETTE.muted }}>/10</span></div>
@@ -438,6 +488,70 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
           )}
         </div>
       )}
+
+      {/* ── Stylist chat ────────────────────────────────────────────────────── */}
+      <div style={{ borderTop: `1px solid ${PALETTE.line}`, paddingTop: 12 }}>
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          style={{ background: "none", border: "none", fontSize: 11, letterSpacing: "0.1em", color: PALETTE.soft, cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6, marginBottom: chatOpen ? 10 : 0 }}>
+          ✦ ASK YOUR STYLIST {chatOpen ? "▲" : "▼"}
+        </button>
+
+        {chatOpen && (
+          <>
+            {chatMessages.length === 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                {["What shoes would work?", "What bag fits this?", "What outerwear works?", "What's missing?"].map(q => (
+                  <button key={q}
+                    onClick={() => setChatInput(q)}
+                    style={{ fontSize: 10, padding: "5px 9px", borderRadius: 12, border: `1px solid ${PALETTE.line}`, background: "#fff", color: PALETTE.soft, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+              {chatMessages.map((m, i) => (
+                <div key={i} style={{
+                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                  maxWidth: "85%",
+                  background: m.role === "user" ? PALETTE.ink : PALETTE.cream,
+                  color: m.role === "user" ? PALETTE.bg : PALETTE.soft,
+                  borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                  padding: "8px 12px",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  border: m.role === "assistant" ? `1px solid ${PALETTE.line}` : "none",
+                }}>
+                  {m.content}
+                </div>
+              ))}
+              {chatLoading && (
+                <div style={{ alignSelf: "flex-start", fontSize: 12, color: PALETTE.muted, fontStyle: "italic", padding: "6px 12px" }}>
+                  Thinking…
+                </div>
+              )}
+              <div ref={chatEndRef}/>
+            </div>
+
+            {chatErr && <p style={{ fontSize: 11, color: PALETTE.accent, marginBottom: 6 }}>{chatErr}</p>}
+
+            <form onSubmit={handleChat} style={{ display: "flex", gap: 6 }}>
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                placeholder="Ask about shoes, outerwear, accessories…"
+                style={{ flex: 1, padding: "9px 12px", border: `1px solid ${PALETTE.line}`, borderRadius: 20, fontSize: 12, background: "#fff", outline: "none" }}
+              />
+              <button type="submit" disabled={chatLoading || !chatInput.trim()}
+                style={{ padding: "9px 14px", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 20, fontSize: 13, cursor: "pointer", opacity: chatLoading || !chatInput.trim() ? 0.4 : 1 }}>
+                →
+              </button>
+            </form>
+          </>
+        )}
+      </div>
     </div>
   );
 }
