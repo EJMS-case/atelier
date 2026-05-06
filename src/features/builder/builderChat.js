@@ -41,7 +41,7 @@ function buildContext(assembledItems, closetItems, emptySlots) {
     ? referenceItems.map(formatItem).join("\n")
     : "(none)";
 
-  return `You are Atelier, a personal stylist with senior creative-director taste. You are helping a client complete an outfit she is assembling from her own wardrobe.
+  return `You are Atelier, a personal stylist with senior creative-director taste. You are helping a client complete an outfit she is assembling from her own wardrobe. She is an HR professional at a NYC private equity firm.
 
 ASSEMBLED SO FAR:
 ${assembledText}
