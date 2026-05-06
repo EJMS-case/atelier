@@ -148,7 +148,7 @@ function checkNoDuplicates(response) {
       const id = typeof item === "string" ? item : item.id;
       const cleanId = String(id).replace(/^ID:/i, "").trim();
       if (usedIds.has(cleanId)) {
-        failures.push(`Item '${cleanId}' appears in multiple looks (duplicate found in look ${i + 1}).`);
+        failures.push(`Look ${i + 1}: Item '${cleanId}' is a duplicate — each item can only appear in one look.`);
       }
       usedIds.add(cleanId);
     });
@@ -665,21 +665,27 @@ function scrubRationale(text) {
 }
 
 // ── Partial-look extractor for streaming ────────────────────────────────────
-// Scans an accumulating partial-JSON string for complete look objects (depth-2
-// inside the "looks" array) and returns all it finds. Uses brace-depth counting
-// so it doesn't need a full JSON parser — safe to call on every SSE delta.
+// Scans an accumulating partial-JSON string for complete look objects and
+// returns all it finds. Uses brace-depth counting so it doesn't need a full
+// JSON parser — safe to call on every SSE delta.
+//
+// Depth model (scanning from position 0):
+//   depth 1 = outer tool-input wrapper  { "looks": [...] }
+//   depth 2 = look objects              { "name": ..., "items": [...] }
+//   depth 3 = item objects inside looks { "id": ..., "role": ... }
+//
+// IMPORTANT: scan must start at position 0 so the outer { counts as depth 1.
+// Starting at indexOf('"looks"') would miss that brace and shift everything
+// down by one, making looks appear at depth 1 and never get extracted.
 
 function extractCompleteLooks(partialJson) {
-  const start = partialJson.indexOf('"looks"');
-  if (start === -1) return [];
-
   const looks = [];
   let depth = 0;
   let inString = false;
   let escape = false;
   let lookStart = -1;
 
-  for (let i = start; i < partialJson.length; i++) {
+  for (let i = 0; i < partialJson.length; i++) {
     const ch = partialJson[i];
     if (escape) { escape = false; continue; }
     if (inString && ch === "\\") { escape = true; continue; }
