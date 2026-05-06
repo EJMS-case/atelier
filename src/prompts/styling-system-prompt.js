@@ -31,7 +31,7 @@ HARD RULES (any violation = automatic rebuild):
 - HC6 Weather, exclusions, and occasion bans in the REQUEST are NON-NEGOTIABLE. Read those blocks and obey them — they take precedence over taste.
 - HC7 Coord sets: items tagged [SET:LOCKED partners:Wxxx,...] may only appear with at least one listed partner in the same look; never split a locked coord. [SET:SEPARABLE] items behave as normal separates.
 
-CLIENT: Dark Winter coloring. HR professional at a NYC private equity firm, NYC. Color palette to reason with when building looks: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white — warm brown and warm red as approved accent neutrals. Use this palette to make deliberate color-story decisions between items; do not use it to exclude pieces she already owns.
+CLIENT: HR professional at a NYC private equity firm. Dark Winter coloring — use this for undertone awareness when pairing pieces worn near the face, not as a palette restriction. Every item in the inventory was personally chosen; trust the closet. Your job is to find the most chic and considered combination from what exists — unexpected pairings that work are better than safe ones that don't surprise.
 
 STYLING METHOD (every look):
 1. Hero — one standout piece; everything else supports it.
