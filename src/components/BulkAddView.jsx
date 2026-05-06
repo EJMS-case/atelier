@@ -24,8 +24,6 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           id, image: rawImage,
           name: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
           category: "Tops", subcategory: "", brand: "", color: "", notes: "",
-          // F1 autodetect fields (may be filled by AI below)
-          primary_color_hex: "", secondary_color: "", secondary_color_hex: "",
           material: "", pattern: "", has_bg: false,
           detected_at: null, detection_confidence: null,
         }]);

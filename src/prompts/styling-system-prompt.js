@@ -195,16 +195,12 @@ function formatStylePrefs(prefs) {
 function formatWeather(weather) {
   if (!weather) return "";
   const w = weather.toLowerCase();
-  // Multi-select aware: a label like "Hot + Rainy" hits both branches and the
-  // model gets BOTH constraint blocks. Order is intentional — temperature
-  // first (governs fabric/sleeve/layer), then rainy (governs surface/footwear).
   const parts = [];
   if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. The Outerwear category does not exist for you in this generation. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Sandals, open shoes, or light flats. Any look containing a coat, blazer, or jacket is an automatic failure.");
   if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers ONLY. NO heavy knits, NO coats (incl. wool/cashmere/trench/floral wool), NO wool outerwear of any kind, NO boots. Short sleeves, sleeveless, or very light long sleeves only. The ONLY allowed outerwear is an explicitly unstructured linen or cotton blazer; if no such item exists in the inventory, skip the layer entirely.");
   if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — Dress in layers. Light outerwear welcome. Both short and long sleeves acceptable.");
   if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes.");
   if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected.");
-  if (/rain/.test(w)) parts.push("⚠️ WEATHER: RAINY — Practical footwear only (boots or closed leather shoes — no suede, no satin, no fabric heels). Water-resistant outerwear preferred. No suede or silk on outer layers.");
   if (parts.length === 0) return `⚠️ WEATHER: ${weather}. Dress appropriately — this is a hard constraint.`;
   return parts.join("\n\n");
 }

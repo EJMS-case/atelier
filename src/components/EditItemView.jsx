@@ -11,10 +11,6 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     material: item.material || "",
     pattern: item.pattern || "",
     price_paid: item.price_paid || "",
-    // Preserved silently — not shown in UI but passed through on save so existing data isn't wiped
-    primary_color_hex: item.primary_color_hex || "",
-    secondary_color: item.secondary_color || "",
-    secondary_color_hex: item.secondary_color_hex || "",
   });
   const [preview, setPreview] = useState(item.image || null);
   const [confirm, setConfirm] = useState(false);

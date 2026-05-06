@@ -102,9 +102,8 @@ export default function App() {
   const [styling,    setStyling]    = useState(false);
   const [styleErr,   setStyleErr]   = useState("");
   const [occasion,   setOccasion]   = useState("Work");
-  // Weather is a Set so user can combine "Hot + Rainy" or "Cold + Rainy".
-  // Empty Set === "Any". Stored as Set in state, joined to a string when
-  // passed downstream so older filter/prompt code keeps working.
+  // Weather is a Set (one temp chip at a time). Empty Set === "Any". Stored
+  // as Set in state, joined to a string when passed downstream.
   const [weather,    setWeather]    = useState(() => new Set());
   const [mood,       setMood]       = useState(""); // F2 — mood tag key
   const [request,    setRequest]    = useState("");
@@ -642,10 +641,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* WHAT'S THE WEATHER? — multi-select. Temperature chips are
-              mutually exclusive (Hot xor Cold etc.); Rainy is a separate
-              modifier so "Cold + Rainy" / "Hot + Rainy" / "Warm + Rainy"
-              all work. Empty = Any. */}
+          {/* WHAT'S THE WEATHER? — one temperature chip at a time. Empty = Any. */}
           <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>WHAT'S THE WEATHER?</div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
             {(() => {
@@ -666,11 +662,6 @@ export default function App() {
                 next.add(val);
                 return next;
               });
-              const toggleRainy = () => setWeather(prev => {
-                const next = new Set(prev);
-                if (next.has("Rainy")) next.delete("Rainy"); else next.add("Rainy");
-                return next;
-              });
               return (
                 <>
                   <button
@@ -687,13 +678,6 @@ export default function App() {
                       {label}
                     </button>
                   ))}
-                  <button
-                    style={weather.has("Rainy")
-                      ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                      : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                    onClick={toggleRainy}>
-                    + Rainy
-                  </button>
                 </>
               );
             })()}

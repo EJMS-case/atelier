@@ -24,9 +24,6 @@ export function applyDetection(queueItem, detection) {
   }
 
   if (detection.primary_color && !queueItem.color) next.color = detection.primary_color;
-  if (detection.primary_color_hex && !queueItem.primary_color_hex) next.primary_color_hex = detection.primary_color_hex;
-  if (detection.secondary_color && !queueItem.secondary_color) next.secondary_color = detection.secondary_color;
-  if (detection.secondary_color_hex && !queueItem.secondary_color_hex) next.secondary_color_hex = detection.secondary_color_hex;
   if (detection.brand && !queueItem.brand) next.brand = detection.brand;
   if (detection.material && !queueItem.material) next.material = detection.material;
   if (detection.pattern && !queueItem.pattern) next.pattern = detection.pattern;

@@ -16,21 +16,15 @@ export function getSleeveType(item) {
 }
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
-// Accepts either a single weather string ("Hot (85°F+)") or a combined label
-// ("Hot + Rainy") produced by the multi-select chip row. Each component
-// applies its filter independently — the strictest constraint wins (e.g.
-// Cold + Rainy keeps coats AND rejects suede). This is what unblocks her
-// "I want Hot + Rainy" UX without inventing new buckets.
 export function filterByWeather(items, weather) {
   const raw = (weather || "").toLowerCase();
   if (!raw || raw === "any") return items;
 
-  const isHot   = /hot|85/.test(raw);
-  const isWarm  = /warm|70-84/.test(raw);
-  const isMild  = /mild|55-69/.test(raw);
-  const isCool  = /cool|40-54/.test(raw);
-  const isCold  = /cold|below 40/.test(raw);
-  const isRainy = /rain/.test(raw);
+  const isHot  = /hot|85/.test(raw);
+  const isWarm = /warm|70-84/.test(raw);
+  const isMild = /mild|55-69/.test(raw);
+  const isCool = /cool|40-54/.test(raw);
+  const isCold = /cold|below 40/.test(raw);
 
   return items.filter(it => {
     const sleeve = getSleeveType(it);
@@ -67,13 +61,6 @@ export function filterByWeather(items, weather) {
       if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
       if (it.subcategory === "Sandals") return false;
       if (it.subcategory === "Shorts") return false;
-    }
-    if (isRainy) {
-      // Rainy can be combined with any temperature. The temperature filter
-      // already pruned weight; rainy adds: drop sandals + drop suede outers.
-      if (it.subcategory === "Sandals") return false;
-      if (it.category === "Outerwear" && isDelicateSurface) return false;
-      if (it.category === "Shoes" && isDelicateSurface) return false;
     }
     return true;
   });

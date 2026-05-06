@@ -38,8 +38,7 @@ RULES:
 - \`category\` must be one of the top-level keys above.
 - \`subcategory\` must be one of that category's values, or "" if the category has none or you can't tell.
 - If it's a bag (any shape), use category "Bags" (not "Accessories"). Belts use "Belts". Shoes use "Shoes".
-- \`primary_color\` is a human word ("navy", "ivory", "burgundy"). \`primary_color_hex\` is a six-digit hex swatch of the dominant fabric color.
-- \`secondary_color\` / \`secondary_color_hex\` are null unless the item has a clear second color (e.g. a stripe, a trim, a colorblock) — a photo background never counts.
+- \`primary_color\` is a human word ("navy", "ivory", "burgundy"). One word, lowercase.
 - \`brand\` only if a logo is clearly visible — otherwise null. Don't guess from style.
 - \`material\` one word when obvious ("silk", "cotton", "wool", "leather", "denim", "cashmere", "linen", "satin", "knit"), else null.
 - \`pattern\` one of: "solid", "striped", "plaid", "floral", "abstract", "animal", "polka-dot" — else null.
@@ -94,9 +93,6 @@ function sanitize(raw) {
     category: validCats.has(raw.category) ? raw.category : null,
     subcategory: "",
     primary_color: str(raw.primary_color),
-    primary_color_hex: hex(raw.primary_color_hex),
-    secondary_color: str(raw.secondary_color),
-    secondary_color_hex: hex(raw.secondary_color_hex),
     brand: str(raw.brand),
     material: str(raw.material),
     pattern: str(raw.pattern),
@@ -115,8 +111,3 @@ function str(v) {
   return t && t.toLowerCase() !== "null" && t.toLowerCase() !== "n/a" ? t : null;
 }
 
-function hex(v) {
-  if (typeof v !== "string") return null;
-  const m = v.trim().match(/^#?([0-9a-f]{6})$/i);
-  return m ? `#${m[1].toUpperCase()}` : null;
-}

@@ -10,7 +10,6 @@ import { VIBE_VOCABULARY } from "../../features/stylist/moods.js";
 
 // ── Shared primitives ────────────────────────────────────────────────────────
 
-const HexSchema = z.string().regex(/^#?[0-9a-fA-F]{6}$/);
 const ConfidenceLevel = z.enum(["High", "Medium", "Low"]);
 const VibeEnum = z.enum(VIBE_VOCABULARY);
 
@@ -22,9 +21,6 @@ export const AutoDetectSchema = z.object({
   category: z.string().nullable(),
   subcategory: z.string().default(""),
   primary_color: z.string().nullable(),
-  primary_color_hex: HexSchema.nullable(),
-  secondary_color: z.string().nullable(),
-  secondary_color_hex: HexSchema.nullable(),
   brand: z.string().nullable(),
   material: z.string().nullable(),
   pattern: z.string().nullable(),
@@ -40,15 +36,12 @@ export const AutoDetectTool = {
       category:            { type: ["string", "null"] },
       subcategory:         { type: "string" },
       primary_color:       { type: ["string", "null"] },
-      primary_color_hex:   { type: ["string", "null"], pattern: "^#?[0-9a-fA-F]{6}$" },
-      secondary_color:     { type: ["string", "null"] },
-      secondary_color_hex: { type: ["string", "null"], pattern: "^#?[0-9a-fA-F]{6}$" },
       brand:               { type: ["string", "null"] },
       material:            { type: ["string", "null"] },
       pattern:             { type: ["string", "null"] },
       confidence:          { type: ["number", "null"], minimum: 0, maximum: 1 },
     },
-    required: ["category", "primary_color", "primary_color_hex", "confidence"],
+    required: ["category", "primary_color", "confidence"],
   },
 };
 
