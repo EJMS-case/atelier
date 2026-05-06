@@ -14,6 +14,21 @@ export const COLOR_FAMILIES = [
   { name:"White",       hex:"#F8F6F2",  shades:[{name:"Ivory", hex:"#FFFBE6"}, {name:"White", hex:"#F8F6F2"}] },
 ];
 
+// Maps each COLOR_FAMILIES swatch name to the [min, max] range in COLOR_SORT_ORDER.
+// Used by the color filter as a fallback when color_family string matching fails.
+export const COLOR_FAMILY_RANGES = {
+  "Black":     [0,  0],
+  "Charcoal":  [1,  1],
+  "Navy":      [2,  4],
+  "Burgundy":  [5,  7],
+  "Cool Red":  [8,  9],
+  "Cool Pink": [10, 12],
+  "Deep Teal": [13, 14],
+  "Brown":     [15, 17],
+  "Neutral":   [18, 20],
+  "White":     [21, 22],
+};
+
 // Primary: color family (cool → warm → neutral → white)
 export const COLOR_SORT_ORDER = {
   "Black":0, "Charcoal":1, "Navy":2, "Deep Blue":3, "Sapphire":4,

@@ -17,6 +17,7 @@ import { icons, Icon } from "./ui/icons.jsx";
 import {
   CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, CATEGORIES, SET_TAGS, OCCASIONS, getSubcatL2, normalizeOccasion,
 } from "./constants/taxonomy.js";
+import { COLOR_FAMILY_RANGES } from "./constants/color.js";
 import {
   getSleeveType, filterByWeather, colorSortIdx, defaultSortComparator,
   normalizeItem, mergeItems, shuffle,
@@ -559,9 +560,15 @@ export default function App() {
       base = base.filter(it => {
         const itemColor = (it.color || "").toLowerCase();
         const itemFamily = (it.color_family || "").toLowerCase();
+        const idx = colorSortIdx(it);
         return activeFilters.color.some(c => {
           const cl = c.toLowerCase();
-          return itemColor.includes(cl) || itemFamily.includes(cl) || itemColor === cl;
+          // String match against color or color_family (handles denim wash labels too)
+          if (itemColor.includes(cl) || itemFamily.includes(cl)) return true;
+          // Index-range fallback: catches items with non-standard color_family values
+          const range = COLOR_FAMILY_RANGES[c];
+          if (range && idx >= range[0] && idx <= range[1]) return true;
+          return false;
         });
       });
     }

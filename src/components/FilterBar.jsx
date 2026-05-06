@@ -4,7 +4,6 @@ import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3 } from "../constants/taxonomy.
 import { COLOR_FAMILIES } from "../constants/color.js";
 
 export default function FilterBar({ items, activeFilters, onChange }) {
-  const [expandedColor, setExpandedColor] = useState(null);
   const [showBrand, setShowBrand] = useState(false);
   const [brandSearch, setBrandSearch] = useState("");
   const [showMore, setShowMore] = useState(false);
@@ -141,44 +140,19 @@ export default function FilterBar({ items, activeFilters, onChange }) {
         <div style={s.filterSectionLabel}>Color</div>
         <div style={s.filterRow}>
           {COLOR_FAMILIES.map(family => (
-            <div key={family.name} style={{position:"relative"}}>
-              <button
-                onClick={() => setExpandedColor(expandedColor === family.name ? null : family.name)}
-                style={{
-                  ...s.swatchBtn,
-                  background: family.hex,
-                  boxShadow: isActive("color", family.name)
-                    ? `0 0 0 2px var(--color-ink), 0 0 0 4px ${family.hex}`
-                    : expandedColor === family.name
-                    ? `0 0 0 2px var(--color-accent)`
-                    : "none",
-                  border: family.name === "White" || family.name === "Neutral" ? "1px solid var(--color-border)" : "none",
-                }}
-                title={family.name}
-              />
-              {/* Shade expansion */}
-              {expandedColor === family.name && family.shades.length > 1 && (
-                <div style={s.shadePopover}>
-                  {family.shades.map(shade => (
-                    <button key={shade.name}
-                      onClick={() => { toggle("color", shade.name); setExpandedColor(null); }}
-                      style={{
-                        ...s.shadeSwatch,
-                        background: shade.hex,
-                        boxShadow: isActive("color", shade.name) ? `0 0 0 2px var(--color-ink)` : "none",
-                        border: shade.name === "White" || shade.name === "Ivory" || shade.name === "Neutral" ? "1px solid var(--color-border)" : "none",
-                      }}
-                      title={shade.name}
-                    />
-                  ))}
-                </div>
-              )}
-              {expandedColor === family.name && family.shades.length === 1 && (() => {
-                toggle("color", family.name);
-                setExpandedColor(null);
-                return null;
-              })()}
-            </div>
+            <button
+              key={family.name}
+              onClick={() => toggle("color", family.name)}
+              style={{
+                ...s.swatchBtn,
+                background: family.hex,
+                boxShadow: isActive("color", family.name)
+                  ? `0 0 0 2px var(--color-ink), 0 0 0 4px ${family.hex}`
+                  : "none",
+                border: family.name === "White" || family.name === "Neutral" ? "1px solid var(--color-border)" : "none",
+              }}
+              title={family.name}
+            />
           ))}
         </div>
       </div>
