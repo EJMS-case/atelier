@@ -460,19 +460,6 @@ export default function App() {
   // each word independently, so this is the cleanest bridge.
   const weatherLabel = [...weather].join(" + ");
 
-  const handleGenerateForDay = async (dayOccasion = "Work") => {
-    if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
-    if (items.length < 3) throw new Error(`Add at least 3 items first (you have ${items.length}).`);
-    const result = await generateOutfit(items, dayOccasion, weatherLabel, "", apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems });
-    const looks = result?.looks;
-    if (!looks || !Array.isArray(looks) || looks.length === 0) {
-      throw new Error(result?.notes || "AI returned no looks — try again.");
-    }
-    const normalized = normalizeLooks(looks, dayOccasion);
-    setAllLooks(prev => [...prev, ...normalized].slice(-30));
-    return normalized;
-  };
-
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
     if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
@@ -845,17 +832,11 @@ export default function App() {
             items={items}
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
-            onOpenWear={() => setView("favorites")}
-            onGenerateForDay={handleGenerateForDay}
-            onPinLookToDate={async (iso, look) => {
-              await sb.saveOutfitLog({
-                garment_ids: look.items || [],
-                date_worn: null,
-                occasion: look.occasion || "Work",
-                notes: null,
-                collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, styling: look.styling || look.why }),
-              });
-              await savePlan({ date: iso, items: look.items || [], source: "ai", occasion: look.occasion || "Work", notes: null });
+            onEditItem={(item) => { setEditItem(item); setView("edit"); }}
+            onStyleItem={(item) => {
+              setRequest(`Style around my ${item.name}`);
+              setView("style");
+              setStylePanelOpen(true);
             }}
           />
         </div>
