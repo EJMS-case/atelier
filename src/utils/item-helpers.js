@@ -156,6 +156,13 @@ export function normalizeItem(item) {
 // without that flag is treated as "deleted on another device" and dropped,
 // so deletes propagate cross-device instead of being resurrected by the
 // next merge.
+//
+// Critically: items that ARE in Supabase get `pending_sync` explicitly set
+// to false, regardless of any stale local flag. Earlier builds set the flag
+// once on every existing local item via reconcilePendingSyncFlag and never
+// cleared it, which made cross-device deletes silently fail — the desktop
+// kept resurrecting items the user deleted on her phone because their
+// stale local copies still carried the protective flag.
 export function mergeItems(sbItems, localItems) {
   const localMap = {};
   localItems.forEach(it => { localMap[it.id] = it; });
@@ -164,6 +171,7 @@ export function mergeItems(sbItems, localItems) {
   const merged = sbItems.map(it => ({
     ...it,
     image: localMap[it.id]?.image || it.image || null,
+    pending_sync: false,
   }));
   localItems.forEach(it => {
     if (!sbMap[it.id] && it.pending_sync) merged.push(it);

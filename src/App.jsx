@@ -9,7 +9,7 @@ import { stripBackground } from "./lib/bgRemoval.js";
 import { applyDetection } from "./features/closet/applyDetection.js";
 import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
-import { savePlan } from "./features/planner/plannerApi.js";
+import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
 import { bumpWearCounts, unbumpWearCounts, costPerWear } from "./features/wear/wearApi.js";
 import HomeView from "./features/home/HomeView.jsx";
 import { s, si, ss } from "./ui/styles.js";
@@ -1071,6 +1071,7 @@ export default function App() {
             const result = await sb.saveOutfitLog(log);
             if (log.date_worn) {
               bumpWearCounts(log.garment_ids || []);
+              savePlan({ date: log.date_worn, items: log.garment_ids || [], source: "worn", occasion: log.occasion || "Work", notes: null }).catch(() => {});
             }
             return Array.isArray(result) ? result[0] : result;
           }}
@@ -1195,8 +1196,12 @@ export default function App() {
             // F6 — decrement wear counts when unlogging
             const log = (await sb.fetchOutfitLogs()).find(l => l.id === id);
             const ids = log?.garment_ids || [];
+            const dateWorn = log?.date_worn;
             await sb.updateOutfitLog(id, { date_worn: null });
             unbumpWearCounts(ids);
+            // Clear the matching planner pin (if it was created by the
+            // wear-log auto-pin and hasn't been overwritten manually).
+            if (dateWorn) deletePlan(dateWorn).catch(() => {});
             const updated = items.map(it =>
               ids.includes(it.id) ? {...it, wear_count: Math.max(0, (it.wear_count || 0) - 1)} : it
             );
@@ -1209,6 +1214,10 @@ export default function App() {
             const ids = log?.garment_ids || [];
             await Promise.all(ids.map(gid => sb.updateItemLastWorn(gid, date)));
             bumpWearCounts(ids); // F6
+            // Pin this look to the planner on the date worn so the calendar
+            // reflects what she actually wore (user request: "items I mark
+            // as worn, put them on the calendar on the date that I wore them").
+            savePlan({ date, items: ids, source: "worn", occasion: log?.occasion || "Work", notes: null }).catch(() => {});
             const updated = items.map(it =>
               ids.includes(it.id)
                 ? {...it, last_worn: date, wear_count: (it.wear_count || 0) + 1}
@@ -1230,6 +1239,8 @@ export default function App() {
             const ids = log.garment_ids || [];
             await Promise.all(ids.map(id => sb.updateItemLastWorn(id, today)));
             bumpWearCounts(ids); // F6
+            // Mirror the wear onto the planner calendar.
+            savePlan({ date: today, items: ids, source: "worn", occasion: log.occasion || "Work", notes: null }).catch(() => {});
             const updated = items.map(it =>
               ids.includes(it.id)
                 ? {...it, last_worn: today, wear_count: (it.wear_count || 0) + 1}
@@ -1243,6 +1254,8 @@ export default function App() {
             // F6 — if the save included date_worn, bump counts too
             if (log.date_worn) {
               bumpWearCounts(log.garment_ids || []);
+              // Pin to the planner on the date worn.
+              savePlan({ date: log.date_worn, items: log.garment_ids || [], source: "worn", occasion: log.occasion || "Work", notes: null }).catch(() => {});
             }
             return Array.isArray(result) ? result[0] : result;
           }}
