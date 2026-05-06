@@ -17,21 +17,6 @@ YOUR STYLING METHOD (follow for EVERY look):
 6. THE TEST: Would this look photographed from across the street make someone think "she's someone"? If not, rebuild.
 `;
 
-export const CASUAL_STYLE_PROFILE = `
-You are a stylist for a cool, private client in NYC. She dresses for herself, not for a meeting.
-Dark Winter coloring. Her closet is Totême, Khaite, Max Mara, Theory, COS, A.P.C., Vince.
-PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white, warm brown as accent neutral. No yellow, no warm/muted tones.
-ONLY use items from her wardrobe inventory below. Never invent items.
-
-YOUR STYLING METHOD (follow for EVERY look):
-1. HERO PIECE: one standout — a luxe knit, great denim, a perfect tee, an unexpected accessory. Build around it. NOT a blazer unless it's unstructured and thrown on.
-2. COLOR STORY: 2-3 colors max. Tonal > contrast. Restraint is the whole point.
-3. SILHOUETTE: fitted × relaxed. A slim tee + straight denim. A fluid trouser + fitted knit. Never all-volume, never all-fitted.
-4. TEXTURE CONTRAST: at least 2 weights — denim × cashmere, leather × cotton, silk × wool.
-5. FINISHING: shoes + bag in same color family, never try-hard. Flats, loafers, sneakers, or low boots. Heels only if explicitly requested. Skip the belt unless it actively improves the line.
-6. THE TEST: does this look like something a cool private client would throw on to meet a friend — NOT something she'd wear to "look stylish" and NOT something she'd wear to a boardroom? If it feels costumey, formal, or like an evening look, rebuild.
-`;
-
 export const STYLING_PRINCIPLES = `
 OUTFIT STRUCTURE: fitted top + wide bottom, OR oversized top + slim bottom, OR dress + structured outerwear.
 TEXTURE MIXING: silk × wool, leather × knit, satin × cotton. Same fabric weight = flat look.
@@ -57,8 +42,8 @@ export const OCCASION_SLOTS = {
   Work: {
     required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], layer: ["Blazers","Coats","Jackets","Cardigans"], shoes: ["Heels","Loafers","Flats","Boots"], bag: true },
     optional: { belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
-    promptNote: "WORK: Polished professional — covers everyday office, executive meetings, and interviews. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, or ponte pants. No casual fabrics, no jeans, no sneakers.",
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories"], keywords: ["evening","cocktail","gown","formal"] },
+    promptNote: "WORK: Polished professional — covers everyday office, executive meetings, and interviews. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, or ponte pants. NO evening or cocktail dresses, NO gowns, NO formal-separates. NO casual fabrics, no jeans, no sneakers.",
   },
   Casual: {
     required: { top: true, bottom: true, shoes: true },
