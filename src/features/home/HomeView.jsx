@@ -1,10 +1,9 @@
 // ── F7 — HOME LANDING VIEW ───────────────────────────────────────────────────
-// A 7-day horizontal strip (today centered), today's weather, quick-style CTA,
+// A 7-day horizontal strip (today centered), quick-style CTA,
 // and a small stats row (closet size, most-worn, neglected count).
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween } from "../planner/plannerApi.js";
-import { getLocalWeatherLabel } from "../../lib/weather.js";
 import { mostWornItems, neglectedItems } from "../wear/wearApi.js";
 
 const PALETTE = {
@@ -20,9 +19,6 @@ const DAY_OCCASIONS = ["Work", "Weekend", "Evening"];
 
 export default function HomeView({ items, onOpenPlanner, onOpenStyle, onOpenWear, onGenerateForDay, onPinLookToDate }) {
   const [plans, setPlans] = useState({});
-  const [weather, setWeather] = useState(null);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherErr, setWeatherErr] = useState(null);
   const [expandedIso, setExpandedIso] = useState(null);
   const [dayState, setDayState] = useState({}); // iso → { loading, looks, err, occasion, pinnedLookIdx }
 
@@ -46,16 +42,6 @@ export default function HomeView({ items, onOpenPlanner, onOpenStyle, onOpenWear
     }).catch(() => {});
   };
   useEffect(loadPlans, [week]);
-
-  async function loadWeather() {
-    setWeatherLoading(true); setWeatherErr(null);
-    try {
-      const label = await getLocalWeatherLabel();
-      setWeather(label);
-    } catch (err) {
-      setWeatherErr(err.message || "Couldn't locate");
-    } finally { setWeatherLoading(false); }
-  }
 
   const topWorn   = mostWornItems(items, 5);
   const neglected = neglectedItems(items, 60);
@@ -92,15 +78,8 @@ export default function HomeView({ items, onOpenPlanner, onOpenStyle, onOpenWear
 
   return (
     <div style={{ padding: "8px 16px 120px" }}>
-      {/* Weather + quick stats row */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, marginTop: 8 }}>
-        <button onClick={loadWeather} disabled={weatherLoading}
-          style={{ background: "none", border: "none", cursor: "pointer", color: PALETTE.soft, fontSize: 13, textAlign: "left", padding: 0 }}>
-          <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted }}>TODAY</div>
-          <div style={{ fontFamily: "serif", fontSize: 16, color: PALETTE.ink }}>
-            {weatherLoading ? "…" : weather || (weatherErr ? "tap to retry" : "tap for weather")}
-          </div>
-        </button>
+      {/* Quick stats row */}
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 16, marginTop: 8 }}>
         <div style={{ fontSize: 10, color: PALETTE.muted, textAlign: "right" }}>
           {items.length} pieces · {neglected.length} neglected
         </div>

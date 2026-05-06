@@ -19,7 +19,7 @@ export default function SaveLookModal({ look, lookItems, onSave, onClose }) {
         date_worn: logAsWorn ? dateWorn : null,
         occasion,
         notes: notes.trim() || null,
-        collage_url: JSON.stringify({ look_name: look.name, mood: look.mood, styling: look.styling || look.why }),
+        collage_url: JSON.stringify({ mood: look.mood, styling: look.styling || look.why }),
       });
       setSaved(true);
       setTimeout(onClose, 1200);
@@ -46,7 +46,6 @@ export default function SaveLookModal({ look, lookItems, onSave, onClose }) {
         ) : (
           <>
             <div style={s.modalLookPreview}>
-              <div style={s.modalLookName}>{look.name}</div>
               <div style={s.modalLookPieces}>{lookItems.map(it => it.name).join(" · ")}</div>
             </div>
             <div style={s.modalField}>

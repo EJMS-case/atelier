@@ -50,42 +50,6 @@ const EXCLUSION_CHECKS = {
   "no-knits": (item) => item.category === "Knits",
 };
 
-// ── Color synonym map ────────────────────────────────────────────────────────
-// Used for color coherence checks — groups equivalent color names.
-const COLOR_SYNONYMS = {
-  // Blacks
-  black: "black", onyx: "black", jet: "black", noir: "black", ebony: "black",
-  // Charcoals
-  charcoal: "charcoal", "dark grey": "charcoal", "dark gray": "charcoal", graphite: "charcoal", slate: "charcoal", anthracite: "charcoal",
-  // Navys
-  navy: "navy", "dark blue": "navy", "deep blue": "navy", midnight: "navy", "midnight blue": "navy", indigo: "navy",
-  // Blues
-  cobalt: "blue", sapphire: "blue", azure: "blue", cerulean: "blue", royal: "blue", "royal blue": "blue",
-  // Burgundys
-  burgundy: "burgundy", wine: "burgundy", maroon: "burgundy", oxblood: "burgundy", merlot: "burgundy", claret: "burgundy", plum: "burgundy", "deep purple": "burgundy", aubergine: "burgundy",
-  // Reds
-  red: "red", "cool red": "red", cherry: "red", crimson: "red", scarlet: "red", ruby: "red", garnet: "red", vermilion: "red",
-  // Pinks
-  pink: "pink", "cool pink": "pink", blush: "pink", rose: "pink", fuchsia: "pink", magenta: "pink", mauve: "pink", dusty_rose: "pink",
-  // Teals / Greens
-  teal: "teal", "deep teal": "teal", "forest green": "teal", emerald: "teal", hunter: "teal", evergreen: "teal", pine: "teal",
-  // Browns
-  brown: "brown", chocolate: "brown", espresso: "brown", caramel: "brown", cognac: "brown", tan: "brown", "warm brown": "brown", coffee: "brown", mocha: "brown", chestnut: "brown", walnut: "brown",
-  // Neutrals
-  neutral: "neutral", beige: "neutral", camel: "neutral", sand: "neutral", oat: "neutral", taupe: "neutral", khaki: "neutral", stone: "neutral", mushroom: "neutral",
-  // Whites
-  white: "white", ivory: "white", cream: "white", "off-white": "white", ecru: "white", bone: "white", snow: "white", chalk: "white",
-};
-
-/**
- * Normalize a color string to its canonical family.
- */
-function normalizeColor(color) {
-  if (!color) return null;
-  const lower = color.toLowerCase().trim();
-  return COLOR_SYNONYMS[lower] || lower;
-}
-
 // ── 8 Validation Checks ──────────────────────────────────────────────────────
 
 /**
@@ -97,7 +61,7 @@ function checkStructure(response) {
     failures.push("Response missing 'looks' array.");
     return failures;
   }
-  const required = ["name", "vibe", "items", "silhouette", "focal_point", "color_strategy", "texture_story", "rationale"];
+  const required = ["vibe", "items", "silhouette", "focal_point", "color_strategy", "texture_story", "rationale"];
   response.looks.forEach((look, i) => {
     for (const field of required) {
       if (!look[field] && look[field] !== "") {
@@ -176,7 +140,7 @@ function checkLowerHalf(response, idMap, allItems) {
     );
 
     if (!hasBottom && !hasDress) {
-      failures.push(`Look ${i + 1} ("${look.name}") has no bottom or dress — missing lower-half coverage.`);
+      failures.push(`Look ${i + 1} has no bottom or dress — missing lower-half coverage.`);
     }
   });
   return failures;
@@ -205,7 +169,7 @@ function checkUpperHalf(response, idMap, allItems) {
 
     const hasTop = resolved.some(it => it.category === "Tops" || it.category === "Knits");
     if (!hasTop) {
-      failures.push(`Look ${i + 1} ("${look.name}") has no top or knit — every separates look needs an upper-half garment. Outerwear is a layer, not a top.`);
+      failures.push(`Look ${i + 1} has no top or knit — every separates look needs an upper-half garment. Outerwear is a layer, not a top.`);
     }
   });
   return failures;
@@ -363,55 +327,6 @@ function checkCategoryBalance(response, idMap, allItems) {
   return failures;
 }
 
-/**
- * Check 10: The look's NAME must match the dominant color of its items.
- * This catches the common failure where the model confabulates a name
- * ("Navy Silk Column") that doesn't reflect the actual picked items
- * (which are black, burgundy, etc.). Dark-Winter naming is strict here
- * — navy ≠ black, burgundy ≠ red, cool pink ≠ blush.
- */
-function checkNameMatchesItems(response, idMap, allItems) {
-  const failures = [];
-  // Longer keywords first so "cool red" wins over "red", "deep teal" over "teal".
-  const colorKeywords = Object.keys(COLOR_SYNONYMS).sort((a, b) => b.length - a.length);
-
-  response.looks.forEach((look, i) => {
-    const name = (look.name || "").toLowerCase();
-    if (!name) return;
-
-    // Find the dominant color keyword claimed in the name (first match).
-    let claimedKeyword = null;
-    for (const kw of colorKeywords) {
-      if (new RegExp(`\\b${kw.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "i").test(name)) {
-        claimedKeyword = kw;
-        break;
-      }
-    }
-    if (!claimedKeyword) return; // name claims no color — nothing to verify
-
-    const claimedFamily = COLOR_SYNONYMS[claimedKeyword];
-
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
-
-    const families = resolved.flatMap(it => [
-      normalizeColor(it.color_family),
-      normalizeColor(it.color),
-    ]).filter(Boolean);
-
-    if (!families.includes(claimedFamily)) {
-      const itemColors = resolved.map(it => it.color_family || it.color || "?").join(", ");
-      failures.push(
-        `Look ${i + 1} name "${look.name}" claims "${claimedKeyword}" but no item matches the ${claimedFamily} color family. Item colors: ${itemColors}. Either rename the look to match the actual colors, or swap in items from the ${claimedFamily} family.`
-      );
-    }
-  });
-  return failures;
-}
 
 /**
  * Check 11: Weather compliance. Second line of defense — the sampler
@@ -564,7 +479,7 @@ function checkCoordSets(response, idMap, allItems) {
       if (partnersInSample.length === 0) continue; // no partners available — AI can't be faulted
       const hasPartnerInLook = partnersInSample.some(p => lookIds.has(p.id));
       if (!hasPartnerInLook) {
-        failures.push(`Look ${i + 1} ("${look.name}") uses LOCKED coord piece "${piece.name}" without any of its set partners.`);
+        failures.push(`Look ${i + 1} uses LOCKED coord piece "${piece.name}" without any of its set partners.`);
       }
     }
   });
@@ -587,7 +502,6 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
   allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots).map(f => ({ type: "occasion", message: f, hard: true })));
   allFailures.push(...checkCategoryBalance(response, idMap, allItems).map(f => ({ type: "category_balance", message: f, hard: true })));
-  allFailures.push(...checkNameMatchesItems(response, idMap, allItems).map(f => ({ type: "name_color", message: f, hard: true })));
   allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));

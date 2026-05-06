@@ -64,7 +64,6 @@ const LookItemSchema = z.object({
 });
 
 const LookSchema = z.object({
-  name: z.string(),
   vibe: VibeEnum,
   items: z.array(LookItemSchema).min(1),
   silhouette: z.string().default(""),
@@ -92,7 +91,6 @@ export const LooksTool = {
         items: {
           type: "object",
           properties: {
-            name:           { type: "string" },
             vibe:           { type: "string", enum: VIBE_VOCABULARY },
             items: {
               type: "array",
@@ -112,7 +110,7 @@ export const LooksTool = {
             texture_story:  { type: "string" },
             rationale:      { type: "string" },
           },
-          required: ["name", "vibe", "items"],
+          required: ["vibe", "items"],
         },
       },
       notes: { type: "string" },
