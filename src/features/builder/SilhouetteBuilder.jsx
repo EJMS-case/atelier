@@ -67,7 +67,41 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [positions, setPositions] = useState(() => ({ ...DEFAULT_POSITIONS }));
   // Active drag/resize state
   const [dragState, setDragState] = useState(null);
+  // Tracks "slotKey:itemId" pairs whose box has already been auto-fit to the
+  // image aspect ratio. Skips re-fitting after the user has moved/resized.
+  const [autoFitted, setAutoFitted] = useState(() => new Set());
   const canvasRef = useRef(null);
+
+  // Snap the bounding box height to match the image's intrinsic aspect ratio
+  // so there's no whitespace around the visible item — eliminates the dead
+  // negative space that made the resize handle hard to find.
+  function fitBoxToImage(slot, itemId, naturalW, naturalH) {
+    if (!naturalW || !naturalH) return;
+    const key = `${slot}:${itemId}`;
+    if (autoFitted.has(key)) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect?.width) return;
+    const imgAR = naturalW / naturalH;
+    setPositions(prev => {
+      const cur = prev[slot] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
+      const widthPx = (cur.w / 100) * rect.width;
+      let newHpx = widthPx / imgAR;
+      // Cap height so the box stays inside the canvas.
+      const maxHpx = rect.height - (cur.y / 100) * rect.height;
+      if (newHpx > maxHpx) {
+        newHpx = maxHpx;
+        // If height was capped, shrink width proportionally to preserve AR.
+        const newWpx = newHpx * imgAR;
+        return { ...prev, [slot]: { ...cur, w: (newWpx / rect.width) * 100, h: (newHpx / rect.height) * 100 } };
+      }
+      return { ...prev, [slot]: { ...cur, h: (newHpx / rect.height) * 100 } };
+    });
+    setAutoFitted(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }
 
   // Reset search + subcategory filter when the active slot changes
   useEffect(() => { setSearch(""); setSubcatFilter(""); }, [activeSlot]);
@@ -271,6 +305,8 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
                 e.currentTarget.setPointerCapture(e.pointerId);
                 const rect = canvasRef.current.getBoundingClientRect();
                 setDragState({ slot, type: "move", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                // User-driven moves should not be undone by a stale auto-fit.
+                setAutoFitted(prev => { const n = new Set(prev); n.add(`${slot}:${item.id}`); return n; });
               }}
               onPointerMove={(e) => {
                 if (!dragState || dragState.slot !== slot || dragState.type !== "move") return;
@@ -287,7 +323,14 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
               }}
               onPointerUp={() => setDragState(null)}
             >
-              {item.image && <img src={item.image} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}/>}
+              {item.image && (
+                <img
+                  src={item.image}
+                  alt=""
+                  onLoad={(e) => fitBoxToImage(slot, item.id, e.target.naturalWidth, e.target.naturalHeight)}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}
+                />
+              )}
               {/* Resize handle — bottom-right corner */}
               <div
                 data-resize="1"
@@ -298,6 +341,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const rect = canvasRef.current.getBoundingClientRect();
                   setDragState({ slot, type: "resize", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                  setAutoFitted(prev => { const n = new Set(prev); n.add(`${slot}:${item.id}`); return n; });
                 }}
                 onPointerMove={(e) => {
                   if (!dragState || dragState.slot !== slot || dragState.type !== "resize") return;
@@ -325,7 +369,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       {/* Reset layout button — only shown when positions differ from defaults */}
       {pickedItems.length > 0 && (
         <div style={{ textAlign: "right", marginBottom: 8 }}>
-          <button onClick={() => setPositions({ ...DEFAULT_POSITIONS })}
+          <button onClick={() => { setPositions({ ...DEFAULT_POSITIONS }); setAutoFitted(new Set()); }}
             style={{ background: "none", border: "none", fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
             Reset layout
           </button>

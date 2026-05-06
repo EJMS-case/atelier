@@ -341,9 +341,10 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
 
   const isHot = /hot|85/i.test(w);
   const isWarm = /warm|70-84/i.test(w);
+  const isMild = /mild|55-69/i.test(w);
   const isCool = /cool|40-54/i.test(w);
   const isCold = /cold|below 40/i.test(w);
-  if (!isHot && !isWarm && !isCool && !isCold) return [];
+  if (!isHot && !isWarm && !isMild && !isCool && !isCold) return [];
 
   const failures = [];
 
@@ -355,9 +356,10 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
       const resolved = allItems.find(it => it.id === realId);
       if (!resolved) return;
 
-      const text = ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.subcategory || "")).toLowerCase();
+      const text = ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.subcategory || "") + " " + (resolved.material || "")).toLowerCase();
       const sw = (resolved.season_weight || "").toLowerCase();
       const heavy = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i.test(text);
+      const winterOnly = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(text);
       const lightOnly = /tank|sleeveless|sandal|bikini|swim|shorts/i.test(text) || resolved.subcategory === "Sandals" || resolved.subcategory === "Tanks";
 
       if (isHot || isWarm) {
@@ -376,6 +378,24 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
           const isLight = /linen|cotton|seersucker|unstructured|unlined|lightweight|sheer/i.test(text);
           if (isHot || !isLight) {
             failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear — wrong for ${weather}. Skip the layer or pick an unstructured linen blazer.`);
+          }
+        }
+        if (sw === "winter") {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is marked Winter — wrong for ${weather}.`);
+        }
+      }
+      if (isMild) {
+        // Mild is forgiving for sleeves and most layers, but the dead-of-winter
+        // silhouette pieces — parka, puffer, sherpa, shearling, fleece, heavy
+        // floor-length wool coats — read as a costume mismatch. Light wool
+        // blazers and trenches are fine and not flagged here.
+        if (winterOnly) {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is a winter-only piece (parka/puffer/sherpa/shearling/fleece) — wrong for ${weather}.`);
+        }
+        if (resolved.subcategory === "Coats" && heavy) {
+          const isLight = /linen|cotton|silk|unstructured|unlined|lightweight/i.test(text);
+          if (!isLight) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is a heavy long coat — wrong for ${weather}. Use a blazer, trench, or skip the layer.`);
           }
         }
         if (sw === "winter") {
