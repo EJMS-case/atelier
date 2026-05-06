@@ -508,7 +508,46 @@ function checkCoordSets(response, idMap, allItems) {
   return failures;
 }
 
+/**
+ * Check 13: One statement piece per look. The styling-system rule already
+ * says "one focal point" but the AI doesn't always honor it; this enforces
+ * it. A statement = a non-solid pattern OR explicit heavy embellishment
+ * (sequin, embroidered, lace, beaded, brocade, jacquard, metallic). Texture
+ * cues (satin sheen, fringe, suede) DON'T count — they're accents, not
+ * statements, and counting them would block normal tonal layering.
+ */
+function isStatementPiece(item) {
+  if (!item) return false;
+  const pattern = (item.pattern || "").toLowerCase().trim();
+  if (pattern && pattern !== "solid" && pattern !== "—" && pattern !== "none") return true;
+  const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
+  if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|featherwork|lace)\b/i.test(text)) return true;
+  // Bold prints in the name even when pattern field is unset (sparse metadata).
+  if (/\b(floral|polka.?dot|leopard|zebra|snake|cheetah|paisley|gingham|houndstooth|chevron|argyle|tartan|tie.?dye|abstract print|graphic print)\b/i.test(text)) return true;
+  return false;
+}
+
+function checkStatementCount(response, idMap, allItems) {
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const statements = resolved.filter(isStatementPiece);
+    if (statements.length > 1) {
+      const names = statements.map(s => `"${s.name}"`).join(", ");
+      failures.push(`Look ${i + 1} has ${statements.length} statement pieces (${names}) — only ONE per look. Pair the most important one with quiet neutrals; swap the rest for solids.`);
+    }
+  });
+  return failures;
+}
+
 // ── Run all checks ───────────────────────────────────────────────────────────
+
 
 function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds = []) {
   const allFailures = [];
@@ -528,6 +567,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
+  allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: true })));
 
   // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
   // Over-maximum is soft — acceptable to show, just noisy.
