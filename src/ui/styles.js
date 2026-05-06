@@ -5,17 +5,22 @@
 // handful can cherry-pick.
 
 export const s = {
-  app: { minHeight:"100vh", background:"var(--color-surface)", fontFamily:"'DM Sans',system-ui,sans-serif", color:"var(--color-ink)" },
+  app: { minHeight:"100vh", background:"var(--color-surface)", fontFamily:"'DM Sans',system-ui,sans-serif", color:"var(--color-ink)", overflowX:"hidden" },
 
-  // Header
-  header: { background:"var(--color-ink)", position:"sticky", top:0, zIndex:100, borderBottom:"1px solid var(--color-ink-2)" },
-  headerInner: { maxWidth:900, margin:"0 auto", padding:"0 20px", height:56, display:"flex", alignItems:"center", justifyContent:"space-between" },
-  brand: { display:"flex", alignItems:"center", gap:8 },
+  // Header — width:100% guards against horizontally-overflowing children
+  // (e.g. the nav row on narrow iPhones) leaving a gap to the right of the
+  // dark band. The inner container scrolls horizontally if needed.
+  header: { background:"var(--color-ink)", position:"sticky", top:0, zIndex:100, borderBottom:"1px solid var(--color-ink-2)", width:"100%" },
+  headerInner: { maxWidth:900, margin:"0 auto", padding:"0 16px", height:56, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 },
+  brand: { display:"flex", alignItems:"center", gap:8, flexShrink:0 },
   brandMark: { color:"var(--color-accent)", fontSize:16 },
   brandName: { color:"var(--color-surface)", fontSize:13, letterSpacing:"0.25em", fontFamily:"'DM Sans',sans-serif" },
   savedPill: { background:"var(--color-success)", color:"#fff", borderRadius:10, padding:"2px 8px", fontSize:10, fontFamily:"sans-serif" },
-  nav: { display:"flex", gap:4, alignItems:"center" },
-  navBtn: { background:"none", border:"none", color:"var(--color-text-muted)", fontSize:12, letterSpacing:"0.12em", padding:"6px 12px", cursor:"pointer", borderRadius:3, display:"flex", alignItems:"center", gap:5 },
+  // Nav scrolls horizontally on narrow phones so the dark header band stays
+  // edge-to-edge even when there are more chips than fit. justify:flex-end
+  // keeps the icons right-aligned on wider screens.
+  nav: { display:"flex", gap:2, alignItems:"center", overflowX:"auto", flexWrap:"nowrap", flex:"1 1 auto", justifyContent:"flex-end", scrollbarWidth:"none", WebkitOverflowScrolling:"touch" },
+  navBtn: { background:"none", border:"none", color:"var(--color-text-muted)", fontSize:12, letterSpacing:"0.08em", padding:"6px 8px", cursor:"pointer", borderRadius:3, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", flexShrink:0 },
   navActive: { color:"var(--color-surface)" },
   badge: { background:"var(--color-accent)", color:"var(--color-ink)", borderRadius:10, padding:"1px 6px", fontSize:10, fontFamily:"sans-serif" },
 
@@ -56,8 +61,9 @@ export const s = {
   spinnerSm: { display:"inline-block", width:13, height:13, border:"2px solid rgba(255,255,255,0.3)", borderTop:"2px solid #fff", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
   spinnerSm: { display:"inline-block", width:11, height:11, border:"1.5px solid var(--color-border-muted)", borderTop:"1.5px solid var(--color-ink)", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
 
-  // Style panel
-  stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid var(--color-border)", padding:"14px 20px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", maxHeight:"80vh", overflowY:"auto" },
+  // Style panel — capped at 65vh so it stops dominating the iPhone screen.
+  // The panel still scrolls internally, so all controls remain reachable.
+  stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid var(--color-border)", padding:"12px 16px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", maxHeight:"65vh", overflowY:"auto" },
   panelLabel: { fontSize:10, letterSpacing:"0.22em", color:"var(--color-text-muted)", marginBottom:10 },
   panelRow: { display:"flex", gap:8, marginBottom:8 },
   select: { flex:1, border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)" },

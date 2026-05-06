@@ -41,12 +41,14 @@ export async function saveLookFeedback({ lookHash, rating, itemIds, occasion, mo
 }
 
 /**
- * Fetch aggregate +1 / -1 totals per item id. Returns a map keyed by item id.
- * Heavy down-votes → sampler penalty; heavy up-votes → sampler boost.
+ * Fetch aggregate up-vote totals per item id. Returns a map keyed by item id.
+ * Down-votes were removed — they were noisy proxies (a single bad pairing
+ * tarnished every item in the look). Only ratings > 0 contribute now, so
+ * historical thumbs-downs are silently ignored without needing a DB cleanup.
  */
 export async function fetchItemFeedbackScores() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating`,
+    `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating&rating=gt.0`,
     { headers: HEADERS },
   );
   if (!res.ok) return {};
@@ -54,6 +56,7 @@ export async function fetchItemFeedbackScores() {
   const scores = {};
   for (const row of rows) {
     const rating = Number(row.rating) || 0;
+    if (rating <= 0) continue;
     for (const id of row.item_ids || []) {
       scores[id] = (scores[id] || 0) + rating;
     }

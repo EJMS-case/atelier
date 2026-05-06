@@ -30,8 +30,10 @@ export function filterByWeather(items, weather) {
     const sleeve = getSleeveType(it);
     const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "") + " " + (it.material || "")).toLowerCase();
     const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit/i.test(nameNotes);
+    const isWinterOuter = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(nameNotes);
+    const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(nameNotes);
     const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
-    const isDelicateSurface = /suede|silk|satin/i.test(nameNotes);
+    const seasonTag = (it.season_weight || "").toLowerCase();
 
     if (it.category === "Swim") return false;
 
@@ -45,6 +47,7 @@ export function filterByWeather(items, weather) {
       if (it.category === "Tops" && sleeve === "long") return false;
       if (it.category === "Dresses" && /long.?sleeve/i.test(nameNotes)) return false;
       if (isHeavyFabric) return false;
+      if (seasonTag === "winter") return false;
     }
     if (isWarm) {
       if (it.category === "Knits" && it.subcategory === "Pullovers") return false;
@@ -53,9 +56,22 @@ export function filterByWeather(items, weather) {
       if (it.subcategory === "Coats") return false;
       if (it.subcategory === "Boots") return false;
       if (isHeavyFabric) return false;
+      if (seasonTag === "winter") return false;
+      // For warm, ALL outerwear must be tagged as a light fabric. Items with no
+      // material info default to "not light" — better to skip the layer than
+      // ship a wool floral coat at 78°F.
+      if (it.category === "Outerwear" && !isLightOuter) return false;
     }
     if (isMild) {
       if (it.subcategory === "Sandals") return false;
+      // Mild = spring/fall layering. Wool blazers and trenches are fine, but
+      // dead-of-winter pieces (parka, puffer, sherpa, shearling, fleece) read
+      // as a costume mismatch. Same for items the user tagged Winter-only.
+      if (isWinterOuter) return false;
+      if (seasonTag === "winter") return false;
+      // Heavy long wool overcoats are also winter-only — allow only if the
+      // item is explicitly tagged lightweight.
+      if (it.subcategory === "Coats" && isHeavyFabric && !isLightOuter) return false;
     }
     if (isCool || isCold) {
       if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;

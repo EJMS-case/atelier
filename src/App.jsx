@@ -739,7 +739,7 @@ export default function App() {
             style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
           {request && (
             <div style={{fontSize:10, color:"var(--color-text-muted)", marginTop:-4, marginBottom:8, fontStyle:"italic"}}>
-              ✦ Items matching your request will be force-included in look 1.
+              ✦ Used as the theme for all 3 looks. Named pieces are force-included.
             </div>
           )}
 
@@ -766,6 +766,15 @@ export default function App() {
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         * { box-sizing: border-box; }
         input, select, button { font-family: inherit; }
+        /* Hide horizontal scrollbar on the nav (Chrome/Safari) — the row
+           still scrolls, just without the always-visible track. */
+        nav::-webkit-scrollbar { display: none; }
+        /* iPhone-class widths: tighten the header so all chips fit before
+           overflow-scroll kicks in. */
+        @media (max-width: 480px) {
+          header > div { padding: 0 12px !important; }
+          nav button { padding: 6px 6px !important; font-size: 11px !important; letter-spacing: 0.04em !important; }
+        }
       `}</style>
 
       {/* ── HEADER ── */}

@@ -60,54 +60,58 @@ function buildCollageLayout(items) {
   // Garment slots are kept TALL because most clothing photos are portrait —
   // a tall slot lets objectFit:contain render the piece large; a short-wide
   // slot leaves whitespace and the garment looks smaller than its neighbours.
+  // Belt photos vary wildly (square coiled vs. wide flat), so we give them a
+  // chunky near-square slot. With objectFit:contain a square slot renders the
+  // belt at a readable ~12-14% of canvas regardless of source aspect ratio,
+  // which is what reads as an accessory instead of a dot.
   if (hasDress) {
     // ── DRESS-BASED LAYOUT ──
     if (hasLayer) {
       // Dress + Layer — both tall, side by side
       place("layer",  { x:1,  y:1,  w:42, h:64 });
-      place("dress",  { x:46, y:1,  w:50, h:70 });
-      if (hasBelt) place("belt", { x:28, y:66, w:20, h:6 });
-      if (hasShoes) place("shoes", { x:1, y:68, w:32, h:26 });
-      if (hasBag) place("bag", { x:62, y:74, w:30, h:24 });
+      place("dress",  { x:46, y:1,  w:50, h:72 });
+      if (hasBelt) place("belt", { x:36, y:74, w:24, h:14 });
+      if (hasShoes) place("shoes", { x:1, y:74, w:32, h:24 });
+      if (hasBag) place("bag", { x:64, y:74, w:32, h:24 });
     } else if (hasTop) {
       // Dress + Top — dress dominant, top smaller on left
-      place("top",    { x:1,  y:1,  w:40, h:48 });
-      place("dress",  { x:44, y:1,  w:52, h:70 });
-      if (hasBelt) place("belt", { x:28, y:64, w:20, h:6 });
-      if (hasShoes) place("shoes", { x:1, y:54, w:32, h:28 });
-      if (hasBag) place("bag", { x:62, y:74, w:30, h:24 });
+      place("top",    { x:1,  y:1,  w:40, h:46 });
+      place("dress",  { x:44, y:1,  w:52, h:72 });
+      if (hasBelt) place("belt", { x:4,  y:50, w:24, h:14 });
+      if (hasShoes) place("shoes", { x:30, y:74, w:32, h:24 });
+      if (hasBag) place("bag", { x:64, y:74, w:32, h:24 });
     } else {
       // Dress only
       place("dress",  { x:22, y:1,  w:52, h:72 });
-      if (hasBelt) place("belt", { x:30, y:64, w:20, h:7 });
-      if (hasShoes) place("shoes", { x:1, y:74, w:32, h:24 });
-      if (hasBag) place("bag", { x:62, y:74, w:32, h:24 });
+      if (hasBelt) place("belt", { x:34, y:74, w:24, h:14 });
+      if (hasShoes) place("shoes", { x:1, y:74, w:30, h:22 });
+      if (hasBag) place("bag", { x:68, y:74, w:30, h:22 });
     }
   } else {
     // ── SEPARATES-BASED LAYOUT (top + bottom) ──
     if (hasLayer && hasTop) {
       // Layer + Top + Bottom — layer dominant on left, top + bottom stack right
       place("layer",  { x:1,  y:1,  w:44, h:66 });
-      place("top",    { x:48, y:1,  w:48, h:34 });
-      place("bottom", { x:48, y:38, w:44, h:38 });
-      if (hasBelt) place("belt", { x:48, y:76, w:20, h:6 });
-      if (hasShoes) place("shoes", { x:1, y:70, w:32, h:26 });
-      if (hasBag) place("bag", { x:72, y:76, w:24, h:22 });
+      place("top",    { x:48, y:1,  w:48, h:32 });
+      place("bottom", { x:48, y:36, w:44, h:38 });
+      if (hasBelt) place("belt", { x:1,  y:70, w:22, h:14 });
+      if (hasShoes) place("shoes", { x:24, y:76, w:30, h:22 });
+      if (hasBag) place("bag", { x:70, y:76, w:28, h:22 });
     } else if (hasLayer) {
       // Layer + Bottom (no separate top — layer IS the top).
       // Give layer a tall hero slot; bottom sits compact on the right so
       // a long coat doesn't get dwarfed by a wide skirt rendering.
-      place("layer",  { x:1,  y:1,  w:48, h:74 });
-      place("bottom", { x:54, y:1,  w:42, h:50 });
-      if (hasBelt) place("belt", { x:54, y:52, w:20, h:6 });
-      if (hasBag) place("bag", { x:54, y:62, w:24, h:24 });
-      if (hasShoes) place("shoes", { x:78, y:62, w:20, h:24 });
+      place("layer",  { x:1,  y:1,  w:48, h:72 });
+      place("bottom", { x:54, y:1,  w:42, h:48 });
+      if (hasBelt) place("belt", { x:54, y:52, w:22, h:14 });
+      if (hasBag) place("bag", { x:1,  y:76, w:30, h:22 });
+      if (hasShoes) place("shoes", { x:64, y:76, w:32, h:22 });
     } else {
       // Top + Bottom (no layer). Bottom is taller — pants/long skirts are
       // mostly portrait, so a tall slot keeps them visually similar in scale
       // to the top instead of looking stubby next to a wide blouse.
       place("top",    { x:18, y:1,  w:46, h:42 });
-      if (hasBelt) place("belt", { x:14, y:40, w:22, h:6 });
+      if (hasBelt) place("belt", { x:68, y:30, w:22, h:14 });
       place("bottom", { x:1,  y:46, w:48, h:52 });
       if (hasBag) place("bag", { x:54, y:48, w:28, h:26 });
       if (hasShoes) place("shoes", { x:54, y:76, w:28, h:22 });

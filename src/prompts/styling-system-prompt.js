@@ -30,6 +30,7 @@ HARD RULES (any violation = automatic rebuild):
 - HC5 Exactly ONE Shoes item and (unless the occasion exempts it) ONE Bags item per look.
 - HC6 Weather, exclusions, and occasion bans in the REQUEST are NON-NEGOTIABLE. Read those blocks and obey them — they take precedence over taste.
 - HC7 Coord sets: items tagged [SET:LOCKED partners:Wxxx,...] may only appear with at least one listed partner in the same look; never split a locked coord. [SET:SEPARABLE] items behave as normal separates.
+- HC8 ONE statement piece per look — maximum. A statement is any item with a non-solid pattern (floral, polka, plaid, stripe, animal, abstract, paisley, tartan, etc.) OR explicit heavy embellishment (sequin, embroidered, beaded, brocade, jacquard, metallic, lace, paillette). The other pieces must be QUIET — solid neutrals, simple shapes, no embellishment. A printed coat goes with a black turtleneck and plain trousers, NOT with a satin shirt and burgundy wide-legs and fringe bag. Texture variation (matte × sheen, leather × cashmere) is encouraged; pattern stacking is forbidden.
 
 CLIENT: HR professional at a NYC private equity firm. Dark Winter coloring — use this for undertone awareness when pairing pieces worn near the face, not as a palette restriction. Every item in the inventory was personally chosen; trust the closet. Your job is to find the most chic and considered combination from what exists — unexpected pairings that work are better than safe ones that don't surprise.
 
@@ -94,14 +95,14 @@ export function buildStylingPrompt({
   const weatherBlock = formatWeather(weather);
 
   const requestBlock = freeTextRequest
-    ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis takes priority over general styling rules. Honor it exactly.\n`
+    ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis is the THEME for ALL THREE looks — every look must honor it, not just the first. Read it as a styling brief: if she says "all black", every look is black; if she says "navy and brown", every look uses that palette; if she says "include my red blazer", at least one look features the blazer. The three looks should still feel distinct (different hero piece, different proportion, different texture story) but each one resolves the same brief in its own way.\n`
     : "";
 
   // Items the sampler matched against the free-text request. The AI tends to
   // ignore "include my red blazer" — pinning the matched IDs explicitly fixes
   // that. The validator also enforces ≥1 of these IDs appears in the output.
   const requiredItemsBlock = requestedShortIds.length > 0
-    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. AT LEAST ONE of these IDs must appear as a hero or supporting item in the FIRST look. Do not substitute, do not skip. Build the rest of the look around it.\n`
+    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the looks (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ALL THREE looks. Do not substitute the named pieces; do not water down the theme on looks 2 and 3.\n`
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
@@ -174,7 +175,7 @@ function formatWeather(weather) {
   const parts = [];
   if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. The Outerwear category does not exist for you in this generation. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Sandals, open shoes, or light flats. Any look containing a coat, blazer, or jacket is an automatic failure.");
   if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers ONLY. NO heavy knits, NO coats (incl. wool/cashmere/trench/floral wool), NO wool outerwear of any kind, NO boots. Short sleeves, sleeveless, or very light long sleeves only. The ONLY allowed outerwear is an explicitly unstructured linen or cotton blazer; if no such item exists in the inventory, skip the layer entirely.");
-  if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — Dress in layers. Light outerwear welcome. Both short and long sleeves acceptable.");
+  if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — HARD CONSTRAINT. Spring/fall layering. Light outerwear welcome (trench, blazer, leather jacket, denim jacket, lightweight wool blazer). NO parkas, NO puffers, NO sherpa, NO shearling, NO fleece, NO chunky/cable knits, NO heavy floor-length wool coats — those belong to Cool/Cold. Both short and long sleeves acceptable.");
   if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes.");
   if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected.");
   if (parts.length === 0) return `⚠️ WEATHER: ${weather}. Dress appropriately — this is a hard constraint.`;

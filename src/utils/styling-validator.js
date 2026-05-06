@@ -9,10 +9,12 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 
-// Was 2. Each retry is a full Anthropic call (~5–8s) — three total tries
-// blew past 20s for the user. Capping at 1 retry: if the first response
-// passes, we ship it; if it fails, we get one chance to fix.
-const MAX_RETRIES = 1;
+// Two retries (three total attempts). Each retry is ~5–8s, but the salvage
+// step often returned 1–2 looks instead of 3 with only one retry — paying the
+// extra latency once is worth landing a full set of three. The follow-up
+// "fill" call below picks up any slack if the third attempt still salvages
+// to fewer than three.
+const MAX_RETRIES = 2;
 
 // ── Validation Error ─────────────────────────────────────────────────────────
 export class ValidationError extends Error {
@@ -341,9 +343,10 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
 
   const isHot = /hot|85/i.test(w);
   const isWarm = /warm|70-84/i.test(w);
+  const isMild = /mild|55-69/i.test(w);
   const isCool = /cool|40-54/i.test(w);
   const isCold = /cold|below 40/i.test(w);
-  if (!isHot && !isWarm && !isCool && !isCold) return [];
+  if (!isHot && !isWarm && !isMild && !isCool && !isCold) return [];
 
   const failures = [];
 
@@ -355,9 +358,10 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
       const resolved = allItems.find(it => it.id === realId);
       if (!resolved) return;
 
-      const text = ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.subcategory || "")).toLowerCase();
+      const text = ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.subcategory || "") + " " + (resolved.material || "")).toLowerCase();
       const sw = (resolved.season_weight || "").toLowerCase();
       const heavy = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i.test(text);
+      const winterOnly = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(text);
       const lightOnly = /tank|sleeveless|sandal|bikini|swim|shorts/i.test(text) || resolved.subcategory === "Sandals" || resolved.subcategory === "Tanks";
 
       if (isHot || isWarm) {
@@ -376,6 +380,24 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
           const isLight = /linen|cotton|seersucker|unstructured|unlined|lightweight|sheer/i.test(text);
           if (isHot || !isLight) {
             failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear — wrong for ${weather}. Skip the layer or pick an unstructured linen blazer.`);
+          }
+        }
+        if (sw === "winter") {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is marked Winter — wrong for ${weather}.`);
+        }
+      }
+      if (isMild) {
+        // Mild is forgiving for sleeves and most layers, but the dead-of-winter
+        // silhouette pieces — parka, puffer, sherpa, shearling, fleece, heavy
+        // floor-length wool coats — read as a costume mismatch. Light wool
+        // blazers and trenches are fine and not flagged here.
+        if (winterOnly) {
+          failures.push(`Look ${i + 1}: "${resolved.name}" is a winter-only piece (parka/puffer/sherpa/shearling/fleece) — wrong for ${weather}.`);
+        }
+        if (resolved.subcategory === "Coats" && heavy) {
+          const isLight = /linen|cotton|silk|unstructured|unlined|lightweight/i.test(text);
+          if (!isLight) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is a heavy long coat — wrong for ${weather}. Use a blazer, trench, or skip the layer.`);
           }
         }
         if (sw === "winter") {
@@ -447,7 +469,7 @@ function checkRequestedItems(response, idMap, forceIncludeIds) {
   });
   const matched = [...requested].filter(id => usedRealIds.has(id));
   if (matched.length === 0) {
-    return [`She explicitly asked for these item IDs: ${[...requested].join(", ")}. NONE of them appear in any look. At least one must be included in the first look — rebuild.`];
+    return [`She explicitly asked for these item IDs: ${[...requested].join(", ")}. NONE of them appear in any look. At least one must be included across the three looks — rebuild.`];
   }
   return [];
 }
@@ -486,7 +508,46 @@ function checkCoordSets(response, idMap, allItems) {
   return failures;
 }
 
+/**
+ * Check 13: One statement piece per look. The styling-system rule already
+ * says "one focal point" but the AI doesn't always honor it; this enforces
+ * it. A statement = a non-solid pattern OR explicit heavy embellishment
+ * (sequin, embroidered, lace, beaded, brocade, jacquard, metallic). Texture
+ * cues (satin sheen, fringe, suede) DON'T count — they're accents, not
+ * statements, and counting them would block normal tonal layering.
+ */
+function isStatementPiece(item) {
+  if (!item) return false;
+  const pattern = (item.pattern || "").toLowerCase().trim();
+  if (pattern && pattern !== "solid" && pattern !== "—" && pattern !== "none") return true;
+  const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
+  if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|featherwork|lace)\b/i.test(text)) return true;
+  // Bold prints in the name even when pattern field is unset (sparse metadata).
+  if (/\b(floral|polka.?dot|leopard|zebra|snake|cheetah|paisley|gingham|houndstooth|chevron|argyle|tartan|tie.?dye|abstract print|graphic print)\b/i.test(text)) return true;
+  return false;
+}
+
+function checkStatementCount(response, idMap, allItems) {
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const statements = resolved.filter(isStatementPiece);
+    if (statements.length > 1) {
+      const names = statements.map(s => `"${s.name}"`).join(", ");
+      failures.push(`Look ${i + 1} has ${statements.length} statement pieces (${names}) — only ONE per look. Pair the most important one with quiet neutrals; swap the rest for solids.`);
+    }
+  });
+  return failures;
+}
+
 // ── Run all checks ───────────────────────────────────────────────────────────
+
 
 function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds = []) {
   const allFailures = [];
@@ -506,6 +567,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
+  allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: true })));
 
   // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
   // Over-maximum is soft — acceptable to show, just noisy.
