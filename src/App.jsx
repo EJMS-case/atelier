@@ -19,11 +19,6 @@ import {
   CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, CATEGORIES, SET_TAGS, OCCASIONS, getSubcatL2, normalizeOccasion,
 } from "./constants/taxonomy.js";
 import {
-  STYLE_PROFILE, CASUAL_STYLE_PROFILE, STYLING_PRINCIPLES,
-  OCCASION_SLOTS, STYLING_STRATEGIES,
-} from "./constants/styling.js";
-import { COLOR_FAMILIES, COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT } from "./constants/color.js";
-import {
   getSleeveType, filterByWeather, colorSortIdx, defaultSortComparator,
   normalizeItem, mergeItems, shuffle,
 } from "./utils/item-helpers.js";

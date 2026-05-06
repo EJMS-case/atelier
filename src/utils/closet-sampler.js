@@ -58,12 +58,14 @@ const OCCASION_PREFILTERS = {
     removeKeywords: ["stiletto"],
   },
   Work: {
-    // Covers everyday office through interview/executive — drop only the
-    // categorically wrong stuff at the sample stage. The OCCASION_SLOTS banned
-    // list does the finer-grained no-jeans / no-tee enforcement.
-    removeCategories: new Set(["Athleisure", "Loungewear", "Swim"]),
-    removeSubcategories: new Set(["Jeans"]),
-    removeKeywords: ["ripped", "distressed"],
+    // Covers everyday office through interview/executive — drop the
+    // categorically wrong stuff at the sample stage so evening dresses,
+    // gowns, formal separates, and athleisure never reach the AI for a
+    // Work generation. The OCCASION_SLOTS banned list does the finer-
+    // grained no-jeans / no-tee enforcement on top of this.
+    removeCategories: new Set(["Athleisure", "Loungewear", "Swim", "Occasionwear"]),
+    removeSubcategories: new Set(["Jeans", "Cocktail Dresses", "Gowns", "Formal Separates", "Evening Accessories"]),
+    removeKeywords: ["ripped", "distressed", "evening", "cocktail", "gown", "formal"],
   },
 };
 
