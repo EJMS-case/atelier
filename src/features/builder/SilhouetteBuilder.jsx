@@ -70,6 +70,12 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   // Tracks "slotKey:itemId" pairs whose box has already been auto-fit to the
   // image aspect ratio. Skips re-fitting after the user has moved/resized.
   const [autoFitted, setAutoFitted] = useState(() => new Set());
+  // Per-slot zIndex override — only used when the user has Brought-to-Front
+  // or Sent-to-Back. Falls back to a default stacking order.
+  const [zOrders, setZOrders] = useState({});
+  // The slot the user last touched on the canvas — anchors the layering
+  // controls so they know which item to raise/lower.
+  const [activeCanvasSlot, setActiveCanvasSlot] = useState(null);
   const canvasRef = useRef(null);
 
   // Snap the bounding box height to match the image's intrinsic aspect ratio
@@ -173,12 +179,15 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       });
     }
 
-    // Draw from back (outerwear) to front (accessories, bags)
-    const order = ["outerwear", "dress", "top", "bottom", "bag", "shoes", "accessory"];
-    for (const slot of order) {
-      const sel = pickedItems.find(p => p.slot === slot);
-      if (sel) await drawItem(sel);
-    }
+    // Draw back→front using the same z-resolution as the live canvas so the
+    // saved image matches what the user sees (including any Front/Back overrides).
+    const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
+    const sorted = [...pickedItems].sort((a, b) => {
+      const za = zOrders[a.slot] ?? DEFAULT_Z[a.slot] ?? 3;
+      const zb = zOrders[b.slot] ?? DEFAULT_Z[b.slot] ?? 3;
+      return za - zb;
+    });
+    for (const sel of sorted) await drawItem(sel);
     return canvas.toDataURL("image/jpeg", 0.9);
   }
 
@@ -285,10 +294,15 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         <div style={{ width: 40 }}/>
       </div>
 
-      {/* Canvas area — plain white, draggable items */}
+      {/* Canvas area — plain white, draggable items.
+          Default stacking order (back→front) lives inline below as DEFAULT_Z;
+          zOrders[slot] overrides it when the user uses the Front/Back controls. */}
       <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 6, overflow: "hidden", touchAction: "none" }}>
         {pickedItems.map(({ slot, item }) => {
           const pos = positions[slot] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
+          const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
+          const z = zOrders[slot] ?? DEFAULT_Z[slot] ?? 3;
+          const isActive = activeCanvasSlot === slot;
           return (
             <div key={slot + item.id}
               style={{
@@ -298,6 +312,9 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
                 cursor: "move",
                 userSelect: "none",
                 touchAction: "none",
+                zIndex: z,
+                outline: isActive ? "1px dashed rgba(28,24,20,0.35)" : "none",
+                outlineOffset: 2,
               }}
               onPointerDown={(e) => {
                 if (e.target.dataset.resize) return; // let resize handle its own handler
@@ -305,6 +322,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
                 e.currentTarget.setPointerCapture(e.pointerId);
                 const rect = canvasRef.current.getBoundingClientRect();
                 setDragState({ slot, type: "move", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                setActiveCanvasSlot(slot);
                 // User-driven moves should not be undone by a stale auto-fit.
                 setAutoFitted(prev => { const n = new Set(prev); n.add(`${slot}:${item.id}`); return n; });
               }}
@@ -341,6 +359,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const rect = canvasRef.current.getBoundingClientRect();
                   setDragState({ slot, type: "resize", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                  setActiveCanvasSlot(slot);
                   setAutoFitted(prev => { const n = new Set(prev); n.add(`${slot}:${item.id}`); return n; });
                 }}
                 onPointerMove={(e) => {
@@ -366,10 +385,37 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
           );
         })}
       </div>
-      {/* Reset layout button — only shown when positions differ from defaults */}
+      {/* Layering controls + Reset layout */}
       {pickedItems.length > 0 && (
-        <div style={{ textAlign: "right", marginBottom: 8 }}>
-          <button onClick={() => { setPositions({ ...DEFAULT_POSITIONS }); setAutoFitted(new Set()); }}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {activeCanvasSlot && pickedItems.find(p => p.slot === activeCanvasSlot) ? (
+              <>
+                <span style={{ fontSize: 10, color: PALETTE.muted, letterSpacing: "0.08em" }}>{(SLOTS.find(s => s.key === activeCanvasSlot)?.label || activeCanvasSlot.toUpperCase())}:</span>
+                <button
+                  onClick={() => {
+                    const all = pickedItems.map(p => p.slot);
+                    const max = Math.max(...all.map(s => zOrders[s] ?? 3));
+                    setZOrders(prev => ({ ...prev, [activeCanvasSlot]: max + 1 }));
+                  }}
+                  style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
+                  ↑ Front
+                </button>
+                <button
+                  onClick={() => {
+                    const all = pickedItems.map(p => p.slot);
+                    const min = Math.min(...all.map(s => zOrders[s] ?? 3));
+                    setZOrders(prev => ({ ...prev, [activeCanvasSlot]: min - 1 }));
+                  }}
+                  style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
+                  ↓ Back
+                </button>
+              </>
+            ) : (
+              <span style={{ fontSize: 10, color: PALETTE.muted, fontStyle: "italic" }}>Tap an item on the canvas to layer it.</span>
+            )}
+          </div>
+          <button onClick={() => { setPositions({ ...DEFAULT_POSITIONS }); setAutoFitted(new Set()); setZOrders({}); setActiveCanvasSlot(null); }}
             style={{ background: "none", border: "none", fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
             Reset layout
           </button>

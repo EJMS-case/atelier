@@ -94,14 +94,14 @@ export function buildStylingPrompt({
   const weatherBlock = formatWeather(weather);
 
   const requestBlock = freeTextRequest
-    ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis takes priority over general styling rules. Honor it exactly.\n`
+    ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis is the THEME for ALL THREE looks — every look must honor it, not just the first. Read it as a styling brief: if she says "all black", every look is black; if she says "navy and brown", every look uses that palette; if she says "include my red blazer", at least one look features the blazer. The three looks should still feel distinct (different hero piece, different proportion, different texture story) but each one resolves the same brief in its own way.\n`
     : "";
 
   // Items the sampler matched against the free-text request. The AI tends to
   // ignore "include my red blazer" — pinning the matched IDs explicitly fixes
   // that. The validator also enforces ≥1 of these IDs appears in the output.
   const requiredItemsBlock = requestedShortIds.length > 0
-    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. AT LEAST ONE of these IDs must appear as a hero or supporting item in the FIRST look. Do not substitute, do not skip. Build the rest of the look around it.\n`
+    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the looks (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ALL THREE looks. Do not substitute the named pieces; do not water down the theme on looks 2 and 3.\n`
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;

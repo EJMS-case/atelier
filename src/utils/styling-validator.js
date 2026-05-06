@@ -9,10 +9,12 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 
-// Was 2. Each retry is a full Anthropic call (~5–8s) — three total tries
-// blew past 20s for the user. Capping at 1 retry: if the first response
-// passes, we ship it; if it fails, we get one chance to fix.
-const MAX_RETRIES = 1;
+// Two retries (three total attempts). Each retry is ~5–8s, but the salvage
+// step often returned 1–2 looks instead of 3 with only one retry — paying the
+// extra latency once is worth landing a full set of three. The follow-up
+// "fill" call below picks up any slack if the third attempt still salvages
+// to fewer than three.
+const MAX_RETRIES = 2;
 
 // ── Validation Error ─────────────────────────────────────────────────────────
 export class ValidationError extends Error {
@@ -467,7 +469,7 @@ function checkRequestedItems(response, idMap, forceIncludeIds) {
   });
   const matched = [...requested].filter(id => usedRealIds.has(id));
   if (matched.length === 0) {
-    return [`She explicitly asked for these item IDs: ${[...requested].join(", ")}. NONE of them appear in any look. At least one must be included in the first look — rebuild.`];
+    return [`She explicitly asked for these item IDs: ${[...requested].join(", ")}. NONE of them appear in any look. At least one must be included across the three looks — rebuild.`];
   }
   return [];
 }

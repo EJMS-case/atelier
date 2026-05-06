@@ -28,30 +28,19 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
           </div>
         </div>
         <div style={{display:"flex", alignItems:"center", gap:6}}>
-          {/* F2 — thumbs feedback */}
+          {/* Love-it (no down-vote — thumbs-down was removed; the noisy filter
+              was creating more drift than signal). */}
           {onRate && (
-            <>
-              <button
-                title="Love it"
-                onClick={() => {
-                  if (rated !== 0) return;
-                  setRated(1);
-                  onRate(look, 1);
-                }}
-                style={{background: rated === 1 ? "var(--color-success)" : "none", border:"1px solid " + (rated === 1 ? "var(--color-success)" : "var(--color-border-strong)"), color: rated === 1 ? "#fff" : "var(--color-text)", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
-                ♥
-              </button>
-              <button
-                title="Not for me"
-                onClick={() => {
-                  if (rated !== 0) return;
-                  setRated(-1);
-                  onRate(look, -1);
-                }}
-                style={{background: rated === -1 ? "var(--color-danger)" : "none", border:"1px solid " + (rated === -1 ? "var(--color-danger)" : "var(--color-border-strong)"), color: rated === -1 ? "#fff" : "var(--color-text)", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
-                ✕
-              </button>
-            </>
+            <button
+              title="Love it"
+              onClick={() => {
+                if (rated === 1) return;
+                setRated(1);
+                onRate(look, 1);
+              }}
+              style={{background: rated === 1 ? "var(--color-success)" : "none", border:"1px solid " + (rated === 1 ? "var(--color-success)" : "var(--color-border-strong)"), color: rated === 1 ? "#fff" : "var(--color-text)", fontSize:14, padding:"4px 9px", borderRadius:16, cursor: rated === 0 ? "pointer" : "default", lineHeight:1}}>
+              ♥
+            </button>
           )}
           <button style={s.expandBtn} onClick={()=>setExpanded(e=>!e)}>
             {expanded ? "Hide" : "Details"}

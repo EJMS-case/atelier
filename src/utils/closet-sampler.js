@@ -286,10 +286,9 @@ export function sampleClosetItems({
     if (trimmed.length >= 30) pool = trimmed;
   }
 
-  // ── 3c. F2 — drop items with strong down-vote signal (≤ -3) entirely ──
-  if (Object.keys(feedbackScores).length > 0) {
-    pool = pool.filter(it => (feedbackScores[it.id] || 0) > -3);
-  }
+  // Down-vote drop removed — feedbackScores now only contains positive ratings
+  // (see feedback.js). Items with no positive signal stay in the pool; loved
+  // items still get boosted in the cold-item sort below.
 
   // ── 4. Identify force-include items (free-text match) ──
   const forceInclude = freeTextRequest
