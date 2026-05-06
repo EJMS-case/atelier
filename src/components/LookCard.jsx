@@ -22,7 +22,6 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem 
     <div style={s.lookCard}>
       <div style={s.lookHeader}>
         <div>
-          <div style={s.lookName}>{look.name}</div>
           <div style={s.lookOcc}>
             {look.occasion?.toUpperCase()}
             {(look.vibe || look.mood) && <span style={s.lookMood}> · {(look.vibe || look.mood).toUpperCase()}</span>}

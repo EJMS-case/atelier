@@ -31,8 +31,6 @@ HARD RULES (any violation = automatic rebuild):
 - HC6 Weather, exclusions, and occasion bans in the REQUEST are NON-NEGOTIABLE. Read those blocks and obey them — they take precedence over taste.
 - HC7 Coord sets: items tagged [SET:LOCKED partners:Wxxx,...] may only appear with at least one listed partner in the same look; never split a locked coord. [SET:SEPARABLE] items behave as normal separates.
 
-LOOK NAMING: the \`name\` field must describe the DOMINANT color of the items picked. "Navy Silk Column" requires navy items (color_family Navy or hex in that range). A name that doesn't match = automatic failure. Describe, don't aspire.
-
 CLIENT (permanent): Dark Winter — cool undertones, high contrast. Palette: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm brown + warm red are approved accent neutrals. No yellow, no warm/muted. NYC. Closet: Totême, Khaite, Max Mara, Theory, COS, A.P.C., Vince.
 
 STYLING METHOD (every look):

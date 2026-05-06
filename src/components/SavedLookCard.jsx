@@ -1,17 +1,15 @@
 import { s } from "../ui/styles.js";
 
-// Shared card layout used by Looks, OutfitHistory, and Favorites — renders the
-// look's name, thumbnails of constituent garments, optional notes, and a
-// caller-supplied actions row.
+// Shared card layout used by Looks, OutfitHistory, and Favorites — renders
+// thumbnails of constituent garments, optional notes, and a caller-supplied
+// actions row.
 export default function SavedLookCard({ log, items, subtitle, headerRight, notes, actions }) {
   const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean);
-  const meta = (() => { try { return JSON.parse(log.collage_url); } catch { return {}; } })();
   return (
     <div style={s.histCard}>
       <div style={s.histCardHeader}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
           <div>
-            {meta.look_name && <div style={s.histLookName}>{meta.look_name}</div>}
             {subtitle && <div style={s.histDate}>{subtitle}</div>}
           </div>
           {headerRight}

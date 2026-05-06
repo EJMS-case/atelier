@@ -7,7 +7,6 @@ import { generateContactSheets } from "./utils/contact-sheet.js";
 import { autoDetectItem } from "./lib/anthropic.js";
 import { stripBackground } from "./lib/bgRemoval.js";
 import { applyDetection } from "./features/closet/applyDetection.js";
-import { getLocalWeatherLabel } from "./lib/weather.js";
 import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import { savePlan } from "./features/planner/plannerApi.js";
@@ -111,7 +110,6 @@ export default function App() {
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
   const [manualBuilderOpen, setManualBuilderOpen] = useState(false);
-  const [weatherLoading, setWeatherLoading] = useState(false); // F2 — auto-location fetch
   const [feedbackScores, setFeedbackScores] = useState({});    // F2 — aggregate item scores
   const [recentlyWornItems, setRecentlyWornItems] = useState([]); // F2 — item IDs worn in last 3 days
   const [apiKey,     setApiKey]     = useState(() => loadApiKey());
@@ -654,32 +652,7 @@ export default function App() {
               mutually exclusive (Hot xor Cold etc.); Rainy is a separate
               modifier so "Cold + Rainy" / "Hot + Rainy" / "Warm + Rainy"
               all work. Empty = Any. */}
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
-            <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)"}}>WHAT'S THE WEATHER?</div>
-            <button
-              onClick={async () => {
-                setWeatherLoading(true);
-                try {
-                  const label = await getLocalWeatherLabel();
-                  setWeather(prev => {
-                    const next = new Set(prev);
-                    // Drop any prior temperature chip — keep the user's Rainy if set.
-                    ["Hot (85°F+)","Warm (70-84°F)","Mild (55-69°F)","Cool (40-54°F)","Cold (below 40°F)"].forEach(t => next.delete(t));
-                    if (label === "Rainy") next.add("Rainy");
-                    else if (label) next.add(label);
-                    return next;
-                  });
-                } catch (err) {
-                  console.warn("[F2] auto-weather failed:", err);
-                } finally {
-                  setWeatherLoading(false);
-                }
-              }}
-              disabled={weatherLoading}
-              style={{background:"none", border:"none", color:"var(--color-text)", fontSize:10, letterSpacing:"0.1em", textDecoration:"underline", cursor:"pointer", padding:0}}>
-              {weatherLoading ? "locating…" : "✦ use my location"}
-            </button>
-          </div>
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>WHAT'S THE WEATHER?</div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
             {(() => {
               const TEMP_CHIPS = [
