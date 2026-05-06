@@ -5,7 +5,7 @@ import { sb } from "../lib/supabase.js";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
 
-export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey }) {
+export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -77,7 +77,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           </>
         );
         return (
-          <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+          <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
             actions={
               <>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>

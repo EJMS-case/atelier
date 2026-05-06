@@ -46,7 +46,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
                 </>
               );
               return (
-                <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes}
+                <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
                   headerRight={
                     <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
                       <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"

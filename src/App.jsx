@@ -1120,6 +1120,7 @@ export default function App() {
           )}
           {outfits && outfits.map((look, i) => (
             <LookCard key={i} look={look} items={items}
+              onEditItem={(item) => { setEditItem(item); setView("edit"); }}
               onRate={async (lk, rating) => {
                 try {
                   const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
@@ -1188,7 +1189,7 @@ export default function App() {
             <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
-          <PlannerWrapper items={items} onGoToStyleMe={() => setView("style")}/>
+          <PlannerWrapper items={items} onGoToStyleMe={() => setView("style")} onEditItem={(item) => { setEditItem(item); setView("edit"); }}/>
         </div>
       )}
 
