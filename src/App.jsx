@@ -49,6 +49,8 @@ import BulkAddView from "./components/BulkAddView.jsx";
 import EditItemView from "./components/EditItemView.jsx";
 import LookCard from "./components/LookCard.jsx";
 import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
+import InspirationView from "./features/inspiration/InspirationView.jsx";
+import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
@@ -118,6 +120,12 @@ export default function App() {
   const [editItem,   setEditItem]   = useState(null);
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
+  const [inspirations, setInspirations] = useState([]);
+  // Lazy-load inspirations on first render. They live in their own table and
+  // never block the closet boot — failures here shouldn't break Style Me.
+  useEffect(() => {
+    listInspirations().then(setInspirations).catch(() => setInspirations([]));
+  }, []);
   // ── Sets metadata ──
   const [setsMeta,       setSetsMeta]       = useState(() => loadSetsMeta());
   const [setsSearch,     setSetsSearch]     = useState("");
@@ -475,7 +483,13 @@ export default function App() {
           setStyling("partial"); // switch from full-page spinner to subtle banner
         }
       };
-      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook });
+      // Pull inspiration vibe notes tagged to the active occasion + weather.
+      // We only send the vibe TEXT (not images, not items) — keeps generation
+      // cheap and prevents the AI from substituting inspo pieces for closet pieces.
+      const inspirationVibes = vibesFor(inspirations, occasion, [...weather][0] || "")
+        .map(r => r.vibe_text)
+        .filter(Boolean);
+      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes });
       const looks = result?.looks;
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
         throw new Error("AI returned no looks — try again.");
@@ -792,7 +806,7 @@ export default function App() {
             )}
           </div>
           <nav style={s.nav}>
-            {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
+            {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"],["inspiration","Inspo"]].map(([v,label]) => (
               <button key={v} onClick={() => {
                 setView(v);
                 // Clicking the Style Me nav always opens the generator
@@ -1044,12 +1058,22 @@ export default function App() {
         <BulkAddView onAdd={addItems} onBack={() => setView("closet")} rmbgKey={rmbgKey} apiKey={apiKey}/>
       )}
 
+      {/* ── INSPIRATION ── */}
+      {view === "inspiration" && (
+        <InspirationView
+          apiKey={apiKey}
+          items={inspirations}
+          setItems={setInspirations}
+          onBack={() => setView("home")}/>
+      )}
+
       {/* ── EDIT ── */}
       {view === "edit" && editItem && (
         <EditItemView
           item={editItem}
           allItems={items}
           setsMeta={setsMeta}
+          rmbgKey={rmbgKey}
           onSave={(fields) => { updateItem(editItem.id, fields); setView("closet"); }}
           onDelete={() => { deleteItem(editItem.id); setView("closet"); }}
           onBack={() => setView("closet")}/>

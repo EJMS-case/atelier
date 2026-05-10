@@ -213,6 +213,20 @@ export function sampleClosetItems({
 }) {
   const excludeSet = styleExcludes instanceof Set ? styleExcludes : new Set(styleExcludes);
 
+  // ── 0. Free-text override set ──
+  // Match the user's request against the UNFILTERED closet. Items she
+  // explicitly named ("Use Medium wash jeans", "include my red blazer") get
+  // a pass through the occasion-based filters below — otherwise asking for
+  // jeans on Work strips them from the pool, then the AI hallucinates fake
+  // item IDs trying to satisfy the request. User intent overrides defaults.
+  // We do NOT bypass active toggle exclusions (she clicked "No Jeans" on
+  // purpose) or weather filters (jeans in a heatwave is still wrong).
+  const freeTextOverrideIds = new Set(
+    freeTextRequest
+      ? items.filter(it => matchesFreeText(it, freeTextRequest)).map(it => it.id)
+      : []
+  );
+
   // ── 1. Pre-filter by occasion bans (from OCCASION_SLOTS) ──
   const slots = occasionSlots || {};
   const bannedCats = new Set(slots.banned?.categories || []);
@@ -224,6 +238,7 @@ export function sampleClosetItems({
     /\b(jeans|denim|jean)\b/i.test((it.name || "") + " " + (it.notes || ""));
 
   let pool = items.filter(it => {
+    if (freeTextOverrideIds.has(it.id)) return true;
     if (bannedCats.has(it.category)) return false;
     if (bannedSubs.has(it.subcategory)) return false;
     if (bannedSubs.has("Jeans") && isDenim(it)) return false;
@@ -238,6 +253,7 @@ export function sampleClosetItems({
   const preFilter = OCCASION_PREFILTERS[occasion];
   if (preFilter) {
     pool = pool.filter(it => {
+      if (freeTextOverrideIds.has(it.id)) return true;
       if (preFilter.removeCategories.has(it.category)) return false;
       if (preFilter.removeSubcategories.has(it.subcategory)) return false;
       if (preFilter.removeKeywords.length > 0) {

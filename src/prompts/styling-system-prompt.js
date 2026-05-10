@@ -81,6 +81,7 @@ export function buildStylingPrompt({
   stylingDirections = [],
   moodPrompt = "",
   requestedShortIds = [],
+  inspirationVibes = [],
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
@@ -102,10 +103,17 @@ export function buildStylingPrompt({
   // ignore "include my red blazer" — pinning the matched IDs explicitly fixes
   // that. The validator also enforces ≥1 of these IDs appears in the output.
   const requiredItemsBlock = requestedShortIds.length > 0
-    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the looks (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ALL THREE looks. Do not substitute the named pieces; do not water down the theme on looks 2 and 3.\n`
+    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the looks (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ALL THREE looks. Do not substitute the named pieces; do not water down the theme on looks 2 and 3.\n\n⚠️ EXPLICIT-REQUEST OVERRIDE: these named pieces override the occasion's default item-type bans for this generation (e.g. if she asked for jeans on Work, jeans are allowed in the look that uses them — weather and toggled exclusions still apply). Build looks that flatter the named pieces; lean into a "polished casual" register if the named piece is more casual than the occasion's norm.\n`
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
+
+  // Inspiration vibe notes — TEXT-ONLY style direction tied to this occasion +
+  // weather. These are NOT inventory. The block hard-asserts that twice:
+  // the items array still comes only from the wardrobe inventory below.
+  const inspirationBlock = (inspirationVibes && inspirationVibes.length > 0)
+    ? `\n🎨 INSPIRATION VIBES — TEXT REFERENCE ONLY (NOT inventory):\nShe saved these style notes for ${occasion} / ${weather || "any weather"}. Use them to bias mood, silhouette, color story, and texture direction. Do NOT try to find or reproduce any item described below — those pieces are NOT in her closet. Build looks from the wardrobe inventory only; if the inspo describes a color or piece she doesn't own, pick the nearest equivalent from her actual closet and move on. Never throw an error because an inspo color/piece is missing.\n\n${inspirationVibes.map((v, i) => `• ${v}`).join("\n")}\n`
+    : "";
 
   const moodBlock = moodPrompt
     ? `\n✦ ${moodPrompt}\nEvery look must reflect this mood in silhouette, palette, and finishing choices. It changes how you interpret the occasion — not what's allowed, but what feels right.\n`
@@ -130,7 +138,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}
+${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}
 ${stylePrefsBlock}${recentBlock}
 ${availabilityNote}
 ${directionsBlock}

@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { s } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import { sb, SUPABASE_URL } from "../lib/supabase.js";
-import { compressImage, imageToBase64, removeBackground } from "../utils/images.js";
+import { compressImage, imageToBase64, removeBackground, detectTransparency } from "../utils/images.js";
 import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../utils/storage.js";
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
 
@@ -22,6 +22,13 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const [batchProgress,setBatchProgress]= useState({ done: 0, total: 0, errors: 0 });
   const [batchDone,    setBatchDone]    = useState(false);
   const batchStop = useRef(false);
+
+  // Transparency backfill — for legacy items where has_bg was never set,
+  // sample the corner pixels of the image and update the flag when we can
+  // prove it's already transparent. Costs no API credits.
+  const [detectRunning, setDetectRunning] = useState(false);
+  const [detectProgress, setDetectProgress] = useState({ done: 0, total: 0, found: 0 });
+  const detectStop = useRef(false);
 
   // ── Recover Lost Items state
   const [recoverOpen,    setRecoverOpen]    = useState(false);
@@ -134,11 +141,15 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefs(updated); };
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
 
-  // Only process items that still have a background. The has_bg flag is set
-  // by stripBackground() on upload — true means "we couldn't strip it" or
-  // "uploaded before bg removal was wired up". Skipping the rest saves real
-  // money on the Remove.bg API.
-  const itemsNeedingBg = items.filter(it => it.image && it.has_bg !== false);
+  // Only count items EXPLICITLY flagged as has_bg === true. Previously this
+  // used `has_bg !== false`, which falsely counted legacy items (where the
+  // flag is null/undefined) as still having backgrounds — for a closet
+  // imported before the flag existed, the count was wildly inflated.
+  const itemsNeedingBg = items.filter(it => it.image && it.has_bg === true);
+  // Items where we don't know either way — the transparency detector targets
+  // these. Treat as "ambiguous" so the count isn't a lie and the user has a
+  // way to clear the ambiguity without burning Remove.bg credits.
+  const itemsUnknownBg = items.filter(it => it.image && (it.has_bg === null || it.has_bg === undefined));
 
   const handleBatchBgRemoval = async () => {
     if (!rmbg) return;
@@ -163,6 +174,37 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
     }
     setBatchRunning(false); setBatchDone(true);
   };
+
+  // Walk every item with an unknown has_bg and check its actual image. Any
+  // already-transparent photo gets has_bg flipped to false so the cleanup
+  // count reflects reality. Items that look opaque get has_bg set to true so
+  // the cleanup button finds them. CORS-blocked or 404 images are left alone.
+  const handleDetectTransparency = async () => {
+    if (!onUpdateItem) return;
+    const targets = itemsUnknownBg;
+    if (!targets.length) return;
+    detectStop.current = false;
+    setDetectRunning(true);
+    setDetectProgress({ done: 0, total: targets.length, found: 0 });
+    let found = 0;
+    for (let i = 0; i < targets.length; i++) {
+      if (detectStop.current) break;
+      const it = targets[i];
+      try {
+        const isTransparent = await detectTransparency(it.image);
+        if (isTransparent === true) {
+          found++;
+          await onUpdateItem(it.id, { has_bg: false });
+        } else if (isTransparent === false) {
+          await onUpdateItem(it.id, { has_bg: true });
+        }
+        // null result → leave the flag unchanged; we couldn't read the pixels.
+      } catch { /* swallow; per-item failure shouldn't stop the sweep */ }
+      setDetectProgress({ done: i + 1, total: targets.length, found });
+    }
+    setDetectRunning(false);
+  };
+
   const removePair  = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
   const addPair     = () => {
     if (!newPair.trim()) return;
@@ -284,9 +326,11 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
       <div style={s.settingsCard}>
         <div style={s.settingsTitle}>✦ Clean Up White Backgrounds</div>
         <p style={s.settingsSub}>
-          {itemsNeedingBg.length === 0
+          {itemsNeedingBg.length === 0 && itemsUnknownBg.length === 0
             ? "All your photos already have transparent backgrounds — nothing to do."
-            : `${itemsNeedingBg.length} of your ${items.length} pieces still have a white background. Run Remove.bg on those to make them transparent. Uses 1 credit per item.`}
+            : itemsNeedingBg.length === 0
+              ? `${itemsUnknownBg.length} of your ${items.length} pieces don't have a background flag set yet (mostly older uploads). Tap "Detect Existing Transparent Photos" below — it samples the corners of each image and updates the flag for free, no Remove.bg credits used. Anything still flagged afterward can be cleaned with the button above.`
+              : `${itemsNeedingBg.length} of your ${items.length} pieces are flagged as still having a white background. Run Remove.bg on those to make them transparent. Uses 1 credit per item.${itemsUnknownBg.length > 0 ? ` (${itemsUnknownBg.length} more haven't been checked yet — run the detector below first to avoid wasting credits.)` : ""}`}
         </p>
         {!batchRunning && !batchDone && itemsNeedingBg.length > 0 && (
           <button style={{...s.btnPrimary, width:"100%"}} onClick={handleBatchBgRemoval}
@@ -317,6 +361,34 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
               onClick={() => { setBatchDone(false); setBatchProgress({done:0,total:0,errors:0}); }}>
               Run Again
             </button>
+          </div>
+        )}
+
+        {/* Transparency detector — free corner-pixel sweep over unknown-flag items. */}
+        {itemsUnknownBg.length > 0 && !detectRunning && (
+          <button style={{...s.btnSecondary, width:"100%", marginTop:10}}
+            onClick={handleDetectTransparency}>
+            Detect Existing Transparent Photos ({itemsUnknownBg.length})
+          </button>
+        )}
+        {detectRunning && (
+          <div style={{marginTop:10}}>
+            <div style={{...s.auditProgressTrack, marginBottom:8}}>
+              <div style={{...s.auditProgressBar, width:`${(detectProgress.done/detectProgress.total)*100}%`}}/>
+            </div>
+            <div style={{fontSize:11, color:"var(--color-text-2)", marginBottom:8}}>
+              Checking {detectProgress.done} / {detectProgress.total}
+              {detectProgress.found > 0 && ` · ${detectProgress.found} already transparent`}
+            </div>
+            <button style={{...s.btnSecondary, width:"100%"}}
+              onClick={() => { detectStop.current = true; }}>
+              Stop
+            </button>
+          </div>
+        )}
+        {!detectRunning && detectProgress.total > 0 && detectProgress.done === detectProgress.total && (
+          <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500, marginTop:10}}>
+            ✓ Checked {detectProgress.total} photo{detectProgress.total === 1 ? "" : "s"} — {detectProgress.found} already transparent, {detectProgress.total - detectProgress.found} need Remove.bg.
           </div>
         )}
       </div>

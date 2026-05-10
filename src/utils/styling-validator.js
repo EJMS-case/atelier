@@ -217,18 +217,25 @@ function checkExclusions(response, idMap, allItems, activeExclusions) {
 
 /**
  * Check 6: Occasion appropriateness (basic check against banned categories).
+ *
+ * `forceIncludeIds` (real Supabase IDs) are exempted: when the user's free-text
+ * request explicitly named a piece, the sampler already let it bypass the
+ * occasion ban — re-rejecting it here would undo the override and trigger a
+ * pointless retry loop.
  */
-function checkOccasion(response, idMap, allItems, occasionSlots) {
+function checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds = []) {
   if (!occasionSlots?.banned) return [];
   const failures = [];
   const bannedCats = new Set(occasionSlots.banned.categories || []);
   const bannedSubs = new Set(occasionSlots.banned.subcategories || []);
+  const overrideIds = new Set(forceIncludeIds);
 
   response.looks.forEach((look, i) => {
     (look.items || []).forEach((item) => {
       const id = typeof item === "string" ? item : item.id;
       const cleanId = String(id).replace(/^ID:/i, "").trim();
       const realId = idMap[cleanId] || cleanId;
+      if (overrideIds.has(realId)) return;
       const resolved = allItems.find(it => it.id === realId);
       if (!resolved) return;
 
@@ -561,7 +568,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkLowerHalf(response, idMap, allItems).map(f => ({ type: "lower_half", message: f, hard: true })));
   allFailures.push(...checkUpperHalf(response, idMap, allItems).map(f => ({ type: "upper_half", message: f, hard: true })));
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
-  allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots).map(f => ({ type: "occasion", message: f, hard: true })));
+  allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds).map(f => ({ type: "occasion", message: f, hard: true })));
   allFailures.push(...checkCategoryBalance(response, idMap, allItems).map(f => ({ type: "category_balance", message: f, hard: true })));
   allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
