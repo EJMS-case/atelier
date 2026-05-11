@@ -30,10 +30,14 @@ export async function fetchAllPlans() {
   return res.json().catch(() => []);
 }
 
-/** Upsert (one plan per date). */
+/** Upsert (one plan per date). The `on_conflict=date` query param tells
+ *  PostgREST to use the date unique constraint for the ON CONFLICT clause
+ *  (it would otherwise default to the primary key, throwing a
+ *  `duplicate key value violates unique constraint "planned_outfits_date_key"`
+ *  error when re-scheduling a day that already has a plan). */
 export async function savePlan(plan) {
   const payload = { ...plan, updated_at: new Date().toISOString() };
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/planned_outfits`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`, {
     method: "POST",
     headers: { ...H, Prefer: "resolution=merge-duplicates,return=representation" },
     body: JSON.stringify(payload),
