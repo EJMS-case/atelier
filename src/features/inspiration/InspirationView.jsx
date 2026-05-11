@@ -183,7 +183,7 @@ export default function InspirationView({ apiKey, onBack, items, setItems }) {
           const isEditing = editingId === it.id;
           return (
             <div key={it.id} style={{background:"var(--color-surface)", borderRadius:8, overflow:"hidden", border:"1px solid var(--color-border)"}}>
-              <img src={it.image_url} alt="" style={{width:"100%", height:180, objectFit:"cover", display:"block"}}/>
+              <img src={it.image_url} alt="" loading="lazy" decoding="async" style={{width:"100%", height:180, objectFit:"cover", display:"block"}}/>
               <div style={{padding:8, fontSize:11}}>
                 {isEditing ? (
                   <div style={{display:"flex", gap:6, marginBottom:6}}>

@@ -19,7 +19,7 @@ export default function SavedLookCard({ log, items, subtitle, headerRight, notes
         {logItems.map(it => (
           <div key={it.id} style={{...s.histThumb, cursor: onEditItem ? "pointer" : "default"}}
             onClick={onEditItem ? () => onEditItem(it) : undefined}>
-            {it.image ? <img src={it.image} alt={it.name} style={s.histThumbImg}/>
+            {it.image ? <img src={it.image} alt={it.name} loading="lazy" decoding="async" style={s.histThumbImg}/>
               : <div style={s.histThumbPh}>{it.category?.[0]}</div>}
             <div style={s.histThumbName}>{it.name}</div>
           </div>

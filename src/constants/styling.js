@@ -63,7 +63,7 @@ export const OCCASION_SLOTS = {
     required: { top: ["Blouses","Shirts","Tops","Bodysuits"], bottom: true, shoes: ["Heels"], bag: true },
     optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Jackets","Cardigans"], belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: ["chunky","platform","combat","lug"] },
-    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Silk, satin, or luxe fabrics. At least one of the 3 looks should be a dress.",
+    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Lean into texture variety — silk, satin, leather, fine knit, lace, structured wool all welcome; no single material is mandatory. At least one of the 3 looks should be a dress.",
   },
   Dinner: {
     required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },

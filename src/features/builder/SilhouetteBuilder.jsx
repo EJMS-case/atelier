@@ -80,6 +80,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [name, setName] = useState(initialLook?.notes || "");
   const [saveMode, setSaveMode] = useState("looks"); // "looks" | "favorite" | "schedule"
   const [occasion, setOccasion] = useState(initialLook?.occasion || "Work");
+  const [weather, setWeather] = useState(initialLook?.weather || "");
   const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
@@ -280,6 +281,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
           items: garmentIds,
           source: "manual",
           occasion,
+          weather: weather || null,
           notes: name || null,
         });
         setSaved(`Scheduled for ${scheduleDate}`);
@@ -292,6 +294,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         garment_ids: garmentIds,
         date_worn: initialLook?.date_worn || null,
         occasion,
+        weather: weather || null,
         notes: name || null,
         collage_url: collageUrl,
         // When set, the parent's onSave updates the existing log instead of
@@ -627,11 +630,18 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         ))}
       </div>
 
-      {/* Occasion + (when scheduling) date */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+      {/* Occasion + weather + (when scheduling) date.
+          Weather is tagged on the saved look so it can later filter into the
+          Planner's "From saved looks" picker and the Style Me reference. */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
         <select value={occasion} onChange={e => setOccasion(e.target.value)}
           style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff" }}>
           {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+        </select>
+        <select value={weather} onChange={e => setWeather(e.target.value)}
+          style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff" }}>
+          <option value="">Any weather</option>
+          {["Hot","Warm","Mild","Cool","Cold"].map(w => <option key={w}>{w}</option>)}
         </select>
         {saveMode === "schedule" && (
           <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
