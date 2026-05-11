@@ -3,20 +3,25 @@ import { s } from "../ui/styles.js";
 import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
+import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 
-export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem }) {
+export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filterOcc,  setFilterOcc]  = useState("All");
   const [wearingId,  setWearingId]  = useState(null);
   const [deleteId,   setDeleteId]   = useState(null);
   const [unloggingId, setUnloggingId] = useState(null);
+  // Editing flow: when set, render SilhouetteBuilder pre-populated with the
+  // chosen log so the user can change pieces and save updates in place.
+  const [editingLog, setEditingLog] = useState(null);
 
-  useEffect(() => {
+  const loadLogs = () => {
     sb.fetchOutfitLogs()
       .then(data => { setLogs(data.filter(l => l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  };
+  useEffect(loadLogs, []);
 
   const filtered = filterOcc === "All" ? logs : logs.filter(l => l.occasion === filterOcc);
   const grouped = {};
@@ -57,6 +62,27 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   const occasions = ["All", ...new Set(logs.map(l => l.occasion).filter(Boolean))];
   const Wrap = nested ? "div" : "div";
   const wrapStyle = nested ? {} : s.page;
+
+  // Editing a logged outfit replaces it via the parent's onSaveLook path
+  // (which routes to sb.updateOutfitLog when editing_log_id is set).
+  if (editingLog && onSaveLook) {
+    return (
+      <SilhouetteBuilder
+        items={items}
+        apiKey={apiKey}
+        initialLook={editingLog}
+        onSave={async (log) => {
+          const saved = await onSaveLook(log);
+          setEditingLog(null);
+          loadLogs();
+          return saved;
+        }}
+        onFavoriteLook={onFavoriteLook}
+        onSchedule={onSchedule}
+        onClose={() => setEditingLog(null)}
+      />
+    );
+  }
 
   return (
     <Wrap style={wrapStyle}>
@@ -110,7 +136,12 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
                         <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
                       </div>
                     ) : (
-                      <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                      <div style={{ display:"flex", gap:6 }}>
+                        {onSaveLook && (
+                          <button style={s.histDeleteBtn} onClick={() => setEditingLog(log)}>Edit</button>
+                        )}
+                        <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                      </div>
                     )}
                   </>
                 }

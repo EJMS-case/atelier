@@ -22,7 +22,20 @@ export default function SavedView({ items, favorites, toggleFav, onEditItem, onW
         <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem}/>
       )}
       {tab === "history" && (
-        <OutfitHistory nested items={items} onWearAgain={onWearAgain} onDelete={onDeleteLog} onUnlog={onUnlog} isFav={isFav} toggleFav={toggleFav} onEditItem={onEditItem}/>
+        <OutfitHistory
+          nested
+          items={items}
+          apiKey={apiKey}
+          onWearAgain={onWearAgain}
+          onDelete={onDeleteLog}
+          onUnlog={onUnlog}
+          isFav={isFav}
+          toggleFav={toggleFav}
+          onEditItem={onEditItem}
+          onSaveLook={onSaveLook}
+          onFavoriteLook={onFavoriteLook}
+          onSchedule={onSchedule}
+        />
       )}
       {tab === "favorites" && (
         <FavoritesView nested items={items} favorites={favorites} toggleFav={toggleFav} onEditItem={onEditItem}/>
