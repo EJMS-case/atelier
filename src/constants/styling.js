@@ -51,7 +51,7 @@ export const OCCASION_SLOTS = {
     required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], shoes: ["Heels","Loafers","Boots"], bag: true },
     optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Coats","Jackets"], belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Gowns","Formal Separates"], keywords: ["gown","formal"] },
-    promptNote: "WORK DINNER: Polished but elevated — covers client dinners, after-work events, evening meetings. Tailored separates or a midi/cocktail dress that still reads professional. Silk and satin welcome. Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO gowns, NO formal-separates.",
+    promptNote: "WORK DINNER: Polished but elevated — covers client dinners, after-work events, evening meetings. Tailored separates or a midi/cocktail dress that still reads professional. Mix fabrics for texture (wool, leather, silk, satin, fine knit, structured cotton) — no single material is mandatory; the right answer depends on the closet. Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO gowns, NO formal-separates.",
   },
   Casual: {
     required: { top: true, bottom: true, shoes: true },
