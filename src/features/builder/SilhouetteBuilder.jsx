@@ -521,9 +521,7 @@ export default function SilhouetteBuilder({
               const activeItem = activeCanvasKey
                 ? pickedItems.find(p => posKey(p.slot, p.item.id) === activeCanvasKey)
                 : null;
-              if (!activeItem) {
-                return <span style={{ fontSize: 10, color: PALETTE.muted, fontStyle: "italic" }}>Tap an item on the canvas to layer it.</span>;
-              }
+              if (!activeItem) return null;
               const slotLabel = SLOTS.find(s => s.key === activeItem.slot)?.label || activeItem.slot.toUpperCase();
               const allKeys = pickedItems.map(p => posKey(p.slot, p.item.id));
               return (
@@ -607,15 +605,6 @@ export default function SilhouetteBuilder({
         </div>
       )}
 
-      {/* Layering hint for multi-slots (tops / shoes / bags) */}
-      {MULTI_SLOTS.has(activeSlot) && (
-        <div style={{ fontSize: 10, color: PALETTE.muted, marginBottom: 6, fontStyle: "italic" }}>
-          {activeSlot === "top"
-            ? "Tap multiple to layer (e.g. tank under blouse under cardigan)."
-            : `Tap multiple to compare ${activeSlot} options on the canvas.`}
-        </div>
-      )}
-
       {/* Horizontal picker — tap to add/remove for the active slot */}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 12px", scrollSnapType: "x mandatory" }}>
         {poolForSlot.length === 0 && (
@@ -651,27 +640,29 @@ export default function SilhouetteBuilder({
 
       {/* Name + actions */}
       <input type="text" value={name} onChange={e => setName(e.target.value)}
-        placeholder="Name this look (optional)"
+        placeholder={saveMode === "schedule" ? "What you're doing (optional)" : "Name this look (optional)"}
         style={{ width: "100%", padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, marginBottom: 10, background: "#fff" }}/>
 
-      {/* Save-mode segmented control */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 8, border: `1px solid ${PALETTE.line}`, borderRadius: 6, padding: 3, background: "#fff" }}>
-        {[["looks","Save"],["favorite","Favorite"],["schedule","Schedule"]].map(([k, label]) => (
-          <button key={k} onClick={() => setSaveMode(k)}
-            style={{
-              flex: 1,
-              padding: "7px 4px",
-              border: "none",
-              borderRadius: 4,
-              background: saveMode === k ? PALETTE.ink : "transparent",
-              color: saveMode === k ? PALETTE.bg : PALETTE.soft,
-              fontSize: 11,
-              letterSpacing: "0.06em",
-              cursor: "pointer",
-              fontWeight: saveMode === k ? 600 : 400,
-            }}>{label}</button>
-        ))}
-      </div>
+      {/* Save-mode selector (Style Me flow only — calendar edits go straight to Save) */}
+      {saveMode !== "schedule" && (
+        <div style={{ display: "flex", gap: 4, marginBottom: 8, border: `1px solid ${PALETTE.line}`, borderRadius: 6, padding: 3, background: "#fff" }}>
+          {[["looks","Save"],["favorite","Favorite"]].map(([k, label]) => (
+            <button key={k} onClick={() => setSaveMode(k)}
+              style={{
+                flex: 1,
+                padding: "7px 4px",
+                border: "none",
+                borderRadius: 4,
+                background: saveMode === k ? PALETTE.ink : "transparent",
+                color: saveMode === k ? PALETTE.bg : PALETTE.soft,
+                fontSize: 11,
+                letterSpacing: "0.06em",
+                cursor: "pointer",
+                fontWeight: saveMode === k ? 600 : 400,
+              }}>{label}</button>
+          ))}
+        </div>
+      )}
 
       {/* Occasion + weather as multi-select chips. Tap to toggle each tag —
           a saved look can carry multiple occasions and multiple weather
@@ -737,7 +728,7 @@ export default function SilhouetteBuilder({
         </button>
         <button onClick={handleSave} disabled={saving || pickedItems.length < 2}
           style={{ flex: 1, padding: 12, background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 12, letterSpacing: "0.08em", cursor: "pointer", opacity: saving || pickedItems.length < 2 ? 0.5 : 1 }}>
-          {saving ? "Saving…" : saveMode === "schedule" ? "Schedule" : saveMode === "favorite" ? "Save & Favorite" : "Save look"}
+          {saving ? "Saving…" : saveMode === "favorite" ? "Save & Favorite" : "Save"}
         </button>
       </div>
 

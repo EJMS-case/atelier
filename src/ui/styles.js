@@ -113,7 +113,7 @@ export const s = {
   expandBtn: { background:"none", border:"1px solid #DDD5CC", borderRadius:20, padding:"4px 13px", fontSize:11, color:"var(--color-text-2)", cursor:"pointer", letterSpacing:"0.06em" },
 
   // ── Editorial collage canvas
-  collageCanvas: { position:"relative", width:"100%", paddingBottom:"95%", background:"#FFFFFF", overflow:"hidden", margin:"0" },
+  collageCanvas: { position:"relative", width:"100%", paddingBottom:"95%", background:"transparent", overflow:"hidden", margin:"0" },
   collagePh: { width:"100%", height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4, padding:8, background:"var(--color-surface-3)" },
   collageCat:  { fontSize:10, color:"var(--color-border-muted)", letterSpacing:"0.1em" },
   collageName: { fontSize:9, color:"var(--color-text-muted)", textAlign:"center", lineHeight:1.4 },
