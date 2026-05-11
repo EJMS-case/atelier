@@ -7,6 +7,7 @@ import { fetchPlansBetween, savePlan, deletePlan } from "./plannerApi.js";
 import { buildPackingList } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast } from "../../lib/weather.js";
+import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 const PALETTE = {
@@ -108,13 +109,17 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
   const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   async function handleAssignSaved(iso, log, overrides = {}) {
+    const logOcc = tagsFor(log, "occasions", "occasion");
+    const logWx  = tagsFor(log, "weathers",  "weather");
     const plan = {
       date: iso,
       items: log.garment_ids || [],
       outfit_log_id: log.id,
       source: "saved",
-      occasion: overrides.occasion || log.occasion || null,
-      weather:  overrides.weather  || log.weather  || null,
+      occasion: overrides.occasion || logOcc[0] || null,
+      weather:  overrides.weather  || logWx[0]  || null,
+      occasions: overrides.occasion ? [overrides.occasion] : logOcc,
+      weathers:  overrides.weather  ? [overrides.weather]  : logWx,
     };
     try {
       const saved = await savePlan(plan);
@@ -338,12 +343,21 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
           </div>
         )}
 
-        {tab === "saved" && (
+        {tab === "saved" && (() => {
+          // Surface looks that match the user's picked weather (if any). A
+          // look tagged for multiple weathers passes when ANY tag matches.
+          // No selection → show every saved look.
+          const matching = (outfitLogs || []).filter(l =>
+            rowMatchesTag(l, "weathers", "weather", pickedWeather)
+          );
+          return (
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
-            {(outfitLogs || []).length === 0 && (
-              <div style={{ padding: 24, textAlign: "center", color: PALETTE.muted }}>No saved looks yet.</div>
+            {matching.length === 0 && (
+              <div style={{ padding: 24, textAlign: "center", color: PALETTE.muted }}>
+                {(outfitLogs || []).length === 0 ? "No saved looks yet." : `No saved looks tagged ${pickedWeather}.`}
+              </div>
             )}
-            {(outfitLogs || []).map(log => {
+            {matching.map(log => {
               const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean).slice(0, 4);
               return (
                 <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather })}
@@ -356,7 +370,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
                     ))}
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>{log.occasion || "Saved look"}</div>
+                    <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>{joinTags(tagsFor(log, "occasions", "occasion")) || "Saved look"}</div>
                     <div style={{ fontSize: 10, color: PALETTE.muted }}>
                       {logItems.length} piece{logItems.length === 1 ? "" : "s"}
                       {log.date_worn && ` · worn ${log.date_worn}`}
@@ -366,7 +380,8 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
               );
             })}
           </div>
-        )}
+          );
+        })()}
 
         {tab === "generate" && (
           <div style={{ padding: 16, textAlign: "center" }}>

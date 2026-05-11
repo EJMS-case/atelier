@@ -4,6 +4,7 @@ import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
+import { tagsFor, joinTags, rowMatchesTag } from "../lib/multitag.js";
 
 export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
@@ -23,7 +24,9 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   };
   useEffect(loadLogs, []);
 
-  const filtered = filterOcc === "All" ? logs : logs.filter(l => l.occasion === filterOcc);
+  const filtered = filterOcc === "All"
+    ? logs
+    : logs.filter(l => rowMatchesTag(l, "occasions", "occasion", filterOcc));
   const grouped = {};
   filtered.forEach(log => {
     const d = log.date_worn || log.created_at?.slice(0, 10) || "Unknown";
@@ -59,7 +62,10 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     finally { setUnloggingId(null); }
   };
 
-  const occasions = ["All", ...new Set(logs.map(l => l.occasion).filter(Boolean))];
+  // Flatten multi-tagged occasions so the filter chip row shows every value
+  // that appears anywhere across logs (a look tagged [Work, Casual] surfaces
+  // under both filters).
+  const occasions = ["All", ...new Set(logs.flatMap(l => tagsFor(l, "occasions", "occasion")))];
   const Wrap = nested ? "div" : "div";
   const wrapStyle = nested ? {} : s.page;
 
@@ -104,10 +110,11 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
           <div style={s.histMonthLabel}>{formatMonth(month)}</div>
           {grouped[month].map(log => {
             const meta = parseMeta(log.collage_url);
+            const occLabel = joinTags(tagsFor(log, "occasions", "occasion"));
             const subtitle = (
               <>
                 {formatDate(log.date_worn)}
-                {log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+                {occLabel && <span style={s.histOcc}> · {occLabel}</span>}
                 {meta.mood && <span style={s.histMood}> · {meta.mood}</span>}
               </>
             );

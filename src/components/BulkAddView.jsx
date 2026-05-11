@@ -4,7 +4,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
 import { classifyKnitAI } from "../lib/ai/stylist.js";
-import { compressImage } from "../utils/images.js";
+import { compressImage, trimTransparentBorders } from "../utils/images.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 
 export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
@@ -30,12 +30,14 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         setProcessing(p => ({...p, [id]: "bg"}));
 
         // F1 — run BG removal and AI detect in parallel. Both are best-effort;
-        // neither blocks the save button on failure.
+        // neither blocks the save button on failure. After a successful strip
+        // we trim the transparent border so saved photos don't carry empty
+        // padding into the closet grid or builder collages.
         const bgP = stripBackground(rawImage, { rmbgKey })
-          .then(r => {
-            return compressImage(r.image, 600, 0.9, true).then(compressed => ({
-              image: compressed, has_bg: r.has_bg,
-            }));
+          .then(async r => {
+            const trimmed = r.has_bg ? r.image : await trimTransparentBorders(r.image);
+            const compressed = await compressImage(trimmed, 600, 0.9, true);
+            return { image: compressed, has_bg: r.has_bg };
           })
           .catch(err => {
             console.warn("[F1] bg strip failed:", err);

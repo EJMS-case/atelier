@@ -16,7 +16,10 @@ const API_URL = "https://api.anthropic.com/v1/messages";
 // Compact one-line representation of an outfit. Resolves garment_ids to the
 // minimum metadata Claude needs to spot patterns: category, color, brand,
 // subcategory. Skip image/notes — they'd blow the context for no signal.
-function compactOutfit({ date, occasion, weather, garment_ids = [] }, itemMap) {
+// Multi-tagged outfits surface every tag joined with "+", giving the AI
+// signal about patterns that span contexts (e.g. "navy column outfit for
+// Work + Work Dinner" is one entry, not two).
+function compactOutfit({ date, occasionLabel, weatherLabel, garment_ids = [] }, itemMap) {
   const pieces = garment_ids
     .map(id => itemMap[id])
     .filter(Boolean)
@@ -27,7 +30,7 @@ function compactOutfit({ date, occasion, weather, garment_ids = [] }, itemMap) {
       return `${color ? color + " " : ""}${sub}${brand}`.trim();
     });
   if (pieces.length === 0) return null;
-  const meta = [date || "?", occasion || "?", weather || ""].filter(Boolean).join(" | ");
+  const meta = [date || "?", occasionLabel || "?", weatherLabel || ""].filter(Boolean).join(" | ");
   return `${meta} — ${pieces.join(", ")}`;
 }
 
@@ -51,17 +54,25 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], a
   // that also lives on the calendar isn't double-counted in the pattern math.
   const seen = new Set();
   const rows = [];
+  // Local copy of the array-normalizer so this module stays callable from
+  // any context without importing the multitag helper (kept independent so
+  // a misconfigured bundler doesn't break fingerprint generation).
+  const asArr = v => Array.isArray(v) ? v.filter(Boolean) : (v ? [v] : []);
   const push = (r, dateField) => {
     const idsKey = (r.garment_ids || r.items || []).slice().sort().join(",");
     const date = r[dateField];
     const key = `${date || ""}|${idsKey}`;
     if (idsKey && !seen.has(key)) {
       seen.add(key);
+      const occList = asArr(r.occasions).length ? asArr(r.occasions) : asArr(r.occasion);
+      const wxList  = asArr(r.weathers).length  ? asArr(r.weathers)  : asArr(r.weather);
       rows.push({
         date,
-        occasion: r.occasion,
-        weather: r.weather,
-        garment_ids: r.garment_ids || r.items || [],
+        // Join multi-tagged contexts with "+" so the AI sees "Work+Travel"
+        // as one cross-context outfit (vs two duplicates).
+        occasionLabel: occList.join("+"),
+        weatherLabel:  wxList.join("+"),
+        garment_ids:   r.garment_ids || r.items || [],
       });
     }
   };
