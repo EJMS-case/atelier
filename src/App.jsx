@@ -1,16 +1,12 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
-import { buildStylingPrompt } from "./prompts/styling-system-prompt.js";
-import { sampleClosetItems, formatInventory } from "./utils/closet-sampler.js";
-import { generateValidatedLooks, ValidationError } from "./utils/styling-validator.js";
-import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } from "./utils/rotation-tracker.js";
-import { generateContactSheets } from "./utils/contact-sheet.js";
-import { autoDetectItem } from "./lib/anthropic.js";
-import { stripBackground } from "./lib/bgRemoval.js";
-import { applyDetection } from "./features/closet/applyDetection.js";
-import { MOODS, moodPromptFor } from "./features/stylist/moods.js";
+// Outfit generation, knit classify, color analyze — sole entry points into
+// the AI layer from App.jsx. The lower-level helpers (sampler / validator /
+// prompt builder / rotation tracker) live behind generateOutfit and don't
+// need to be re-imported here.
+import { MOODS } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
-import { bumpWearCounts, unbumpWearCounts, costPerWear } from "./features/wear/wearApi.js";
+import { bumpWearCounts, unbumpWearCounts } from "./features/wear/wearApi.js";
 import HomeView from "./features/home/HomeView.jsx";
 import { s, si, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
@@ -29,7 +25,6 @@ import {
   loadSetsMeta, saveSetsMeta, loadStylePrefs, loadAboutMe,
   migrateLocalStorage, reconcilePendingSyncFlag,
 } from "./utils/storage.js";
-import { compressImage } from "./utils/images.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import {
