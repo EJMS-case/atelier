@@ -95,6 +95,34 @@ export default function SilhouetteBuilder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLook?.id]);
 
+  // Hydrate positions / zOrders / autoFitted from a saved layout when editing
+  // an existing look or plan. Without this, reopening a custom-arranged look
+  // resets every box back to its default zone. We derive the slot from each
+  // item's category so the (slot, itemId) keys line up with the rest of the
+  // builder's state.
+  const restoredLayout = useMemo(() => {
+    const arr = Array.isArray(initialLook?.layout_data) ? initialLook.layout_data : null;
+    if (!arr?.length) return null;
+    const pos = {};
+    const z = {};
+    const fitted = new Set();
+    for (const entry of arr) {
+      if (!entry || !entry.id) continue;
+      const it = (items || []).find(i => i.id === entry.id);
+      if (!it) continue;
+      const slot = SLOTS.find(s => s.match(it));
+      if (!slot) continue;
+      const key = posKey(slot.key, entry.id);
+      if (typeof entry.x === "number") {
+        pos[key] = { x: entry.x, y: entry.y, w: entry.w, h: entry.h };
+        fitted.add(key);
+      }
+      if (typeof entry.z === "number") z[key] = entry.z;
+    }
+    return { positions: pos, zOrders: z, autoFitted: fitted };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLook?.id]);
+
   const [selections, setSelections] = useState(initialSelections);
   const [activeSlot, setActiveSlot] = useState(SLOTS[0].key);
   const [name, setName] = useState(initialLook?.notes || "");
@@ -123,15 +151,16 @@ export default function SilhouetteBuilder({
   const chatEndRef = useRef(null);
   // Canvas positions { x, y, w, h } as % of canvas dimensions, keyed per
   // (slot, itemId) so multi-slot items each have their own placement.
-  const [positions, setPositions] = useState({});
+  const [positions, setPositions] = useState(() => restoredLayout?.positions || {});
   // Active drag/resize state
   const [dragState, setDragState] = useState(null);
   // Tracks per-(slot,itemId) keys whose box has been auto-fit. Skips re-fitting
-  // after the user has moved/resized.
-  const [autoFitted, setAutoFitted] = useState(() => new Set());
+  // after the user has moved/resized. Restored keys count as fitted so we don't
+  // clobber the saved arrangement.
+  const [autoFitted, setAutoFitted] = useState(() => restoredLayout?.autoFitted || new Set());
   // Per-(slot,itemId) zIndex override — only used when the user has
   // Brought-to-Front or Sent-to-Back. Falls back to a default stacking order.
-  const [zOrders, setZOrders] = useState({});
+  const [zOrders, setZOrders] = useState(() => restoredLayout?.zOrders || {});
   // The canvas item the user last touched — anchors the layering
   // controls so they know which item to raise/lower. Key = posKey(slot, itemId).
   const [activeCanvasKey, setActiveCanvasKey] = useState(null);
@@ -299,12 +328,26 @@ export default function SilhouetteBuilder({
     return canvas.toDataURL("image/jpeg", 0.9);
   }
 
+  // Build a portable layout snapshot — [{ id, x, y, w, h, z }, …] — so the
+  // viewer (LookCard, planner cells) can rebuild the same arrangement and the
+  // builder can restore it on reopen.
+  function buildLayoutData() {
+    const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
+    return pickedItems.map(p => {
+      const key = posKey(p.slot, p.item.id);
+      const pos = positions[key] || defaultPosFor(p.slot, p.item.id);
+      const z = zOrders[key] ?? DEFAULT_Z[p.slot] ?? 3;
+      return { id: p.item.id, x: pos.x, y: pos.y, w: pos.w, h: pos.h, z };
+    });
+  }
+
   async function handleSave() {
     if (pickedItems.length < 2) return;
     setSaving(true);
     setSaveErr("");
     try {
       const garmentIds = pickedItems.map(p => p.item.id);
+      const layoutData = buildLayoutData();
 
       const occList = asArray(occasions);
       const wxList  = asArray(weathers);
@@ -324,6 +367,7 @@ export default function SilhouetteBuilder({
           occasions: occList,
           weathers:  wxList,
           notes: name || null,
+          layout_data: layoutData,
         });
         setSaved(`Scheduled for ${scheduleDate}`);
         setTimeout(onClose, 1000);
@@ -340,6 +384,7 @@ export default function SilhouetteBuilder({
         weathers:  wxList,
         notes: name || null,
         collage_url: collageUrl,
+        layout_data: layoutData,
         // When set, the parent's onSave updates the existing log instead of
         // inserting a new one. Lets users edit a saved look in place.
         editing_log_id: initialLook?.id || null,

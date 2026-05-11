@@ -1139,12 +1139,15 @@ export default function App() {
           initialLook={editingPlan ? {
             // Synthetic "log shape" so SilhouetteBuilder's initialSelections
             // distribution picks the right slots. We carry the plan's
-            // occasion/weather (multi-tag arrays preferred) onto the new save.
+            // occasion/weather + saved canvas layout so the user's manual
+            // arrangement isn't lost between edits.
             garment_ids: editingPlan.plan?.items || [],
             occasion:    editingPlan.plan?.occasion,
             weather:     editingPlan.plan?.weather,
             occasions:   editingPlan.plan?.occasions,
             weathers:    editingPlan.plan?.weathers,
+            notes:       editingPlan.plan?.notes,
+            layout_data: editingPlan.plan?.layout_data,
           } : null}
           initialSaveMode={editingPlan ? "schedule" : "looks"}
           initialScheduleDate={editingPlan?.iso || null}

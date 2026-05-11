@@ -187,6 +187,12 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
           const planItems = plan?.items
             ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
             : [];
+          // Prefer the layout saved on the plan itself; fall back to the
+          // linked outfit_log's layout for plans created by pinning a saved
+          // look. Either way the user sees the arrangement they chose.
+          const layoutOverride = plan?.layout_data
+            || (plan?.outfit_log_id && (outfitLogs || []).find(l => l.id === plan.outfit_log_id)?.layout_data)
+            || null;
           const isToday = iso === todayIso;
           return (
             <button key={iso}
@@ -203,6 +209,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
                 <div style={{ position: "relative", flex: 1, marginTop: 2 }}>
                   <EditorialCollage
                     lookItems={planItems}
+                    layoutOverride={layoutOverride}
                     canvasStyle={{ position: "absolute", inset: 0, width: "100%", height: "100%", paddingBottom: 0 }}/>
                 </div>
               )}
@@ -279,6 +286,9 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
   const planItems = plan?.items
     ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
     : [];
+  const planLayout = plan?.layout_data
+    || (plan?.outfit_log_id && (outfitLogs || []).find(l => l.id === plan.outfit_log_id)?.layout_data)
+    || null;
 
   return (
     <div style={backdropStyle} onClick={onClose}>
@@ -306,6 +316,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
             </div>
             <EditorialCollage
               lookItems={planItems}
+              layoutOverride={planLayout}
               onItemClick={onEditItem ? (it) => onEditItem(it) : undefined}/>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               {onEditPlan && (
