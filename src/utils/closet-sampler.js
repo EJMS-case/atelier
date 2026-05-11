@@ -67,6 +67,13 @@ const OCCASION_PREFILTERS = {
     removeSubcategories: new Set(["Jeans", "Cocktail Dresses", "Gowns", "Formal Separates", "Evening Accessories"]),
     removeKeywords: ["ripped", "distressed", "evening", "cocktail", "gown", "formal"],
   },
+  "Work Dinner": {
+    // Same hard removals as Work for fit-for-purpose pieces, but cocktail
+    // dresses are allowed (the silhouette can still read professional).
+    removeCategories: new Set(["Athleisure", "Loungewear", "Swim"]),
+    removeSubcategories: new Set(["Jeans", "Gowns", "Formal Separates"]),
+    removeKeywords: ["ripped", "distressed", "gown", "formal"],
+  },
 };
 
 // ── Exclusion filter → item test mapping ─────────────────────────────────────

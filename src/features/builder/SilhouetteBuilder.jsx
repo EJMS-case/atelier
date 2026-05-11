@@ -29,6 +29,15 @@ const SLOTS = [
   { key: "accessory", label: "ACCESSORY", match: (it) => ["Accessories", "Belts"].includes(it.category), optional: true },
 ];
 
+// Slots that accept multiple items at once. Tops layer (tank under blouse
+// under cardigan); shoes and bags act as "options I'm considering" the user
+// can stage side-by-side in the canvas and pick visually.
+const MULTI_SLOTS = new Set(["top", "shoes", "bag"]);
+
+// Stable key for per-instance state (positions, zOrders, autoFitted) so each
+// item in a multi-slot has its own canvas slot.
+const posKey = (slot, itemId) => `${slot}__${itemId}`;
+
 
 // Default canvas positions (% of canvas width/height) per slot.
 // These match the fixed CSS zones that were here before drag was added.
@@ -42,12 +51,35 @@ const DEFAULT_POSITIONS = {
   accessory: { x: 68, y: 14, w:  28, h: 16 },
 };
 
-export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSchedule, onClose, apiKey }) {
-  const [selections, setSelections] = useState({}); // { slotKey: itemId }
+export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSchedule, onClose, apiKey, initialLook = null }) {
+  // Pre-populate selections / name / occasion when editing an existing log.
+  // We distribute the log's garment_ids back into slots by matching each
+  // item's category against the slot's `match` predicate, in slot order. An
+  // item matching multiple slots lands in the first one (dress beats top for
+  // dresses, etc.). Multi-slots collect every match.
+  const initialSelections = useMemo(() => {
+    if (!initialLook?.garment_ids) return {};
+    const out = {};
+    for (const id of initialLook.garment_ids) {
+      const it = (items || []).find(i => i.id === id);
+      if (!it) continue;
+      const slot = SLOTS.find(s => s.match(it));
+      if (!slot) continue;
+      const arr = out[slot.key] || [];
+      if (MULTI_SLOTS.has(slot.key) || arr.length === 0) {
+        out[slot.key] = [...arr, id];
+      }
+      // Non-multi slot already filled → drop additional matches silently.
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLook?.id]);
+
+  const [selections, setSelections] = useState(initialSelections);
   const [activeSlot, setActiveSlot] = useState(SLOTS[0].key);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialLook?.notes || "");
   const [saveMode, setSaveMode] = useState("looks"); // "looks" | "favorite" | "schedule"
-  const [occasion, setOccasion] = useState("Work");
+  const [occasion, setOccasion] = useState(initialLook?.occasion || "Work");
   const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
@@ -63,33 +95,52 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [chatLoading, setChatLoading] = useState(false);
   const [chatErr, setChatErr] = useState("");
   const chatEndRef = useRef(null);
-  // Per-slot canvas positions { x, y, w, h } as % of canvas dimensions
-  const [positions, setPositions] = useState(() => ({ ...DEFAULT_POSITIONS }));
+  // Canvas positions { x, y, w, h } as % of canvas dimensions, keyed per
+  // (slot, itemId) so multi-slot items each have their own placement.
+  const [positions, setPositions] = useState({});
   // Active drag/resize state
   const [dragState, setDragState] = useState(null);
-  // Tracks "slotKey:itemId" pairs whose box has already been auto-fit to the
-  // image aspect ratio. Skips re-fitting after the user has moved/resized.
+  // Tracks per-(slot,itemId) keys whose box has been auto-fit. Skips re-fitting
+  // after the user has moved/resized.
   const [autoFitted, setAutoFitted] = useState(() => new Set());
-  // Per-slot zIndex override — only used when the user has Brought-to-Front
-  // or Sent-to-Back. Falls back to a default stacking order.
+  // Per-(slot,itemId) zIndex override — only used when the user has
+  // Brought-to-Front or Sent-to-Back. Falls back to a default stacking order.
   const [zOrders, setZOrders] = useState({});
-  // The slot the user last touched on the canvas — anchors the layering
-  // controls so they know which item to raise/lower.
-  const [activeCanvasSlot, setActiveCanvasSlot] = useState(null);
+  // The canvas item the user last touched — anchors the layering
+  // controls so they know which item to raise/lower. Key = posKey(slot, itemId).
+  const [activeCanvasKey, setActiveCanvasKey] = useState(null);
   const canvasRef = useRef(null);
+
+  // Default position for an item, with a per-instance offset for multi-slots
+  // so stacking items don't perfectly overlap on first render.
+  function defaultPosFor(slot, itemId) {
+    const base = DEFAULT_POSITIONS[slot] || { x: 10, y: 10, w: 40, h: 40 };
+    if (!MULTI_SLOTS.has(slot)) return base;
+    const ids = Array.isArray(selections[slot]) ? selections[slot] : (selections[slot] ? [selections[slot]] : []);
+    const idx = ids.indexOf(itemId);
+    if (idx <= 0) return base;
+    // Stagger each subsequent item by a small offset so they're individually grabbable.
+    return {
+      x: Math.max(0, Math.min(100 - base.w, base.x + idx * 6)),
+      y: Math.max(0, Math.min(100 - base.h, base.y + idx * 6)),
+      w: base.w,
+      h: base.h,
+    };
+  }
 
   // Snap the bounding box height to match the image's intrinsic aspect ratio
   // so there's no whitespace around the visible item — eliminates the dead
-  // negative space that made the resize handle hard to find.
+  // negative space that made the resize handle hard to find. Keyed per
+  // (slot, itemId) so multi-slot items each fit independently.
   function fitBoxToImage(slot, itemId, naturalW, naturalH) {
     if (!naturalW || !naturalH) return;
-    const key = `${slot}:${itemId}`;
+    const key = posKey(slot, itemId);
     if (autoFitted.has(key)) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect?.width) return;
     const imgAR = naturalW / naturalH;
     setPositions(prev => {
-      const cur = prev[slot] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
+      const cur = prev[key] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
       const widthPx = (cur.w / 100) * rect.width;
       let newHpx = widthPx / imgAR;
       // Cap height so the box stays inside the canvas.
@@ -98,9 +149,9 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         newHpx = maxHpx;
         // If height was capped, shrink width proportionally to preserve AR.
         const newWpx = newHpx * imgAR;
-        return { ...prev, [slot]: { ...cur, w: (newWpx / rect.width) * 100, h: (newHpx / rect.height) * 100 } };
+        return { ...prev, [key]: { ...cur, w: (newWpx / rect.width) * 100, h: (newHpx / rect.height) * 100 } };
       }
-      return { ...prev, [slot]: { ...cur, h: (newHpx / rect.height) * 100 } };
+      return { ...prev, [key]: { ...cur, h: (newHpx / rect.height) * 100 } };
     });
     setAutoFitted(prev => {
       const next = new Set(prev);
@@ -136,9 +187,30 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     return pool;
   }, [activeSlot, items, search, subcatFilter]);
 
-  const pickedItems = Object.entries(selections)
-    .map(([slot, id]) => ({ slot, item: items.find(i => i.id === id) }))
-    .filter(x => x.item);
+  // Flatten the multi-item slots into a single list of {slot, item} pairs.
+  // The slot is preserved so default positions / z-order / layout controls
+  // still key off the slot definition.
+  const pickedItems = Object.entries(selections).flatMap(([slot, ids]) => {
+    const arr = Array.isArray(ids) ? ids : [ids];
+    return arr
+      .map(id => ({ slot, item: items.find(i => i.id === id) }))
+      .filter(x => x.item);
+  });
+
+  // Toggle helper. Multi-slots accumulate; single-slots replace.
+  const togglePick = (slot, id) => {
+    setSelections(prev => {
+      const cur = Array.isArray(prev[slot]) ? prev[slot] : (prev[slot] ? [prev[slot]] : []);
+      const isMulti = MULTI_SLOTS.has(slot);
+      if (cur.includes(id)) {
+        const next = cur.filter(x => x !== id);
+        const out = { ...prev };
+        if (next.length) out[slot] = next; else delete out[slot];
+        return out;
+      }
+      return { ...prev, [slot]: isMulti ? [...cur, id] : [id] };
+    });
+  };
 
   async function compositeSaveImage() {
     const canvas = document.createElement("canvas");
@@ -148,9 +220,12 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Convert % positions to absolute pixels on the 600×800 save canvas
-    const zoneFor = (slot) => {
-      const p = positions[slot] || DEFAULT_POSITIONS[slot];
+    // Convert % positions to absolute pixels on the 600×800 save canvas.
+    // Keyed per (slot, itemId) so layered tops and multi-bag/shoe options
+    // each composite at their own placement.
+    const zoneFor = (slot, itemId) => {
+      const key = posKey(slot, itemId);
+      const p = positions[key] || defaultPosFor(slot, itemId);
       if (!p) return null;
       return {
         x: p.x / 100 * 600,
@@ -162,7 +237,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
 
     async function drawItem({ slot, item }) {
       if (!item.image) return;
-      const zone = zoneFor(slot);
+      const zone = zoneFor(slot, item.id);
       if (!zone) return;
       await new Promise((resolve) => {
         const img = new Image();
@@ -183,8 +258,8 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     // saved image matches what the user sees (including any Front/Back overrides).
     const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
     const sorted = [...pickedItems].sort((a, b) => {
-      const za = zOrders[a.slot] ?? DEFAULT_Z[a.slot] ?? 3;
-      const zb = zOrders[b.slot] ?? DEFAULT_Z[b.slot] ?? 3;
+      const za = zOrders[posKey(a.slot, a.item.id)] ?? DEFAULT_Z[a.slot] ?? 3;
+      const zb = zOrders[posKey(b.slot, b.item.id)] ?? DEFAULT_Z[b.slot] ?? 3;
       return za - zb;
     });
     for (const sel of sorted) await drawItem(sel);
@@ -215,10 +290,13 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       const collageUrl = await compositeSaveImage();
       const log = {
         garment_ids: garmentIds,
-        date_worn: null,
+        date_worn: initialLook?.date_worn || null,
         occasion,
         notes: name || null,
         collage_url: collageUrl,
+        // When set, the parent's onSave updates the existing log instead of
+        // inserting a new one. Lets users edit a saved look in place.
+        editing_log_id: initialLook?.id || null,
       };
       const savedLog = await onSave(log);
 
@@ -240,7 +318,10 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   }
 
   const emptySlots = SLOTS
-    .filter(s => !selections[s.key])
+    .filter(s => {
+      const v = selections[s.key];
+      return !v || (Array.isArray(v) && v.length === 0);
+    })
     .map(s => s.key);
 
   async function handleChat(e) {
@@ -299,12 +380,13 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
           zOrders[slot] overrides it when the user uses the Front/Back controls. */}
       <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 6, overflow: "hidden", touchAction: "none" }}>
         {pickedItems.map(({ slot, item }) => {
-          const pos = positions[slot] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
+          const key = posKey(slot, item.id);
+          const pos = positions[key] || defaultPosFor(slot, item.id);
           const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
-          const z = zOrders[slot] ?? DEFAULT_Z[slot] ?? 3;
-          const isActive = activeCanvasSlot === slot;
+          const z = zOrders[key] ?? DEFAULT_Z[slot] ?? 3;
+          const isActive = activeCanvasKey === key;
           return (
-            <div key={slot + item.id}
+            <div key={key}
               style={{
                 position: "absolute",
                 left: `${pos.x}%`, top: `${pos.y}%`,
@@ -321,18 +403,18 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
                 e.preventDefault();
                 e.currentTarget.setPointerCapture(e.pointerId);
                 const rect = canvasRef.current.getBoundingClientRect();
-                setDragState({ slot, type: "move", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
-                setActiveCanvasSlot(slot);
+                setDragState({ key, type: "move", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                setActiveCanvasKey(key);
                 // User-driven moves should not be undone by a stale auto-fit.
-                setAutoFitted(prev => { const n = new Set(prev); n.add(`${slot}:${item.id}`); return n; });
+                setAutoFitted(prev => { const n = new Set(prev); n.add(key); return n; });
               }}
               onPointerMove={(e) => {
-                if (!dragState || dragState.slot !== slot || dragState.type !== "move") return;
+                if (!dragState || dragState.key !== key || dragState.type !== "move") return;
                 const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
                 const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
                 setPositions(prev => ({
                   ...prev,
-                  [slot]: {
+                  [key]: {
                     ...dragState.startPos,
                     x: Math.max(0, Math.min(100 - dragState.startPos.w, dragState.startPos.x + dx)),
                     y: Math.max(0, Math.min(100 - dragState.startPos.h, dragState.startPos.y + dy)),
@@ -358,17 +440,17 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
                   e.stopPropagation();
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const rect = canvasRef.current.getBoundingClientRect();
-                  setDragState({ slot, type: "resize", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
-                  setActiveCanvasSlot(slot);
-                  setAutoFitted(prev => { const n = new Set(prev); n.add(`${slot}:${item.id}`); return n; });
+                  setDragState({ key, type: "resize", startX: e.clientX, startY: e.clientY, startPos: { ...pos }, cW: rect.width, cH: rect.height });
+                  setActiveCanvasKey(key);
+                  setAutoFitted(prev => { const n = new Set(prev); n.add(key); return n; });
                 }}
                 onPointerMove={(e) => {
-                  if (!dragState || dragState.slot !== slot || dragState.type !== "resize") return;
+                  if (!dragState || dragState.key !== key || dragState.type !== "resize") return;
                   const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
                   const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
                   setPositions(prev => ({
                     ...prev,
-                    [slot]: {
+                    [key]: {
                       ...dragState.startPos,
                       w: Math.max(8, Math.min(100 - dragState.startPos.x, dragState.startPos.w + dx)),
                       h: Math.max(8, Math.min(100 - dragState.startPos.y, dragState.startPos.h + dy)),
@@ -389,33 +471,39 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       {pickedItems.length > 0 && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            {activeCanvasSlot && pickedItems.find(p => p.slot === activeCanvasSlot) ? (
-              <>
-                <span style={{ fontSize: 10, color: PALETTE.muted, letterSpacing: "0.08em" }}>{(SLOTS.find(s => s.key === activeCanvasSlot)?.label || activeCanvasSlot.toUpperCase())}:</span>
-                <button
-                  onClick={() => {
-                    const all = pickedItems.map(p => p.slot);
-                    const max = Math.max(...all.map(s => zOrders[s] ?? 3));
-                    setZOrders(prev => ({ ...prev, [activeCanvasSlot]: max + 1 }));
-                  }}
-                  style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
-                  ↑ Front
-                </button>
-                <button
-                  onClick={() => {
-                    const all = pickedItems.map(p => p.slot);
-                    const min = Math.min(...all.map(s => zOrders[s] ?? 3));
-                    setZOrders(prev => ({ ...prev, [activeCanvasSlot]: min - 1 }));
-                  }}
-                  style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
-                  ↓ Back
-                </button>
-              </>
-            ) : (
-              <span style={{ fontSize: 10, color: PALETTE.muted, fontStyle: "italic" }}>Tap an item on the canvas to layer it.</span>
-            )}
+            {(() => {
+              const activeItem = activeCanvasKey
+                ? pickedItems.find(p => posKey(p.slot, p.item.id) === activeCanvasKey)
+                : null;
+              if (!activeItem) {
+                return <span style={{ fontSize: 10, color: PALETTE.muted, fontStyle: "italic" }}>Tap an item on the canvas to layer it.</span>;
+              }
+              const slotLabel = SLOTS.find(s => s.key === activeItem.slot)?.label || activeItem.slot.toUpperCase();
+              const allKeys = pickedItems.map(p => posKey(p.slot, p.item.id));
+              return (
+                <>
+                  <span style={{ fontSize: 10, color: PALETTE.muted, letterSpacing: "0.08em" }}>{slotLabel}:</span>
+                  <button
+                    onClick={() => {
+                      const max = Math.max(...allKeys.map(k => zOrders[k] ?? 3));
+                      setZOrders(prev => ({ ...prev, [activeCanvasKey]: max + 1 }));
+                    }}
+                    style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
+                    ↑ Front
+                  </button>
+                  <button
+                    onClick={() => {
+                      const min = Math.min(...allKeys.map(k => zOrders[k] ?? 3));
+                      setZOrders(prev => ({ ...prev, [activeCanvasKey]: min - 1 }));
+                    }}
+                    style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
+                    ↓ Back
+                  </button>
+                </>
+              );
+            })()}
           </div>
-          <button onClick={() => { setPositions({ ...DEFAULT_POSITIONS }); setAutoFitted(new Set()); setZOrders({}); setActiveCanvasSlot(null); }}
+          <button onClick={() => { setPositions({}); setAutoFitted(new Set()); setZOrders({}); setActiveCanvasKey(null); }}
             style={{ background: "none", border: "none", fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
             Reset layout
           </button>
@@ -424,23 +512,27 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
 
       {/* Slot selector */}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, paddingBottom: 4 }}>
-        {SLOTS.map(s => (
-          <button key={s.key} onClick={() => setActiveSlot(s.key)}
-            style={{
-              fontSize: 11,
-              padding: "6px 10px",
-              borderRadius: 14,
-              border: `1px solid ${activeSlot === s.key ? PALETTE.ink : PALETTE.line}`,
-              background: activeSlot === s.key ? PALETTE.ink : "transparent",
-              color: activeSlot === s.key ? PALETTE.bg : PALETTE.soft,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-              fontWeight: selections[s.key] ? 600 : 400,
-            }}>
-            {s.label}{selections[s.key] ? " ✓" : ""}
-          </button>
-        ))}
+        {SLOTS.map(s => {
+          const picked = Array.isArray(selections[s.key]) ? selections[s.key] : (selections[s.key] ? [selections[s.key]] : []);
+          const count = picked.length;
+          return (
+            <button key={s.key} onClick={() => setActiveSlot(s.key)}
+              style={{
+                fontSize: 11,
+                padding: "6px 10px",
+                borderRadius: 14,
+                border: `1px solid ${activeSlot === s.key ? PALETTE.ink : PALETTE.line}`,
+                background: activeSlot === s.key ? PALETTE.ink : "transparent",
+                color: activeSlot === s.key ? PALETTE.bg : PALETTE.soft,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                fontWeight: count ? 600 : 400,
+              }}>
+              {s.label}{count > 1 ? ` ✓×${count}` : count === 1 ? " ✓" : ""}
+            </button>
+          );
+        })}
       </div>
 
       {/* Search bar */}
@@ -469,20 +561,26 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         </div>
       )}
 
+      {/* Layering hint for multi-slots (tops / shoes / bags) */}
+      {MULTI_SLOTS.has(activeSlot) && (
+        <div style={{ fontSize: 10, color: PALETTE.muted, marginBottom: 6, fontStyle: "italic" }}>
+          {activeSlot === "top"
+            ? "Tap multiple to layer (e.g. tank under blouse under cardigan)."
+            : `Tap multiple to compare ${activeSlot} options on the canvas.`}
+        </div>
+      )}
+
       {/* Horizontal picker — tap to add/remove for the active slot */}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 12px", scrollSnapType: "x mandatory" }}>
         {poolForSlot.length === 0 && (
           <div style={{ fontSize: 12, color: PALETTE.muted, padding: "20px 8px" }}>No items in this slot yet.</div>
         )}
         {poolForSlot.map(it => {
-          const picked = selections[activeSlot] === it.id;
+          const curIds = Array.isArray(selections[activeSlot]) ? selections[activeSlot] : (selections[activeSlot] ? [selections[activeSlot]] : []);
+          const picked = curIds.includes(it.id);
           return (
             <button key={it.id}
-              onClick={() => setSelections(prev => {
-                const next = { ...prev };
-                if (picked) delete next[activeSlot]; else next[activeSlot] = it.id;
-                return next;
-              })}
+              onClick={() => togglePick(activeSlot, it.id)}
               style={{
                 flexShrink: 0,
                 width: 88,

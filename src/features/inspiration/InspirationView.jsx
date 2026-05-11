@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { s } from "../../ui/styles.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
 import { compressImage } from "../../utils/images.js";
-import { listInspirations, createInspiration, deleteInspiration } from "./inspirationApi.js";
+import { listInspirations, createInspiration, deleteInspiration, updateInspiration } from "./inspirationApi.js";
 import { summarizeInspiration } from "./summarize.js";
 
 const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
@@ -81,6 +81,21 @@ export default function InspirationView({ apiKey, onBack, items, setItems }) {
     setItems(items.filter(it => it.id !== id));
     try { await deleteInspiration(id); }
     catch { setItems(before); alert("Couldn't delete — try again."); }
+  };
+
+  const [editingId, setEditingId] = useState(null);
+  const [editOcc, setEditOcc] = useState("");
+  const [editWx, setEditWx] = useState("");
+
+  const startEdit = (it) => { setEditingId(it.id); setEditOcc(it.occasion); setEditWx(it.weather); };
+  const cancelEdit = () => { setEditingId(null); };
+  const saveEdit = async (it) => {
+    const before = items;
+    const next = { ...it, occasion: editOcc, weather: editWx };
+    setItems(items.map(i => i.id === it.id ? next : i));
+    setEditingId(null);
+    try { await updateInspiration(next); }
+    catch { setItems(before); alert("Couldn't save changes — try again."); }
   };
 
   return (
@@ -164,21 +179,48 @@ export default function InspirationView({ apiKey, onBack, items, setItems }) {
       )}
 
       <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:12}}>
-        {filtered.map(it => (
-          <div key={it.id} style={{background:"var(--color-surface)", borderRadius:8, overflow:"hidden", border:"1px solid var(--color-border)"}}>
-            <img src={it.image_url} alt="" style={{width:"100%", height:180, objectFit:"cover", display:"block"}}/>
-            <div style={{padding:8, fontSize:11}}>
-              <div style={{color:"var(--color-text-muted)", marginBottom:4}}>{it.occasion} · {it.weather}</div>
-              {it.vibe_text && (
-                <div style={{color:"var(--color-text)", marginBottom:8, lineHeight:1.4}}>{it.vibe_text}</div>
-              )}
-              <button style={{...s.btnSecondary, width:"100%", padding:"6px 10px", fontSize:11}}
-                onClick={() => handleDelete(it.id)}>
-                Remove
-              </button>
+        {filtered.map(it => {
+          const isEditing = editingId === it.id;
+          return (
+            <div key={it.id} style={{background:"var(--color-surface)", borderRadius:8, overflow:"hidden", border:"1px solid var(--color-border)"}}>
+              <img src={it.image_url} alt="" style={{width:"100%", height:180, objectFit:"cover", display:"block"}}/>
+              <div style={{padding:8, fontSize:11}}>
+                {isEditing ? (
+                  <div style={{display:"flex", gap:6, marginBottom:6}}>
+                    <select value={editOcc} onChange={e => setEditOcc(e.target.value)}
+                      style={{...s.select, flex:1, fontSize:11, padding:"4px 6px"}}>
+                      {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+                    </select>
+                    <select value={editWx} onChange={e => setEditWx(e.target.value)}
+                      style={{...s.select, flex:1, fontSize:11, padding:"4px 6px"}}>
+                      {WEATHERS.map(w => <option key={w}>{w}</option>)}
+                    </select>
+                  </div>
+                ) : (
+                  <div style={{color:"var(--color-text-muted)", marginBottom:4}}>{it.occasion} · {it.weather}</div>
+                )}
+                {it.vibe_text && (
+                  <div style={{color:"var(--color-text)", marginBottom:8, lineHeight:1.4}}>{it.vibe_text}</div>
+                )}
+                {isEditing ? (
+                  <div style={{display:"flex", gap:6}}>
+                    <button style={{...s.btnPrimary, flex:1, padding:"6px 10px", fontSize:11}}
+                      onClick={() => saveEdit(it)}>Save</button>
+                    <button style={{...s.btnSecondary, flex:1, padding:"6px 10px", fontSize:11}}
+                      onClick={cancelEdit}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{display:"flex", gap:6}}>
+                    <button style={{...s.btnSecondary, flex:1, padding:"6px 10px", fontSize:11}}
+                      onClick={() => startEdit(it)}>Edit</button>
+                    <button style={{...s.btnSecondary, flex:1, padding:"6px 10px", fontSize:11}}
+                      onClick={() => handleDelete(it.id)}>Remove</button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

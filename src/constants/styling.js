@@ -45,6 +45,14 @@ export const OCCASION_SLOTS = {
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories"], keywords: ["evening","cocktail","gown","formal"] },
     promptNote: "WORK: Polished professional — covers everyday office, executive meetings, and interviews. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, or ponte pants. NO evening or cocktail dresses, NO gowns, NO formal-separates. NO casual fabrics, no jeans, no sneakers.",
   },
+  "Work Dinner": {
+    // Hybrid of Work + Dinner: still client-facing polish, but silk/satin and
+    // midi/cocktail dresses become eligible; sneakers, jeans, gowns are out.
+    required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], shoes: ["Heels","Loafers","Boots"], bag: true },
+    optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Coats","Jackets"], belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Gowns","Formal Separates"], keywords: ["gown","formal"] },
+    promptNote: "WORK DINNER: Polished but elevated — covers client dinners, after-work events, evening meetings. Tailored separates or a midi/cocktail dress that still reads professional. Silk and satin welcome. Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO gowns, NO formal-separates.",
+  },
   Casual: {
     required: { top: true, bottom: true, shoes: true },
     optional: { dress: true, layer: true, bag: true, belt: true, accessory: true },

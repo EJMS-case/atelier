@@ -65,16 +65,36 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
+  const [syncError, setSyncError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch plans for the visible month
-  useEffect(() => {
-    const start = startOfMonth(anchor);
-    const end = endOfMonth(anchor);
-    fetchPlansBetween(isoDate(start), isoDate(end)).then(rows => {
+  const refreshPlans = async () => {
+    setRefreshing(true);
+    try {
+      const start = startOfMonth(anchor);
+      const end = endOfMonth(anchor);
+      const rows = await fetchPlansBetween(isoDate(start), isoDate(end));
       const map = {};
       for (const r of rows || []) map[r.date] = r;
       setPlans(map);
-    });
+      setSyncError("");
+    } catch (e) {
+      setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
+    } finally { setRefreshing(false); }
+  };
+
+  // Fetch plans for the visible month, on mount/month-change AND when the
+  // tab regains focus (so cross-device edits show up without a manual reload).
+  useEffect(() => { refreshPlans(); /* eslint-disable-line */ }, [anchor]);
+  useEffect(() => {
+    const onFocus = () => refreshPlans();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
 
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
@@ -88,14 +108,24 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
       source: "saved",
       occasion: log.occasion || null,
     };
-    const saved = await savePlan(plan).catch(() => null);
-    if (saved) setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));
+    try {
+      const saved = await savePlan(plan);
+      setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));
+      setSyncError("");
+    } catch (e) {
+      setSyncError(`Couldn't save the ${iso} plan to the cloud — local only. Tap Refresh to retry, or try again.`);
+    }
     setActiveDay(null);
   }
 
   async function handleClear(iso) {
-    await deletePlan(iso);
-    setPlans(p => { const n = { ...p }; delete n[iso]; return n; });
+    try {
+      await deletePlan(iso);
+      setPlans(p => { const n = { ...p }; delete n[iso]; return n; });
+      setSyncError("");
+    } catch (e) {
+      setSyncError(`Couldn't clear the ${iso} plan — try again.`);
+    }
     setActiveDay(null);
   }
 
@@ -103,11 +133,23 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
 
   return (
     <div style={{ padding: "16px 16px 120px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <button onClick={() => setAnchor(a => addMonths(a, -1))} style={iconButtonStyle}>‹</button>
         <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink, letterSpacing: "0.02em" }}>{monthLabel}</div>
         <button onClick={() => setAnchor(a => addMonths(a, 1))} style={iconButtonStyle}>›</button>
       </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <button onClick={refreshPlans} disabled={refreshing}
+          style={{ background: "none", border: "none", fontSize: 11, color: PALETTE.muted, cursor: refreshing ? "default" : "pointer", letterSpacing: "0.06em" }}>
+          {refreshing ? "Refreshing…" : "⟳ Refresh"}
+        </button>
+      </div>
+      {syncError && (
+        <div style={{ background: "#FBE9E7", border: `1px solid ${PALETTE.accent}`, color: PALETTE.accent, padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 11, lineHeight: 1.5 }}>
+          {syncError}
+          <button onClick={refreshPlans} style={{ marginLeft: 8, background: "none", border: "none", color: PALETTE.accent, textDecoration: "underline", cursor: "pointer", fontSize: 11 }}>Refresh</button>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
         {WEEK_HEADER.map((h, i) => (

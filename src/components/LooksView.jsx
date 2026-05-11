@@ -12,6 +12,8 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
   const [deleteId,  setDeleteId]  = useState(null);
   const [dateById,  setDateById]  = useState({});
   const [showBuilder, setShowBuilder] = useState(false);
+  // Look currently being edited (null = building a new one).
+  const [editingLook, setEditingLook] = useState(null);
 
   const loadLogs = () => {
     sb.fetchOutfitLogs()
@@ -40,6 +42,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
       <SilhouetteBuilder
         items={items}
         apiKey={apiKey}
+        initialLook={editingLook}
         onSave={async (log) => {
           const saved = await onSaveLook(log);
           setLoading(true);
@@ -48,7 +51,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
         }}
         onFavoriteLook={onFavoriteLook}
         onSchedule={onSchedule}
-        onClose={() => setShowBuilder(false)}
+        onClose={() => { setShowBuilder(false); setEditingLook(null); }}
       />
     );
   }
@@ -100,7 +103,10 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
                     <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
                   </div>
                 ) : (
-                  <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button style={s.histDeleteBtn} onClick={() => { setEditingLook(log); setShowBuilder(true); }}>Edit</button>
+                    <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
+                  </div>
                 )}
               </>
             }

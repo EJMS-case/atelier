@@ -19,6 +19,30 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
   const [confirm, setConfirm] = useState(false);
   const [bgState, setBgState] = useState("idle"); // idle | running | success | error
   const [bgError, setBgError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // Async save wrapper. Awaits the parent's onSave (which returns {ok,error}),
+  // shows a clear error if it failed, and only signals "done" on success so
+  // the parent can navigate away. Without this, the previous fire-and-forget
+  // save would lose changes whenever the network blipped.
+  const handleSave = async () => {
+    if (!form.name.trim() || saving) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const result = await onSave(form);
+      if (result && result.ok === false) {
+        setSaveError(result.error || "Couldn't save. Try again.");
+        setSaving(false);
+        return;
+      }
+      // onSave is responsible for navigating away on success.
+    } catch (e) {
+      setSaveError(e.message || "Couldn't save. Try again.");
+      setSaving(false);
+    }
+  };
 
   const handleImage = (e) => {
     const file = e.target.files[0];
@@ -222,10 +246,19 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
         )}
       </div>
 
-      <button style={{...s.btnPrimary,width:"100%",marginBottom:10}}
-        onClick={() => onSave(form)} disabled={!form.name.trim()}>
-        Save Changes
+      <button style={{...s.btnPrimary,width:"100%",marginBottom:saveError ? 6 : 10, opacity: saving ? 0.6 : 1}}
+        onClick={handleSave} disabled={!form.name.trim() || saving}>
+        {saving ? "Saving…" : "Save Changes"}
       </button>
+      {saveError && (
+        <div style={{fontSize:12, color:"var(--color-danger)", marginBottom:10, lineHeight:1.4}}>
+          {saveError}
+          <button onClick={handleSave} disabled={saving}
+            style={{marginLeft:8, background:"none", border:"none", color:"var(--color-danger)", textDecoration:"underline", cursor:"pointer", fontSize:12}}>
+            Retry
+          </button>
+        </div>
+      )}
       <button style={{...s.btnSecondary,width:"100%",color:confirm?"var(--color-danger)":"var(--color-text-muted)"}}
         onClick={() => confirm ? onDelete() : setConfirm(true)}>
         {confirm ? "Tap again to confirm delete" : "Delete Item"}

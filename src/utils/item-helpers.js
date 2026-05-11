@@ -171,11 +171,22 @@ export function mergeItems(sbItems, localItems) {
   localItems.forEach(it => { localMap[it.id] = it; });
   const sbMap = {};
   sbItems.forEach(it => { sbMap[it.id] = it; });
-  const merged = sbItems.map(it => ({
-    ...it,
-    image: localMap[it.id]?.image || it.image || null,
-    pending_sync: false,
-  }));
+  // If a local item has `pending_sync: true` AND its server twin exists, the
+  // user edited it locally but the upsert hasn't succeeded yet. We MUST keep
+  // the local field values — previously this branch spread Supabase fields
+  // on top of local, silently wiping edits made just before a refresh.
+  // The reloadFromSupabase code path retries the upsert for these rows.
+  const merged = sbItems.map(it => {
+    const local = localMap[it.id];
+    if (local?.pending_sync) {
+      return { ...it, ...local };
+    }
+    return {
+      ...it,
+      image: local?.image || it.image || null,
+      pending_sync: false,
+    };
+  });
   localItems.forEach(it => {
     if (!sbMap[it.id] && it.pending_sync) merged.push(it);
   });

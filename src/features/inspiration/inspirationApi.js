@@ -31,6 +31,14 @@ export async function deleteInspiration(id) {
   return sb.removeInspiration(id);
 }
 
+// Patch occasion / weather / vibe_text on an existing inspo row. The full
+// row is passed through to sb.upsertInspiration so merge-duplicates updates
+// the existing id rather than inserting a new one.
+export async function updateInspiration(row) {
+  if (!row?.id) throw new Error("updateInspiration requires the row's id");
+  return sb.upsertInspiration(row);
+}
+
 // Filter helper used by the stylist. Returns inspo vibes that match the
 // active occasion + weather combo. Weather "Any" / falsy means match every
 // weather; same for occasion.
