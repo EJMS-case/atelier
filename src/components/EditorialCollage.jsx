@@ -1,4 +1,5 @@
 import { s } from "../ui/styles.js";
+import TrimmedImage from "./TrimmedImage.jsx";
 
 // Build layout positions based on item categories
 function buildCollageLayout(items) {
@@ -173,7 +174,11 @@ export default function EditorialCollage({ lookItems, onItemClick }) {
             cursor: onItemClick ? "pointer" : "default",
           }}>
           {slot.image ? (
-            <img src={slot.image} alt={slot.name}
+            // TrimmedImage crops the transparent border first, so the piece
+            // fills the slot tightly instead of floating in empty space. Big
+            // visual win for Style Me looks where the slot is small and the
+            // PNG's transparent halo would otherwise dominate.
+            <TrimmedImage src={slot.image} alt={slot.name}
               style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>

@@ -122,6 +122,10 @@ export default function App() {
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
   const [manualBuilderOpen, setManualBuilderOpen] = useState(false);
+  // When the user taps Edit on a planner day, we open the SilhouetteBuilder
+  // pre-populated with that plan. Schedule mode + the original date are
+  // pre-selected so hitting Save updates the same pin in place.
+  const [editingPlan, setEditingPlan] = useState(null); // { iso, plan }
   const [feedbackScores, setFeedbackScores] = useState({});    // F2 — aggregate item scores
   const [recentlyWornItems, setRecentlyWornItems] = useState([]); // F2 — item IDs worn in last 3 days
   const [apiKey,     setApiKey]     = useState(() => loadApiKey());
@@ -1132,6 +1136,18 @@ export default function App() {
         <SilhouetteBuilder
           items={items}
           apiKey={apiKey}
+          initialLook={editingPlan ? {
+            // Synthetic "log shape" so SilhouetteBuilder's initialSelections
+            // distribution picks the right slots. We carry the plan's
+            // occasion/weather (multi-tag arrays preferred) onto the new save.
+            garment_ids: editingPlan.plan?.items || [],
+            occasion:    editingPlan.plan?.occasion,
+            weather:     editingPlan.plan?.weather,
+            occasions:   editingPlan.plan?.occasions,
+            weathers:    editingPlan.plan?.weathers,
+          } : null}
+          initialSaveMode={editingPlan ? "schedule" : "looks"}
+          initialScheduleDate={editingPlan?.iso || null}
           onSave={async (log) => {
             const result = await sb.saveOutfitLog(log);
             if (log.date_worn) {
@@ -1145,7 +1161,7 @@ export default function App() {
             setFavorites(prev => [...(Array.isArray(result) ? result : [result]), ...prev]);
           }}
           onSchedule={async (plan) => { await savePlan(plan); }}
-          onClose={() => setManualBuilderOpen(false)}
+          onClose={() => { setManualBuilderOpen(false); setEditingPlan(null); }}
         />
       )}
 
@@ -1243,7 +1259,16 @@ export default function App() {
             <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
-          <PlannerWrapper items={items} onGoToStyleMe={() => setView("style")} onEditItem={(item) => { setEditItem(item); setView("edit"); }}/>
+          <PlannerWrapper
+            items={items}
+            onGoToStyleMe={() => setView("style")}
+            onEditItem={(item) => { setEditItem(item); setView("edit"); }}
+            onEditPlan={(iso, plan) => {
+              setEditingPlan({ iso, plan });
+              setManualBuilderOpen(true);
+              setView("style");
+            }}
+          />
         </div>
       )}
 

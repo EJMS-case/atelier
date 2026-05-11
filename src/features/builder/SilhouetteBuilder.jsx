@@ -10,48 +10,9 @@ import { sendBuilderMessage } from "./builderChat.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
+import TrimmedImage from "../../components/TrimmedImage.jsx";
 
 const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
-
-// Render an item photo with its transparent border trimmed away. The first
-// time the source loads, we sample its alpha channel for a bounding box;
-// subsequent renders draw straight from the cached crop. CORS-tainted images
-// (rare — most Supabase Storage URLs work) fall back to a plain <img>.
-function TrimmedImage({ src, alt, style, onLoad }) {
-  const canvasRef = useRef(null);
-  const fallbackRef = useRef(null);
-  const [tainted, setTainted] = useState(false);
-  useEffect(() => {
-    if (!src) return;
-    let cancelled = false;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      if (cancelled) return;
-      const bbox = getAlphaBbox(img);
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      if (!bbox) {
-        // Already tight (or opaque JPEG) — paint the whole image.
-        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-        canvas.getContext("2d").drawImage(img, 0, 0);
-      } else {
-        canvas.width = bbox.w; canvas.height = bbox.h;
-        canvas.getContext("2d").drawImage(img, bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
-      }
-      onLoad?.({ naturalWidth: bbox?.w || img.naturalWidth, naturalHeight: bbox?.h || img.naturalHeight });
-    };
-    // Treat CORS errors as "render the plain <img> as a fallback so the
-    // user at least sees the piece, even if it's not tight-cropped."
-    img.onerror = () => { if (!cancelled) setTainted(true); };
-    img.src = src;
-    return () => { cancelled = true; };
-  }, [src, onLoad]);
-  if (tainted) {
-    return <img ref={fallbackRef} src={src} alt={alt} style={style} onLoad={onLoad}/>;
-  }
-  return <canvas ref={canvasRef} aria-label={alt} style={style}/>;
-}
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -95,7 +56,22 @@ const DEFAULT_POSITIONS = {
   accessory: { x: 68, y: 14, w:  28, h: 16 },
 };
 
-export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSchedule, onClose, apiKey, initialLook = null }) {
+export default function SilhouetteBuilder({
+  items,
+  onSave,
+  onFavoriteLook,
+  onSchedule,
+  onClose,
+  apiKey,
+  initialLook = null,
+  // When the builder is opened to edit an existing planner pin we want the
+  // save flow defaulted to "Schedule" + that day's date so the user can edit
+  // pieces and just hit Save to update the pin. Optional — only set by the
+  // Planner edit affordance; everywhere else falls back to the prior
+  // "looks" default.
+  initialSaveMode = "looks",
+  initialScheduleDate = null,
+}) {
   // Pre-populate selections / name / occasion when editing an existing log.
   // We distribute the log's garment_ids back into slots by matching each
   // item's category against the slot's `match` predicate, in slot order. An
@@ -122,7 +98,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [selections, setSelections] = useState(initialSelections);
   const [activeSlot, setActiveSlot] = useState(SLOTS[0].key);
   const [name, setName] = useState(initialLook?.notes || "");
-  const [saveMode, setSaveMode] = useState("looks"); // "looks" | "favorite" | "schedule"
+  const [saveMode, setSaveMode] = useState(initialSaveMode); // "looks" | "favorite" | "schedule"
   // Multi-tag arrays. Read from the new plural fields first; fall back to
   // wrapping the legacy singleton when editing an older saved look.
   const [occasions, setOccasions] = useState(() => {
@@ -130,7 +106,7 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     return arr.length ? arr : ["Work"];
   });
   const [weathers, setWeathers] = useState(() => tagsFor(initialLook, "weathers", "weather"));
-  const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [scheduleDate, setScheduleDate] = useState(() => initialScheduleDate || new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
   const [saveErr, setSaveErr] = useState("");
