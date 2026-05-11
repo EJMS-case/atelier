@@ -204,6 +204,29 @@ export const sb = {
     } catch { /* fallback to localStorage only */ }
   },
 
+  // ── Style Fingerprint (one row per user, key='style_fingerprint') ──
+  // Stored as JSON: { text, source_count, generated_at }. Lives in
+  // user_settings (which already exists) to avoid a separate migration.
+  async getStyleFingerprint() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
+        headers: SB_HEADERS,
+      });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+    } catch { return null; }
+  },
+  async saveStyleFingerprint(fp) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "style_fingerprint", value: JSON.stringify(fp) }),
+      });
+    } catch { /* swallow — non-fatal, regenerate on demand */ }
+  },
+
   // ── Inspiration images ──
   // Style references the AI uses ONLY as a vibe guide (see prompt wiring).
   // The image bytes live in the same `wardrobe-images` bucket under an

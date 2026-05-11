@@ -136,10 +136,15 @@ export default function App() {
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
   const [inspirations, setInspirations] = useState([]);
-  // Lazy-load inspirations on first render. They live in their own table and
-  // never block the closet boot — failures here shouldn't break Style Me.
+  // { text, source_count, generated_at } | null — loaded from user_settings
+  // and refreshed via the Settings → Update Style Fingerprint button.
+  const [styleFingerprint, setStyleFingerprint] = useState(null);
+  // Lazy-load inspirations + fingerprint on first render. They live in their
+  // own table/key and never block the closet boot — failures here shouldn't
+  // break Style Me.
   useEffect(() => {
     listInspirations().then(setInspirations).catch(() => setInspirations([]));
+    sb.getStyleFingerprint().then(setStyleFingerprint).catch(() => setStyleFingerprint(null));
   }, []);
   // ── Sets metadata ──
   const [setsMeta,       setSetsMeta]       = useState(() => loadSetsMeta());
@@ -528,7 +533,11 @@ export default function App() {
       const inspirationVibes = vibesFor(inspirations, occasion, [...weather][0] || "")
         .map(r => r.vibe_text)
         .filter(Boolean);
-      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes });
+      // Personal style patterns (soft bias). Falls back to empty string when
+      // the fingerprint hasn't been generated yet — the prompt block is
+      // skipped entirely in that case.
+      const fingerprintText = styleFingerprint?.text || "";
+      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText });
       const looks = result?.looks;
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
         throw new Error("AI returned no looks — try again.");
@@ -1367,6 +1376,8 @@ export default function App() {
           }}
           onAddItems={addItems}
           onForceSync={forceSyncAll}
+          styleFingerprint={styleFingerprint}
+          setStyleFingerprint={setStyleFingerprint}
           onBack={() => setView("closet")}/>
       )}
       </Suspense>

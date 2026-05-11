@@ -82,6 +82,7 @@ export function buildStylingPrompt({
   moodPrompt = "",
   requestedShortIds = [],
   inspirationVibes = [],
+  styleFingerprint = "",
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
@@ -107,6 +108,14 @@ export function buildStylingPrompt({
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
+
+  // Personal patterns observed across her ENTIRE worn + planned outfit
+  // history. These are SOFT preferences — bias only, never hard rule. The
+  // prompt explicitly tells the AI not to error or refuse if a generation
+  // departs from a pattern; the closet, occasion, and weather still rule.
+  const fingerprintBlock = (styleFingerprint && styleFingerprint.trim().length > 0)
+    ? `\n👤 PERSONAL PATTERNS — soft preferences from her actual worn + planned outfit history (use as gentle bias, NOT hard rule):\n${styleFingerprint.trim()}\n\nHonor these patterns when they fit naturally; depart freely when the closet, occasion, or weather call for something different. NEVER error or refuse a look just because it departs from a pattern — the patterns describe taste, not constraints.\n`
+    : "";
 
   // Inspiration vibe notes — TEXT-ONLY style direction tied to this occasion +
   // weather. These are NOT inventory. The block hard-asserts that twice:
@@ -138,7 +147,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}
+${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}
 ${stylePrefsBlock}${recentBlock}
 ${availabilityNote}
 ${directionsBlock}

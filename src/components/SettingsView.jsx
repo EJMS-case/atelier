@@ -5,8 +5,10 @@ import { sb, SUPABASE_URL } from "../lib/supabase.js";
 import { compressImage, imageToBase64, removeBackground, detectTransparency } from "../utils/images.js";
 import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../utils/storage.js";
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
+import { generateStyleFingerprint } from "../features/stylist/styleFingerprint.js";
+import { fetchAllPlans } from "../features/planner/plannerApi.js";
 
-export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync }) {
+export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, styleFingerprint, setStyleFingerprint }) {
   const [key,          setKey]          = useState(apiKey);
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
@@ -29,6 +31,25 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const [detectRunning, setDetectRunning] = useState(false);
   const [detectProgress, setDetectProgress] = useState({ done: 0, total: 0, found: 0 });
   const detectStop = useRef(false);
+
+  // ── Style Fingerprint
+  const [fpRunning, setFpRunning] = useState(false);
+  const [fpError,   setFpError]   = useState("");
+  const handleRefreshFingerprint = async () => {
+    if (!apiKey) { setFpError("Add your Anthropic API key above first."); return; }
+    setFpRunning(true); setFpError("");
+    try {
+      const [logs, plans] = await Promise.all([
+        sb.fetchOutfitLogs().catch(() => []),
+        fetchAllPlans().catch(() => []),
+      ]);
+      const fp = await generateStyleFingerprint({ items, logs, plans, apiKey });
+      await sb.saveStyleFingerprint(fp);
+      setStyleFingerprint?.(fp);
+    } catch (e) {
+      setFpError(e.message || "Couldn't generate fingerprint.");
+    } finally { setFpRunning(false); }
+  };
 
   // ── Recover Lost Items state
   const [recoverOpen,    setRecoverOpen]    = useState(false);
@@ -284,6 +305,50 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
             {label}
           </label>
         ))}
+      </div>
+
+      {/* Style Fingerprint — Claude-summarized observations from her ENTIRE
+          worn + planned outfit history. Read by Style Me as a soft bias. */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>✦ Style Fingerprint</div>
+        <p style={s.settingsSub}>
+          A short summary of patterns Claude has observed across every outfit you've worn or planned. Read by Style Me as a soft bias — never as a hard rule. Refresh after you've added new looks to keep it current.
+        </p>
+        {styleFingerprint?.text && (
+          <div style={{
+            background: "var(--color-bg)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 6,
+            padding: 12,
+            fontSize: 12,
+            color: "var(--color-text)",
+            lineHeight: 1.55,
+            whiteSpace: "pre-wrap",
+            marginBottom: 10,
+          }}>
+            {styleFingerprint.text}
+          </div>
+        )}
+        {styleFingerprint?.generated_at && (
+          <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
+            Last updated {new Date(styleFingerprint.generated_at).toLocaleDateString()}
+            {styleFingerprint.source_count ? ` · ${styleFingerprint.source_count} outfit${styleFingerprint.source_count === 1 ? "" : "s"}` : ""}
+          </div>
+        )}
+        <button style={{...s.btnPrimary, width:"100%"}}
+          onClick={handleRefreshFingerprint}
+          disabled={fpRunning || !apiKey}>
+          {fpRunning
+            ? "Reading your history…"
+            : !apiKey
+              ? "Add Anthropic key above first"
+              : styleFingerprint
+                ? "Refresh Fingerprint"
+                : "Generate Fingerprint"}
+        </button>
+        {fpError && (
+          <div style={{ fontSize: 11, color: "var(--color-danger)", marginTop: 6 }}>{fpError}</div>
+        )}
       </div>
 
       {/* About Me */}
