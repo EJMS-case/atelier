@@ -2,8 +2,10 @@ import { useState } from "react";
 import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 import { costPerWear } from "../features/wear/wearApi.js";
+import { stripBackground } from "../lib/bgRemoval.js";
+import { imageToBase64 } from "../utils/images.js";
 
-export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp }) {
+export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -11,16 +13,70 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     material: item.material || "",
     pattern: item.pattern || "",
     price_paid: item.price_paid || "",
+    has_bg: item.has_bg,
   });
   const [preview, setPreview] = useState(item.image || null);
   const [confirm, setConfirm] = useState(false);
+  const [bgState, setBgState] = useState("idle"); // idle | running | success | error
+  const [bgError, setBgError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // Async save wrapper. Awaits the parent's onSave (which returns {ok,error}),
+  // shows a clear error if it failed, and only signals "done" on success so
+  // the parent can navigate away. Without this, the previous fire-and-forget
+  // save would lose changes whenever the network blipped.
+  const handleSave = async () => {
+    if (!form.name.trim() || saving) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const result = await onSave(form);
+      if (result && result.ok === false) {
+        setSaveError(result.error || "Couldn't save. Try again.");
+        setSaving(false);
+        return;
+      }
+      // onSave is responsible for navigating away on success.
+    } catch (e) {
+      setSaveError(e.message || "Couldn't save. Try again.");
+      setSaving(false);
+    }
+  };
 
   const handleImage = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => { setPreview(ev.target.result); setForm(f=>({...f,image:ev.target.result})); };
+    reader.onload = ev => {
+      setPreview(ev.target.result);
+      setForm(f=>({...f,image:ev.target.result, has_bg: undefined}));
+      setBgState("idle"); setBgError("");
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleStripBackground = async () => {
+    if (!preview) return;
+    setBgState("running"); setBgError("");
+    try {
+      const base64 = await imageToBase64(preview);
+      const result = await stripBackground(base64, { rmbgKey });
+      if (result.has_bg) {
+        // Both Remove.bg (or missing key) and the imgly fallback gave up.
+        setBgState("error");
+        setBgError(rmbgKey
+          ? "Background removal failed — Remove.bg returned an error and the local fallback isn't available. Try a clearer photo or check your API credit balance."
+          : "Add a Remove.bg API key in Settings to strip backgrounds (or upload a photo that's already transparent).");
+        return;
+      }
+      setPreview(result.image);
+      setForm(f => ({...f, image: result.image, has_bg: false}));
+      setBgState("success");
+    } catch (e) {
+      setBgState("error");
+      setBgError(e.message || "Background removal failed.");
+    }
   };
 
   return (
@@ -30,12 +86,39 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
         <h2 style={s.pageTitle}>Edit Item</h2>
       </div>
 
-      <label style={{...s.dropZone, marginBottom:20}}>
+      <label style={{...s.dropZone, marginBottom:10}}>
         {preview
           ? <img src={preview} alt="preview" style={{width:"100%",height:240,objectFit:"contain",display:"block",background:"#EEEAE4"}}/>
           : <div style={s.dropInner}><div style={s.dropIcon}>✦</div><div style={s.dropSub}>Tap to change photo</div></div>}
         <input type="file" accept="image/*" onChange={handleImage} style={{display:"none"}}/>
       </label>
+
+      {/* Per-item background removal — works against the current preview, so
+          users can clean up legacy uploads without going through Settings. */}
+      {preview && (
+        <div style={{marginBottom:20}}>
+          <button
+            style={{...s.btnSecondary, width:"100%"}}
+            onClick={handleStripBackground}
+            disabled={bgState === "running" || form.has_bg === false}>
+            {bgState === "running"
+              ? "Removing background…"
+              : form.has_bg === false
+                ? "✓ Background already removed"
+                : "Remove Background"}
+          </button>
+          {bgState === "success" && (
+            <div style={{fontSize:11, color:"var(--color-success)", marginTop:6}}>
+              ✓ Background removed. Tap Save Changes to keep it.
+            </div>
+          )}
+          {bgState === "error" && (
+            <div style={{fontSize:11, color:"var(--color-danger)", marginTop:6}}>
+              {bgError}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
         {[
@@ -163,10 +246,19 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
         )}
       </div>
 
-      <button style={{...s.btnPrimary,width:"100%",marginBottom:10}}
-        onClick={() => onSave(form)} disabled={!form.name.trim()}>
-        Save Changes
+      <button style={{...s.btnPrimary,width:"100%",marginBottom:saveError ? 6 : 10, opacity: saving ? 0.6 : 1}}
+        onClick={handleSave} disabled={!form.name.trim() || saving}>
+        {saving ? "Saving…" : "Save Changes"}
       </button>
+      {saveError && (
+        <div style={{fontSize:12, color:"var(--color-danger)", marginBottom:10, lineHeight:1.4}}>
+          {saveError}
+          <button onClick={handleSave} disabled={saving}
+            style={{marginLeft:8, background:"none", border:"none", color:"var(--color-danger)", textDecoration:"underline", cursor:"pointer", fontSize:12}}>
+            Retry
+          </button>
+        </div>
+      )}
       <button style={{...s.btnSecondary,width:"100%",color:confirm?"var(--color-danger)":"var(--color-text-muted)"}}
         onClick={() => confirm ? onDelete() : setConfirm(true)}>
         {confirm ? "Tap again to confirm delete" : "Delete Item"}

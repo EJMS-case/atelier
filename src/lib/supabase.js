@@ -204,6 +204,77 @@ export const sb = {
     } catch { /* fallback to localStorage only */ }
   },
 
+  // ── Style Fingerprint (one row per user, key='style_fingerprint') ──
+  // Stored as JSON: { text, source_count, generated_at }. Lives in
+  // user_settings (which already exists) to avoid a separate migration.
+  async getStyleFingerprint() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
+        headers: SB_HEADERS,
+      });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+    } catch { return null; }
+  },
+  async saveStyleFingerprint(fp) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "style_fingerprint", value: JSON.stringify(fp) }),
+      });
+    } catch { /* swallow — non-fatal, regenerate on demand */ }
+  },
+
+  // ── Inspiration images ──
+  // Style references the AI uses ONLY as a vibe guide (see prompt wiring).
+  // The image bytes live in the same `wardrobe-images` bucket under an
+  // `inspiration/` prefix so we don't need a second bucket. The vibe_text is
+  // written once on upload by the auto-summarizer.
+  async fetchInspirations() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/inspiration_images?select=*&order=created_at.desc`, {
+        headers: SB_HEADERS,
+      });
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
+  },
+  async upsertInspiration(row) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/inspiration_images`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(row),
+    });
+    if (!res.ok) throw new Error(`Upsert inspiration failed: ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data[0] : data;
+  },
+  async removeInspiration(id) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/inspiration_images?id=eq.${id}`, {
+      method: "DELETE",
+      headers: SB_HEADERS,
+    });
+    if (!res.ok) throw new Error("Delete inspiration failed");
+  },
+  async uploadInspirationImage(id, base64DataUrl) {
+    const [header, base64] = base64DataUrl.split(",");
+    const mime = header.match(/data:([^;]+)/)?.[1] || "image/jpeg";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: mime });
+    const path = `inspiration/${id}`;
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+      method: "POST",
+      headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
+      body: blob,
+    });
+    if (!res.ok) throw new Error(`Inspiration upload failed: ${res.status}`);
+    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+  },
+
   // ── Sets ──
   async fetchSets() {
     try {

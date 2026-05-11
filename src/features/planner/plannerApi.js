@@ -19,6 +19,17 @@ export async function fetchPlansBetween(startIso, endIso) {
   return res.json().catch(() => []);
 }
 
+/** Fetch every plan in the table — used by the style fingerprint, which
+ *  intentionally summarizes ALL of the user's planned + worn history. */
+export async function fetchAllPlans() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/planned_outfits?select=*&order=date.asc`,
+    { headers: H },
+  );
+  if (!res.ok) return [];
+  return res.json().catch(() => []);
+}
+
 /** Upsert (one plan per date). */
 export async function savePlan(plan) {
   const payload = { ...plan, updated_at: new Date().toISOString() };

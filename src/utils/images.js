@@ -70,3 +70,40 @@ export function buildImgSource(imgStr) {
   if (imgStr.startsWith("data:")) return { type: "base64", data: imgStr };
   return { type: "url", url: imgStr };
 }
+
+// Sample the four corner pixels of an image; if any alpha < 250 we treat it as
+// already transparent. Used to backfill the has_bg flag for legacy items that
+// were uploaded before the flag existed — many of them are PNGs with cut-out
+// backgrounds even though has_bg is null/undefined in Supabase.
+//
+// Returns: true (transparent) | false (opaque) | null (couldn't decide — CORS,
+// 404, or non-image data). Callers should leave has_bg unchanged on null.
+export function detectTransparency(imgUrl) {
+  return new Promise((resolve) => {
+    if (!imgUrl) { resolve(null); return; }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const w = canvas.width = img.width;
+        const h = canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const corners = [
+          ctx.getImageData(0, 0, 1, 1).data,
+          ctx.getImageData(w - 1, 0, 1, 1).data,
+          ctx.getImageData(0, h - 1, 1, 1).data,
+          ctx.getImageData(w - 1, h - 1, 1, 1).data,
+        ];
+        const anyTransparent = corners.some(p => p[3] < 250);
+        resolve(anyTransparent);
+      } catch {
+        // Tainted canvas (CORS) — can't read pixels. Caller leaves flag alone.
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = imgUrl;
+  });
+}

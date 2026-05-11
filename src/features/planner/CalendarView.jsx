@@ -65,37 +65,68 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
+  const [syncError, setSyncError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch plans for the visible month
-  useEffect(() => {
-    const start = startOfMonth(anchor);
-    const end = endOfMonth(anchor);
-    fetchPlansBetween(isoDate(start), isoDate(end)).then(rows => {
+  const refreshPlans = async () => {
+    setRefreshing(true);
+    try {
+      const start = startOfMonth(anchor);
+      const end = endOfMonth(anchor);
+      const rows = await fetchPlansBetween(isoDate(start), isoDate(end));
       const map = {};
       for (const r of rows || []) map[r.date] = r;
       setPlans(map);
-    });
+      setSyncError("");
+    } catch (e) {
+      setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
+    } finally { setRefreshing(false); }
+  };
+
+  // Fetch plans for the visible month, on mount/month-change AND when the
+  // tab regains focus (so cross-device edits show up without a manual reload).
+  useEffect(() => { refreshPlans(); /* eslint-disable-line */ }, [anchor]);
+  useEffect(() => {
+    const onFocus = () => refreshPlans();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
 
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
   const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
-  async function handleAssignSaved(iso, log) {
+  async function handleAssignSaved(iso, log, overrides = {}) {
     const plan = {
       date: iso,
       items: log.garment_ids || [],
       outfit_log_id: log.id,
       source: "saved",
-      occasion: log.occasion || null,
+      occasion: overrides.occasion || log.occasion || null,
+      weather:  overrides.weather  || log.weather  || null,
     };
-    const saved = await savePlan(plan).catch(() => null);
-    if (saved) setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));
+    try {
+      const saved = await savePlan(plan);
+      setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));
+      setSyncError("");
+    } catch (e) {
+      setSyncError(`Couldn't save the ${iso} plan to the cloud — local only. Tap Refresh to retry, or try again.`);
+    }
     setActiveDay(null);
   }
 
   async function handleClear(iso) {
-    await deletePlan(iso);
-    setPlans(p => { const n = { ...p }; delete n[iso]; return n; });
+    try {
+      await deletePlan(iso);
+      setPlans(p => { const n = { ...p }; delete n[iso]; return n; });
+      setSyncError("");
+    } catch (e) {
+      setSyncError(`Couldn't clear the ${iso} plan — try again.`);
+    }
     setActiveDay(null);
   }
 
@@ -103,11 +134,23 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
 
   return (
     <div style={{ padding: "16px 16px 120px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <button onClick={() => setAnchor(a => addMonths(a, -1))} style={iconButtonStyle}>‹</button>
         <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink, letterSpacing: "0.02em" }}>{monthLabel}</div>
         <button onClick={() => setAnchor(a => addMonths(a, 1))} style={iconButtonStyle}>›</button>
       </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <button onClick={refreshPlans} disabled={refreshing}
+          style={{ background: "none", border: "none", fontSize: 11, color: PALETTE.muted, cursor: refreshing ? "default" : "pointer", letterSpacing: "0.06em" }}>
+          {refreshing ? "Refreshing…" : "⟳ Refresh"}
+        </button>
+      </div>
+      {syncError && (
+        <div style={{ background: "#FBE9E7", border: `1px solid ${PALETTE.accent}`, color: PALETTE.accent, padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 11, lineHeight: 1.5 }}>
+          {syncError}
+          <button onClick={refreshPlans} style={{ marginLeft: 8, background: "none", border: "none", color: PALETTE.accent, textDecoration: "underline", cursor: "pointer", fontSize: 11 }}>Refresh</button>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
         {WEEK_HEADER.map((h, i) => (
@@ -139,7 +182,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, flex: 1, marginTop: 2 }}>
                   {planItems.map(it => (
                     <div key={it.id} style={{ background: PALETTE.cream, overflow: "hidden", borderRadius: 2 }}>
-                      {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                      {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                     </div>
                   ))}
                 </div>
@@ -161,7 +204,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
           items={items}
           outfitLogs={outfitLogs}
           onClose={() => setActiveDay(null)}
-          onPickSaved={(log) => handleAssignSaved(activeDay, log)}
+          onPickSaved={(log, overrides) => handleAssignSaved(activeDay, log, overrides)}
           onGoToStyleMe={() => { setActiveDay(null); onGoToStyleMe?.(); }}
           onClear={() => handleClear(activeDay)}
           onEditItem={onEditItem ? (it) => { setActiveDay(null); onEditItem(it); } : undefined}
@@ -195,6 +238,10 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
 // ── Day Assignment Modal ─────────────────────────────────────────────────────
 function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToStyleMe, onClear, onEditItem }) {
   const [tab, setTab] = useState("saved");
+  // Optional weather for this assignment — falls back to the saved log's
+  // weather if not chosen. Lets the user pin "this brunch look but for a
+  // colder day" without editing the underlying saved look.
+  const [pickedWeather, setPickedWeather] = useState(plan?.weather || "");
   const dateLabel = new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   const planItems = plan?.items
     ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
@@ -219,7 +266,7 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
                 <div key={it.id}
                   onClick={onEditItem ? () => onEditItem(it) : undefined}
                   style={{ width: 56, height: 56, background: "#fff", borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}`, cursor: onEditItem ? "pointer" : "default" }}>
-                  {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                  {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                 </div>
               ))}
             </div>
@@ -227,12 +274,22 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <button onClick={() => setTab("saved")}
             style={{ ...tabBtn, ...(tab === "saved" ? tabActive : {}) }}>From saved looks</button>
           <button onClick={() => setTab("generate")}
             style={{ ...tabBtn, ...(tab === "generate" ? tabActive : {}) }}>Generate new</button>
         </div>
+        {tab === "saved" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 10, letterSpacing: "0.14em", color: PALETTE.muted }}>WEATHER</span>
+            <select value={pickedWeather} onChange={e => setPickedWeather(e.target.value)}
+              style={{ flex: 1, padding: "6px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, background: "#fff", fontSize: 12 }}>
+              <option value="">Any / unspecified</option>
+              {["Hot","Warm","Mild","Cool","Cold"].map(w => <option key={w}>{w}</option>)}
+            </select>
+          </div>
+        )}
 
         {tab === "saved" && (
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
@@ -242,12 +299,12 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
             {(outfitLogs || []).map(log => {
               const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean).slice(0, 4);
               return (
-                <button key={log.id} onClick={() => onPickSaved(log)}
+                <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather })}
                   style={{ display: "flex", gap: 10, width: "100%", padding: 10, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, marginBottom: 8, cursor: "pointer", alignItems: "center", textAlign: "left" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, width: 56, height: 56, flexShrink: 0 }}>
                     {logItems.map(it => (
                       <div key={it.id} style={{ background: PALETTE.cream, overflow: "hidden", borderRadius: 2 }}>
-                        {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                       </div>
                     ))}
                   </div>
@@ -361,7 +418,7 @@ function TripModal({ items, onClose, onAssign }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 12, maxHeight: 240, overflowY: "auto" }}>
               {estimate.packingList.map(it => (
                 <div key={it.id} style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
-                  {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                  {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                 </div>
               ))}
             </div>

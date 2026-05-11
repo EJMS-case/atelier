@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { buildStylingPrompt } from "./prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory } from "./utils/closet-sampler.js";
 import { generateValidatedLooks, ValidationError } from "./utils/styling-validator.js";
@@ -35,20 +35,37 @@ import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import {
   generateOutfit, classifyKnitAI, analyzeColorAI,
 } from "./lib/ai/stylist.js";
-import SettingsView from "./components/SettingsView.jsx";
-import StyleInsightsView from "./components/StyleInsightsView.jsx";
-import ShoppingView from "./components/ShoppingView.jsx";
-import SavedView from "./components/SavedView.jsx";
-import PlannerWrapper from "./components/PlannerWrapper.jsx";
-import ColorAdvisorView from "./components/ColorAdvisorView.jsx";
+// Inline imports — these render on the default Home/Closet view and would
+// trigger a Suspense flash on first paint if lazy.
 import FilterBar from "./components/FilterBar.jsx";
 import SetCard from "./components/SetCard.jsx";
-import SetEditModal from "./components/SetEditModal.jsx";
 import ItemCard from "./components/ItemCard.jsx";
-import BulkAddView from "./components/BulkAddView.jsx";
-import EditItemView from "./components/EditItemView.jsx";
 import LookCard from "./components/LookCard.jsx";
-import SilhouetteBuilder from "./features/builder/SilhouetteBuilder.jsx";
+
+// Code-split everything else. Each chunk only ships when the matching view
+// (or modal) is actually opened — shaves ~150kB off the initial bundle and
+// keeps the closet/home cold-start fast.
+const SettingsView      = lazy(() => import("./components/SettingsView.jsx"));
+const StyleInsightsView = lazy(() => import("./components/StyleInsightsView.jsx"));
+const ShoppingView      = lazy(() => import("./components/ShoppingView.jsx"));
+const SavedView         = lazy(() => import("./components/SavedView.jsx"));
+const PlannerWrapper    = lazy(() => import("./components/PlannerWrapper.jsx"));
+const ColorAdvisorView  = lazy(() => import("./components/ColorAdvisorView.jsx"));
+const SetEditModal      = lazy(() => import("./components/SetEditModal.jsx"));
+const BulkAddView       = lazy(() => import("./components/BulkAddView.jsx"));
+const EditItemView      = lazy(() => import("./components/EditItemView.jsx"));
+const SilhouetteBuilder = lazy(() => import("./features/builder/SilhouetteBuilder.jsx"));
+const InspirationView   = lazy(() => import("./features/inspiration/InspirationView.jsx"));
+
+import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
+
+// Minimal placeholder while a lazy chunk loads. Reuses the existing spinner
+// styles so the visual register matches the rest of the app.
+const RouteFallback = () => (
+  <div style={{ padding: "40px 16px", display: "flex", justifyContent: "center" }}>
+    <span style={s.spinner}/>
+  </div>
+);
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
@@ -118,6 +135,17 @@ export default function App() {
   const [editItem,   setEditItem]   = useState(null);
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
+  const [inspirations, setInspirations] = useState([]);
+  // { text, source_count, generated_at } | null — loaded from user_settings
+  // and refreshed via the Settings → Update Style Fingerprint button.
+  const [styleFingerprint, setStyleFingerprint] = useState(null);
+  // Lazy-load inspirations + fingerprint on first render. They live in their
+  // own table/key and never block the closet boot — failures here shouldn't
+  // break Style Me.
+  useEffect(() => {
+    listInspirations().then(setInspirations).catch(() => setInspirations([]));
+    sb.getStyleFingerprint().then(setStyleFingerprint).catch(() => setStyleFingerprint(null));
+  }, []);
   // ── Sets metadata ──
   const [setsMeta,       setSetsMeta]       = useState(() => loadSetsMeta());
   const [setsSearch,     setSetsSearch]     = useState("");
@@ -164,13 +192,25 @@ export default function App() {
         setItems(merged);
         saveLocalItems(merged);
 
-        // Push up only the local-only items still flagged pending_sync.
+        // Push up local-only NEW items still flagged pending_sync.
         // Without this filter, an aggressive "sync everything local" would
         // re-create items that another device legitimately deleted.
         const sbIds = new Set(sbItems.map(it => it.id));
         const pendingLocalOnly = freshLocal.filter(it => !sbIds.has(it.id) && it.pending_sync);
         if (pendingLocalOnly.length > 0) {
           migrateAndSync(pendingLocalOnly, setItems, flashSync);
+        }
+        // Push up EDITED items still flagged pending_sync — these exist on
+        // Supabase, but their latest edit never reached the server (network
+        // blip, tab closed mid-save). The merged copy already has the local
+        // values; retry the upsert here so other devices see them.
+        const pendingEdits = merged.filter(it => sbIds.has(it.id) && it.pending_sync);
+        for (const it of pendingEdits) {
+          sb.upsert(it).then(() => {
+            const cleared = loadLocalItems().map(x => x.id === it.id ? { ...x, pending_sync: false } : x);
+            saveLocalItems(cleared);
+            setItems(prev => prev.map(x => x.id === it.id ? { ...x, pending_sync: false } : x));
+          }).catch(err => console.warn("[Atelier] Retry edit-sync failed for", it.id, err));
         }
 
         // Migrate any base64 images in the merged set to Storage
@@ -338,6 +378,10 @@ export default function App() {
     }
   }, [items]);
 
+  // Returns { ok, error, imageUploadFailed }. Callers can choose to await and
+  // surface failure to the user (the EditItemView keeps the form open on
+  // failure so unsynced edits aren't lost). Edits are tagged pending_sync so
+  // mergeItems retains the local copy across reloads until the upsert lands.
   const updateItem = useCallback(async (id, fields) => {
     let resolvedFields = { ...fields };
     let imageUploadFailed = false;
@@ -350,21 +394,29 @@ export default function App() {
         imageUploadFailed = true;
       }
     }
-    const updated = items.map(it => it.id === id ? {...it, ...resolvedFields} : it);
-    persistItems(updated);
+    // Tag as pending so a refresh mid-sync doesn't wipe the change.
+    const pendingUpdate = items.map(it => it.id === id ? {...it, ...resolvedFields, pending_sync: true} : it);
+    persistItems(pendingUpdate);
     flashSync("syncing");
     try {
-      const item = updated.find(it => it.id === id);
+      const item = pendingUpdate.find(it => it.id === id);
       await sb.upsert(item);
+      // Clear the flag now that Supabase has the change.
+      const cleared = pendingUpdate.map(it => it.id === id ? {...it, pending_sync: false} : it);
+      persistItems(cleared);
       if (imageUploadFailed) {
         flashSync("error");
         alert("⚠️ Your changes were saved, but the photo failed to upload. The photo is stored locally — try editing the item again or use Settings → Force Sync.");
-      } else {
-        flashSync("synced");
+        return { ok: false, error: "Photo upload failed (text changes saved).", imageUploadFailed: true };
       }
+      flashSync("synced");
+      return { ok: true };
     } catch(e) {
       console.error("Failed to update item in Supabase:", e);
       flashSync("error");
+      // Leave pending_sync: true on the local row so mergeItems + the
+      // reloadFromSupabase retry path can recover it on the next reload.
+      return { ok: false, error: e.message || "Couldn't save to cloud — your edit is kept locally and will retry on next reload." };
     }
   }, [items, persistItems]);
 
@@ -475,7 +527,17 @@ export default function App() {
           setStyling("partial"); // switch from full-page spinner to subtle banner
         }
       };
-      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook });
+      // Pull inspiration vibe notes tagged to the active occasion + weather.
+      // We only send the vibe TEXT (not images, not items) — keeps generation
+      // cheap and prevents the AI from substituting inspo pieces for closet pieces.
+      const inspirationVibes = vibesFor(inspirations, occasion, [...weather][0] || "")
+        .map(r => r.vibe_text)
+        .filter(Boolean);
+      // Personal style patterns (soft bias). Falls back to empty string when
+      // the fingerprint hasn't been generated yet — the prompt block is
+      // skipped entirely in that case.
+      const fingerprintText = styleFingerprint?.text || "";
+      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText });
       const looks = result?.looks;
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
         throw new Error("AI returned no looks — try again.");
@@ -792,7 +854,7 @@ export default function App() {
             )}
           </div>
           <nav style={s.nav}>
-            {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
+            {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"],["inspiration","Inspo"]].map(([v,label]) => (
               <button key={v} onClick={() => {
                 setView(v);
                 // Clicking the Style Me nav always opens the generator
@@ -822,6 +884,7 @@ export default function App() {
         </div>
       </header>
 
+      <Suspense fallback={<RouteFallback/>}>
       {/* ── CLOSET ── */}
       {view === "home" && (
         <div style={s.page}>
@@ -1044,13 +1107,27 @@ export default function App() {
         <BulkAddView onAdd={addItems} onBack={() => setView("closet")} rmbgKey={rmbgKey} apiKey={apiKey}/>
       )}
 
+      {/* ── INSPIRATION ── */}
+      {view === "inspiration" && (
+        <InspirationView
+          apiKey={apiKey}
+          items={inspirations}
+          setItems={setInspirations}
+          onBack={() => setView("home")}/>
+      )}
+
       {/* ── EDIT ── */}
       {view === "edit" && editItem && (
         <EditItemView
           item={editItem}
           allItems={items}
           setsMeta={setsMeta}
-          onSave={(fields) => { updateItem(editItem.id, fields); setView("closet"); }}
+          rmbgKey={rmbgKey}
+          onSave={async (fields) => {
+            const result = await updateItem(editItem.id, fields);
+            if (result?.ok) setView("closet");
+            return result;
+          }}
           onDelete={() => { deleteItem(editItem.id); setView("closet"); }}
           onBack={() => setView("closet")}/>
       )}
@@ -1243,6 +1320,13 @@ export default function App() {
             flashSync("synced");
           }}
           onSaveLook={async (log) => {
+            // Update path — SilhouetteBuilder set editing_log_id when the
+            // user opened an existing saved look via the Edit affordance.
+            if (log.editing_log_id) {
+              const { editing_log_id, ...patch } = log;
+              const result = await sb.updateOutfitLog(editing_log_id, patch);
+              return Array.isArray(result) ? result[0] : result;
+            }
             const result = await sb.saveOutfitLog(log);
             // F6 — if the save included date_worn, bump counts too
             if (log.date_worn) {
@@ -1292,8 +1376,11 @@ export default function App() {
           }}
           onAddItems={addItems}
           onForceSync={forceSyncAll}
+          styleFingerprint={styleFingerprint}
+          setStyleFingerprint={setStyleFingerprint}
           onBack={() => setView("closet")}/>
       )}
+      </Suspense>
     </div>
   );
 }

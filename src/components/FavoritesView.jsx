@@ -64,7 +64,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
               {favPieces.map(item => (
                 <div key={item.id} style={s.card}>
                   <div style={s.cardImg} onClick={() => onEditItem(item)}>
-                    {item.image ? <img src={item.image} alt={item.name} style={s.cardPhoto}/> : <div style={s.cardPlaceholder}>{item.category?.[0]}</div>}
+                    {item.image ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.cardPhoto}/> : <div style={s.cardPlaceholder}>{item.category?.[0]}</div>}
                   </div>
                   <div style={s.cardBody}>
                     <div style={s.cardCat}>{item.category}</div>

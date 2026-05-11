@@ -11,7 +11,7 @@ export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited
     <div style={s.card}>
       <div style={s.cardImg} onClick={onEdit}>
         {item.image
-          ? <img src={item.image} alt={item.name} style={s.cardPhoto}/>
+          ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.cardPhoto}/>
           : <div style={s.cardPlaceholder}>{item.category?.[0] || "?"}</div>}
         {isPartOfSet && (
           <button style={s.setBadge}
