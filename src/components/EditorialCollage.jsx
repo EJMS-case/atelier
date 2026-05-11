@@ -144,16 +144,40 @@ function buildCollageLayout(items) {
   return slots.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
 }
 
+// Build slots from a user-saved layout snapshot (positions + z) instead of the
+// auto-layout engine. Items present in lookItems but missing from the layout
+// are appended via auto-layout so a partially-saved arrangement still renders
+// every piece.
+function buildFromLayout(items, layout) {
+  const byId = new Map(layout.map(e => [e.id, e]));
+  const positioned = [];
+  const missing = [];
+  for (const it of items) {
+    const entry = byId.get(it.id);
+    if (entry && typeof entry.x === "number") {
+      positioned.push({ ...it, x: entry.x, y: entry.y, w: entry.w, h: entry.h, rotate: 0, zIndex: entry.z ?? 5 });
+    } else {
+      missing.push(it);
+    }
+  }
+  if (missing.length > 0) {
+    positioned.push(...buildCollageLayout(missing));
+  }
+  return positioned.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
+}
+
 // Positions pieces as floating, slightly overlapping items on a clean background
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
-export default function EditorialCollage({ lookItems, onItemClick, canvasStyle }) {
+export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride }) {
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
-  // Assign editorial positions based on category and count
-  // Each slot: { item, x, y, w, h, rotate, zIndex }
-  const slots = buildCollageLayout(sorted);
+  // Assign editorial positions: user-saved layout if present, otherwise the
+  // category-based auto-layout.
+  const slots = Array.isArray(layoutOverride) && layoutOverride.length > 0
+    ? buildFromLayout(sorted, layoutOverride)
+    : buildCollageLayout(sorted);
 
   return (
     <div style={{ ...s.collageCanvas, ...canvasStyle }}>

@@ -48,7 +48,7 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
         </div>
       </div>
 
-      <EditorialCollage lookItems={lookItems} onItemClick={item => setDetailItem(item)}/>
+      <EditorialCollage lookItems={lookItems} layoutOverride={look.layout_data} onItemClick={item => setDetailItem(item)}/>
 
       {/* Item detail sheet */}
       {detailItem && (
