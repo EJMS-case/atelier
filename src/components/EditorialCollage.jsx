@@ -65,57 +65,55 @@ function buildCollageLayout(items) {
   // chunky near-square slot. With objectFit:contain a square slot renders the
   // belt at a readable ~12-14% of canvas regardless of source aspect ratio,
   // which is what reads as an accessory instead of a dot.
+  // Slots overlap their neighbours by a few percent on purpose — drop-shadow
+  // and zIndex stacking read it as editorial layering rather than a tiled grid.
   if (hasDress) {
     // ── DRESS-BASED LAYOUT ──
     if (hasLayer) {
-      // Dress + Layer — both tall, side by side
-      place("layer",  { x:1,  y:1,  w:42, h:64 });
-      place("dress",  { x:46, y:1,  w:50, h:72 });
-      if (hasBelt) place("belt", { x:36, y:74, w:24, h:14 });
-      if (hasShoes) place("shoes", { x:1, y:74, w:32, h:24 });
-      if (hasBag) place("bag", { x:64, y:74, w:32, h:24 });
+      // Dress + Layer — both tall, side by side, layer crosses onto dress edge
+      place("layer",  { x:1,  y:1,  w:46, h:64 });
+      place("dress",  { x:42, y:1,  w:54, h:72 });
+      if (hasBelt) place("belt", { x:36, y:70, w:26, h:15 });
+      if (hasShoes) place("shoes", { x:1, y:72, w:34, h:26 });
+      if (hasBag) place("bag", { x:62, y:72, w:34, h:26 });
     } else if (hasTop) {
-      // Dress + Top — dress dominant, top smaller on left
-      place("top",    { x:1,  y:1,  w:40, h:46 });
-      place("dress",  { x:44, y:1,  w:52, h:72 });
-      if (hasBelt) place("belt", { x:4,  y:50, w:24, h:14 });
-      if (hasShoes) place("shoes", { x:30, y:74, w:32, h:24 });
-      if (hasBag) place("bag", { x:64, y:74, w:32, h:24 });
+      // Dress + Top — dress dominant, top smaller on left, slight overlap
+      place("top",    { x:1,  y:1,  w:44, h:48 });
+      place("dress",  { x:40, y:1,  w:56, h:72 });
+      if (hasBelt) place("belt", { x:4,  y:48, w:26, h:15 });
+      if (hasShoes) place("shoes", { x:28, y:72, w:34, h:26 });
+      if (hasBag) place("bag", { x:62, y:72, w:34, h:26 });
     } else {
       // Dress only
-      place("dress",  { x:22, y:1,  w:52, h:72 });
-      if (hasBelt) place("belt", { x:34, y:74, w:24, h:14 });
-      if (hasShoes) place("shoes", { x:1, y:74, w:30, h:22 });
-      if (hasBag) place("bag", { x:68, y:74, w:30, h:22 });
+      place("dress",  { x:22, y:1,  w:54, h:74 });
+      if (hasBelt) place("belt", { x:34, y:72, w:26, h:15 });
+      if (hasShoes) place("shoes", { x:1, y:72, w:32, h:24 });
+      if (hasBag) place("bag", { x:66, y:72, w:32, h:24 });
     }
   } else {
     // ── SEPARATES-BASED LAYOUT (top + bottom) ──
     if (hasLayer && hasTop) {
-      // Layer + Top + Bottom — layer dominant on left, top + bottom stack right
-      place("layer",  { x:1,  y:1,  w:44, h:66 });
-      place("top",    { x:48, y:1,  w:48, h:32 });
-      place("bottom", { x:48, y:36, w:44, h:38 });
-      if (hasBelt) place("belt", { x:1,  y:70, w:22, h:14 });
-      if (hasShoes) place("shoes", { x:24, y:76, w:30, h:22 });
-      if (hasBag) place("bag", { x:70, y:76, w:28, h:22 });
+      // Layer + Top + Bottom — layer crosses onto the right column slightly
+      place("layer",  { x:1,  y:1,  w:48, h:66 });
+      place("top",    { x:44, y:1,  w:52, h:34 });
+      place("bottom", { x:44, y:32, w:48, h:42 });
+      if (hasBelt) place("belt", { x:1,  y:68, w:24, h:15 });
+      if (hasShoes) place("shoes", { x:22, y:74, w:32, h:24 });
+      if (hasBag) place("bag", { x:68, y:74, w:30, h:24 });
     } else if (hasLayer) {
       // Layer + Bottom (no separate top — layer IS the top).
-      // Give layer a tall hero slot; bottom sits compact on the right so
-      // a long coat doesn't get dwarfed by a wide skirt rendering.
-      place("layer",  { x:1,  y:1,  w:48, h:72 });
-      place("bottom", { x:54, y:1,  w:42, h:48 });
-      if (hasBelt) place("belt", { x:54, y:52, w:22, h:14 });
-      if (hasBag) place("bag", { x:1,  y:76, w:30, h:22 });
-      if (hasShoes) place("shoes", { x:64, y:76, w:32, h:22 });
+      place("layer",  { x:1,  y:1,  w:52, h:72 });
+      place("bottom", { x:48, y:1,  w:48, h:50 });
+      if (hasBelt) place("belt", { x:54, y:50, w:24, h:15 });
+      if (hasBag) place("bag", { x:1,  y:74, w:32, h:24 });
+      if (hasShoes) place("shoes", { x:62, y:74, w:34, h:24 });
     } else {
-      // Top + Bottom (no layer). Bottom is taller — pants/long skirts are
-      // mostly portrait, so a tall slot keeps them visually similar in scale
-      // to the top instead of looking stubby next to a wide blouse.
-      place("top",    { x:18, y:1,  w:46, h:42 });
-      if (hasBelt) place("belt", { x:68, y:30, w:22, h:14 });
-      place("bottom", { x:1,  y:46, w:48, h:52 });
-      if (hasBag) place("bag", { x:54, y:48, w:28, h:26 });
-      if (hasShoes) place("shoes", { x:54, y:76, w:28, h:22 });
+      // Top + Bottom (no layer). Bottom overlaps top by a few % vertically.
+      place("top",    { x:18, y:1,  w:48, h:44 });
+      if (hasBelt) place("belt", { x:66, y:28, w:24, h:15 });
+      place("bottom", { x:1,  y:42, w:50, h:54 });
+      if (hasBag) place("bag", { x:52, y:46, w:30, h:28 });
+      if (hasShoes) place("shoes", { x:52, y:74, w:30, h:24 });
     }
   }
 
@@ -148,7 +146,7 @@ function buildCollageLayout(items) {
 
 // Positions pieces as floating, slightly overlapping items on a clean background
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
-export default function EditorialCollage({ lookItems, onItemClick }) {
+export default function EditorialCollage({ lookItems, onItemClick, canvasStyle }) {
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
@@ -158,7 +156,7 @@ export default function EditorialCollage({ lookItems, onItemClick }) {
   const slots = buildCollageLayout(sorted);
 
   return (
-    <div style={s.collageCanvas}>
+    <div style={{ ...s.collageCanvas, ...canvasStyle }}>
       {slots.map((slot, i) => (
         <div key={slot.id || i}
           onClick={onItemClick ? () => onItemClick(slot) : undefined}

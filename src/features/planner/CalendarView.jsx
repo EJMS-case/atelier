@@ -8,6 +8,7 @@ import { buildPackingList } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast } from "../../lib/weather.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
+import EditorialCollage from "../../components/EditorialCollage.jsx";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 const PALETTE = {
@@ -184,7 +185,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
           const inMonth = d.getMonth() === anchor.getMonth();
           const plan = plans[iso];
           const planItems = plan?.items
-            ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean).slice(0, 4)
+            ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
             : [];
           const isToday = iso === todayIso;
           return (
@@ -197,14 +198,12 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
                 borderWidth: isToday ? 2 : 1,
                 boxShadow: plan ? `inset 0 0 0 2px ${PALETTE.accent}20` : "none",
               }}>
-              <div style={{ fontWeight: isToday ? 600 : 400, color: isToday ? PALETTE.ink : PALETTE.soft }}>{d.getDate()}</div>
+              <div style={{ fontWeight: isToday ? 600 : 400, color: isToday ? PALETTE.ink : PALETTE.soft, position: "relative", zIndex: 2 }}>{d.getDate()}</div>
               {planItems.length > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, flex: 1, marginTop: 2 }}>
-                  {planItems.map(it => (
-                    <div key={it.id} style={{ background: PALETTE.cream, overflow: "hidden", borderRadius: 2 }}>
-                      {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
-                    </div>
-                  ))}
+                <div style={{ position: "relative", flex: 1, marginTop: 2 }}>
+                  <EditorialCollage
+                    lookItems={planItems}
+                    canvasStyle={{ position: "absolute", inset: 0, width: "100%", height: "100%", paddingBottom: 0 }}/>
                 </div>
               )}
             </button>
@@ -305,15 +304,9 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>
               {isPast ? "WHAT YOU WORE" : isToday ? "TODAY'S LOOK" : "PLANNED LOOK"}
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {planItems.map(it => (
-                <div key={it.id}
-                  onClick={onEditItem ? () => onEditItem(it) : undefined}
-                  style={{ width: 56, height: 56, background: "#fff", borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}`, cursor: onEditItem ? "pointer" : "default" }}>
-                  {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
-                </div>
-              ))}
-            </div>
+            <EditorialCollage
+              lookItems={planItems}
+              onItemClick={onEditItem ? (it) => onEditItem(it) : undefined}/>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               {onEditPlan && (
                 <button onClick={onEditPlan} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
