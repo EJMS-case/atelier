@@ -3,7 +3,7 @@ import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
-import { imageToBase64 } from "../utils/images.js";
+import { imageToBase64, trimTransparentBorders } from "../utils/images.js";
 
 export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey }) {
   const [form, setForm] = useState({
@@ -70,8 +70,11 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           : "Add a Remove.bg API key in Settings to strip backgrounds (or upload a photo that's already transparent).");
         return;
       }
-      setPreview(result.image);
-      setForm(f => ({...f, image: result.image, has_bg: false}));
+      // Trim transparent border so the saved photo is tight to the visible
+      // piece. The bg removal almost always leaves padding around the item.
+      const trimmed = await trimTransparentBorders(result.image);
+      setPreview(trimmed);
+      setForm(f => ({...f, image: trimmed, has_bg: false}));
       setBgState("success");
     } catch (e) {
       setBgState("error");

@@ -8,6 +8,50 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
+import { getAlphaBbox } from "../../utils/images.js";
+import { asArray, tagsFor } from "../../lib/multitag.js";
+
+const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
+
+// Render an item photo with its transparent border trimmed away. The first
+// time the source loads, we sample its alpha channel for a bounding box;
+// subsequent renders draw straight from the cached crop. CORS-tainted images
+// (rare — most Supabase Storage URLs work) fall back to a plain <img>.
+function TrimmedImage({ src, alt, style, onLoad }) {
+  const canvasRef = useRef(null);
+  const fallbackRef = useRef(null);
+  const [tainted, setTainted] = useState(false);
+  useEffect(() => {
+    if (!src) return;
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled) return;
+      const bbox = getAlphaBbox(img);
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      if (!bbox) {
+        // Already tight (or opaque JPEG) — paint the whole image.
+        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+      } else {
+        canvas.width = bbox.w; canvas.height = bbox.h;
+        canvas.getContext("2d").drawImage(img, bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
+      }
+      onLoad?.({ naturalWidth: bbox?.w || img.naturalWidth, naturalHeight: bbox?.h || img.naturalHeight });
+    };
+    // Treat CORS errors as "render the plain <img> as a fallback so the
+    // user at least sees the piece, even if it's not tight-cropped."
+    img.onerror = () => { if (!cancelled) setTainted(true); };
+    img.src = src;
+    return () => { cancelled = true; };
+  }, [src, onLoad]);
+  if (tainted) {
+    return <img ref={fallbackRef} src={src} alt={alt} style={style} onLoad={onLoad}/>;
+  }
+  return <canvas ref={canvasRef} aria-label={alt} style={style}/>;
+}
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -79,8 +123,13 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
   const [activeSlot, setActiveSlot] = useState(SLOTS[0].key);
   const [name, setName] = useState(initialLook?.notes || "");
   const [saveMode, setSaveMode] = useState("looks"); // "looks" | "favorite" | "schedule"
-  const [occasion, setOccasion] = useState(initialLook?.occasion || "Work");
-  const [weather, setWeather] = useState(initialLook?.weather || "");
+  // Multi-tag arrays. Read from the new plural fields first; fall back to
+  // wrapping the legacy singleton when editing an older saved look.
+  const [occasions, setOccasions] = useState(() => {
+    const arr = tagsFor(initialLook, "occasions", "occasion");
+    return arr.length ? arr : ["Work"];
+  });
+  const [weathers, setWeathers] = useState(() => tagsFor(initialLook, "weathers", "weather"));
   const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
@@ -244,10 +293,17 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = () => {
-          const scale = Math.min(zone.w / img.width, zone.h / img.height);
-          const w = img.width * scale;
-          const h = img.height * scale;
-          ctx.drawImage(img, zone.x + (zone.w - w) / 2, zone.y + (zone.h - h) / 2, w, h);
+          // Trim transparent padding before scaling — without this the zone
+          // shows a piece centered inside surrounding empty space.
+          const bbox = getAlphaBbox(img);
+          const srcX = bbox?.x ?? 0;
+          const srcY = bbox?.y ?? 0;
+          const srcW = bbox?.w ?? img.width;
+          const srcH = bbox?.h ?? img.height;
+          const scale = Math.min(zone.w / srcW, zone.h / srcH);
+          const w = srcW * scale;
+          const h = srcH * scale;
+          ctx.drawImage(img, srcX, srcY, srcW, srcH, zone.x + (zone.w - w) / 2, zone.y + (zone.h - h) / 2, w, h);
           resolve();
         };
         img.onerror = () => resolve();
@@ -274,14 +330,23 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
     try {
       const garmentIds = pickedItems.map(p => p.item.id);
 
+      const occList = asArray(occasions);
+      const wxList  = asArray(weathers);
+      const primaryOccasion = occList[0] || "Work";
+      const primaryWeather  = wxList[0]  || null;
+
       if (saveMode === "schedule") {
         if (!onSchedule) throw new Error("Scheduling unavailable.");
         await onSchedule({
           date: scheduleDate,
           items: garmentIds,
           source: "manual",
-          occasion,
-          weather: weather || null,
+          // Write both shapes — plurals are the new source of truth, singletons
+          // keep legacy readers (older app builds, raw SQL queries) working.
+          occasion: primaryOccasion,
+          weather:  primaryWeather,
+          occasions: occList,
+          weathers:  wxList,
           notes: name || null,
         });
         setSaved(`Scheduled for ${scheduleDate}`);
@@ -293,8 +358,10 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
       const log = {
         garment_ids: garmentIds,
         date_worn: initialLook?.date_worn || null,
-        occasion,
-        weather: weather || null,
+        occasion: primaryOccasion,
+        weather:  primaryWeather,
+        occasions: occList,
+        weathers:  wxList,
         notes: name || null,
         collage_url: collageUrl,
         // When set, the parent's onSave updates the existing log instead of
@@ -427,10 +494,10 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
               onPointerUp={() => setDragState(null)}
             >
               {item.image && (
-                <img
+                <TrimmedImage
                   src={item.image}
                   alt=""
-                  onLoad={(e) => fitBoxToImage(slot, item.id, e.target.naturalWidth, e.target.naturalHeight)}
+                  onLoad={(meta) => fitBoxToImage(slot, item.id, meta.naturalWidth, meta.naturalHeight)}
                   style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}
                 />
               )}
@@ -630,24 +697,62 @@ export default function SilhouetteBuilder({ items, onSave, onFavoriteLook, onSch
         ))}
       </div>
 
-      {/* Occasion + weather + (when scheduling) date.
-          Weather is tagged on the saved look so it can later filter into the
-          Planner's "From saved looks" picker and the Style Me reference. */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-        <select value={occasion} onChange={e => setOccasion(e.target.value)}
-          style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff" }}>
-          {OCCASIONS.map(o => <option key={o}>{o}</option>)}
-        </select>
-        <select value={weather} onChange={e => setWeather(e.target.value)}
-          style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff" }}>
-          <option value="">Any weather</option>
-          {["Hot","Warm","Mild","Cool","Cold"].map(w => <option key={w}>{w}</option>)}
-        </select>
-        {saveMode === "schedule" && (
-          <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
-            style={{ flex: 1, padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff", fontFamily: "inherit" }}/>
+      {/* Occasion + weather as multi-select chips. Tap to toggle each tag —
+          a saved look can carry multiple occasions and multiple weather
+          buckets so the planner picker + style fingerprint see every
+          context where the outfit applies. */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted, marginBottom: 4 }}>OCCASIONS</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {OCCASIONS.map(o => {
+            const on = occasions.includes(o);
+            return (
+              <button key={o}
+                onClick={() => setOccasions(prev => on ? prev.filter(x => x !== o) : [...prev, o])}
+                style={{
+                  fontSize: 11,
+                  padding: "5px 10px",
+                  borderRadius: 14,
+                  border: `1px solid ${on ? PALETTE.ink : PALETTE.line}`,
+                  background: on ? PALETTE.ink : "transparent",
+                  color: on ? PALETTE.bg : PALETTE.soft,
+                  cursor: "pointer",
+                }}>{o}</button>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted, marginBottom: 4 }}>WEATHER</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {WEATHERS.map(w => {
+            const on = weathers.includes(w);
+            return (
+              <button key={w}
+                onClick={() => setWeathers(prev => on ? prev.filter(x => x !== w) : [...prev, w])}
+                style={{
+                  fontSize: 11,
+                  padding: "5px 10px",
+                  borderRadius: 14,
+                  border: `1px solid ${on ? PALETTE.ink : PALETTE.line}`,
+                  background: on ? PALETTE.ink : "transparent",
+                  color: on ? PALETTE.bg : PALETTE.soft,
+                  cursor: "pointer",
+                }}>{w}</button>
+            );
+          })}
+        </div>
+        {weathers.length === 0 && (
+          <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic" }}>No weather tags — applies to any weather.</div>
         )}
       </div>
+      {saveMode === "schedule" && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted, marginBottom: 4 }}>DATE</div>
+          <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
+            style={{ width: "100%", padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff", fontFamily: "inherit" }}/>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <button onClick={handleEvaluate} disabled={evaluating}

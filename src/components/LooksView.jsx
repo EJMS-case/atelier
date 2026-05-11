@@ -4,6 +4,7 @@ import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
+import { tagsFor, joinTags } from "../lib/multitag.js";
 
 export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem }) {
   const [logs,      setLogs]      = useState([]);
@@ -73,10 +74,13 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
       {!loading && logs.map(log => {
         const meta = parseMeta(log.collage_url);
         const pickedDate = dateById[log.id] || today;
+        const occLabel = joinTags(tagsFor(log, "occasions", "occasion"));
+        const wxLabel  = joinTags(tagsFor(log, "weathers",  "weather"));
         const subtitle = (
           <>
-            {log.occasion && <span>{log.occasion}</span>}
-            {meta.mood && <span style={s.histMood}>{log.occasion ? " · " : ""}{meta.mood}</span>}
+            {occLabel && <span>{occLabel}</span>}
+            {wxLabel && <span style={s.histMood}>{occLabel ? " · " : ""}{wxLabel}</span>}
+            {meta.mood && <span style={s.histMood}>{(occLabel || wxLabel) ? " · " : ""}{meta.mood}</span>}
           </>
         );
         return (
