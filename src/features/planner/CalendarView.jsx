@@ -5,6 +5,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan } from "./plannerApi.js";
 import { buildPackingList } from "./tripPacker.js";
+import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
+import { fetchNycForecast } from "../../lib/weather.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 const PALETTE = {
@@ -67,6 +69,11 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
   const [showTrip, setShowTrip] = useState(false);
   const [syncError, setSyncError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  // NYC daily-high forecast for the next ~16 days, keyed by iso date.
+  // Used to (a) auto-suggest a weather bucket when assigning a plan, and
+  // (b) show today's temp + weather pill at the top of the planner.
+  const [forecast, setForecast] = useState(null);
+  useEffect(() => { fetchNycForecast().then(setForecast); }, []);
 
   const refreshPlans = async () => {
     setRefreshing(true);
@@ -130,10 +137,18 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
     setActiveDay(null);
   }
 
-  const todayIso = isoDate(new Date());
+  const todayIso = nyToday();
 
   return (
     <div style={{ padding: "16px 16px 120px" }}>
+      {/* NYC location + today + forecast pill — anchors the planner to the
+          user's actual locale (rather than the browser's timezone). */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, fontSize: 11, color: PALETTE.muted, letterSpacing: "0.06em" }}>
+        <span>📍 {CITY} · {friendlyDate(todayIso)}</span>
+        {forecast?.[todayIso] && (
+          <span>Today {forecast[todayIso].high}°F · {forecast[todayIso].bucket}</span>
+        )}
+      </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <button onClick={() => setAnchor(a => addMonths(a, -1))} style={iconButtonStyle}>‹</button>
         <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink, letterSpacing: "0.02em" }}>{monthLabel}</div>
@@ -203,6 +218,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
           plan={plans[activeDay]}
           items={items}
           outfitLogs={outfitLogs}
+          forecast={forecast}
           onClose={() => setActiveDay(null)}
           onPickSaved={(log, overrides) => handleAssignSaved(activeDay, log, overrides)}
           onGoToStyleMe={() => { setActiveDay(null); onGoToStyleMe?.(); }}
@@ -236,13 +252,25 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
 }
 
 // ── Day Assignment Modal ─────────────────────────────────────────────────────
-function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToStyleMe, onClear, onEditItem }) {
+function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved, onGoToStyleMe, onClear, onEditItem }) {
+  // Language adapts to past/today/future. Past = "What you wore" (a log, not
+  // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
+  // you can't "plan" a day that's already happened.
+  const part = dayPart(iso);
+  const isFuture  = part === "future";
+  const isPast    = part === "past";
+  const isToday   = part === "today";
+
   const [tab, setTab] = useState("saved");
-  // Optional weather for this assignment — falls back to the saved log's
-  // weather if not chosen. Lets the user pin "this brunch look but for a
-  // colder day" without editing the underlying saved look.
-  const [pickedWeather, setPickedWeather] = useState(plan?.weather || "");
-  const dateLabel = new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  // Auto-suggest a weather bucket from the NYC forecast (for future + today),
+  // falling back to whatever the plan/log already had. The user can still
+  // override via the dropdown.
+  const suggested = forecast?.[iso]?.bucket || "";
+  const [pickedWeather, setPickedWeather] = useState(plan?.weather || suggested);
+
+  const friendly = friendlyDate(iso); // "Today" / "Tomorrow" / weekday-month-day
+  const fullLabel = new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" });
+  const headerEyebrow = isPast ? "WORN" : isToday ? "TODAY" : "PLAN";
   const planItems = plan?.items
     ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
     : [];
@@ -252,15 +280,25 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
       <div style={sheetStyle} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted }}>PLAN</div>
-            <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink }}>{dateLabel}</div>
+            <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted }}>{headerEyebrow}</div>
+            <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink }}>
+              {friendly}
+              {friendly !== fullLabel && <span style={{ fontSize: 12, color: PALETTE.muted, fontWeight: 400 }}> · {fullLabel}</span>}
+            </div>
+            {forecast?.[iso] && (
+              <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 2 }}>
+                {forecast[iso].high}°F / {forecast[iso].low}°F · {forecast[iso].bucket}
+              </div>
+            )}
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 22, cursor: "pointer" }}>×</button>
         </div>
 
         {planItems.length > 0 && (
           <div style={{ marginBottom: 16, padding: 12, background: PALETTE.cream, borderRadius: 6 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>CURRENTLY PLANNED</div>
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>
+              {isPast ? "WHAT YOU WORE" : isToday ? "TODAY'S LOOK" : "PLANNED LOOK"}
+            </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {planItems.map(it => (
                 <div key={it.id}
@@ -270,15 +308,21 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
                 </div>
               ))}
             </div>
-            <button onClick={onClear} style={{ ...btnSecondary, marginTop: 10, fontSize: 11, padding: "6px 12px" }}>Clear this day</button>
+            <button onClick={onClear} style={{ ...btnSecondary, marginTop: 10, fontSize: 11, padding: "6px 12px" }}>
+              {isPast ? "Remove this log" : "Clear this day"}
+            </button>
           </div>
         )}
 
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <button onClick={() => setTab("saved")}
-            style={{ ...tabBtn, ...(tab === "saved" ? tabActive : {}) }}>From saved looks</button>
+            style={{ ...tabBtn, ...(tab === "saved" ? tabActive : {}) }}>
+            {isPast ? "Log a saved look" : "From saved looks"}
+          </button>
           <button onClick={() => setTab("generate")}
-            style={{ ...tabBtn, ...(tab === "generate" ? tabActive : {}) }}>Generate new</button>
+            style={{ ...tabBtn, ...(tab === "generate" ? tabActive : {}) }}>
+            {isPast ? "Log a new outfit" : "Generate new"}
+          </button>
         </div>
         {tab === "saved" && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -288,6 +332,9 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
               <option value="">Any / unspecified</option>
               {["Hot","Warm","Mild","Cool","Cold"].map(w => <option key={w}>{w}</option>)}
             </select>
+            {suggested && pickedWeather === suggested && (
+              <span style={{ fontSize: 10, color: PALETTE.muted }}>NYC forecast</span>
+            )}
           </div>
         )}
 
@@ -324,7 +371,9 @@ function DayModal({ iso, plan, items, outfitLogs, onClose, onPickSaved, onGoToSt
         {tab === "generate" && (
           <div style={{ padding: 16, textAlign: "center" }}>
             <p style={{ fontSize: 12, color: PALETTE.soft, marginBottom: 16 }}>
-              Open Style Me to generate fresh looks, then come back here to pin one to this date.
+              {isPast
+                ? "Open Style Me to build a look, save it, then log it for this past date."
+                : "Open Style Me to generate fresh looks, then come back here to pin one to this date."}
             </p>
             <button onClick={onGoToStyleMe} style={btnPrimary}>✦ Go to Style Me</button>
           </div>
