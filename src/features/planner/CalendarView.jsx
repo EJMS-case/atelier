@@ -63,7 +63,7 @@ const btnSecondary = {
  * @param {Object[]} props.outfitLogs   - saved outfits for the "pick saved" picker
  * @param {() => void} props.onGoToStyleMe
  */
-export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditItem }) {
+export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditItem, onEditPlan }) {
   const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
@@ -229,6 +229,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
           onGoToStyleMe={() => { setActiveDay(null); onGoToStyleMe?.(); }}
           onClear={() => handleClear(activeDay)}
           onEditItem={onEditItem ? (it) => { setActiveDay(null); onEditItem(it); } : undefined}
+          onEditPlan={onEditPlan ? () => { const p = plans[activeDay]; setActiveDay(null); onEditPlan(activeDay, p); } : undefined}
         />
       )}
 
@@ -257,7 +258,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
 }
 
 // ── Day Assignment Modal ─────────────────────────────────────────────────────
-function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved, onGoToStyleMe, onClear, onEditItem }) {
+function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved, onGoToStyleMe, onClear, onEditItem, onEditPlan }) {
   // Language adapts to past/today/future. Past = "What you wore" (a log, not
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
@@ -313,9 +314,16 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
                 </div>
               ))}
             </div>
-            <button onClick={onClear} style={{ ...btnSecondary, marginTop: 10, fontSize: 11, padding: "6px 12px" }}>
-              {isPast ? "Remove this log" : "Clear this day"}
-            </button>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              {onEditPlan && (
+                <button onClick={onEditPlan} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
+                  ✎ Edit
+                </button>
+              )}
+              <button onClick={onClear} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
+                {isPast ? "Remove this log" : "Clear this day"}
+              </button>
+            </div>
           </div>
         )}
 
