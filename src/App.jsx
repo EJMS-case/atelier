@@ -1152,7 +1152,14 @@ export default function App() {
           initialSaveMode={editingPlan ? "schedule" : "looks"}
           initialScheduleDate={editingPlan?.iso || null}
           onSave={async (log) => {
-            const result = await sb.saveOutfitLog(log);
+            // Mirror SavedView's onSave: when SilhouetteBuilder set
+            // editing_log_id (user opened an existing log via the Edit
+            // affordance), PATCH that row rather than INSERTing — and either
+            // way strip editing_log_id, which isn't a real column.
+            const { editing_log_id, ...patch } = log;
+            const result = editing_log_id
+              ? await sb.updateOutfitLog(editing_log_id, patch)
+              : await sb.saveOutfitLog(patch);
             if (log.date_worn) {
               bumpWearCounts(log.garment_ids || []);
               savePlan({ date: log.date_worn, items: log.garment_ids || [], source: "worn", occasion: log.occasion || "Work", notes: null }).catch(() => {});

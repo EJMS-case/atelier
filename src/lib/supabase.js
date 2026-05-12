@@ -109,14 +109,28 @@ export const sb = {
   },
 
   // ── Outfit Logs ──
+  // Mirrors the self-healing pattern in `upsert`: on PGRST204 (unknown
+  // column, e.g. an older Supabase project that hasn't run the latest
+  // migration), strip that column and retry. Saves the caller from having
+  // to know which columns exist on which deploy.
   async saveOutfitLog(log) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(log),
-    });
-    if (!res.ok) throw new Error("Save outfit log failed");
-    return res.json();
+    let payload = { ...log };
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`Save outfit log failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(`Save outfit log failed: ${err.message || res.status}`);
+    }
+    throw new Error("Save outfit log failed after stripping unknown columns");
   },
   async fetchOutfitLogs() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=*&order=date_worn.desc,created_at.desc`, {
@@ -133,13 +147,23 @@ export const sb = {
     if (!res.ok) throw new Error("Delete outfit log failed");
   },
   async updateOutfitLog(id, patch) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) throw new Error("Update outfit log failed");
-    return res.json();
+    let payload = { ...patch };
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`Update outfit log failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(`Update outfit log failed: ${err.message || res.status}`);
+    }
+    throw new Error("Update outfit log failed after stripping unknown columns");
   },
 
   // ── Favorites ──
