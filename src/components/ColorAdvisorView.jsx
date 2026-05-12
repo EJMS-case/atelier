@@ -5,7 +5,7 @@ import { analyzeColorAI } from "../lib/ai/stylist.js";
 import ColorResultCard from "./ColorResultCard.jsx";
 import ShoppingDimensionsCard from "./ShoppingDimensionsCard.jsx";
 
-export default function ColorAdvisorView({ items, apiKey }) {
+export default function ColorAdvisorView({ items, apiKey, onBack }) {
   const [mode, setMode]           = useState("analyze");
   const [uploadImg, setUploadImg] = useState(null);
   const [checking, setChecking]   = useState(false);
@@ -41,7 +41,7 @@ export default function ColorAdvisorView({ items, apiKey }) {
 
   const handleAudit = async () => {
     if (!apiKey) { setErr("Add your Anthropic API key in Settings."); return; }
-    const UNDERTONE_CATEGORIES = ["Tops", "Knits", "Dresses", "Outerwear", "Jumpsuits", "Ocasionwear", "Occasionwear"];
+    const UNDERTONE_CATEGORIES = ["Tops", "Knits", "Dresses", "Outerwear", "Jumpsuits", "Occasionwear"];
     const toAudit = items.filter(it => it.image && UNDERTONE_CATEGORIES.includes(it.category));
     if (!toAudit.length) { setErr("No items with photos found."); return; }
     setAuditRunning(true); setAuditItems([]); setDismissed(new Set());
@@ -70,6 +70,7 @@ export default function ColorAdvisorView({ items, apiKey }) {
   return (
     <div style={s.page}>
       <div style={s.pageHeader}>
+        {onBack && <button style={s.backBtn} onClick={onBack}>← Back</button>}
         <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Color Advisor</h2>
       </div>
 
@@ -105,7 +106,7 @@ export default function ColorAdvisorView({ items, apiKey }) {
           <button style={{...s.btnPrimary, width:"100%", marginBottom:20}}
             onClick={handleAnalyze} disabled={checking || !uploadImg}>
             {checking
-              ? <><span style={s.spinnerSm}/> Analyzing…</>
+              ? <><span style={s.spinnerSmLight}/> Analyzing…</>
               : <><Icon path={icons.sparkle} size={15}/> {mode === "shopping" ? "Check This Piece" : "Analyze Color"}</>}
           </button>
 

@@ -12,7 +12,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable ?? true,
     material: item.material || "",
     pattern: item.pattern || "",
-    price_paid: item.price_paid || "",
+    price_paid: item.price_paid ?? null,
     has_bg: item.has_bg,
   });
   const [preview, setPreview] = useState(item.image || null);
@@ -159,8 +159,8 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           <div style={s.fieldLabel}>Purchase price (USD, optional)</div>
           <input type="number" min="0" step="1" style={{...s.input,width:"100%"}}
             placeholder="e.g. 450"
-            value={form.price_paid}
-            onChange={e => setForm(f => ({...f, price_paid: e.target.value ? Number(e.target.value) : ""}))}/>
+            value={form.price_paid ?? ""}
+            onChange={e => setForm(f => ({...f, price_paid: e.target.value === "" ? null : Number(e.target.value)}))}/>
           {item.wear_count > 0 && costPerWear(item) !== null && (
             <div style={{fontSize:11, color:"var(--color-text)", marginTop:4}}>
               Cost-per-wear so far: <strong>${costPerWear(item).toFixed(2)}</strong> · {item.wear_count} wears

@@ -67,7 +67,7 @@ export default function ShoppingView({ items, apiKey, onBack }) {
 
       {err && <p style={s.err}>{err}</p>}
       <button style={{...s.btnPrimary, width:"100%", marginBottom:20}} onClick={handleAnalyze} disabled={loading}>
-        {loading ? <><span style={s.spinnerSm}/> Analyzing…</> : <><Icon path={icons.sparkle} size={15}/> {mode === "gap" ? "Run Gap Analysis" : `Find Pieces (${selectedIds.length} selected)`}</>}
+        {loading ? <><span style={s.spinnerSmLight}/> Analyzing…</> : <><Icon path={icons.sparkle} size={15}/> {mode === "gap" ? "Run Gap Analysis" : `Find Pieces (${selectedIds.length} selected)`}</>}
       </button>
 
       {results && mode === "gap" && results.gaps && (

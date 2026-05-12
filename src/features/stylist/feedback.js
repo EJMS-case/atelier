@@ -1,68 +1,12 @@
 // ── F2 — LOOK FEEDBACK ───────────────────────────────────────────────────────
-// Thin Supabase REST client for per-look thumbs up/down. Writes straight to
-// the `look_feedback` table added in migration 0002. Reads aggregate
-// per-item scores so the sampler can up/down-weight items that earned signal.
+// Thin re-export over the centralized Supabase client. The actual writes /
+// reads / aggregation live in `sb.saveLookFeedback` and
+// `sb.fetchItemFeedbackScores` so credentials live in exactly one place.
 
-const SUPABASE_URL = "https://ljcwsrfmojbjdveefoqa.supabase.co";
-// Anon key — same public key as used elsewhere in App.jsx.
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dzcmZtb2piamR2ZWVmb3FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0ODM1NDksImV4cCI6MjA5MDA1OTU0OX0.3LLv6JdwOvq_7woz3LUO8wnaoH8lSawiQJqk2Wmk4QE";
-const HEADERS = {
-  "Content-Type": "application/json",
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-};
+import { sb } from "../../lib/supabase.js";
 
-/**
- * Record a thumbs-up / thumbs-down on a generated look.
- * @param {Object} params
- * @param {string}   params.lookHash   - stable hash of (occasion|sorted item IDs)
- * @param {number}   params.rating     - +1 for up, -1 for down
- * @param {string[]} params.itemIds    - item IDs in the look
- * @param {string}   params.occasion
- * @param {string}   [params.mood]
- */
-export async function saveLookFeedback({ lookHash, rating, itemIds, occasion, mood }) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/look_feedback`, {
-    method: "POST",
-    headers: { ...HEADERS, Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify({
-      look_hash: lookHash,
-      rating,
-      item_ids: itemIds,
-      occasion,
-      mood: mood || null,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.message || `feedback save failed ${res.status}`);
-  }
-  return res.json();
-}
-
-/**
- * Fetch aggregate up-vote totals per item id. Returns a map keyed by item id.
- * Down-votes were removed — they were noisy proxies (a single bad pairing
- * tarnished every item in the look). Only ratings > 0 contribute now, so
- * historical thumbs-downs are silently ignored without needing a DB cleanup.
- */
-export async function fetchItemFeedbackScores() {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating&rating=gt.0`,
-    { headers: HEADERS },
-  );
-  if (!res.ok) return {};
-  const rows = await res.json().catch(() => []);
-  const scores = {};
-  for (const row of rows) {
-    const rating = Number(row.rating) || 0;
-    if (rating <= 0) continue;
-    for (const id of row.item_ids || []) {
-      scores[id] = (scores[id] || 0) + rating;
-    }
-  }
-  return scores;
-}
+export const saveLookFeedback = sb.saveLookFeedback.bind(sb);
+export const fetchItemFeedbackScores = sb.fetchItemFeedbackScores.bind(sb);
 
 /**
  * Deterministic hash so identical looks collapse. Not crypto — just a quick

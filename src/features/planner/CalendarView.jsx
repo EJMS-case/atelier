@@ -96,12 +96,17 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
   // tab regains focus (so cross-device edits show up without a manual reload).
   useEffect(() => { refreshPlans(); /* eslint-disable-line */ }, [anchor]);
   useEffect(() => {
-    const onFocus = () => refreshPlans();
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onFocus);
+    // Only refresh when the tab becomes visible / focused — don't fire on
+    // the visibilitychange that signals the tab going *hidden* (previously
+    // we re-fetched in both directions, doubling the request count).
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshPlans();
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);

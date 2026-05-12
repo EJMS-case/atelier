@@ -1,7 +1,7 @@
 // ── ITEM HELPERS ─────────────────────────────────────────────────────────────
 // Weather filter, sort comparators, sleeve classifier, taxonomy migration.
 
-import { TAXONOMY, SUBCATEGORY_L3 } from "../constants/taxonomy.js";
+import { TAXONOMY, SUBCATEGORY_L3, BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
 import { COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT } from "../constants/color.js";
 
 // ── SLEEVE CLASSIFICATION ───────────────────────────────────────────────────
@@ -88,12 +88,14 @@ export function colorSortIdx(item) {
   if (COLOR_SORT_ORDER[cf] !== undefined) return COLOR_SORT_ORDER[cf];
   const c = (item.color || "").toLowerCase();
   if (!c) return 50;
+  // Single pass: prefer exact match, fall back to substring match.
+  let substr = -1;
   for (const [key, idx] of Object.entries(COLOR_SORT_ORDER)) {
-    if (c === key.toLowerCase()) return idx;
+    const k = key.toLowerCase();
+    if (c === k) return idx;
+    if (substr === -1 && c.includes(k)) substr = idx;
   }
-  for (const [key, idx] of Object.entries(COLOR_SORT_ORDER)) {
-    if (c.includes(key.toLowerCase())) return idx;
-  }
+  if (substr !== -1) return substr;
   if (/black/i.test(c)) return 0;
   if (/charcoal|grey|gray/i.test(c)) return 1;
   if (/navy|midnight/i.test(c)) return 2;
@@ -137,11 +139,10 @@ export function defaultSortComparator(a, b) {
 // Keeps legacy Accessories items migrating into their new taxonomy buckets
 // on every load so old rows don't re-surface as Accessories bags/belts.
 export function normalizeItem(item) {
-  const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
-  if (item.category === "Accessories" && BAG_SUBS.has(item.subcategory)) {
+  if (item.category === "Accessories" && BAG_SUBCATEGORIES.has(item.subcategory)) {
     return { ...item, category: "Bags", subcategory: item.subcategory === "Bags" ? "" : item.subcategory };
   }
-  if (item.category === "Accessories" && /\b(bag|purse|tote|clutch|handbag|crossbody)\b/i.test(item.name) && !item.subcategory) {
+  if (item.category === "Accessories" && BAG_NAME_RE.test(item.name || "") && !item.subcategory) {
     return { ...item, category: "Bags" };
   }
   if (item.category === "Accessories" && (item.subcategory === "Belts" || /\bbelt\b/i.test(item.name))) {

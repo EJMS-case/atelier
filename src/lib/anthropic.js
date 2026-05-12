@@ -4,28 +4,16 @@
 
 import { invokeTool } from "./ai/toolUse.js";
 import { AutoDetectSchema, AutoDetectTool } from "./ai/schemas.js";
+import { TAXONOMY } from "../constants/taxonomy.js";
 
 // ── F1: AUTO-DETECT CLOTHING ITEM FROM PHOTO ─────────────────────────────────
 // Returns a structured object matching the wardrobe_items schema. The caller
 // decides whether to apply each field (never clobber manual user edits).
 
-const AUTODETECT_TAXONOMY = {
-  Tops:         ["Blouses","Bodysuits","Shirts","Tops","Light Knit Tops","T-Shirts","Tanks","Polos"],
-  Knits:        ["Cardigans","Pullovers"],
-  Bottoms:      ["Pants","Skirts","Shorts"],
-  Dresses:      ["Maxi","Midi","Mini","Sweater Dress"],
-  Sets:         ["Day Sets","Night Sets"],
-  Jumpsuits:    [],
-  Loungewear:   ["Bottoms","Hoodies / Sweatshirts","Tops"],
-  Athleisure:   ["Bra/Crop Top","Dresses","Long Sleeve","Pants","Short Sleeve","Shorts","Skirts"],
-  Swim:         ["Swimsuits","Cover-Ups"],
-  Outerwear:    ["Blazers","Coats","Jackets"],
-  Occasionwear: ["Cocktail Dresses","Evening Accessories","Formal Separates","Gowns"],
-  Shoes:        ["Boots","Flats","Heels","Loafers","Sandals"],
-  Bags:         ["Clutch","Crossbody","Shoulder","Tote"],
-  Belts:        [],
-  Accessories:  ["Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
-};
+// Pin the taxonomy the AI is allowed to choose from to the single source of
+// truth in constants/taxonomy.js — previously this was a hand-copied clone
+// that silently drifted whenever the canonical taxonomy was edited.
+const AUTODETECT_TAXONOMY = TAXONOMY;
 
 const DETECT_PROMPT = `You are a wardrobe-cataloging assistant for a private client. Look at the single clothing item in the attached photo and describe it using the record_clothing_item tool.
 

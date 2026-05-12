@@ -1,12 +1,10 @@
 import { s } from "../ui/styles.js";
+import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
 import TrimmedImage from "./TrimmedImage.jsx";
 
 // Build layout positions based on item categories
 function buildCollageLayout(items) {
   const all = items;
-
-  const BAG_SUBS = new Set(["Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette"]);
-  const BAG_RE   = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette)\b/i;
 
   const getRole = (item) => {
     const cat  = item.category    || "";
@@ -19,7 +17,7 @@ function buildCollageLayout(items) {
     if (cat === "Dresses" || cat === "Jumpsuits" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
     if (cat === "Bags") return "bag";
     if (cat === "Belts") return "belt";
-    if (cat === "Accessories" && (BAG_SUBS.has(sub) || BAG_RE.test(name))) return "bag";
+    if (cat === "Accessories" && (BAG_SUBCATEGORIES.has(sub) || BAG_NAME_RE.test(name))) return "bag";
     if (cat === "Accessories" && /\bbelt\b/i.test(name)) return "belt";
     if (cat === "Accessories") return "accessory";
     return "top";

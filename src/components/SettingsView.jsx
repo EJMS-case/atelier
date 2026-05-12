@@ -2,13 +2,14 @@ import { useState, useRef } from "react";
 import { s } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import { sb, SUPABASE_URL } from "../lib/supabase.js";
-import { compressImage, imageToBase64, removeBackground, detectTransparency } from "../utils/images.js";
+import { compressImage, imageToBase64, detectTransparency } from "../utils/images.js";
+import { stripBackground } from "../lib/bgRemoval.js";
 import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../utils/storage.js";
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { generateStyleFingerprint } from "../features/stylist/styleFingerprint.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 
-export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, styleFingerprint, setStyleFingerprint }) {
+export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, styleFingerprint, setStyleFingerprint, onNavigate }) {
   const [key,          setKey]          = useState(apiKey);
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
@@ -185,8 +186,9 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
       const item = toProcess[i];
       try {
         const base64 = await imageToBase64(item.image);
-        const cleaned = await removeBackground(base64, rmbg);
-        const compressed = await compressImage(cleaned, 600, 0.9, true);
+        const result = await stripBackground(base64, { rmbgKey: rmbg });
+        if (result.has_bg) { errors++; continue; } // both Remove.bg and fallback gave up
+        const compressed = await compressImage(result.image, 600, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
         // Flip has_bg so the next run skips this item.
         if (onUpdateItem) await onUpdateItem(item.id, { image: url, has_bg: false });
@@ -277,6 +279,27 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           Get your free key at <a href="https://www.remove.bg/api" target="_blank" rel="noreferrer" style={{color:"var(--color-ink)"}}>remove.bg/api</a>
         </p>
       </div>
+
+      {/* More tools — Color Advisor, Style Insights, Shopping. These views
+          are deep enough that they don't deserve permanent nav real-estate,
+          but are useful enough that they shouldn't be unreachable either. */}
+      {onNavigate && (
+        <div style={s.settingsCard}>
+          <div style={s.settingsTitle}>✦ More Tools</div>
+          <p style={s.settingsSub}>Specialty views you can open without leaving Settings.</p>
+          <div style={{display:"flex", flexDirection:"column", gap:8, marginTop:6}}>
+            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("color")}>
+              ✦ Color Advisor — analyze a piece or audit your wardrobe
+            </button>
+            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("insights")}>
+              ✦ Style Intelligence — wear patterns, signature pairs, profile
+            </button>
+            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("shop")}>
+              ✦ Shopping — gap analysis and find pieces to fill them
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Style Preferences */}
       <div style={s.settingsCard}>

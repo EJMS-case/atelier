@@ -21,15 +21,15 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
       .then(data => { setLogs(data.filter(l => !l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
   };
-  useEffect(loadLogs, []);
+  useEffect(() => { loadLogs(); }, []);
 
   const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
   const today = new Date().toISOString().slice(0, 10);
 
-  const handleLog = async (id) => {
-    const date = dateById[id] || today;
-    setLoggingId(id);
-    try { await onLogAsWorn(id, date); setLogs(prev => prev.filter(l => l.id !== id)); }
+  const handleLog = async (log) => {
+    const date = dateById[log.id] || today;
+    setLoggingId(log.id);
+    try { await onLogAsWorn(log, date); setLogs(prev => prev.filter(l => l.id !== log.id)); }
     catch (e) { console.error(e); }
     finally { setLoggingId(null); }
   };
@@ -97,7 +97,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
                   <input type="date" value={pickedDate}
                     onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}
                     style={{ fontSize:12, padding:"4px 6px", border:"1px solid var(--color-border)", borderRadius:6, background:"#FDFBF9", fontFamily:"inherit", color:"#2C2420" }}/>
-                  <button style={s.histWearBtn} onClick={() => handleLog(log.id)} disabled={loggingId === log.id}>
+                  <button style={s.histWearBtn} onClick={() => handleLog(log)} disabled={loggingId === log.id}>
                     {loggingId === log.id ? <><span style={s.spinnerSm}/> Logging…</> : "Log as worn"}
                   </button>
                 </div>
