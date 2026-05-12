@@ -40,6 +40,16 @@ export const SUBCATEGORY_L3 = {
 // Flat list for legacy compatibility (AI inventory, sort, etc.)
 export const CATEGORIES = CATEGORY_ORDER;
 
+// Bag detection — used by normalizeItem (taxonomy migration) and
+// EditorialCollage (slot assignment). Listed once here so the rule doesn't
+// drift between callers. The regex catches free-form `name` strings; the
+// Set catches legacy items still filed under "Accessories" with bag-like
+// subcategories.
+export const BAG_SUBCATEGORIES = new Set([
+  "Bags","Clutch","Crossbody","Shoulder","Tote","Pouch","Minaudière","Wristlet","Baguette",
+]);
+export const BAG_NAME_RE = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette|crossbody)\b/i;
+
 export const SET_TAGS = ["Work","Weekend","Evening","Travel","Casual","Date Night","Seasonal","Formal","Vacation"];
 
 // Tightened to six. Anything finer was overlapping (Dinner / Dinner Party /

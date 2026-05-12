@@ -56,10 +56,11 @@ export const s = {
   emptyMark: { fontSize:36, color:"var(--color-border-muted)" },
   emptyText: { color:"var(--color-text-muted)", fontSize:14, textAlign:"center" },
 
-  // Spinners
+  // Spinners. `spinnerSm` is the muted dark spinner used on light backgrounds.
+  // `spinnerSmLight` is the inverse for use on dark buttons (btnPrimary).
   spinner: { display:"inline-block", width:28, height:28, border:"2px solid var(--color-border)", borderTop:"2px solid var(--color-ink)", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
-  spinnerSm: { display:"inline-block", width:13, height:13, border:"2px solid rgba(255,255,255,0.3)", borderTop:"2px solid #fff", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
   spinnerSm: { display:"inline-block", width:11, height:11, border:"1.5px solid var(--color-border-muted)", borderTop:"1.5px solid var(--color-ink)", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
+  spinnerSmLight: { display:"inline-block", width:11, height:11, border:"1.5px solid rgba(255,255,255,0.3)", borderTop:"1.5px solid #fff", borderRadius:"50%", animation:"spin 0.8s linear infinite" },
 
   // Style panel — capped at 65vh so it stops dominating the iPhone screen.
   // The panel still scrolls internally, so all controls remain reachable.

@@ -111,7 +111,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const skirtDressAvailable = skirtCount + dressCount > 0;
   const availabilityNote = `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the 3 looks MUST use a skirt or dress (not pants)." : "Only pants available, so all 3 looks will use pants."}`;
 
-  const pickRandom = (arr) => shuffle([...arr]);
+  // `shuffle` already clones internally; pass the array directly.
+  const pickRandom = (arr) => shuffle(arr);
   const colorStrategies = pickRandom(STYLING_STRATEGIES.color);
   const proportionStrategies = pickRandom(STYLING_STRATEGIES.proportion);
   const heroStrategies = pickRandom(STYLING_STRATEGIES.hero);

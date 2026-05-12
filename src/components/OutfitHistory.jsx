@@ -22,7 +22,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
       .then(data => { setLogs(data.filter(l => l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
   };
-  useEffect(loadLogs, []);
+  useEffect(() => { loadLogs(); }, []);
 
   const filtered = filterOcc === "All"
     ? logs
@@ -55,9 +55,9 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     try { await onDelete(id); setLogs(prev => prev.filter(l => l.id !== id)); setDeleteId(null); }
     catch (e) { console.error(e); }
   };
-  const handleUnlog = async (id) => {
-    setUnloggingId(id);
-    try { await onUnlog(id); setLogs(prev => prev.filter(l => l.id !== id)); }
+  const handleUnlog = async (log) => {
+    setUnloggingId(log.id);
+    try { await onUnlog(log); setLogs(prev => prev.filter(l => l.id !== log.id)); }
     catch (e) { console.error(e); }
     finally { setUnloggingId(null); }
   };
@@ -66,7 +66,6 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   // that appears anywhere across logs (a look tagged [Work, Casual] surfaces
   // under both filters).
   const occasions = ["All", ...new Set(logs.flatMap(l => tagsFor(l, "occasions", "occasion")))];
-  const Wrap = nested ? "div" : "div";
   const wrapStyle = nested ? {} : s.page;
 
   // Editing a logged outfit replaces it via the parent's onSaveLook path
@@ -91,7 +90,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   }
 
   return (
-    <Wrap style={wrapStyle}>
+    <div style={wrapStyle}>
       {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>}
       {logs.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
@@ -132,7 +131,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
                       <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
                         {wearingId === log.id ? <><span style={s.spinnerSm}/> Logging…</> : "Wear this again"}
                       </button>
-                      <button style={s.histDeleteBtn} onClick={() => handleUnlog(log.id)} disabled={unloggingId === log.id}
+                      <button style={s.histDeleteBtn} onClick={() => handleUnlog(log)} disabled={unloggingId === log.id}
                         title="Move back to Looks (clears the wear date)">
                         {unloggingId === log.id ? "…" : "Unlog"}
                       </button>
@@ -157,6 +156,6 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
           })}
         </div>
       ))}
-    </Wrap>
+    </div>
   );
 }

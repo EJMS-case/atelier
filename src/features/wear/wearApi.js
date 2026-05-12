@@ -3,13 +3,9 @@
 // cost-per-wear on demand. We do this app-side rather than via a DB trigger
 // so the same code path works from every save entry point.
 
-const SUPABASE_URL = "https://ljcwsrfmojbjdveefoqa.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dzcmZtb2piamR2ZWVmb3FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0ODM1NDksImV4cCI6MjA5MDA1OTU0OX0.3LLv6JdwOvq_7woz3LUO8wnaoH8lSawiQJqk2Wmk4QE";
-const H = {
-  "Content-Type": "application/json",
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-};
+import { SUPABASE_URL, SB_HEADERS } from "../../lib/supabase.js";
+
+const H = { ...SB_HEADERS, Prefer: "return=minimal" };
 
 /**
  * Increment wear_count by 1 for each id in the list. Uses PATCH per item —
@@ -19,21 +15,16 @@ const H = {
 export async function bumpWearCounts(itemIds = []) {
   await Promise.all((itemIds || []).map(async (id) => {
     try {
-      // Fetch current count
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?select=wear_count&id=eq.${id}`,
-        { headers: H },
+        { headers: SB_HEADERS },
       );
       if (!res.ok) return;
       const rows = await res.json().catch(() => []);
       const current = rows[0]?.wear_count || 0;
       await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`,
-        {
-          method: "PATCH",
-          headers: { ...H, Prefer: "return=minimal" },
-          body: JSON.stringify({ wear_count: current + 1 }),
-        },
+        { method: "PATCH", headers: H, body: JSON.stringify({ wear_count: current + 1 }) },
       );
     } catch (err) {
       console.warn("[F6] bumpWearCount failed for", id, err);
@@ -47,18 +38,14 @@ export async function unbumpWearCounts(itemIds = []) {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?select=wear_count&id=eq.${id}`,
-        { headers: H },
+        { headers: SB_HEADERS },
       );
       if (!res.ok) return;
       const rows = await res.json().catch(() => []);
       const current = rows[0]?.wear_count || 0;
       await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`,
-        {
-          method: "PATCH",
-          headers: { ...H, Prefer: "return=minimal" },
-          body: JSON.stringify({ wear_count: Math.max(0, current - 1) }),
-        },
+        { method: "PATCH", headers: H, body: JSON.stringify({ wear_count: Math.max(0, current - 1) }) },
       );
     } catch (err) {
       console.warn("[F6] unbumpWearCount failed for", id, err);

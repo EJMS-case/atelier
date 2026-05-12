@@ -301,6 +301,81 @@ export const sb = {
     return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
   },
 
+  // ── Planned outfits (calendar) ──
+  async fetchPlansBetween(startIso, endIso) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/planned_outfits?select=*&date=gte.${startIso}&date=lte.${endIso}&order=date.asc`,
+      { headers: SB_HEADERS },
+    );
+    if (!res.ok) return [];
+    return res.json().catch(() => []);
+  },
+  async fetchAllPlans() {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/planned_outfits?select=*&order=date.asc`,
+      { headers: SB_HEADERS },
+    );
+    if (!res.ok) return [];
+    return res.json().catch(() => []);
+  },
+  async savePlan(plan) {
+    const payload = { ...plan, updated_at: new Date().toISOString() };
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.message || `savePlan failed ${res.status}`);
+    }
+    return res.json();
+  },
+  async deletePlan(date) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/planned_outfits?date=eq.${date}`,
+      { method: "DELETE", headers: SB_HEADERS },
+    );
+    return res.ok;
+  },
+
+  // ── Look feedback (thumbs up/down on generated looks) ──
+  async saveLookFeedback({ lookHash, rating, itemIds, occasion, mood }) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/look_feedback`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        look_hash: lookHash,
+        rating,
+        item_ids: itemIds,
+        occasion,
+        mood: mood || null,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.message || `feedback save failed ${res.status}`);
+    }
+    return res.json();
+  },
+  async fetchItemFeedbackScores() {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating&rating=gt.0`,
+      { headers: SB_HEADERS },
+    );
+    if (!res.ok) return {};
+    const rows = await res.json().catch(() => []);
+    const scores = {};
+    for (const row of rows) {
+      const rating = Number(row.rating) || 0;
+      if (rating <= 0) continue;
+      for (const id of row.item_ids || []) {
+        scores[id] = (scores[id] || 0) + rating;
+      }
+    }
+    return scores;
+  },
+
   // ── Sets ──
   async fetchSets() {
     try {

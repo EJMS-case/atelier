@@ -10,20 +10,16 @@ import { bumpWearCounts, unbumpWearCounts } from "./features/wear/wearApi.js";
 import HomeView from "./features/home/HomeView.jsx";
 import { s, si, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
-import {
-  CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, CATEGORIES, SET_TAGS, OCCASIONS, getSubcatL2, normalizeOccasion,
-} from "./constants/taxonomy.js";
+import { SET_TAGS, OCCASIONS } from "./constants/taxonomy.js";
 import { COLOR_FAMILY_RANGES } from "./constants/color.js";
 import {
-  getSleeveType, filterByWeather, colorSortIdx, defaultSortComparator,
-  normalizeItem, mergeItems, shuffle,
+  colorSortIdx, defaultSortComparator, mergeItems,
 } from "./utils/item-helpers.js";
 import {
-  STORAGE_KEY, API_KEY_STORE, RMBG_KEY_STORE, SETS_META_KEY,
   THEME_KEY, RECENT_LOOKS_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
   loadSetsMeta, saveSetsMeta, loadStylePrefs, loadAboutMe,
-  migrateLocalStorage, reconcilePendingSyncFlag,
+  migrateLocalStorage,
 } from "./utils/storage.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
@@ -65,11 +61,6 @@ const RouteFallback = () => (
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
 migrateLocalStorage();
-
-// Mark every existing local item as `pending_sync: true` once, so the new
-// delete-protection merge (which drops local-only items without that flag)
-// doesn't discard pre-existing unsynced data on first reload. No-op after.
-reconcilePendingSyncFlag();
 
 
 
@@ -224,10 +215,8 @@ export default function App() {
   }, []);
 
   // ── On mount: ensure Storage bucket exists, pull from Supabase, merge with local
+  // (initial items came from the lazy useState init above, no need to re-read).
   useEffect(() => {
-    const local = loadLocalItems();
-    if (local.length > 0) setItems(local);
-
     sb.ensureBucket().catch(() => {});
     sb.fetchFavorites().then(setFavorites).catch(() => {});
 
@@ -809,7 +798,7 @@ export default function App() {
             onClick={() => { handleStyle(); }}
             disabled={styling}>
             {styling
-              ? <><span style={s.spinnerSm}/> Styling…</>
+              ? <><span style={s.spinnerSmLight}/> Styling…</>
               : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
           </button>
         </>
@@ -1259,7 +1248,7 @@ export default function App() {
 
       {/* ── COLOR ADVISOR ── */}
       {view === "color" && (
-        <ColorAdvisorView items={items} apiKey={apiKey}/>
+        <ColorAdvisorView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── PLANNER (F3) ── */}
@@ -1292,12 +1281,13 @@ export default function App() {
           isFav={isFav}
           onEditItem={(item) => { setEditItem(item); setView("edit"); }}
           onDeleteLog={async (id) => { await sb.deleteOutfitLog(id); }}
-          onUnlog={async (id) => {
-            // F6 — decrement wear counts when unlogging
-            const log = (await sb.fetchOutfitLogs()).find(l => l.id === id);
+          onUnlog={async (log) => {
+            // F6 — decrement wear counts when unlogging. Callers pass the
+            // full log object so we don't have to refetch the entire table
+            // to find garment_ids / date_worn for a single row.
             const ids = log?.garment_ids || [];
             const dateWorn = log?.date_worn;
-            await sb.updateOutfitLog(id, { date_worn: null });
+            await sb.updateOutfitLog(log.id, { date_worn: null });
             unbumpWearCounts(ids);
             // Clear the matching planner pin (if it was created by the
             // wear-log auto-pin and hasn't been overwritten manually).
@@ -1307,10 +1297,8 @@ export default function App() {
             );
             persistItems(updated);
           }}
-          onLogAsWorn={async (id, date) => {
-            await sb.updateOutfitLog(id, { date_worn: date });
-            // Also update per-item last_worn so rotation tracking sees the wear
-            const log = (await sb.fetchOutfitLogs()).find(l => l.id === id);
+          onLogAsWorn={async (log, date) => {
+            await sb.updateOutfitLog(log.id, { date_worn: date });
             const ids = log?.garment_ids || [];
             await Promise.all(ids.map(gid => sb.updateItemLastWorn(gid, date)));
             bumpWearCounts(ids); // F6
@@ -1383,12 +1371,12 @@ export default function App() {
 
       {/* ── INSIGHTS ── */}
       {view === "insights" && (
-        <StyleInsightsView items={items} apiKey={apiKey} onBack={() => setView("closet")}/>
+        <StyleInsightsView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── SHOPPING ── */}
       {view === "shop" && (
-        <ShoppingView items={items} apiKey={apiKey} onBack={() => setView("closet")}/>
+        <ShoppingView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── SETTINGS ── */}
@@ -1408,6 +1396,7 @@ export default function App() {
           onForceSync={forceSyncAll}
           styleFingerprint={styleFingerprint}
           setStyleFingerprint={setStyleFingerprint}
+          onNavigate={setView}
           onBack={() => setView("closet")}/>
       )}
       </Suspense>
