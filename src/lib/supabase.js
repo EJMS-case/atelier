@@ -37,6 +37,8 @@ export const sb = {
     void pending_sync;
     let payload = image && !image.startsWith("data:") ? { ...rest, image } : { ...rest };
     if (payload.set_id === "") payload.set_id = null;
+    // Empty strings reach numeric columns as `""` and PG rejects them.
+    if (payload.price_paid === "") payload.price_paid = null;
 
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
