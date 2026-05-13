@@ -24,10 +24,21 @@ const PALETTE = {
   accent: "#6D1A2E",
 };
 
+// Subcategory hints that resolve a Loungewear/Athleisure piece to top vs.
+// bottom. Anything tagged with these subcategories slots into the matching
+// silhouette zone so the builder isn't blind to comfortwear.
+const TOP_LIKE_SUBS    = /^(top|tops|long sleeve|short sleeve|bra\/crop top|hoodies|hoodies \/ sweatshirts|sweatshirt|tank|t-shirt)/i;
+const BOTTOM_LIKE_SUBS = /^(bottom|bottoms|pants|shorts|skirt|skirts|joggers|leggings)/i;
+const DRESS_LIKE_SUBS  = /^(dress|dresses|romper)/i;
+
 const SLOTS = [
-  { key: "top",       label: "TOP",       match: (it) => ["Tops", "Knits"].includes(it.category) },
-  { key: "bottom",    label: "BOTTOM",    match: (it) => ["Bottoms"].includes(it.category) },
-  { key: "dress",     label: "DRESS",     match: (it) => ["Dresses", "Jumpsuits", "Sets", "Occasionwear"].includes(it.category), optional: true },
+  { key: "top",       label: "TOP",       match: (it) => ["Tops", "Knits"].includes(it.category)
+      || (["Loungewear", "Athleisure"].includes(it.category) && TOP_LIKE_SUBS.test(it.subcategory || "")) },
+  { key: "bottom",    label: "BOTTOM",    match: (it) => ["Bottoms"].includes(it.category)
+      || (["Loungewear", "Athleisure"].includes(it.category) && BOTTOM_LIKE_SUBS.test(it.subcategory || "")) },
+  { key: "dress",     label: "DRESS",     match: (it) => ["Dresses", "Jumpsuits", "Sets", "Occasionwear"].includes(it.category)
+      || (it.category === "Athleisure" && DRESS_LIKE_SUBS.test(it.subcategory || "")), optional: true },
+  { key: "swim",      label: "SWIM",      match: (it) => it.category === "Swim", optional: true },
   { key: "shoes",     label: "SHOES",     match: (it) => it.category === "Shoes" },
   { key: "outerwear", label: "OUTER",     match: (it) => it.category === "Outerwear", optional: true },
   { key: "bag",       label: "BAG",       match: (it) => it.category === "Bags", optional: true },
@@ -369,7 +380,7 @@ export default function SilhouetteBuilder({
           notes: name || null,
           layout_data: layoutData,
         });
-        setSaved(`Scheduled for ${scheduleDate}`);
+        setSaved(`Saved for ${scheduleDate}`);
         setTimeout(onClose, 1000);
         return;
       }
