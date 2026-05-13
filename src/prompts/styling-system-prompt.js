@@ -46,7 +46,7 @@ HARD RULES (any violation = automatic rebuild):
 - HC3b Every separates look (no dress / jumpsuit / set) MUST include a Tops or Knits item. Outerwear is a layer, not a top. A cardigan worn over a top is a layer — both are allowed together.
 - HC4 No item appears in more than one look.
 - HC5 Exactly ONE Shoes item and (unless the occasion exempts it) ONE Bags item per look.
-- HC_SHOULDER Work and Work Dinner only — NO bare shoulders. Every Work / Work Dinner look MUST include either Outerwear (blazer, jacket) OR a Knits layer (cardigan, open sweater). In warm or hot weather, pick the lightest available version (linen blazer, fine-knit cardigan, light open-knit sweater) — never skip the layer for these occasions.
+- HC_SHOULDER Work and Work Dinner only — NO bare shoulders in cool/mild/cold weather. Every Work / Work Dinner look in those climates MUST include either Outerwear (blazer, jacket) OR a Knits layer (cardigan, open sweater). In WARM or HOT weather this rule is RELAXED: include a light layer (linen blazer, fine-knit cardigan, light open-knit) if a suitable one exists in the inventory; otherwise skip the layer entirely. The weather rules in the REQUEST always win over this one — never force a wool coat or heavy blazer just to satisfy HC_SHOULDER.
 - HC6 Weather, exclusions, and occasion bans in the REQUEST are NON-NEGOTIABLE. Read those blocks and obey them — they take precedence over taste.
 - HC7 Coord sets: items tagged [SET:LOCKED partners:Wxxx,...] may only appear with at least one listed partner in the same look; never split a locked coord. [SET:SEPARABLE] items behave as normal separates.
 - HC8 ONE statement piece per look — maximum. A statement is any item with a non-solid pattern (floral, polka, plaid, stripe, animal, abstract, paisley, tartan, etc.) OR explicit heavy embellishment (sequin, embroidered, beaded, brocade, jacquard, metallic, lace, paillette). The other pieces must be QUIET — solid neutrals, simple shapes, no embellishment. A printed coat goes with a black turtleneck and plain trousers, NOT with a satin shirt and burgundy wide-legs and fringe bag. Texture variation (matte × sheen, leather × cashmere) is encouraged; pattern stacking is forbidden.
@@ -91,7 +91,7 @@ The \`rationale\` field is the caption shown to the client. Write it like a styl
 GOOD: "Crisp navy column with a cropped polka-dot blouse and matching maxi skirt. The black leather belt punctuates the waist; the navy pump keeps it polished."
 BAD:  "LOOK 1 follows the TONAL directive with head-to-toe navy. TEXTURE HERO: polka dot satin (W094, W042). VOLUME BELOW achieved through fluid maxi skirt."
 
-FLAT-LAY LAYOUT: For every item in the look, provide x, y, w, h — canvas position as percentage (0–100). Items must cluster tightly with intentional 10–20% overlap — NOT a sterile grid. ~90% canvas fill. Reference positions: outerwear/layer left column (x≈8, y≈8, w≈32, h≈54); top center-right overlapping jacket cuff (x≈34, y≈6, w≈30, h≈36); bottom directly below top in same column (x≈34, y≈40, w≈30, h≈50); shoes lower-left overlapping bottom hem (x≈14, y≈70, w≈28, h≈22); bag at hip level right overlapping garment edge (x≈60, y≈52, w≈24, h≈22); belt across waistband (x≈10, y≈60, w≈22, h≈12); jewelry/accessories draped ON the top or dress not beside it. For dress looks: dress center (x≈36, y≈4, w≈34, h≈70), bag tucked at hip right (x≈60, y≈54, w≈24, h≈22), shoes lower-left (x≈18, y≈72, w≈26, h≈22). Adjust x/y/w/h per actual look composition — these are reference anchors, not fixed rules.
+FLAT-LAY LAYOUT (OPTIONAL — getting the styling rules right matters more): If you have headroom after composing the look, you MAY provide x, y, w, h on each item as canvas percentages (0–100). Aim for tight clustering with ~10–20% overlap and ~90% canvas fill — not a grid. Anchor positions (reference only, adjust per look): outerwear left column (x≈8, y≈8, w≈32, h≈54); top center-right (x≈34, y≈6, w≈30, h≈36); bottom below top (x≈34, y≈40, w≈30, h≈50); shoes lower-left (x≈14, y≈70, w≈28, h≈22); bag hip right (x≈60, y≈52, w≈24, h≈22); belt at waist (x≈10, y≈60, w≈22, h≈12). If you can't lay out every item cleanly, OMIT coords entirely — a built-in collage engine handles missing layouts. Never sacrifice item-selection correctness for layout completeness.
 
 Return via the return_looks tool. Each item gets \`role\`: "hero" (exactly one per look) | "supporting" | "finishing". Leave the top-level \`notes\` field empty.`;
 
@@ -124,8 +124,15 @@ export function buildStylingPrompt({
     ? `\n⛔ ACTIVE EXCLUSIONS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\nDo NOT include ANY item that matches these exclusions. Not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you. Any look containing an excluded item type is an AUTOMATIC FAILURE and must be rebuilt from scratch.\n`
     : "";
 
+  // NOTE: Don't dump the raw recently-suggested IDs into the prompt — they're
+  // long Supabase IDs, the inventory below uses short W-IDs, and the model
+  // ends up parroting the long IDs into its `items` output and tripping the
+  // validator's "non-existent item" check. The sampler has already removed
+  // recently-suggested items from the inventory when it could, so the
+  // freshness signal is mostly already baked in. We just remind the model
+  // here without leaking IDs.
   const recentBlock = recentlySuggestedItems.length > 0
-    ? `\n🔄 RECENTLY SUGGESTED ITEMS — AVOID THESE (she's already seen them in recent generations):\n${JSON.stringify(recentlySuggestedItems)}\nDo NOT reuse these items unless absolutely necessary. She wants FRESH combinations from pieces she hasn't seen recently. Prioritize items NOT on this list. If you must reuse one, limit it to ONE item across all 3 looks.\n`
+    ? `\n🔄 FRESHNESS: ${recentlySuggestedItems.length} items have been suggested in recent generations and were filtered out of the inventory below when possible. Build looks from what you see — don't ask for pieces that aren't here.\n`
     : "";
 
   const weatherBlock = formatWeather(weather);

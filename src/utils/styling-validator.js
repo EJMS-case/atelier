@@ -388,15 +388,30 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
         if (heavy) {
           failures.push(`Look ${i + 1}: "${resolved.name}" uses a heavy fabric (wool/cashmere/heavy) — wrong for ${weather}.`);
         }
-        if (resolved.subcategory === "Coats" || resolved.subcategory === "Boots") {
-          failures.push(`Look ${i + 1}: "${resolved.name}" (${resolved.subcategory}) is wrong for ${weather} — pick lighter.`);
+        // Boots are always wrong in hot/warm. Coats are wrong in hot, and
+        // wrong in warm only when they're actually heavy (a "trench" or
+        // "duster" can read fine on a 75°F day; a long wool coat doesn't).
+        if (resolved.subcategory === "Boots") {
+          failures.push(`Look ${i + 1}: "${resolved.name}" (Boots) is wrong for ${weather} — pick lighter.`);
         }
-        // Outerwear is a hot-weather hard fail; for warm, only allow if the item
-        // is explicitly tagged as light (linen/cotton/unstructured/unlined).
+        if (resolved.subcategory === "Coats") {
+          const isHeavyCoat = /wool|cashmere|shearling|sherpa|puffer|parka|down|quilted|long|heavy/i.test(text);
+          if (isHot || isHeavyCoat) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" (Coats) is wrong for ${weather} — pick lighter.`);
+          }
+        }
+        // Outerwear is a hot-weather hard fail. For warm, only reject the
+        // genuinely heavy / winter pieces — a regular blazer worn over a
+        // blouse for the office in 75°F is fine. Previously this rejected
+        // anything that didn't literally say "linen|cotton|unstructured" in
+        // its text, which combined with the HC_SHOULDER rule produced
+        // unsatisfiable Work + Warm validations.
         if (resolved.category === "Outerwear") {
-          const isLight = /linen|cotton|seersucker|unstructured|unlined|lightweight|sheer/i.test(text);
-          if (isHot || !isLight) {
-            failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear — wrong for ${weather}. Skip the layer or pick an unstructured linen blazer.`);
+          const isHeavyOuter = /parka|puffer|sherpa|shearling|fleece|down|quilted|overcoat|peacoat|long\s*wool|heavy/i.test(text);
+          if (isHot) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear — wrong for ${weather}. Skip the layer entirely.`);
+          } else if (isHeavyOuter) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is heavy outerwear — wrong for ${weather}. Pick a lighter blazer or skip the layer.`);
           }
         }
         if (sw === "winter") {
@@ -566,9 +581,15 @@ function checkStatementCount(response, idMap, allItems) {
 /**
  * Check HC_SHOULDER: Work and Work Dinner looks must include Outerwear (blazer/jacket)
  * OR a Knits layer (cardigan, open sweater). No bare shoulders at work.
+ *
+ * Relaxed on hot/warm days — combined with the strict warm-weather rejection
+ * of most outerwear and all non-summer knits this was unsatisfiable. The user
+ * can wear a sleeved blouse to a 78°F desk without a blazer.
  */
-function checkShoulderCoverage(response, idMap, allItems, occasion) {
+function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
   if (!["Work", "Work Dinner"].includes(occasion)) return [];
+  const w = (weather || "").toLowerCase();
+  if (/hot|warm|85|70-84/.test(w)) return [];
   const failures = [];
 
   response.looks.forEach((look, i) => {
@@ -611,7 +632,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
   allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: true })));
-  allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
+  allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion, weather).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
 
   // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
   // Over-maximum is soft — acceptable to show, just noisy.
@@ -821,7 +842,7 @@ export async function generateValidatedLooks({
           {
             apiKey,
             model: "claude-sonnet-4-5",
-            maxTokens: 3500,
+            maxTokens: 5000,
             temperature: 0.7,
             content: messageContent,
             tool: LooksTool,
