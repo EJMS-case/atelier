@@ -385,7 +385,13 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
         if (resolved.category === "Knits" && !(isWarm && resolved.knit_weight === "Fine/Summer")) {
           failures.push(`Look ${i + 1}: "${resolved.name}" is a knit — too warm for ${weather}.`);
         }
-        if (heavy) {
+        // The broad "heavy fabric" check applies to garments worn ON the body
+        // (tops, bottoms, dresses). Outerwear gets evaluated by the
+        // Outerwear-specific block below, which already has a finer-grained
+        // notion of "actually too heavy for warm" — running both meant a
+        // regular wool blazer tripped here regardless of how the Outerwear
+        // block decided, defeating HC_SHOULDER's warm-weather relaxation.
+        if (heavy && resolved.category !== "Outerwear") {
           failures.push(`Look ${i + 1}: "${resolved.name}" uses a heavy fabric (wool/cashmere/heavy) — wrong for ${weather}.`);
         }
         // Boots are always wrong in hot/warm. Coats are wrong in hot, and
@@ -611,9 +617,12 @@ function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
 }
 
 // ── Run all checks ───────────────────────────────────────────────────────────
+// Exported so the offline style-me-matrix script can probe every
+// (occasion × weather) cell for unsatisfiable rule combinations without
+// burning real API tokens.
 
 
-function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds = []) {
+export function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds = []) {
   const allFailures = [];
 
   // Hard checks (must pass)
@@ -812,7 +821,12 @@ export async function generateValidatedLooks({
       });
     }
     messageContent.push({ type: "text", text: dynamicText });
-    if (contactSheets.length > 0) {
+    // Contact sheets are heavy (~1.5K vision tokens each, often 2–3 sheets per
+    // closet). They give the model real color / texture / silhouette context
+    // on attempt 0; on retries the failure list is a text correction and the
+    // model already saw the imagery — resending it just inflates cost without
+    // changing the kind of fix the retry needs.
+    if (attempt === 0 && contactSheets.length > 0) {
       for (const dataUri of contactSheets) {
         messageContent.push({
           type: "image",
