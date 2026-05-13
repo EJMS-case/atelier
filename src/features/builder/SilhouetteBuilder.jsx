@@ -155,6 +155,7 @@ export default function SilhouetteBuilder({
   const [evalErr, setEvalErr] = useState("");
   const [search, setSearch] = useState("");
   const [subcatFilter, setSubcatFilter] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]); // [{role,content}]
   const [chatInput, setChatInput] = useState("");
@@ -611,89 +612,106 @@ export default function SilhouetteBuilder({
         </div>
       )}
 
-      {/* Slot selector */}
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, paddingBottom: 4 }}>
+      {/* Slot status bar — tap any slot to open the picker sheet */}
+      <div style={{ display: "flex", gap: 5, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
         {SLOTS.map(s => {
           const picked = Array.isArray(selections[s.key]) ? selections[s.key] : (selections[s.key] ? [selections[s.key]] : []);
           const count = picked.length;
+          const isActive = activeSlot === s.key && pickerOpen;
           return (
-            <button key={s.key} onClick={() => setActiveSlot(s.key)}
+            <button key={s.key}
+              onClick={() => { setActiveSlot(s.key); setPickerOpen(true); }}
               style={{
-                fontSize: 11,
-                padding: "6px 10px",
-                borderRadius: 14,
-                border: `1px solid ${activeSlot === s.key ? PALETTE.ink : PALETTE.line}`,
-                background: activeSlot === s.key ? PALETTE.ink : "transparent",
-                color: activeSlot === s.key ? PALETTE.bg : PALETTE.soft,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-                fontWeight: count ? 600 : 400,
+                fontSize: 10, letterSpacing: "0.1em",
+                padding: "7px 11px", borderRadius: 14, flexShrink: 0,
+                border: `1.5px solid ${isActive ? PALETTE.ink : count ? "#8B6E4E" : PALETTE.line}`,
+                background: isActive ? PALETTE.ink : count ? "rgba(139,110,78,0.08)" : "transparent",
+                color: isActive ? PALETTE.bg : count ? "#8B6E4E" : PALETTE.muted,
+                cursor: "pointer", whiteSpace: "nowrap",
               }}>
-              {s.label}{count > 1 ? ` ✓×${count}` : count === 1 ? " ✓" : ""}
+              {s.label}{count > 1 ? ` ×${count}` : count === 1 ? " ✓" : " +"}
             </button>
           );
         })}
       </div>
 
-      {/* Search bar */}
-      <input
-        type="search"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder={`Search ${slotDef?.label.toLowerCase() || "items"}…`}
-        style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 12, marginBottom: 6, background: "#fff", boxSizing: "border-box" }}
-      />
-
-      {/* Subcategory filter chips */}
-      {subcatsForSlot.length > 1 && (
-        <div style={{ display: "flex", gap: 5, overflowX: "auto", marginBottom: 8, paddingBottom: 2 }}>
-          <button
-            onClick={() => setSubcatFilter("")}
-            style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, border: `1px solid ${subcatFilter === "" ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === "" ? PALETTE.ink : "transparent", color: subcatFilter === "" ? PALETTE.cream : PALETTE.muted, cursor: "pointer", whiteSpace: "nowrap" }}>
-            All
-          </button>
-          {subcatsForSlot.map(sub => (
-            <button key={sub} onClick={() => setSubcatFilter(sub === subcatFilter ? "" : sub)}
-              style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, border: `1px solid ${subcatFilter === sub ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === sub ? PALETTE.ink : "transparent", color: subcatFilter === sub ? PALETTE.cream : PALETTE.muted, cursor: "pointer", whiteSpace: "nowrap" }}>
-              {sub}
-            </button>
-          ))}
-        </div>
+      {/* Bottom-sheet picker — slides up when a slot is tapped */}
+      {pickerOpen && (
+        <>
+          <div onClick={() => setPickerOpen(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 99 }}/>
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: "68vh", background: "#fff", borderRadius: "18px 18px 0 0", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: "0 -4px 24px rgba(28,24,20,0.12)" }}>
+            {/* Drag handle */}
+            <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 6px" }}>
+              <div style={{ width: 36, height: 3, borderRadius: 2, background: "#DDD5CC" }}/>
+            </div>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 18px 10px" }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.18em", color: PALETTE.muted }}>PICK {slotDef?.label}</div>
+              <button onClick={() => setPickerOpen(false)}
+                style={{ fontSize: 13, color: PALETTE.soft, background: "none", border: "none", cursor: "pointer", padding: "4px 0", letterSpacing: "0.04em" }}>
+                Done
+              </button>
+            </div>
+            {/* Slot tabs inside sheet */}
+            <div style={{ display: "flex", gap: 5, overflowX: "auto", padding: "0 16px 8px" }}>
+              {SLOTS.map(s => {
+                const cnt = (Array.isArray(selections[s.key]) ? selections[s.key] : (selections[s.key] ? [selections[s.key]] : [])).length;
+                return (
+                  <button key={s.key} onClick={() => setActiveSlot(s.key)}
+                    style={{ fontSize: 10, letterSpacing: "0.09em", padding: "5px 9px", borderRadius: 12, flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer",
+                      border: `1px solid ${activeSlot === s.key ? PALETTE.ink : PALETTE.line}`,
+                      background: activeSlot === s.key ? PALETTE.ink : "transparent",
+                      color: activeSlot === s.key ? PALETTE.bg : cnt ? "#8B6E4E" : PALETTE.muted,
+                    }}>
+                    {s.label}{cnt ? " ✓" : ""}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Search */}
+            <div style={{ padding: "0 16px 6px" }}>
+              <input type="search" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder={`Search ${slotDef?.label.toLowerCase() || "items"}…`}
+                style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 12, background: "#fff", boxSizing: "border-box" }}/>
+            </div>
+            {/* Subcategory chips */}
+            {subcatsForSlot.length > 1 && (
+              <div style={{ display: "flex", gap: 5, overflowX: "auto", padding: "0 16px 8px" }}>
+                <button onClick={() => setSubcatFilter("")}
+                  style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${subcatFilter === "" ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === "" ? PALETTE.ink : "transparent", color: subcatFilter === "" ? PALETTE.cream : PALETTE.muted }}>All</button>
+                {subcatsForSlot.map(sub => (
+                  <button key={sub} onClick={() => setSubcatFilter(sub === subcatFilter ? "" : sub)}
+                    style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${subcatFilter === sub ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === sub ? PALETTE.ink : "transparent", color: subcatFilter === sub ? PALETTE.cream : PALETTE.muted }}>
+                    {sub}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* 3-column item grid */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 32px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignContent: "start" }}>
+              {poolForSlot.length === 0 && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 12, color: PALETTE.muted, padding: "28px 0", textAlign: "center" }}>No items in this category.</div>
+              )}
+              {poolForSlot.map(it => {
+                const curIds = Array.isArray(selections[activeSlot]) ? selections[activeSlot] : (selections[activeSlot] ? [selections[activeSlot]] : []);
+                const isPicked = curIds.includes(it.id);
+                return (
+                  <button key={it.id} onClick={() => togglePick(activeSlot, it.id)}
+                    style={{ background: isPicked ? PALETTE.ink : "#fff", border: `2px solid ${isPicked ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: isPicked ? PALETTE.bg : PALETTE.soft, textAlign: "left" }}>
+                    <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
+                      {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                    </div>
+                    <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", overflow: "hidden", maxHeight: 22 }}>
+                      {it.color ? `${it.color} ` : ""}{it.subcategory || it.category}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
-
-      {/* Horizontal picker — tap to add/remove for the active slot */}
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 12px", scrollSnapType: "x mandatory" }}>
-        {poolForSlot.length === 0 && (
-          <div style={{ fontSize: 12, color: PALETTE.muted, padding: "20px 8px" }}>No items in this slot yet.</div>
-        )}
-        {poolForSlot.map(it => {
-          const curIds = Array.isArray(selections[activeSlot]) ? selections[activeSlot] : (selections[activeSlot] ? [selections[activeSlot]] : []);
-          const picked = curIds.includes(it.id);
-          return (
-            <button key={it.id}
-              onClick={() => togglePick(activeSlot, it.id)}
-              style={{
-                flexShrink: 0,
-                width: 88,
-                scrollSnapAlign: "start",
-                background: picked ? PALETTE.ink : "#fff",
-                border: `2px solid ${picked ? PALETTE.ink : PALETTE.line}`,
-                borderRadius: 8,
-                padding: 4,
-                cursor: "pointer",
-                color: picked ? PALETTE.bg : PALETTE.soft,
-              }}>
-              <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 3 }}>
-                {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
-              </div>
-              <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", maxHeight: 24, overflow: "hidden" }}>
-                {it.color ? `${it.color} ` : ""}{it.subcategory || it.category}
-              </div>
-            </button>
-          );
-        })}
-      </div>
 
       {/* Name + actions */}
       <input type="text" value={name} onChange={e => setName(e.target.value)}
