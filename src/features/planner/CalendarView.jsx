@@ -4,11 +4,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
-import { buildDailyOutfits } from "./tripPacker.js";
+import { buildDailyOutfits, TRIP_VIBES, defaultOccasionsForVibe, alternativesFor } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast } from "../../lib/weather.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
+import { analyzeTripDestination, tempToBucket } from "../../lib/ai/tripAdvisor.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
+import TrimmedImage from "../../components/TrimmedImage.jsx";
 import TripDetailView from "./TripDetailView.jsx";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
@@ -302,6 +304,7 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       {showTrip && (
         <TripModal
           items={items}
+          apiKey={apiKey}
           onClose={() => setShowTrip(false)}
           onAssign={async (rangePlans, savedTrip) => {
             for (const p of rangePlans) {
@@ -466,50 +469,181 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
 }
 
 // ── Trip Packing Modal ───────────────────────────────────────────────────────
-function TripModal({ items, onClose, onAssign }) {
+// Editable trip preview. The user can:
+//   • set destination, dates, trip vibe (drives default per-day occasion)
+//   • override climate (or let an AI-fetched brief auto-fill it)
+//   • change each day's occasion individually
+//   • shuffle a day's outfit, swap any single item, or remove an item
+// All edits stay local until "Pin to calendar".
+const WEATHER_BUCKETS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
+const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
+const OCCASIONS = ["Casual", "Travel", "Work", "Work Dinner", "Dinner", "Date Night", "Lounge"];
+const SEASONAL = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
+
+function TripModal({ items, apiKey, onClose, onAssign }) {
   const [start, setStart] = useState(isoDate(new Date()));
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
-  // estimate: { dailyOutfits: Array<item[]>, packingList: item[], uncovered: number[] }
-  const [estimate, setEstimate] = useState(null);
+  const [vibe, setVibe] = useState("Casual");
+  // "auto" means: use the AI-fetched brief if present, else the seasonal estimate
+  const [weather, setWeather] = useState("auto");
+  // Climate brief (temp range + notes + packing tip) — populated by analyzeTripDestination.
+  const [brief, setBrief] = useState(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  // Local working copy of per-day outfits + per-day occasions. Edits land here
+  // and never touch the database until Pin.
+  const [dayOutfits, setDayOutfits] = useState(null); // Array<item[]>
+  const [dayOccasions, setDayOccasions] = useState(null); // string[]
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [swapTarget, setSwapTarget] = useState(null); // { dayIdx, item } when picking a replacement
 
   const dayCount = Math.max(1, Math.round((new Date(end) - new Date(start)) / (24 * 60 * 60 * 1000)) + 1);
 
-  // Map month index → seasonal high for destination-agnostic planning.
-  // User can type destination for labeling; weather still uses NYC-ish baseline.
-  const SEASONAL = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
+  // If user re-runs Preview the working copy is rebuilt — but vibe/weather
+  // edits made in the preview don't auto-clear it.
+  const invalidatePreview = () => { setDayOutfits(null); setDayOccasions(null); };
+
+  // Pick the effective weather bucket: explicit override > AI brief > seasonal
+  function effectiveWeather() {
+    if (weather !== "auto") return weather;
+    if (brief?.tempHighF != null) return tempToBucket(brief.tempHighF);
+    const month = new Date(start).getMonth();
+    return tempToBucket(SEASONAL[month]);
+  }
+  function effectiveHigh() {
+    const w = effectiveWeather();
+    return WEATHER_HIGH[w] ?? 60;
+  }
+
+  // Fetch the climate brief when the user clicks Preview — also good for
+  // showing temp + packing tip inline before they pin.
+  async function fetchBrief() {
+    if (!destination.trim() || !apiKey) return null;
+    setBriefLoading(true);
+    try {
+      const result = await analyzeTripDestination(destination.trim(), start, apiKey);
+      if (result) setBrief(result);
+      return result;
+    } finally {
+      setBriefLoading(false);
+    }
+  }
 
   async function handlePreview() {
     setLoading(true);
     try {
-      const month = new Date(start).getMonth();
-      const high = SEASONAL[month];
-      const highs = Array.from({ length: dayCount }, () => high);
-      setEstimate(buildDailyOutfits(items, highs));
+      // Get the climate brief first (if we don't already have one) so the
+      // generated outfits use destination-accurate weather, not NYC May.
+      if (!brief && destination.trim() && apiKey) {
+        await fetchBrief();
+      }
+      const occasions = defaultOccasionsForVibe(vibe, dayCount);
+      const highs = Array.from({ length: dayCount }, () => effectiveHigh());
+      const { dailyOutfits } = buildDailyOutfits(items, highs, {
+        occasions,
+        weather: effectiveWeather(),
+      });
+      setDayOutfits(dailyOutfits);
+      setDayOccasions(occasions);
     } finally {
       setLoading(false);
     }
   }
 
+  // Rebuild a single day's outfit, keeping all other days locked. Used by the
+  // per-day shuffle button.
+  function reshuffleDay(dayIdx) {
+    if (!dayOutfits) return;
+    const single = buildDailyOutfits(items, [effectiveHigh()], {
+      occasions: [dayOccasions[dayIdx]],
+      weather: effectiveWeather(),
+    });
+    const newOutfits = dayOutfits.slice();
+    newOutfits[dayIdx] = single.dailyOutfits[0];
+    setDayOutfits(newOutfits);
+  }
+
+  // Swap one item for another within a single day (called from the picker).
+  function swapItem(dayIdx, oldItemId, newItem) {
+    const newOutfits = dayOutfits.map((day, i) => {
+      if (i !== dayIdx) return day;
+      return day.map(it => it.id === oldItemId ? newItem : it);
+    });
+    setDayOutfits(newOutfits);
+    setSwapTarget(null);
+  }
+
+  function removeItem(dayIdx, itemId) {
+    const newOutfits = dayOutfits.map((day, i) =>
+      i === dayIdx ? day.filter(it => it.id !== itemId) : day
+    );
+    setDayOutfits(newOutfits);
+  }
+
+  function changeOccasion(dayIdx, occ) {
+    const newOccasions = dayOccasions.slice();
+    newOccasions[dayIdx] = occ;
+    setDayOccasions(newOccasions);
+    // Reshuffle THAT day to fit the new occasion. Other days untouched.
+    const single = buildDailyOutfits(items, [effectiveHigh()], {
+      occasions: [occ],
+      weather: effectiveWeather(),
+    });
+    const newOutfits = dayOutfits.slice();
+    newOutfits[dayIdx] = single.dailyOutfits[0];
+    setDayOutfits(newOutfits);
+  }
+
+  // Derive the packing list (union of all items used) from the working copy.
+  const packingList = useMemo(() => {
+    if (!dayOutfits) return [];
+    const seen = new Set();
+    const list = [];
+    for (const day of dayOutfits) {
+      for (const it of day) {
+        if (!seen.has(it.id)) { seen.add(it.id); list.push(it); }
+      }
+    }
+    return list;
+  }, [dayOutfits]);
+
+  // Days missing core coverage (no shoes / no top+bottom / no dress).
+  const uncovered = useMemo(() => {
+    if (!dayOutfits) return [];
+    return dayOutfits.reduce((acc, day, i) => {
+      const cats = new Set(day.map(it => it.category));
+      const hasDress = ["Dresses","Jumpsuits","Sets","Occasionwear"].some(c => cats.has(c));
+      const hasTop = cats.has("Tops") || cats.has("Knits");
+      const hasBot = cats.has("Bottoms");
+      const hasShoes = cats.has("Shoes");
+      if ((!hasDress && (!hasTop || !hasBot)) || !hasShoes) acc.push(i);
+      return acc;
+    }, []);
+  }, [dayOutfits]);
+
   async function handleAssign() {
-    if (!estimate || saving) return;
+    if (!dayOutfits || saving) return;
     setSaving(true);
     try {
-      // Save the trip record for the calendar span bar
       let savedTrip = null;
       try {
-        const rows = await saveTrip({ start_date: start, end_date: end, destination: destination || null });
+        const rows = await saveTrip({
+          start_date: start,
+          end_date: end,
+          destination: destination || null,
+          // Persist the brief so TripDetailView can reuse it without a re-fetch.
+          notes: brief ? JSON.stringify(brief) : null,
+        });
         savedTrip = Array.isArray(rows) ? rows[0] : rows;
       } catch { /* non-fatal */ }
 
-      // Each day gets its own rotating outfit — no more same 6 items per day
-      const plans = estimate.dailyOutfits.map((dayItems, i) => ({
+      const plans = dayOutfits.map((dayItems, i) => ({
         date: isoDate(addDays(new Date(start), i)),
         items: dayItems.map(it => it.id),
         source: "trip",
-        occasion: "Travel",
+        occasion: dayOccasions[i] || "Travel",
+        weather: effectiveWeather(),
         notes: destination || null,
       }));
       onAssign(plans, savedTrip);
@@ -517,6 +651,8 @@ function TripModal({ items, onClose, onAssign }) {
       setSaving(false);
     }
   }
+
+  const effW = effectiveWeather();
 
   return (
     <div style={backdropStyle} onClick={onClose}>
@@ -534,48 +670,128 @@ function TripModal({ items, onClose, onAssign }) {
         <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
             Start
-            <input type="date" value={start} onChange={e => { setStart(e.target.value); setEstimate(null); }}
+            <input type="date" value={start} onChange={e => { setStart(e.target.value); invalidatePreview(); }}
               style={dateInput}/>
           </label>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
             End
-            <input type="date" value={end} onChange={e => { setEnd(e.target.value); setEstimate(null); }}
+            <input type="date" value={end} onChange={e => { setEnd(e.target.value); invalidatePreview(); }}
               style={dateInput}/>
           </label>
         </div>
         <label style={{ fontSize: 11, color: PALETTE.muted }}>
           Destination
-          <input type="text" value={destination} onChange={e => setDestination(e.target.value)}
-            placeholder="e.g. Paris, London, Tokyo"
+          <input type="text" value={destination}
+            onChange={e => { setDestination(e.target.value); setBrief(null); invalidatePreview(); }}
+            placeholder="e.g. Disneyland, Paris, Tokyo"
             style={{ ...dateInput, fontSize: 13 }}/>
         </label>
 
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+          <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
+            Vibe
+            <select value={vibe} onChange={e => { setVibe(e.target.value); invalidatePreview(); }}
+              style={dateInput}>
+              {Object.keys(TRIP_VIBES).map(v => <option key={v}>{v}</option>)}
+            </select>
+          </label>
+          <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
+            Climate
+            <select value={weather} onChange={e => { setWeather(e.target.value); invalidatePreview(); }}
+              style={dateInput}>
+              <option value="auto">Auto · {effW}</option>
+              {WEATHER_BUCKETS.map(w => <option key={w} value={w}>{w}</option>)}
+            </select>
+          </label>
+        </div>
+
+        {/* Climate brief — only shown once a destination + brief exists. */}
+        {briefLoading && (
+          <div style={{ marginTop: 10, fontSize: 11, color: PALETTE.muted, fontStyle: "italic" }}>
+            Checking weather for {destination}…
+          </div>
+        )}
+        {brief && !briefLoading && (
+          <div style={{ marginTop: 10, padding: "8px 10px", background: `${PALETTE.accent}0A`, borderLeft: `2px solid ${PALETTE.accent}`, borderRadius: "0 6px 6px 0" }}>
+            <div style={{ fontSize: 11, color: PALETTE.ink, fontWeight: 500 }}>
+              {brief.tempLowF}–{brief.tempHighF}°F · {tempToBucket(brief.tempHighF)}
+            </div>
+            <div style={{ fontSize: 11, color: PALETTE.soft, marginTop: 2 }}>{brief.weatherNotes}</div>
+            <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 2, fontStyle: "italic" }}>💡 {brief.packingTip}</div>
+          </div>
+        )}
+
         <button onClick={handlePreview} disabled={loading} style={{ ...btnPrimary, width: "100%", marginTop: 12 }}>
-          {loading ? "Building looks…" : "Preview looks"}
+          {loading ? "Building looks…" : dayOutfits ? "↺ Rebuild all looks" : "Preview looks"}
         </button>
 
-        {estimate && (
+        {dayOutfits && (
           <div style={{ marginTop: 16 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 8 }}>
-              {estimate.packingList.length} ITEMS TO PACK
-              {estimate.uncovered.length > 0 && ` · ${estimate.uncovered.length} days may need more`}
+              {packingList.length} ITEMS TO PACK
+              {uncovered.length > 0 && ` · ${uncovered.length} day${uncovered.length === 1 ? "" : "s"} may need more`}
             </div>
 
-            {/* Per-day look preview */}
-            <div style={{ maxHeight: 320, overflowY: "auto", marginBottom: 12 }}>
-              {estimate.dailyOutfits.map((dayItems, i) => {
+            {/* Per-day editable preview */}
+            <div style={{ marginBottom: 12 }}>
+              {dayOutfits.map((dayItems, i) => {
                 const dateLabel = new Date(addDays(new Date(start), i)).toLocaleDateString("en-US", {
                   weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
                 });
+                const occ = dayOccasions[i];
+                const isThin = uncovered.includes(i);
                 return (
-                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, padding: "6px 8px", background: PALETTE.cream, borderRadius: 6 }}>
-                    <div style={{ fontSize: 10, color: PALETTE.muted, minWidth: 64, flexShrink: 0 }}>{dateLabel}</div>
-                    <div style={{ display: "flex", gap: 4, flex: 1, overflowX: "auto" }}>
+                  <div key={i} style={{
+                    marginBottom: 10,
+                    padding: "8px 10px",
+                    background: "#fff",
+                    borderRadius: 8,
+                    border: `1px solid ${isThin ? `${PALETTE.accent}55` : PALETTE.line}`,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: PALETTE.ink, minWidth: 88 }}>{dateLabel}</div>
+                      <select value={occ} onChange={e => changeOccasion(i, e.target.value)}
+                        style={{ flex: 1, fontSize: 11, padding: "4px 6px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
+                        {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+                      </select>
+                      <button onClick={() => reshuffleDay(i)}
+                        title="Shuffle this day"
+                        style={{ background: "transparent", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: PALETTE.soft, cursor: "pointer" }}>
+                        ↺
+                      </button>
+                    </div>
+                    {isThin && (
+                      <div style={{ fontSize: 10, color: PALETTE.accent, marginBottom: 4, lineHeight: 1.4 }}>
+                        ⚠ Missing a core piece for this day — try a different occasion or add items to your wardrobe.
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                       {dayItems.map(it => (
-                        <div key={it.id} style={{ width: 40, height: 48, flexShrink: 0, background: "#fff", borderRadius: 3, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
-                          {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        <div key={it.id} style={{ position: "relative" }}>
+                          <button onClick={() => setSwapTarget({ dayIdx: i, item: it })}
+                            title={`Swap ${it.name}`}
+                            style={{
+                              width: 46, height: 54,
+                              padding: 0, background: PALETTE.cream,
+                              border: `1px solid ${PALETTE.line}`,
+                              borderRadius: 4, overflow: "hidden", cursor: "pointer",
+                            }}>
+                            {it.image
+                              ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                              : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.category?.[0]}</span>}
+                          </button>
+                          <button onClick={() => removeItem(i, it.id)}
+                            title="Remove"
+                            style={{ position: "absolute", top: -6, right: -6, width: 16, height: 16, borderRadius: "50%", background: "#fff", border: `1px solid ${PALETTE.line}`, color: PALETTE.muted, fontSize: 11, lineHeight: "14px", padding: 0, cursor: "pointer" }}>
+                            ×
+                          </button>
                         </div>
                       ))}
+                      {dayItems.length === 0 && (
+                        <div style={{ fontSize: 11, color: PALETTE.muted, fontStyle: "italic", padding: "8px 0" }}>
+                          No items — tap ↺ to shuffle in pieces.
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -585,7 +801,7 @@ function TripModal({ items, onClose, onAssign }) {
             {/* Packing list summary */}
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>FULL PACKING LIST</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 14, maxHeight: 160, overflowY: "auto" }}>
-              {estimate.packingList.map(it => (
+              {packingList.map(it => (
                 <div key={it.id} style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
                   {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                 </div>
@@ -595,6 +811,64 @@ function TripModal({ items, onClose, onAssign }) {
             <button onClick={handleAssign} disabled={saving} style={{ ...btnPrimary, width: "100%" }}>
               {saving ? "Pinning…" : "Pin to calendar"}
             </button>
+          </div>
+        )}
+
+        {swapTarget && (
+          <SwapPicker
+            target={swapTarget}
+            items={items}
+            currentDayItems={dayOutfits?.[swapTarget.dayIdx] || []}
+            weather={effW}
+            occasion={dayOccasions?.[swapTarget.dayIdx]}
+            onPick={(newItem) => swapItem(swapTarget.dayIdx, swapTarget.item.id, newItem)}
+            onClose={() => setSwapTarget(null)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Swap picker (per-item replacement modal) ─────────────────────────────────
+function SwapPicker({ target, items, currentDayItems, weather, occasion, onPick, onClose }) {
+  const excludeIds = currentDayItems.map(it => it.id);
+  const candidates = alternativesFor(items, target.item, {
+    weather, occasion, exclude: excludeIds,
+  });
+
+  return (
+    <div style={{ ...backdropStyle, zIndex: 1100 }} onClick={onClose}>
+      <div style={{ ...sheetStyle, maxHeight: "70vh" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted }}>SWAP</div>
+            <div style={{ fontSize: 16, fontFamily: "serif", color: PALETTE.ink }}>
+              Replace {target.item.name}
+            </div>
+            <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 2 }}>
+              {target.item.category}{occasion ? ` · ${occasion}` : ""}{weather ? ` · ${weather}` : ""}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 22, cursor: "pointer" }}>×</button>
+        </div>
+
+        {candidates.length === 0 ? (
+          <div style={{ padding: 24, textAlign: "center", color: PALETTE.muted, fontSize: 12 }}>
+            No alternatives in your wardrobe for this slot + weather.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {candidates.slice(0, 30).map(it => (
+              <button key={it.id} onClick={() => onPick(it)}
+                style={{ padding: 6, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
+                <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
+                  {it.image && <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>}
+                </div>
+                <div style={{ fontSize: 10, color: PALETTE.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</div>
+                <div style={{ fontSize: 9, color: PALETTE.muted, marginTop: 1 }}>{it.subcategory || it.category}</div>
+              </button>
+            ))}
           </div>
         )}
       </div>
