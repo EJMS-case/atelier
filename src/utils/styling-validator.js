@@ -326,11 +326,21 @@ function checkCategoryBalance(response, idMap, allItems) {
       }
     }
 
-    // Combined tops-family check: Tops + Knits together must not exceed 1.
-    // Knits includes pullovers which are functionally tops, not layers.
-    const topsFamilyCount = (catCounts["Tops"] || 0) + (catCounts["Knits"] || 0);
+    // Combined tops-family check: Tops + non-cardigan Knits together must not exceed 1.
+    // Cardigans and open-front knits are LAYERS (worn over a top), not tops themselves —
+    // a blouse + cardigan is valid. Pullovers/turtlenecks ARE tops and count against the limit.
+    const resolvedItems = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+    const isCardigan = (it) => it?.category === "Knits" && /cardigan/i.test(it?.subcategory || "");
+    const topsFamilyCount = resolvedItems.filter(it =>
+      (it.category === "Tops" || it.category === "Knits") && !isCardigan(it)
+    ).length;
     if (topsFamilyCount > 1) {
-      failures.push(`Look ${i + 1} has ${topsFamilyCount} tops-family items (Tops + Knits combined). Max 1 — use either a knit OR a top, not both.`);
+      failures.push(`Look ${i + 1} has ${topsFamilyCount} tops-family items (Tops + non-cardigan Knits combined). Max 1 — use either a knit pullover OR a top, not both.`);
     }
   });
   return failures;
@@ -553,6 +563,32 @@ function checkStatementCount(response, idMap, allItems) {
   return failures;
 }
 
+/**
+ * Check HC_SHOULDER: Work and Work Dinner looks must include Outerwear (blazer/jacket)
+ * OR a Knits layer (cardigan, open sweater). No bare shoulders at work.
+ */
+function checkShoulderCoverage(response, idMap, allItems, occasion) {
+  if (!["Work", "Work Dinner"].includes(occasion)) return [];
+  const failures = [];
+
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const hasLayer = resolved.some(it =>
+      it.category === "Outerwear" || it.category === "Knits"
+    );
+    if (!hasLayer) {
+      failures.push(`Look ${i + 1}: ${occasion} requires a covering layer — add a blazer, jacket, cardigan, or open sweater. No bare shoulders at work (HC_SHOULDER).`);
+    }
+  });
+  return failures;
+}
+
 // ── Run all checks ───────────────────────────────────────────────────────────
 
 
@@ -575,6 +611,7 @@ function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
   allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: true })));
+  allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
 
   // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
   // Over-maximum is soft — acceptable to show, just noisy.

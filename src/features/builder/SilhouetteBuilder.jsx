@@ -146,6 +146,7 @@ export default function SilhouetteBuilder({
   });
   const [weathers, setWeathers] = useState(() => tagsFor(initialLook, "weathers", "weather"));
   const [scheduleDate, setScheduleDate] = useState(() => initialScheduleDate || new Date().toISOString().slice(0, 10));
+  const isFutureSchedule = saveMode === "schedule" && scheduleDate > new Date().toISOString().slice(0, 10);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
   const [saveErr, setSaveErr] = useState("");
@@ -380,7 +381,7 @@ export default function SilhouetteBuilder({
           notes: name || null,
           layout_data: layoutData,
         });
-        setSaved(`Saved for ${scheduleDate}`);
+        setSaved(isFutureSchedule ? `Scheduled for ${scheduleDate}` : "Logged to history");
         setTimeout(onClose, 1000);
         return;
       }
@@ -784,7 +785,7 @@ export default function SilhouetteBuilder({
         </button>
         <button onClick={handleSave} disabled={saving || pickedItems.length < 2}
           style={{ flex: 1, padding: 12, background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 12, letterSpacing: "0.08em", cursor: "pointer", opacity: saving || pickedItems.length < 2 ? 0.5 : 1 }}>
-          {saving ? "Saving…" : saveMode === "favorite" ? "Save & Favorite" : "Save"}
+          {saving ? "Saving…" : saveMode === "favorite" ? "Save & Favorite" : isFutureSchedule ? "Schedule" : "Save"}
         </button>
       </div>
 
