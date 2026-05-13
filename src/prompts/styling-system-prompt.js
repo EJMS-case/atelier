@@ -202,19 +202,22 @@ function formatStylePrefs(prefs) {
   if (!prefs) return "";
   const parts = [];
   if (prefs.colorPairs?.length > 0) {
-    parts.push(`FAVORITE COLOR PAIRINGS: ${prefs.colorPairs.join(", ")}`);
+    // These are observed pairing techniques from her history — not a palette
+    // restriction. The whole closet is approved; this teaches the AI HOW she
+    // combines colors (tonal, complementary, color-blocking), not WHICH ones.
+    parts.push(`COLOR TECHNIQUE SIGNAL (observed from her outfit history — use to understand her pairing method, not to restrict palette): ${prefs.colorPairs.join(", ")}`);
   }
   if (prefs.monochromaticMode) {
-    parts.push("She loves monochromatic looks — head-to-toe in one color family with texture variation.");
+    parts.push("She frequently uses the monochrome technique — head-to-toe in one color family with texture variation. Apply this method broadly across the closet, not just for specific colors.");
   }
   if (prefs.tonalPairing) {
-    parts.push("She loves tonal pairing — shades within the same color family (e.g. navy + powder blue, burgundy + blush).");
+    parts.push("She frequently uses tonal layering — shades within the same color family (e.g. navy + powder blue, burgundy + blush). This is a technique to apply across the palette, not a color preference.");
   }
   if (prefs.direction) {
     parts.push(`OVERALL DIRECTION: ${prefs.direction}`);
   }
   return parts.length > 0
-    ? `STYLE PREFERENCES:\n${parts.join("\n")}`
+    ? `STYLING TECHNIQUE SIGNAL (from her history — soft bias, not restriction):\n${parts.join("\n")}`
     : "";
 }
 

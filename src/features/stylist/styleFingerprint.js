@@ -86,14 +86,15 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], a
 
   const prompt = `You are summarizing this client's personal style patterns from her actual outfit history. Output 4-8 short observations as plain prose — one per line, prefixed with "•". Each observation should be one sentence, ≤22 words. Focus on:
 
-- Color combinations she repeats (e.g. "navy + burgundy", "black + camel")
+- Color TECHNIQUE she defaults to (tonal layering, monochrome, complementary, color-blocking, neutral-plus-one-pop) — describe the METHOD, not just the pair. Every color in her closet is approved; the signal is HOW she combines them.
 - Silhouette / proportion habits per occasion (e.g. "leans column for Work, volume below for Date Night")
-- Fabric leanings she favors or avoids
+- Fabric and texture pairings she gravitates toward (matte × sheen, leather × knit, etc.)
 - Finishing choices she repeats (heels vs flats, bag style, belt usage)
 - Pieces she returns to often, or sets she always wears together
 - Notable absences (what she NEVER pairs)
 
 Do NOT:
+- Treat any color as "her favorite" — the whole closet is chosen and approved. Describe pairing technique only.
 - Quote specific item names or brands as prescriptive ("always wear the X blazer") — speak in patterns
 - List occasions/weathers without a pattern attached
 - Pad with generic styling advice
