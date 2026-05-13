@@ -481,13 +481,18 @@ export default function App() {
 
   const normalizeLooks = (looks, fallbackOccasion) => looks.map(look => {
     const aiLayout = (() => {
+      const ok = (c) =>
+        typeof c.x === "number" && c.x >= 0 && c.x <= 85 &&
+        typeof c.y === "number" && c.y >= 0 && c.y <= 88 &&
+        typeof c.w === "number" && c.w >= 8 && c.w <= 65 &&
+        typeof c.h === "number" && c.h >= 8 && c.h <= 88;
       const coords = (look.items || []).filter(item =>
-        typeof item === "object" && item.id &&
-        typeof item.x === "number" && typeof item.y === "number"
+        typeof item === "object" && item.id && ok(item)
       );
-      return coords.length > 0
-        ? coords.map(item => ({ id: item.id, x: item.x, y: item.y, w: item.w ?? 20, h: item.h ?? 20 }))
-        : null;
+      // Only trust AI layout if every item has valid coordinates.
+      const allItems = (look.items || []).filter(i => typeof i === "object" && i.id);
+      if (coords.length < allItems.length || coords.length < 2) return null;
+      return coords.map(item => ({ id: item.id, x: item.x, y: item.y, w: item.w, h: item.h }));
     })();
     return {
       ...look,
