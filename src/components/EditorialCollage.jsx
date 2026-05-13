@@ -63,79 +63,76 @@ function buildCollageLayout(items) {
 
   if (hasDress) {
     // ── DRESS-BASED LAYOUTS ──
+    // Whole composition lives in the central 65% of canvas — accessories
+    // tuck INTO the outfit cluster, not at canvas edges.
     if (hasLayer) {
-      // Jacket left, dress right (slight overlap on inner edges)
-      place("layer", { x: 4,  y: 6,  w: 46, h: 60 });
-      place("dress", { x: 46, y: 4,  w: 50, h: 70 });
-      if (hasBelt)  place("belt",  { x: 38, y: 64, w: 24, h: 14 });
-      if (hasBag)   place("bag",   { x: 56, y: 70, w: 26, h: 22 });
-      if (hasShoes) place("shoes", { x: 12, y: 74, w: 32, h: 22 });
+      place("layer", { x: 12, y: 8,  w: 32, h: 56 });
+      place("dress", { x: 42, y: 4,  w: 36, h: 68 });
+      if (hasBelt)  place("belt",  { x: 30, y: 60, w: 22, h: 12 });
+      if (hasBag)   place("bag",   { x: 60, y: 60, w: 22, h: 22 });
+      if (hasShoes) place("shoes", { x: 18, y: 72, w: 26, h: 22 });
     } else if (hasTop) {
-      // Layered look: tee/top in front of dress (left side), dress full-height
-      place("dress", { x: 32, y: 4,  w: 56, h: 76 });
-      place("top",   { x: 6,  y: 14, w: 38, h: 44 });
-      if (hasBelt)  place("belt",  { x: 6,  y: 56, w: 24, h: 14 });
-      if (hasBag)   place("bag",   { x: 64, y: 60, w: 28, h: 22 });
-      if (hasShoes) place("shoes", { x: 14, y: 76, w: 34, h: 22 });
+      place("dress", { x: 40, y: 4,  w: 38, h: 72 });
+      place("top",   { x: 16, y: 12, w: 28, h: 40 });
+      if (hasBelt)  place("belt",  { x: 16, y: 54, w: 22, h: 12 });
+      if (hasBag)   place("bag",   { x: 58, y: 60, w: 22, h: 22 });
+      if (hasShoes) place("shoes", { x: 22, y: 74, w: 26, h: 22 });
     } else {
-      // Dress on its own — center column, generous space
-      place("dress", { x: 28, y: 4,  w: 48, h: 74 });
-      if (hasBelt)  place("belt",  { x: 32, y: 62, w: 26, h: 14 });
-      if (hasBag)   place("bag",   { x: 66, y: 56, w: 28, h: 22 });
-      if (hasShoes) place("shoes", { x: 10, y: 76, w: 32, h: 22 });
+      // Dress on its own — center the composition tightly.
+      place("dress", { x: 36, y: 4,  w: 32, h: 70 });
+      if (hasBelt)  place("belt",  { x: 22, y: 50, w: 22, h: 12 });
+      if (hasBag)   place("bag",   { x: 58, y: 52, w: 24, h: 22 });
+      if (hasShoes) place("shoes", { x: 22, y: 72, w: 26, h: 22 });
     }
   } else {
-    // ── SEPARATES LAYOUTS — top & bottom share a column (vertical alignment)
-    // Single anchor x ensures the look reads as one outfit, not pieces.
-    const colX = hasLayer ? 38 : 26;
-    const colW = hasLayer ? 38 : 44;
+    // ── SEPARATES LAYOUTS — top & bottom share a vertical column, shoes
+    // ground that column, bag tucks at hip level beside the bottom.
 
     if (hasLayer && hasTop) {
-      // Reference style: jacket left, top in front overlapping jacket cuff,
-      // bottom directly below top in same column. Bag tucks into right margin.
-      place("layer",  { x: 4,      y: 4,        w: 42, h: 60 });
-      place("top",    { x: colX,   y: 6,        w: colW, h: 36 });
-      place("bottom", { x: colX,   y: 40,       w: colW, h: 50 });
-      if (hasBelt)  place("belt",  { x: 4,      y: 66,  w: 26, h: 14 });
-      if (hasBag)   place("bag",   { x: 78,     y: 56,  w: 20, h: 18 });
-      if (hasShoes) place("shoes", { x: 8,      y: 78,  w: 28, h: 20 });
+      // Jacket left, top in front overlapping jacket cuff, bottom directly
+      // below top in same column. Bag at hip level RIGHT NEXT TO the pants
+      // (not at canvas edge). Shoes balance below the jacket.
+      place("layer",  { x: 8,  y: 8,  w: 32, h: 54 });
+      place("top",    { x: 34, y: 6,  w: 30, h: 36 });
+      place("bottom", { x: 34, y: 40, w: 30, h: 50 });
+      if (hasBelt)  place("belt",  { x: 8,  y: 60, w: 22, h: 12 });
+      if (hasBag)   place("bag",   { x: 60, y: 52, w: 24, h: 22 });
+      if (hasShoes) place("shoes", { x: 14, y: 70, w: 28, h: 22 });
     } else if (hasLayer) {
-      // Jacket as the top half, bottom in same column below
-      place("layer",  { x: 6,  y: 4,  w: 50, h: 56 });
-      place("bottom", { x: 50, y: 4,  w: 44, h: 76 });
-      if (hasBelt)  place("belt",  { x: 8,  y: 60, w: 26, h: 14 });
-      if (hasBag)   place("bag",   { x: 18, y: 76, w: 26, h: 20 });
-      if (hasShoes) place("shoes", { x: 56, y: 78, w: 32, h: 20 });
+      // Jacket + bottom (no separate top — layer plays the top role).
+      place("layer",  { x: 14, y: 6,  w: 34, h: 56 });
+      place("bottom", { x: 46, y: 6,  w: 32, h: 72 });
+      if (hasBelt)  place("belt",  { x: 16, y: 60, w: 22, h: 12 });
+      if (hasBag)   place("bag",   { x: 58, y: 76, w: 24, h: 22 });
+      if (hasShoes) place("shoes", { x: 20, y: 74, w: 26, h: 22 });
     } else if (hasTop && hasBottom) {
-      // Top + bottom share a column. Bottom overlaps top by ~3% (waistband
-      // tuck) — that little overlap is what makes it look styled.
-      place("top",    { x: 22, y: 4,  w: 50, h: 42 });
-      place("bottom", { x: 22, y: 42, w: 52, h: 50 });
-      if (hasBelt)  place("belt",  { x: 4,  y: 38, w: 22, h: 14 });
-      if (hasBag)   place("bag",   { x: 74, y: 56, w: 24, h: 22 });
-      if (hasShoes) place("shoes", { x: 8,  y: 74, w: 30, h: 22 });
+      // Top + bottom share a tight central column. Bottom overlaps the top
+      // hem by ~3% (waistband tuck) — that's the styled-look detail.
+      place("top",    { x: 28, y: 4,  w: 38, h: 40 });
+      place("bottom", { x: 30, y: 40, w: 34, h: 50 });
+      if (hasBelt)  place("belt",  { x: 12, y: 38, w: 22, h: 12 });
+      if (hasBag)   place("bag",   { x: 62, y: 52, w: 24, h: 22 });
+      if (hasShoes) place("shoes", { x: 20, y: 72, w: 28, h: 22 });
     } else if (hasTop) {
-      // Top only — center it
-      place("top",    { x: 22, y: 6,  w: 56, h: 56 });
-      if (hasBag)   place("bag",   { x: 70, y: 60, w: 26, h: 22 });
-      if (hasShoes) place("shoes", { x: 12, y: 72, w: 34, h: 22 });
+      place("top",    { x: 28, y: 8,  w: 44, h: 54 });
+      if (hasBag)   place("bag",   { x: 60, y: 60, w: 24, h: 22 });
+      if (hasShoes) place("shoes", { x: 18, y: 70, w: 28, h: 22 });
     } else if (hasBottom) {
-      place("bottom", { x: 22, y: 4,  w: 56, h: 78 });
-      if (hasBelt)  place("belt",  { x: 4,  y: 30, w: 22, h: 14 });
-      if (hasBag)   place("bag",   { x: 70, y: 56, w: 26, h: 22 });
-      if (hasShoes) place("shoes", { x: 12, y: 78, w: 34, h: 20 });
+      place("bottom", { x: 32, y: 4,  w: 36, h: 74 });
+      if (hasBelt)  place("belt",  { x: 14, y: 30, w: 22, h: 12 });
+      if (hasBag)   place("bag",   { x: 60, y: 54, w: 24, h: 22 });
+      if (hasShoes) place("shoes", { x: 22, y: 76, w: 28, h: 20 });
     }
   }
 
-  // ── Accessories: tuck into corners we know the main slots don't fill ──
-  // Order matters — first one placed in the most prominent open spot.
+  // ── Accessories: tuck into negative space INSIDE the composition, not
+  // at canvas corners (corners read as "abandoned" / disconnected).
   if (g.accessory.length > 0) {
-    // Smaller, square so jewelry/sunglasses don't dwarf the look.
     const candidates = [
-      { x: 78, y: 4,  w: 16, h: 14 },   // top right (earrings)
-      { x: 4,  y: 4,  w: 14, h: 14 },   // top left
-      { x: 80, y: 30, w: 14, h: 14 },   // mid right
-      { x: 4,  y: 28, w: 14, h: 14 },   // mid left
+      { x: 70, y: 8,  w: 14, h: 12 },   // upper right, inside cluster
+      { x: 14, y: 8,  w: 14, h: 12 },   // upper left, inside cluster
+      { x: 70, y: 28, w: 12, h: 12 },   // mid right
+      { x: 14, y: 28, w: 12, h: 12 },   // mid left
     ];
     const isOccupied = (pos) => slots.some(sl =>
       Math.abs(sl.x - pos.x) < 18 && Math.abs(sl.y - pos.y) < 18
