@@ -8,13 +8,18 @@ const CELL_HEIGHT = THUMB_SIZE + LABEL_HEIGHT;
 const COLS = 10;
 const MAX_PER_SHEET = 80; // 10 cols × 8 rows
 
-function loadImage(src) {
+function loadImage(src, timeoutMs = 9000) {
   return new Promise((resolve) => {
     if (!src) { resolve(null); return; }
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
+    // Background tabs have image loads deprioritized by Chrome. Without a
+    // timeout the Promise.all in generateContactSheets can stall indefinitely,
+    // blocking the entire Anthropic API call. Resolve with null on timeout so
+    // generation continues with text-only inventory for that item.
+    const timer = setTimeout(() => resolve(null), timeoutMs);
+    img.onload  = () => { clearTimeout(timer); resolve(img); };
+    img.onerror = () => { clearTimeout(timer); resolve(null); };
     img.src = src;
   });
 }

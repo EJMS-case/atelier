@@ -629,7 +629,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         <div style={{...s.settingsCard, marginTop:16, borderColor: fSyncDone?.failed > 0 ? "var(--color-danger)" : fSyncDone ? "var(--color-success)" : "#E8DDD5"}}>
           <div style={s.settingsTitle}>Sync Wardrobe to Cloud</div>
           <p style={s.settingsSub}>
-            Saves all {items.length} items from this browser directly to Supabase — use this after a bulk upload or if items aren't appearing on other devices. Do this before refreshing.
+            Upserts all {items.length} items from this device to Supabase — existing items are updated in place, nothing is duplicated. Use this after a bulk upload or if your wardrobe isn't showing on other devices.
           </p>
           {fSyncProg && (
             <div style={{marginBottom:10}}>
