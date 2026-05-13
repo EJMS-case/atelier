@@ -355,6 +355,29 @@ export const sb = {
     if (!res.ok) return [];
     return res.json().catch(() => []);
   },
+  async fetchAllTrips() {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trips?order=start_date.asc`,
+      { headers: SB_HEADERS },
+    );
+    if (!res.ok) return [];
+    return res.json().catch(() => []);
+  },
+  async updateTrip(id, patch) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updateTrip failed ${res.status}`);
+    return res.json();
+  },
+  async deleteTrip(id) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
+      method: "DELETE", headers: SB_HEADERS,
+    });
+    return res.ok;
+  },
 
   // ── Look feedback (thumbs up/down on generated looks) ──
   async saveLookFeedback({ lookHash, rating, itemIds, occasion, mood }) {

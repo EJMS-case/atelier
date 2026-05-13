@@ -9,6 +9,7 @@ import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast } from "../../lib/weather.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
+import TripDetailView from "./TripDetailView.jsx";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 const PALETTE = {
@@ -64,12 +65,13 @@ const btnSecondary = {
  * @param {Object[]} props.outfitLogs   - saved outfits for the "pick saved" picker
  * @param {() => void} props.onGoToStyleMe
  */
-export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditItem, onEditPlan }) {
+export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
   const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
   const [trips, setTrips] = useState([]);
+  const [activeTrip, setActiveTrip] = useState(null); // trip object → show TripDetailView
   const [syncError, setSyncError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   // NYC daily-high forecast for the next ~16 days, keyed by iso date.
@@ -155,6 +157,19 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
 
   const todayIso = nyToday();
 
+  // When a trip chip is tapped, render TripDetailView instead of the calendar
+  if (activeTrip) {
+    return (
+      <TripDetailView
+        trip={activeTrip}
+        items={items}
+        apiKey={apiKey}
+        onBack={() => { setActiveTrip(null); refreshPlans(); }}
+        onBuildDay={onBuildDay}
+      />
+    );
+  }
+
   return (
     <div style={{ padding: "16px 16px 120px" }}>
       {/* NYC location + today + forecast pill — anchors the planner to the
@@ -187,18 +202,20 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
       {trips.length > 0 && (
         <div style={{ marginBottom: 10 }}>
           {trips.map(trip => (
-            <div key={trip.id} style={{
-              display: "flex", alignItems: "center", gap: 6,
+            <button key={trip.id} onClick={() => setActiveTrip(trip)} style={{
+              display: "flex", alignItems: "center", gap: 6, width: "100%",
               padding: "5px 10px", marginBottom: 4,
               background: `${PALETTE.accent}12`,
               borderLeft: `3px solid ${PALETTE.accent}`,
+              borderRight: "none", borderTop: "none", borderBottom: "none",
               borderRadius: "0 6px 6px 0",
-              fontSize: 11, color: PALETTE.ink,
+              fontSize: 11, color: PALETTE.ink, cursor: "pointer", textAlign: "left",
             }}>
               <span style={{ fontWeight: 600 }}>{trip.destination || "Trip"}</span>
               <span style={{ color: PALETTE.muted }}>·</span>
               <span style={{ color: PALETTE.muted }}>{formatTripRange(trip.start_date, trip.end_date)}</span>
-            </div>
+              <span style={{ marginLeft: "auto", color: PALETTE.muted, fontSize: 10 }}>View →</span>
+            </button>
           ))}
         </div>
       )}
@@ -286,12 +303,14 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
         <TripModal
           items={items}
           onClose={() => setShowTrip(false)}
-          onAssign={async (rangePlans) => {
+          onAssign={async (rangePlans, savedTrip) => {
             for (const p of rangePlans) {
               await savePlan(p).catch(() => {});
             }
             setShowTrip(false);
-            refreshPlans();
+            await refreshPlans();
+            // Navigate directly into the trip detail view after creation
+            if (savedTrip) setActiveTrip(savedTrip);
           }}
         />
       )}
@@ -479,11 +498,11 @@ function TripModal({ items, onClose, onAssign }) {
     setSaving(true);
     try {
       // Save the trip record for the calendar span bar
-      await saveTrip({
-        start_date: start,
-        end_date: end,
-        destination: destination || null,
-      }).catch(() => {});
+      let savedTrip = null;
+      try {
+        const rows = await saveTrip({ start_date: start, end_date: end, destination: destination || null });
+        savedTrip = Array.isArray(rows) ? rows[0] : rows;
+      } catch { /* non-fatal */ }
 
       // Each day gets its own rotating outfit — no more same 6 items per day
       const plans = estimate.dailyOutfits.map((dayItems, i) => ({
@@ -493,7 +512,7 @@ function TripModal({ items, onClose, onAssign }) {
         occasion: "Travel",
         notes: destination || null,
       }));
-      onAssign(plans);
+      onAssign(plans, savedTrip);
     } finally {
       setSaving(false);
     }

@@ -1274,10 +1274,16 @@ export default function App() {
           </div>
           <PlannerWrapper
             items={items}
+            apiKey={apiKey}
             onGoToStyleMe={() => setView("style")}
             onEditItem={(item) => { setEditItem(item); setView("edit"); }}
             onEditPlan={(iso, plan) => {
               setEditingPlan({ iso, plan });
+              setManualBuilderOpen(true);
+              setView("style");
+            }}
+            onBuildDay={(iso, existingIds) => {
+              setEditingPlan({ iso, plan: { date: iso, items: existingIds } });
               setManualBuilderOpen(true);
               setView("style");
             }}

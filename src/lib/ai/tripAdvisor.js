@@ -1,0 +1,156 @@
+// ── TRIP ADVISOR AI ───────────────────────────────────────────────────────────
+// Two jobs:
+//   1. analyzeTripDestination — one Haiku call per trip. Given destination + dates,
+//      returns climate summary, temp range, weather notes, packing tip.
+//      Stored in trips.notes as JSON so it's only called once.
+//   2. generateTripDayLook — lightweight single-look generation for one trip day.
+//      No contact sheets, no streaming, no retries — just a fast text call that
+//      picks items from the wardrobe and returns a single structured look.
+
+import { z } from "zod";
+import { invokeTool, invokeToolRaw } from "./toolUse.js";
+import { LooksTool } from "./schemas.js";
+import { filterByWeather, shuffle } from "../../utils/item-helpers.js";
+
+const API_URL = "https://api.anthropic.com/v1/messages";
+
+// ── Destination brief ─────────────────────────────────────────────────────────
+
+const BriefSchema = z.object({
+  climate:      z.string(),
+  tempHighF:    z.number(),
+  tempLowF:     z.number(),
+  weatherNotes: z.string(),
+  packingTip:   z.string(),
+});
+
+const BriefTool = {
+  name: "return_trip_brief",
+  description: "Return climate and packing information for a travel destination.",
+  input_schema: {
+    type: "object",
+    required: ["climate", "tempHighF", "tempLowF", "weatherNotes", "packingTip"],
+    properties: {
+      climate:      { type: "string", description: "One word: tropical, hot, warm, temperate, cool, cold, alpine" },
+      tempHighF:    { type: "number", description: "Typical daily high in Fahrenheit" },
+      tempLowF:     { type: "number", description: "Typical daily low in Fahrenheit" },
+      weatherNotes: { type: "string", description: "One sentence on expected conditions (rain, humidity, wind, sun, etc.)" },
+      packingTip:   { type: "string", description: "One specific practical tip (e.g. pack waterproof shoes, bring a light scarf)" },
+    },
+  },
+};
+
+/**
+ * Call Claude Haiku once to get weather/climate context for a destination.
+ * Returns null on any failure — callers degrade gracefully.
+ */
+export async function analyzeTripDestination(destination, startDate, apiKey) {
+  if (!apiKey || !destination?.trim()) return null;
+  try {
+    const month = new Date(startDate + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    return await invokeTool({
+      apiKey,
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 300,
+      content: `What is the typical weather in ${destination.trim()} during ${month}? Return a brief for packing purposes.`,
+      tool: BriefTool,
+      schema: BriefSchema,
+      kind: "trip_brief",
+    });
+  } catch {
+    return null;
+  }
+}
+
+// ── Per-day look generation ───────────────────────────────────────────────────
+
+/**
+ * Generate a single outfit look for one trip day.
+ * Text-only (no contact sheets) → fast, cheap. Returns a normalized look object
+ * with { items: [id,...], title, rationale } or null on failure.
+ *
+ * @param {Object[]} items        - full wardrobe
+ * @param {string}   occasion     - e.g. "Casual", "Dinner", "Work"
+ * @param {string}   weather      - "Hot" | "Warm" | "Mild" | "Cool" | "Cold"
+ * @param {string}   destination  - e.g. "Paris"
+ * @param {string}   apiKey
+ */
+export async function generateTripDayLook(items, occasion, weather, destination, apiKey) {
+  if (!apiKey || !items?.length) return null;
+
+  const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
+  const highF = WEATHER_HIGH[weather] || 60;
+
+  // Filter by weather and exclude swim/loungewear
+  const eligible = items.filter(it =>
+    it.category && it.category !== "Swim" && it.category !== "Loungewear" &&
+    filterByWeather([it], weather).length > 0
+  );
+
+  if (eligible.length < 4) return null;
+
+  // Compact inventory — no short IDs, just real IDs for simplicity
+  const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts"];
+  const sorted = [...eligible].sort((a, b) => (CAT_ORDER.indexOf(a.category) ?? 99) - (CAT_ORDER.indexOf(b.category) ?? 99));
+  const sampled = sorted.slice(0, 60);
+
+  const inventory = sampled.map(it =>
+    `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}`
+  ).join("\n");
+
+  const destNote = destination ? ` in ${destination}` : "";
+  const prompt = `You are a stylist building ONE complete outfit for a trip day${destNote}.
+
+OCCASION: ${occasion}
+WEATHER: ${weather} (around ${highF}°F)
+
+WARDROBE (use ONLY these IDs):
+${inventory}
+
+Build exactly 1 polished, complete outfit appropriate for ${occasion} in ${weather} weather.
+The look must include at minimum: a top or dress, bottoms (unless dress), and shoes.
+Add a bag and layer/outerwear if appropriate for the weather and occasion.
+
+Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:xxxx format stripped to just the UUID).`;
+
+  try {
+    const { toolBlock } = await invokeToolRaw({
+      apiKey,
+      model: "claude-sonnet-4-6",
+      maxTokens: 800,
+      content: prompt,
+      tool: LooksTool,
+    });
+    if (!toolBlock?.input?.looks?.[0]) return null;
+
+    const raw = toolBlock.input.looks[0];
+    // Resolve item IDs back to item objects
+    const resolvedItems = (raw.items || [])
+      .map(it => {
+        const id = typeof it === "object" ? it.id : String(it).replace(/^ID:/i, "").trim();
+        return items.find(w => w.id === id);
+      })
+      .filter(Boolean);
+
+    if (resolvedItems.length < 2) return null;
+
+    return {
+      title: raw.title || `${occasion} look`,
+      rationale: raw.rationale || "",
+      items: resolvedItems.map(it => it.id),
+      occasion,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Weather bucket helper ─────────────────────────────────────────────────────
+
+export function tempToBucket(highF) {
+  if (highF >= 82) return "Hot";
+  if (highF >= 68) return "Warm";
+  if (highF >= 52) return "Mild";
+  if (highF >= 38) return "Cool";
+  return "Cold";
+}
