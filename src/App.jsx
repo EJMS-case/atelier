@@ -479,21 +479,33 @@ export default function App() {
     }
   }, [favorites]);
 
-  const normalizeLooks = (looks, fallbackOccasion) => looks.map(look => ({
-    ...look,
-    items: (look.items || []).map(item =>
-      typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
-    ),
-    itemRoles: (look.items || []).reduce((acc, item) => {
-      if (typeof item === "object" && item.id && item.role) acc[item.id] = item.role;
-      return acc;
-    }, {}),
-    mood: look.vibe || look.mood || "",
-    occasion: look.occasion || fallbackOccasion,
-    styling: look.rationale || look.styling || "",
-    colorStory: look.color_strategy || look.colorStory || "",
-    reasoning: look.rationale || look.reasoning || "",
-  }));
+  const normalizeLooks = (looks, fallbackOccasion) => looks.map(look => {
+    const aiLayout = (() => {
+      const coords = (look.items || []).filter(item =>
+        typeof item === "object" && item.id &&
+        typeof item.x === "number" && typeof item.y === "number"
+      );
+      return coords.length > 0
+        ? coords.map(item => ({ id: item.id, x: item.x, y: item.y, w: item.w ?? 20, h: item.h ?? 20 }))
+        : null;
+    })();
+    return {
+      ...look,
+      items: (look.items || []).map(item =>
+        typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
+      ),
+      itemRoles: (look.items || []).reduce((acc, item) => {
+        if (typeof item === "object" && item.id && item.role) acc[item.id] = item.role;
+        return acc;
+      }, {}),
+      layout_data: look.layout_data || aiLayout || undefined,
+      mood: look.vibe || look.mood || "",
+      occasion: look.occasion || fallbackOccasion,
+      styling: look.rationale || look.styling || "",
+      colorStory: look.color_strategy || look.colorStory || "",
+      reasoning: look.rationale || look.reasoning || "",
+    };
+  });
 
   // Join the multi-weather Set into a single label the downstream code
   // already understands ("Hot (85°F+) + Rainy"). The filter / prompt parse

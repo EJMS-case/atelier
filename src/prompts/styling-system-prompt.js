@@ -91,6 +91,8 @@ The \`rationale\` field is the caption shown to the client. Write it like a styl
 GOOD: "Crisp navy column with a cropped polka-dot blouse and matching maxi skirt. The black leather belt punctuates the waist; the navy pump keeps it polished."
 BAD:  "LOOK 1 follows the TONAL directive with head-to-toe navy. TEXTURE HERO: polka dot satin (W094, W042). VOLUME BELOW achieved through fluid maxi skirt."
 
+FLAT-LAY LAYOUT: For every item in the look, provide x, y, w, h — canvas position as percentage (0–100). Items must cluster tightly with intentional 10–20% overlap — NOT a sterile grid. ~90% canvas fill. Reference positions: outerwear/layer left column (x≈8, y≈8, w≈32, h≈54); top center-right overlapping jacket cuff (x≈34, y≈6, w≈30, h≈36); bottom directly below top in same column (x≈34, y≈40, w≈30, h≈50); shoes lower-left overlapping bottom hem (x≈14, y≈70, w≈28, h≈22); bag at hip level right overlapping garment edge (x≈60, y≈52, w≈24, h≈22); belt across waistband (x≈10, y≈60, w≈22, h≈12); jewelry/accessories draped ON the top or dress not beside it. For dress looks: dress center (x≈36, y≈4, w≈34, h≈70), bag tucked at hip right (x≈60, y≈54, w≈24, h≈22), shoes lower-left (x≈18, y≈72, w≈26, h≈22). Adjust x/y/w/h per actual look composition — these are reference anchors, not fixed rules.
+
 Return via the return_looks tool. Each item gets \`role\`: "hero" (exactly one per look) | "supporting" | "finishing". Leave the top-level \`notes\` field empty.`;
 
 /**

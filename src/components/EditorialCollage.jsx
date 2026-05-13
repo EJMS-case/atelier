@@ -154,6 +154,8 @@ function buildCollageLayout(items) {
 // auto-layout engine. Items present in lookItems but missing from the layout
 // are appended via auto-layout so a partially-saved arrangement still renders
 // every piece.
+const CAT_Z = { Outerwear: 2, Bottoms: 3, Dresses: 4, Jumpsuits: 4, Tops: 5, Shoes: 6, Bags: 7, Belts: 9, Accessories: 10, Knits: 5 };
+
 function buildFromLayout(items, layout) {
   const byId = new Map(layout.map(e => [e.id, e]));
   const positioned = [];
@@ -161,7 +163,8 @@ function buildFromLayout(items, layout) {
   for (const it of items) {
     const entry = byId.get(it.id);
     if (entry && typeof entry.x === "number") {
-      positioned.push({ ...it, x: entry.x, y: entry.y, w: entry.w, h: entry.h, rotate: 0, zIndex: entry.z ?? 5 });
+      const zIndex = entry.z ?? CAT_Z[it.category] ?? 5;
+      positioned.push({ ...it, x: entry.x, y: entry.y, w: entry.w, h: entry.h, rotate: 0, zIndex });
     } else {
       missing.push(it);
     }

@@ -52,6 +52,10 @@ export const AutoDetectTool = {
 const LookItemSchema = z.object({
   id: z.string(),
   role: z.string().optional(),
+  x: z.number().min(0).max(100).optional(),
+  y: z.number().min(0).max(100).optional(),
+  w: z.number().min(1).max(100).optional(),
+  h: z.number().min(1).max(100).optional(),
 });
 
 const LookSchema = z.object({
@@ -91,6 +95,10 @@ export const LooksTool = {
                 properties: {
                   id:   { type: "string" },
                   role: { type: "string" },
+                  x:    { type: "number", minimum: 0, maximum: 100 },
+                  y:    { type: "number", minimum: 0, maximum: 100 },
+                  w:    { type: "number", minimum: 1, maximum: 100 },
+                  h:    { type: "number", minimum: 1, maximum: 100 },
                 },
                 required: ["id"],
               },
