@@ -32,7 +32,7 @@ export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited
       </div>
       <div style={s.cardActions}>
         {onStyleItem && (
-          <button style={s.iconBtn} onClick={() => onStyleItem(item)} title="Style with this piece">
+          <button style={s.iconBtn} onClick={() => onStyleItem(item)} title="Style around this piece">
             <Icon path={icons.sparkle} size={13}/>
           </button>
         )}

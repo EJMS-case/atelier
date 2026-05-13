@@ -149,7 +149,7 @@ export default function FilterBar({ items, activeFilters, onChange }) {
                 boxShadow: isActive("color", family.name)
                   ? `0 0 0 2px var(--color-ink), 0 0 0 4px ${family.hex}`
                   : "none",
-                border: family.name === "White" || family.name === "Neutral" ? "1px solid var(--color-border)" : "none",
+                border: ["White", "Neutrals", "Yellow"].includes(family.name) ? "1px solid var(--color-border)" : "none",
               }}
               title={family.name}
             />

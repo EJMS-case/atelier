@@ -2,7 +2,10 @@
 // Weather filter, sort comparators, sleeve classifier, taxonomy migration.
 
 import { TAXONOMY, SUBCATEGORY_L3, BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
-import { COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT } from "../constants/color.js";
+import {
+  COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT,
+  COLOR_FAMILY_RANGES, familyForColorString,
+} from "../constants/color.js";
 
 // ── SLEEVE CLASSIFICATION ───────────────────────────────────────────────────
 export function getSleeveType(item) {
@@ -83,32 +86,19 @@ export function filterByWeather(items, weather) {
 }
 
 // ── COLOR SORT INDEX ────────────────────────────────────────────────────────
+// Returns a numeric index aligned with COLOR_SORT_ORDER. We try the stored
+// shade name first, then derive a family from the free-form color string
+// and use the family's start-of-range index as a fallback. Items with no
+// recognizable color land at the end of the sort.
 export function colorSortIdx(item) {
   const cf = item.color_family || "";
   if (COLOR_SORT_ORDER[cf] !== undefined) return COLOR_SORT_ORDER[cf];
-  const c = (item.color || "").toLowerCase();
-  if (!c) return 50;
-  // Single pass: prefer exact match, fall back to substring match.
-  let substr = -1;
-  for (const [key, idx] of Object.entries(COLOR_SORT_ORDER)) {
-    const k = key.toLowerCase();
-    if (c === k) return idx;
-    if (substr === -1 && c.includes(k)) substr = idx;
-  }
-  if (substr !== -1) return substr;
-  if (/black/i.test(c)) return 0;
-  if (/charcoal|grey|gray/i.test(c)) return 1;
-  if (/navy|midnight/i.test(c)) return 2;
-  if (/burgundy|wine|oxblood|merlot|plum/i.test(c)) return 5;
-  if (/red|cherry|crimson/i.test(c)) return 8;
-  if (/pink|blush|rose/i.test(c)) return 10;
-  if (/teal|green|emerald|forest|hunter/i.test(c)) return 13;
-  if (/brown|espresso|chocolate|cognac|chestnut|walnut|cocoa/i.test(c)) return 15;
-  if (/beige|camel|tan|nude|oat|sand|neutral/i.test(c)) return 18;
-  if (/white|ivory|cream|ecru/i.test(c)) return 21;
-  if (/blue|cobalt|sapphire/i.test(c)) return 3;
-  if (/purple|violet|lavender/i.test(c)) return 6;
-  return 50;
+  const c = (item.color || "").trim();
+  if (!c) return 9999;
+  if (COLOR_SORT_ORDER[c] !== undefined) return COLOR_SORT_ORDER[c];
+  const family = familyForColorString(c);
+  if (family && COLOR_FAMILY_RANGES[family]) return COLOR_FAMILY_RANGES[family][0];
+  return 9999;
 }
 
 export function defaultSortComparator(a, b) {

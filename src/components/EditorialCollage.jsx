@@ -2,7 +2,13 @@ import { s } from "../ui/styles.js";
 import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
 import TrimmedImage from "./TrimmedImage.jsx";
 
-// Build layout positions based on item categories
+// ── EDITORIAL COLLAGE LAYOUTS ────────────────────────────────────────────────
+// Inspired by Pinterest-style flat-lays (white background, items grouped tightly,
+// roughly equal scale, intentional layering). Garments share a vertical column;
+// shoes ground the bottom; bag tucks into negative space; accessories float in
+// the margins. We deliberately allow garments to OVERLAP a few percent (top
+// crossing the jacket cuff, bag sitting in front of pants) — that's what reads
+// as a styled flat-lay rather than a sterile grid.
 function buildCollageLayout(items) {
   const all = items;
 
@@ -23,13 +29,12 @@ function buildCollageLayout(items) {
     return "top";
   };
 
-  // Deduplicate: keep only the first item per role (prevents 2 shoes, 2 bags, etc.)
+  // Deduplicate: keep only the first item per singleton role.
   const seenRoles = new Set();
   const deduped = [];
   all.forEach(item => {
     const role = getRole(item);
-    // Allow multiple tops and accessories, but only one of: shoes, bag, belt, bottom, dress, layer
-    const singletonRoles = new Set(["shoes", "bag", "belt"]);
+    const singletonRoles = new Set(["shoes", "bag", "belt", "bottom", "dress", "layer"]);
     if (singletonRoles.has(role) && seenRoles.has(role)) return;
     seenRoles.add(role);
     deduped.push(item);
@@ -38,103 +43,109 @@ function buildCollageLayout(items) {
   const g = { layer:[], top:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], accessory:[] };
   deduped.forEach(item => { const r = getRole(item); if (g[r]) g[r].push(item); });
 
-  // ── Dynamic layout engine ──
-  // Determines layout based on whether outfit is dress-based or separates-based
-  const hasDress = g.dress.length > 0;
+  const hasDress  = g.dress.length > 0;
   const hasBottom = g.bottom.length > 0;
-  const hasTop = g.top.length > 0;
-  const hasLayer = g.layer.length > 0;
-  const hasBelt = g.belt.length > 0;
-  const hasBag = g.bag.length > 0;
-  const hasShoes = g.shoes.length > 0;
+  const hasTop    = g.top.length > 0;
+  const hasLayer  = g.layer.length > 0;
+  const hasBelt   = g.belt.length > 0;
+  const hasBag    = g.bag.length > 0;
+  const hasShoes  = g.shoes.length > 0;
 
   const slots = [];
-  const zMap = { layer:5, top:4, dress:4, bottom:2, shoes:8, bag:7, belt:10, accessory:11 };
-  const place = (role, pos) => {
-    if (g[role].length > 0) {
-      slots.push({ ...g[role][0], x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
+  // Z-order: garments back, accessories front. Top crosses the jacket; bag
+  // sits in front of pants; shoes ground the composition; jewelry/belt on top.
+  const zMap = { layer:2, top:5, dress:4, bottom:3, shoes:6, bag:7, belt:9, accessory:10 };
+  const place = (role, pos, idx = 0) => {
+    if (g[role][idx]) {
+      slots.push({ ...g[role][idx], x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
     }
   };
 
-  // Garment slots are kept TALL because most clothing photos are portrait —
-  // a tall slot lets objectFit:contain render the piece large; a short-wide
-  // slot leaves whitespace and the garment looks smaller than its neighbours.
-  // Belt photos vary wildly (square coiled vs. wide flat), so we give them a
-  // chunky near-square slot. With objectFit:contain a square slot renders the
-  // belt at a readable ~12-14% of canvas regardless of source aspect ratio,
-  // which is what reads as an accessory instead of a dot.
-  // Slots overlap their neighbours by a few percent on purpose — drop-shadow
-  // and zIndex stacking read it as editorial layering rather than a tiled grid.
   if (hasDress) {
-    // ── DRESS-BASED LAYOUT ──
+    // ── DRESS-BASED LAYOUTS ──
     if (hasLayer) {
-      // Dress + Layer — both tall, side by side, layer crosses onto dress edge
-      place("layer",  { x:1,  y:1,  w:46, h:64 });
-      place("dress",  { x:42, y:1,  w:54, h:72 });
-      if (hasBelt) place("belt", { x:36, y:70, w:26, h:15 });
-      if (hasShoes) place("shoes", { x:1, y:72, w:34, h:26 });
-      if (hasBag) place("bag", { x:62, y:72, w:34, h:26 });
+      // Jacket left, dress right (slight overlap on inner edges)
+      place("layer", { x: 4,  y: 6,  w: 46, h: 60 });
+      place("dress", { x: 46, y: 4,  w: 50, h: 70 });
+      if (hasBelt)  place("belt",  { x: 38, y: 64, w: 24, h: 14 });
+      if (hasBag)   place("bag",   { x: 56, y: 70, w: 26, h: 22 });
+      if (hasShoes) place("shoes", { x: 12, y: 74, w: 32, h: 22 });
     } else if (hasTop) {
-      // Dress + Top — dress dominant, top smaller on left, slight overlap
-      place("top",    { x:1,  y:1,  w:44, h:48 });
-      place("dress",  { x:40, y:1,  w:56, h:72 });
-      if (hasBelt) place("belt", { x:4,  y:48, w:26, h:15 });
-      if (hasShoes) place("shoes", { x:28, y:72, w:34, h:26 });
-      if (hasBag) place("bag", { x:62, y:72, w:34, h:26 });
+      // Layered look: tee/top in front of dress (left side), dress full-height
+      place("dress", { x: 32, y: 4,  w: 56, h: 76 });
+      place("top",   { x: 6,  y: 14, w: 38, h: 44 });
+      if (hasBelt)  place("belt",  { x: 6,  y: 56, w: 24, h: 14 });
+      if (hasBag)   place("bag",   { x: 64, y: 60, w: 28, h: 22 });
+      if (hasShoes) place("shoes", { x: 14, y: 76, w: 34, h: 22 });
     } else {
-      // Dress only
-      place("dress",  { x:22, y:1,  w:54, h:74 });
-      if (hasBelt) place("belt", { x:34, y:72, w:26, h:15 });
-      if (hasShoes) place("shoes", { x:1, y:72, w:32, h:24 });
-      if (hasBag) place("bag", { x:66, y:72, w:32, h:24 });
+      // Dress on its own — center column, generous space
+      place("dress", { x: 28, y: 4,  w: 48, h: 74 });
+      if (hasBelt)  place("belt",  { x: 32, y: 62, w: 26, h: 14 });
+      if (hasBag)   place("bag",   { x: 66, y: 56, w: 28, h: 22 });
+      if (hasShoes) place("shoes", { x: 10, y: 76, w: 32, h: 22 });
     }
   } else {
-    // ── SEPARATES-BASED LAYOUT (top + bottom) ──
+    // ── SEPARATES LAYOUTS — top & bottom share a column (vertical alignment)
+    // Single anchor x ensures the look reads as one outfit, not pieces.
+    const colX = hasLayer ? 38 : 26;
+    const colW = hasLayer ? 38 : 44;
+
     if (hasLayer && hasTop) {
-      // Layer + Top + Bottom — layer crosses onto the right column slightly
-      place("layer",  { x:1,  y:1,  w:48, h:66 });
-      place("top",    { x:44, y:1,  w:52, h:34 });
-      place("bottom", { x:44, y:32, w:48, h:42 });
-      if (hasBelt) place("belt", { x:1,  y:68, w:24, h:15 });
-      if (hasShoes) place("shoes", { x:22, y:74, w:32, h:24 });
-      if (hasBag) place("bag", { x:68, y:74, w:30, h:24 });
+      // Reference style: jacket left, top in front overlapping jacket cuff,
+      // bottom directly below top in same column. Bag tucks into right margin.
+      place("layer",  { x: 4,      y: 4,        w: 42, h: 60 });
+      place("top",    { x: colX,   y: 6,        w: colW, h: 36 });
+      place("bottom", { x: colX,   y: 40,       w: colW, h: 50 });
+      if (hasBelt)  place("belt",  { x: 4,      y: 66,  w: 26, h: 14 });
+      if (hasBag)   place("bag",   { x: 78,     y: 56,  w: 20, h: 18 });
+      if (hasShoes) place("shoes", { x: 8,      y: 78,  w: 28, h: 20 });
     } else if (hasLayer) {
-      // Layer + Bottom (no separate top — layer IS the top).
-      place("layer",  { x:1,  y:1,  w:52, h:72 });
-      place("bottom", { x:48, y:1,  w:48, h:50 });
-      if (hasBelt) place("belt", { x:54, y:50, w:24, h:15 });
-      if (hasBag) place("bag", { x:1,  y:74, w:32, h:24 });
-      if (hasShoes) place("shoes", { x:62, y:74, w:34, h:24 });
-    } else {
-      // Top + Bottom (no layer). Bottom overlaps top by a few % vertically.
-      place("top",    { x:18, y:1,  w:48, h:44 });
-      if (hasBelt) place("belt", { x:66, y:28, w:24, h:15 });
-      place("bottom", { x:1,  y:42, w:50, h:54 });
-      if (hasBag) place("bag", { x:52, y:46, w:30, h:28 });
-      if (hasShoes) place("shoes", { x:52, y:74, w:30, h:24 });
+      // Jacket as the top half, bottom in same column below
+      place("layer",  { x: 6,  y: 4,  w: 50, h: 56 });
+      place("bottom", { x: 50, y: 4,  w: 44, h: 76 });
+      if (hasBelt)  place("belt",  { x: 8,  y: 60, w: 26, h: 14 });
+      if (hasBag)   place("bag",   { x: 18, y: 76, w: 26, h: 20 });
+      if (hasShoes) place("shoes", { x: 56, y: 78, w: 32, h: 20 });
+    } else if (hasTop && hasBottom) {
+      // Top + bottom share a column. Bottom overlaps top by ~3% (waistband
+      // tuck) — that little overlap is what makes it look styled.
+      place("top",    { x: 22, y: 4,  w: 50, h: 42 });
+      place("bottom", { x: 22, y: 42, w: 52, h: 50 });
+      if (hasBelt)  place("belt",  { x: 4,  y: 38, w: 22, h: 14 });
+      if (hasBag)   place("bag",   { x: 74, y: 56, w: 24, h: 22 });
+      if (hasShoes) place("shoes", { x: 8,  y: 74, w: 30, h: 22 });
+    } else if (hasTop) {
+      // Top only — center it
+      place("top",    { x: 22, y: 6,  w: 56, h: 56 });
+      if (hasBag)   place("bag",   { x: 70, y: 60, w: 26, h: 22 });
+      if (hasShoes) place("shoes", { x: 12, y: 72, w: 34, h: 22 });
+    } else if (hasBottom) {
+      place("bottom", { x: 22, y: 4,  w: 56, h: 78 });
+      if (hasBelt)  place("belt",  { x: 4,  y: 30, w: 22, h: 14 });
+      if (hasBag)   place("bag",   { x: 70, y: 56, w: 26, h: 22 });
+      if (hasShoes) place("shoes", { x: 12, y: 78, w: 34, h: 20 });
     }
   }
 
-  // ── Skip extra items — never stack duplicates. The validator limits these,
-  // but if any slip through, we just don't render them in the collage.
-
-  // ── Accessories: place in remaining corners ──
+  // ── Accessories: tuck into corners we know the main slots don't fill ──
+  // Order matters — first one placed in the most prominent open spot.
   if (g.accessory.length > 0) {
-    const accPositions = [
-      { x:80, y:1,  w:16, h:16 },
-      { x:2,  y:1,  w:16, h:16 },
-      { x:80, y:82, w:16, h:14 },
+    // Smaller, square so jewelry/sunglasses don't dwarf the look.
+    const candidates = [
+      { x: 78, y: 4,  w: 16, h: 14 },   // top right (earrings)
+      { x: 4,  y: 4,  w: 14, h: 14 },   // top left
+      { x: 80, y: 30, w: 14, h: 14 },   // mid right
+      { x: 4,  y: 28, w: 14, h: 14 },   // mid left
     ];
-    // Only place if the corner isn't already occupied by a main item
-    const isOccupied = (pos) => slots.some(s =>
-      Math.abs(s.x - pos.x) < 20 && Math.abs(s.y - pos.y) < 20
+    const isOccupied = (pos) => slots.some(sl =>
+      Math.abs(sl.x - pos.x) < 18 && Math.abs(sl.y - pos.y) < 18
     );
-    let accIdx = 0;
+    let i = 0;
     g.accessory.forEach(item => {
-      while (accIdx < accPositions.length && isOccupied(accPositions[accIdx])) accIdx++;
-      if (accIdx < accPositions.length) {
-        slots.push({ ...item, ...accPositions[accIdx], rotate:0, zIndex:11 + accIdx });
-        accIdx++;
+      while (i < candidates.length && isOccupied(candidates[i])) i++;
+      if (i < candidates.length) {
+        slots.push({ ...item, ...candidates[i], rotate: 0, zIndex: 10 + i });
+        i++;
       }
     });
   }
@@ -190,7 +201,8 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
             height: `${slot.h}%`,
             transform: `rotate(${slot.rotate}deg)`,
             zIndex: slot.zIndex,
-            filter: "drop-shadow(0 4px 14px rgba(28,24,20,0.18))",
+            // No drop-shadow — references show clean flat-lay, items just
+            // sit on white. Shadow read as juvenile / sticker-like.
             cursor: onItemClick ? "pointer" : "default",
           }}>
           {slot.image ? (

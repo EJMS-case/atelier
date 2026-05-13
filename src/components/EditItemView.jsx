@@ -5,7 +5,7 @@ import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders } from "../utils/images.js";
 
-export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey }) {
+export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -248,6 +248,13 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           </label>
         )}
       </div>
+
+      {onStyleAround && (
+        <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}
+          onClick={() => onStyleAround(item)}>
+          ✦ Style around this piece
+        </button>
+      )}
 
       <button style={{...s.btnPrimary,width:"100%",marginBottom:saveError ? 6 : 10, opacity: saving ? 0.6 : 1}}
         onClick={handleSave} disabled={!form.name.trim() || saving}>

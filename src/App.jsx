@@ -11,7 +11,7 @@ import HomeView from "./features/home/HomeView.jsx";
 import { s, si, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, OCCASIONS } from "./constants/taxonomy.js";
-import { COLOR_FAMILY_RANGES } from "./constants/color.js";
+import { COLOR_FAMILY_RANGES, effectiveColorFamily } from "./constants/color.js";
 import {
   colorSortIdx, defaultSortComparator, mergeItems,
 } from "./utils/item-helpers.js";
@@ -607,18 +607,11 @@ export default function App() {
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
       base = base.filter(it => {
-        const itemColor = (it.color || "").toLowerCase();
-        const itemFamily = (it.color_family || "").toLowerCase();
-        const idx = colorSortIdx(it);
-        return activeFilters.color.some(c => {
-          const cl = c.toLowerCase();
-          // String match against color or color_family (handles denim wash labels too)
-          if (itemColor.includes(cl) || itemFamily.includes(cl)) return true;
-          // Index-range fallback: catches items with non-standard color_family values
-          const range = COLOR_FAMILY_RANGES[c];
-          if (range && idx >= range[0] && idx <= range[1]) return true;
-          return false;
-        });
+        // Family is derived from the actual color string when possible, so
+        // a "Gray" item saved with the legacy "Neutral" family resolves to
+        // "Gray" and stays out of the Neutrals bucket.
+        const family = effectiveColorFamily(it);
+        return activeFilters.color.includes(family);
       });
     }
     // Sets filter
@@ -1007,7 +1000,10 @@ export default function App() {
             const recentItems = items
               .filter(it => it.created_at && (now - new Date(it.created_at).getTime()) < TWO_WEEKS)
               .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-            const uncategorized = items.filter(it => !it.subcategory);
+            // True uncategorized = missing top-level category. Subcategory is
+            // not always available (Belts/Jumpsuits have no subcategory list
+            // in taxonomy.js, so checking !it.subcategory left them stranded).
+            const uncategorized = items.filter(it => !it.category);
             const showRecent = recentItems.length > 0;
             const showUncat = uncategorized.length > 0;
             if (!showRecent && !showUncat) return null;
@@ -1117,7 +1113,8 @@ export default function App() {
             return result;
           }}
           onDelete={() => { deleteItem(editItem.id); setView("closet"); }}
-          onBack={() => setView("closet")}/>
+          onBack={() => setView("closet")}
+          onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}/>
       )}
 
       {/* ── LOOKS ── */}
