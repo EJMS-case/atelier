@@ -160,6 +160,7 @@ export function effectiveColorFamily(item) {
   // "Deep Teal" buckets → new families.
   const LEGACY = {
     "Charcoal": "Gray",
+    "Neutral":  "Neutrals", // old AI bucketed singular "Neutral"; filter uses plural "Neutrals"
     "Cool Red": "Red",
     "Cool Pink": "Pink",
     "Deep Teal": "Green",
