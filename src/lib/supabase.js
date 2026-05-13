@@ -338,6 +338,23 @@ export const sb = {
     );
     return res.ok;
   },
+  async saveTrip(trip) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+      body: JSON.stringify(trip),
+    });
+    if (!res.ok) throw new Error(`saveTrip failed ${res.status}`);
+    return res.json();
+  },
+  async fetchTripsBetween(startIso, endIso) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trips?start_date=lte.${endIso}&end_date=gte.${startIso}&order=start_date.asc`,
+      { headers: SB_HEADERS },
+    );
+    if (!res.ok) return [];
+    return res.json().catch(() => []);
+  },
 
   // ── Look feedback (thumbs up/down on generated looks) ──
   async saveLookFeedback({ lookHash, rating, itemIds, occasion, mood }) {

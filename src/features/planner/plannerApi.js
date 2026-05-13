@@ -8,3 +8,5 @@ export const fetchPlansBetween = sb.fetchPlansBetween.bind(sb);
 export const fetchAllPlans = sb.fetchAllPlans.bind(sb);
 export const savePlan = sb.savePlan.bind(sb);
 export const deletePlan = sb.deletePlan.bind(sb);
+export const saveTrip = sb.saveTrip.bind(sb);
+export const fetchTripsBetween = sb.fetchTripsBetween.bind(sb);

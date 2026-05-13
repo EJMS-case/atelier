@@ -3,8 +3,8 @@
 // Trip modal lives in this file too.
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchPlansBetween, savePlan, deletePlan } from "./plannerApi.js";
-import { buildPackingList } from "./tripPacker.js";
+import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
+import { buildDailyOutfits } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast } from "../../lib/weather.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
@@ -69,6 +69,7 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
+  const [trips, setTrips] = useState([]);
   const [syncError, setSyncError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   // NYC daily-high forecast for the next ~16 days, keyed by iso date.
@@ -82,10 +83,14 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
     try {
       const start = startOfMonth(anchor);
       const end = endOfMonth(anchor);
-      const rows = await fetchPlansBetween(isoDate(start), isoDate(end));
+      const [rows, tripRows] = await Promise.all([
+        fetchPlansBetween(isoDate(start), isoDate(end)),
+        fetchTripsBetween(isoDate(start), isoDate(end)).catch(() => []),
+      ]);
       const map = {};
       for (const r of rows || []) map[r.date] = r;
       setPlans(map);
+      setTrips(tripRows || []);
       setSyncError("");
     } catch (e) {
       setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
@@ -178,6 +183,26 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
         </div>
       )}
 
+      {/* Trip span bars — one chip per trip overlapping the visible month */}
+      {trips.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          {trips.map(trip => (
+            <div key={trip.id} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "5px 10px", marginBottom: 4,
+              background: `${PALETTE.accent}12`,
+              borderLeft: `3px solid ${PALETTE.accent}`,
+              borderRadius: "0 6px 6px 0",
+              fontSize: 11, color: PALETTE.ink,
+            }}>
+              <span style={{ fontWeight: 600 }}>{trip.destination || "Trip"}</span>
+              <span style={{ color: PALETTE.muted }}>·</span>
+              <span style={{ color: PALETTE.muted }}>{formatTripRange(trip.start_date, trip.end_date)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
         {WEEK_HEADER.map((h, i) => (
           <div key={i} style={{ textAlign: "center", fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted, padding: "4px 0" }}>{h}</div>
@@ -189,6 +214,11 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
           const iso = isoDate(d);
           const inMonth = d.getMonth() === anchor.getMonth();
           const plan = plans[iso];
+          const tripForDay = trips.find(t => iso >= t.start_date && iso <= t.end_date);
+          const isFirstTripDay = tripForDay && (
+            iso === tripForDay.start_date ||
+            (iso < tripForDay.start_date === false && isoDate(startOfMonth(anchor)) === iso)
+          );
           const planItems = plan?.items
             ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
             : [];
@@ -205,11 +235,19 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
               style={{
                 ...cellStyle,
                 opacity: inMonth ? 1 : 0.35,
-                borderColor: isToday ? PALETTE.ink : PALETTE.line,
+                borderColor: isToday ? PALETTE.ink : tripForDay ? PALETTE.accent : PALETTE.line,
                 borderWidth: isToday ? 2 : 1,
+                background: tripForDay ? `${PALETTE.accent}08` : "#fff",
                 boxShadow: plan ? `inset 0 0 0 2px ${PALETTE.accent}20` : "none",
               }}>
-              <div style={{ fontWeight: isToday ? 600 : 400, color: isToday ? PALETTE.ink : PALETTE.soft, position: "relative", zIndex: 2 }}>{d.getDate()}</div>
+              <div style={{ fontWeight: isToday ? 600 : 400, color: isToday ? PALETTE.ink : PALETTE.soft, position: "relative", zIndex: 2 }}>
+                {d.getDate()}
+                {isFirstTripDay && tripForDay.destination && (
+                  <span style={{ display: "block", fontSize: 7, color: PALETTE.accent, fontWeight: 500, letterSpacing: "0.04em", lineHeight: 1.1, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+                    {tripForDay.destination.split(",")[0]}
+                  </span>
+                )}
+              </div>
               {planItems.length > 0 && (
                 <div style={{ position: "relative", flex: 1, marginTop: 2 }}>
                   <EditorialCollage
@@ -249,18 +287,11 @@ export default function CalendarView({ items, outfitLogs, onGoToStyleMe, onEditI
           items={items}
           onClose={() => setShowTrip(false)}
           onAssign={async (rangePlans) => {
-            // bulk-write plans for each trip day
             for (const p of rangePlans) {
               await savePlan(p).catch(() => {});
             }
             setShowTrip(false);
-            // Re-fetch visible month
-            const start = startOfMonth(anchor);
-            const end = endOfMonth(anchor);
-            const rows = await fetchPlansBetween(isoDate(start), isoDate(end));
-            const map = {};
-            for (const r of rows || []) map[r.date] = r;
-            setPlans(map);
+            refreshPlans();
           }}
         />
       )}
@@ -420,40 +451,52 @@ function TripModal({ items, onClose, onAssign }) {
   const [start, setStart] = useState(isoDate(new Date()));
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
-  const [estimate, setEstimate] = useState(null);  // { packingList, uncovered }
+  // estimate: { dailyOutfits: Array<item[]>, packingList: item[], uncovered: number[] }
+  const [estimate, setEstimate] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const dayCount = Math.max(1, Math.round((new Date(end) - new Date(start)) / (24 * 60 * 60 * 1000)) + 1);
+
+  // Map month index → seasonal high for destination-agnostic planning.
+  // User can type destination for labeling; weather still uses NYC-ish baseline.
+  const SEASONAL = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
 
   async function handlePreview() {
     setLoading(true);
     try {
-      // Weather by destination is optional. For now use a naive seasonal default
-      // based on today's month; honest forecast lookup is a polish step.
       const month = new Date(start).getMonth();
-      const seasonalHigh = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42][month]; // NYC-ish
-      const highs = Array.from({ length: dayCount }, () => seasonalHigh);
-      const result = buildPackingList(items, highs);
-      setEstimate(result);
+      const high = SEASONAL[month];
+      const highs = Array.from({ length: dayCount }, () => high);
+      setEstimate(buildDailyOutfits(items, highs));
     } finally {
       setLoading(false);
     }
   }
 
   async function handleAssign() {
-    if (!estimate) return;
-    const plans = [];
-    for (let i = 0; i < dayCount; i++) {
-      const dateIso = isoDate(addDays(new Date(start), i));
-      plans.push({
-        date: dateIso,
-        items: estimate.packingList.slice(0, 6).map(it => it.id), // heuristic: assign top 6 as "base" per day
+    if (!estimate || saving) return;
+    setSaving(true);
+    try {
+      // Save the trip record for the calendar span bar
+      await saveTrip({
+        start_date: start,
+        end_date: end,
+        destination: destination || null,
+      }).catch(() => {});
+
+      // Each day gets its own rotating outfit — no more same 6 items per day
+      const plans = estimate.dailyOutfits.map((dayItems, i) => ({
+        date: isoDate(addDays(new Date(start), i)),
+        items: dayItems.map(it => it.id),
         source: "trip",
         occasion: "Travel",
         notes: destination || null,
-      });
+      }));
+      onAssign(plans);
+    } finally {
+      setSaving(false);
     }
-    onAssign(plans);
   }
 
   return (
@@ -462,7 +505,9 @@ function TripModal({ items, onClose, onAssign }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted }}>PLAN A TRIP</div>
-            <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink }}>{dayCount}-day packing list</div>
+            <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink }}>
+              {destination || "Trip"} · {dayCount} day{dayCount === 1 ? "" : "s"}
+            </div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 22, cursor: "pointer" }}>×</button>
         </div>
@@ -470,40 +515,67 @@ function TripModal({ items, onClose, onAssign }) {
         <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
             Start
-            <input type="date" value={start} onChange={e => setStart(e.target.value)}
+            <input type="date" value={start} onChange={e => { setStart(e.target.value); setEstimate(null); }}
               style={dateInput}/>
           </label>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
             End
-            <input type="date" value={end} onChange={e => setEnd(e.target.value)}
+            <input type="date" value={end} onChange={e => { setEnd(e.target.value); setEstimate(null); }}
               style={dateInput}/>
           </label>
         </div>
         <label style={{ fontSize: 11, color: PALETTE.muted }}>
-          Destination (optional)
+          Destination
           <input type="text" value={destination} onChange={e => setDestination(e.target.value)}
-            placeholder="e.g. Paris, Oct 12-19"
+            placeholder="e.g. Paris, London, Tokyo"
             style={{ ...dateInput, fontSize: 13 }}/>
         </label>
 
         <button onClick={handlePreview} disabled={loading} style={{ ...btnPrimary, width: "100%", marginTop: 12 }}>
-          {loading ? "Packing…" : "Preview packing list"}
+          {loading ? "Building looks…" : "Preview looks"}
         </button>
 
         {estimate && (
           <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 11, color: PALETTE.muted, marginBottom: 6 }}>
-              {estimate.packingList.length} items packed
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 8 }}>
+              {estimate.packingList.length} ITEMS TO PACK
               {estimate.uncovered.length > 0 && ` · ${estimate.uncovered.length} days may need more`}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 12, maxHeight: 240, overflowY: "auto" }}>
+
+            {/* Per-day look preview */}
+            <div style={{ maxHeight: 320, overflowY: "auto", marginBottom: 12 }}>
+              {estimate.dailyOutfits.map((dayItems, i) => {
+                const dateLabel = new Date(addDays(new Date(start), i)).toLocaleDateString("en-US", {
+                  weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
+                });
+                return (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, padding: "6px 8px", background: PALETTE.cream, borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, color: PALETTE.muted, minWidth: 64, flexShrink: 0 }}>{dateLabel}</div>
+                    <div style={{ display: "flex", gap: 4, flex: 1, overflowX: "auto" }}>
+                      {dayItems.map(it => (
+                        <div key={it.id} style={{ width: 40, height: 48, flexShrink: 0, background: "#fff", borderRadius: 3, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
+                          {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Packing list summary */}
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>FULL PACKING LIST</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 14, maxHeight: 160, overflowY: "auto" }}>
               {estimate.packingList.map(it => (
                 <div key={it.id} style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
                   {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                 </div>
               ))}
             </div>
-            <button onClick={handleAssign} style={{ ...btnPrimary, width: "100%" }}>Pin these days</button>
+
+            <button onClick={handleAssign} disabled={saving} style={{ ...btnPrimary, width: "100%" }}>
+              {saving ? "Pinning…" : "Pin to calendar"}
+            </button>
           </div>
         )}
       </div>
@@ -577,6 +649,13 @@ const dateInput = {
 };
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
+function formatTripRange(startIso, endIso) {
+  const opts = { month: "short", day: "numeric", timeZone: "UTC" };
+  const s = new Date(startIso + "T00:00:00Z").toLocaleDateString("en-US", opts);
+  const e = new Date(endIso   + "T00:00:00Z").toLocaleDateString("en-US", opts);
+  return s === e ? s : `${s} – ${e}`;
+}
+
 function isoDate(d) {
   const z = new Date(d); z.setHours(0, 0, 0, 0);
   return z.toISOString().slice(0, 10);

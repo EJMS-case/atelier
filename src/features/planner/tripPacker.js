@@ -77,6 +77,73 @@ export function buildPackingList(items, dailyHighsF, occasions = ["Travel"]) {
   };
 }
 
+/**
+ * Build a per-day rotating outfit schedule from the wardrobe.
+ * Returns one outfit array per trip day (different looks across days) plus a
+ * derived packing list that is the union of all items actually used.
+ *
+ * @param {Object[]} items        - full wardrobe
+ * @param {number[]} dailyHighsF  - forecast highs per trip day
+ * @returns {{ dailyOutfits: Object[][], packingList: Object[], uncovered: number[] }}
+ */
+export function buildDailyOutfits(items, dailyHighsF) {
+  const { packingList: baseList } = buildPackingList(items, dailyHighsF);
+
+  const bySlot = { tops: [], bottoms: [], shoes: [], outerwear: [], bags: [], dresses: [] };
+  for (const it of baseList) {
+    const s = itemSlot(it);
+    if (s && s in bySlot) bySlot[s].push(it);
+  }
+
+  const dailyOutfits = dailyHighsF.map((hi, d) => {
+    const tops      = bySlot.tops.filter(it => weatherFitness(it, hi));
+    const dresses   = bySlot.dresses.filter(it => weatherFitness(it, hi));
+    const bottoms   = bySlot.bottoms.filter(it => weatherFitness(it, hi));
+    const shoes     = bySlot.shoes.filter(it => weatherFitness(it, hi));
+    const outerwear = bySlot.outerwear.filter(it => weatherFitness(it, hi));
+    const bags      = bySlot.bags.filter(it => weatherFitness(it, hi));
+
+    const day = [];
+    // Alternate between dresses and tops+bottoms for variety
+    const garments = [...dresses, ...tops];
+    if (garments.length > 0) {
+      const g = garments[d % garments.length];
+      day.push(g);
+      // If it's a top (not a dress), pair with a bottom
+      if (bySlot.tops.includes(g) && bottoms.length > 0) {
+        day.push(bottoms[d % bottoms.length]);
+      }
+    } else if (bottoms.length > 0) {
+      day.push(bottoms[d % bottoms.length]);
+    }
+    if (shoes.length > 0)              day.push(shoes[d % shoes.length]);
+    if (outerwear.length > 0 && hi < 68) day.push(outerwear[d % outerwear.length]);
+    if (bags.length > 0)               day.push(bags[d % bags.length]);
+    return day;
+  });
+
+  // Packing list = unique items actually used across all day outfits
+  const seen = new Set();
+  const packingList = [];
+  for (const day of dailyOutfits) {
+    for (const it of day) {
+      if (!seen.has(it.id)) { seen.add(it.id); packingList.push(it); }
+    }
+  }
+
+  // Days missing a core garment (top/dress) or shoes
+  const uncovered = dailyHighsF.reduce((acc, _, d) => {
+    const hasDress = dailyOutfits[d].some(it => itemSlot(it) === "dresses");
+    const hasTop   = dailyOutfits[d].some(it => itemSlot(it) === "tops");
+    const hasShoes = dailyOutfits[d].some(it => itemSlot(it) === "shoes");
+    if (!hasDress && !hasTop) acc.push(d);
+    else if (!hasShoes) acc.push(d);
+    return acc;
+  }, []);
+
+  return { dailyOutfits, packingList, uncovered };
+}
+
 function itemSlot(it) {
   const c = it.category;
   if (c === "Tops" || c === "Knits") return "tops";
