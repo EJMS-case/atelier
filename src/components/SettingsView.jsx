@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { s } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import { sb, SUPABASE_URL } from "../lib/supabase.js";
-import { compressImage, imageToBase64, detectTransparency } from "../utils/images.js";
+import { compressImage, imageToBase64, detectTransparency, trimTransparentBorders } from "../utils/images.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../utils/storage.js";
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
@@ -32,6 +32,11 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const [detectRunning, setDetectRunning] = useState(false);
   const [detectProgress, setDetectProgress] = useState({ done: 0, total: 0, found: 0 });
   const detectStop = useRef(false);
+
+  const [trimRunning, setTrimRunning] = useState(false);
+  const [trimProgress, setTrimProgress] = useState({ done: 0, total: 0, errors: 0 });
+  const [trimDone, setTrimDone] = useState(false);
+  const trimStop = useRef(false);
 
   // ── Style Fingerprint
   const [fpRunning, setFpRunning] = useState(false);
@@ -163,15 +168,32 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefs(updated); };
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
 
-  // Only count items EXPLICITLY flagged as has_bg === true. Previously this
-  // used `has_bg !== false`, which falsely counted legacy items (where the
-  // flag is null/undefined) as still having backgrounds — for a closet
-  // imported before the flag existed, the count was wildly inflated.
+  const itemsClean     = items.filter(it => it.image && it.has_bg === false);
   const itemsNeedingBg = items.filter(it => it.image && it.has_bg === true);
-  // Items where we don't know either way — the transparency detector targets
-  // these. Treat as "ambiguous" so the count isn't a lie and the user has a
-  // way to clear the ambiguity without burning Remove.bg credits.
   const itemsUnknownBg = items.filter(it => it.image && (it.has_bg === null || it.has_bg === undefined));
+
+  const handleBatchTrim = async () => {
+    const toTrim = itemsClean;
+    if (!toTrim.length) return;
+    trimStop.current = false;
+    setTrimRunning(true); setTrimDone(false);
+    setTrimProgress({ done: 0, total: toTrim.length, errors: 0 });
+    let errors = 0;
+    for (let i = 0; i < toTrim.length; i++) {
+      if (trimStop.current) break;
+      const item = toTrim[i];
+      try {
+        const base64 = await imageToBase64(item.image);
+        const trimmed = await trimTransparentBorders(base64);
+        if (trimmed === base64) { setTrimProgress(p => ({ ...p, done: i + 1 })); continue; }
+        const compressed = await compressImage(trimmed, 600, 0.9, true);
+        const url = await sb.uploadImage(item.id, compressed);
+        if (onUpdateItem) await onUpdateItem(item.id, { image: url });
+      } catch { errors++; }
+      setTrimProgress({ done: i + 1, total: toTrim.length, errors });
+    }
+    setTrimRunning(false); setTrimDone(true);
+  };
 
   const handleBatchBgRemoval = async () => {
     if (!rmbg) return;
@@ -188,9 +210,9 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         const base64 = await imageToBase64(item.image);
         const result = await stripBackground(base64, { rmbgKey: rmbg });
         if (result.has_bg) { errors++; continue; } // both Remove.bg and fallback gave up
-        const compressed = await compressImage(result.image, 600, 0.9, true);
+        const trimmed = await trimTransparentBorders(result.image);
+        const compressed = await compressImage(trimmed, 600, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
-        // Flip has_bg so the next run skips this item.
         if (onUpdateItem) await onUpdateItem(item.id, { image: url, has_bg: false });
       } catch { errors++; }
       setBatchProgress({ done: i + 1, total: toProcess.length, errors });
@@ -410,73 +432,118 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         )}
       </div>
 
-      {/* Batch Background Removal — targets only items still flagged has_bg */}
+      {/* Batch Background Removal */}
       <div style={s.settingsCard}>
-        <div style={s.settingsTitle}>✦ Clean Up White Backgrounds</div>
-        <p style={s.settingsSub}>
-          {itemsNeedingBg.length === 0 && itemsUnknownBg.length === 0
-            ? "All your photos already have transparent backgrounds — nothing to do."
-            : itemsNeedingBg.length === 0
-              ? `${itemsUnknownBg.length} of your ${items.length} pieces don't have a background flag set yet (mostly older uploads). Tap "Detect Existing Transparent Photos" below — it samples the corners of each image and updates the flag for free, no Remove.bg credits used. Anything still flagged afterward can be cleaned with the button above.`
-              : `${itemsNeedingBg.length} of your ${items.length} pieces are flagged as still having a white background. Run Remove.bg on those to make them transparent. Uses 1 credit per item.${itemsUnknownBg.length > 0 ? ` (${itemsUnknownBg.length} more haven't been checked yet — run the detector below first to avoid wasting credits.)` : ""}`}
-        </p>
+        <div style={s.settingsTitle}>✦ Photo Backgrounds</div>
+
+        {/* Status summary */}
+        <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+          {[
+            { label:"Clean", count: itemsClean.length,     color:"var(--color-success)" },
+            { label:"Need cleanup", count: itemsNeedingBg.length, color:"#b45309" },
+            { label:"Unchecked", count: itemsUnknownBg.length,  color:"var(--color-text-muted)" },
+          ].map(({ label, count, color }) => (
+            <div key={label} style={{ fontSize:11, padding:"4px 10px", borderRadius:12,
+              border:"1px solid var(--color-border)", background:"var(--color-bg)",
+              color, fontWeight: count > 0 ? 600 : 400 }}>
+              {count} {label}
+            </div>
+          ))}
+        </div>
+
+        {itemsUnknownBg.length > 0 && (
+          <p style={s.settingsSub}>
+            {itemsUnknownBg.length} item{itemsUnknownBg.length === 1 ? "" : "s"} haven't been checked yet. Run the detector first — it's free and updates the counts above without using any Remove.bg credits.
+          </p>
+        )}
+        {itemsNeedingBg.length > 0 && (
+          <p style={s.settingsSub}>
+            {itemsNeedingBg.length} item{itemsNeedingBg.length === 1 ? "" : "s"} still have white backgrounds. Remove.bg will strip and tightly crop each one (1 credit per item).
+          </p>
+        )}
+        {itemsNeedingBg.length === 0 && itemsUnknownBg.length === 0 && (
+          <p style={s.settingsSub}>All photos are clean. Use "Trim White Space" below if any still have padding around the item.</p>
+        )}
+
+        {/* Remove.bg batch */}
         {!batchRunning && !batchDone && itemsNeedingBg.length > 0 && (
-          <button style={{...s.btnPrimary, width:"100%"}} onClick={handleBatchBgRemoval}
+          <button style={{...s.btnPrimary, width:"100%", marginBottom:8}} onClick={handleBatchBgRemoval}
             disabled={!rmbg}>
-            {!rmbg ? "Add Remove.bg key above first" : `Clean ${itemsNeedingBg.length} Photo${itemsNeedingBg.length===1?"":"s"}`}
+            {!rmbg ? "Add Remove.bg key above first" : `Remove Backgrounds (${itemsNeedingBg.length} item${itemsNeedingBg.length===1?"":"s"})`}
           </button>
         )}
         {batchRunning && (
-          <div>
-            <div style={{...s.auditProgressTrack, marginBottom:8}}>
+          <div style={{marginBottom:8}}>
+            <div style={{...s.auditProgressTrack, marginBottom:6}}>
               <div style={{...s.auditProgressBar, width:`${(batchProgress.done/batchProgress.total)*100}%`}}/>
             </div>
-            <div style={{fontSize:11, color:"var(--color-text-2)", marginBottom:8}}>
-              {batchProgress.done} / {batchProgress.total} done
+            <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:8}}>
+              Removing + trimming {batchProgress.done} / {batchProgress.total}
               {batchProgress.errors > 0 && ` · ${batchProgress.errors} skipped`}
             </div>
             <button style={{...s.btnPrimary, background:"var(--color-danger)", width:"100%"}}
-              onClick={() => { batchStop.current = true; }}>
-              Stop
-            </button>
+              onClick={() => { batchStop.current = true; }}>Stop</button>
           </div>
         )}
         {batchDone && (
-          <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500}}>
-            ✓ Done — {batchProgress.done - batchProgress.errors} updated
-            {batchProgress.errors > 0 && `, ${batchProgress.errors} skipped`}
+          <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500, marginBottom:8}}>
+            ✓ Done — {batchProgress.done - batchProgress.errors} updated{batchProgress.errors > 0 && `, ${batchProgress.errors} skipped`}
             <button style={{...s.btnPrimary, width:"100%", marginTop:8}}
-              onClick={() => { setBatchDone(false); setBatchProgress({done:0,total:0,errors:0}); }}>
-              Run Again
-            </button>
+              onClick={() => { setBatchDone(false); setBatchProgress({done:0,total:0,errors:0}); }}>Run Again</button>
           </div>
         )}
 
-        {/* Transparency detector — free corner-pixel sweep over unknown-flag items. */}
+        {/* Transparency detector */}
         {itemsUnknownBg.length > 0 && !detectRunning && (
-          <button style={{...s.btnSecondary, width:"100%", marginTop:10}}
+          <button style={{...s.btnSecondary, width:"100%", marginBottom:8}}
             onClick={handleDetectTransparency}>
-            Detect Existing Transparent Photos ({itemsUnknownBg.length})
+            Detect Unchecked Photos ({itemsUnknownBg.length})
           </button>
         )}
         {detectRunning && (
-          <div style={{marginTop:10}}>
-            <div style={{...s.auditProgressTrack, marginBottom:8}}>
+          <div style={{marginBottom:8}}>
+            <div style={{...s.auditProgressTrack, marginBottom:6}}>
               <div style={{...s.auditProgressBar, width:`${(detectProgress.done/detectProgress.total)*100}%`}}/>
             </div>
-            <div style={{fontSize:11, color:"var(--color-text-2)", marginBottom:8}}>
+            <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:8}}>
               Checking {detectProgress.done} / {detectProgress.total}
               {detectProgress.found > 0 && ` · ${detectProgress.found} already transparent`}
             </div>
             <button style={{...s.btnSecondary, width:"100%"}}
-              onClick={() => { detectStop.current = true; }}>
-              Stop
-            </button>
+              onClick={() => { detectStop.current = true; }}>Stop</button>
           </div>
         )}
         {!detectRunning && detectProgress.total > 0 && detectProgress.done === detectProgress.total && (
-          <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500, marginTop:10}}>
-            ✓ Checked {detectProgress.total} photo{detectProgress.total === 1 ? "" : "s"} — {detectProgress.found} already transparent, {detectProgress.total - detectProgress.found} need Remove.bg.
+          <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500, marginBottom:8}}>
+            ✓ Checked {detectProgress.total} — {detectProgress.found} already transparent, {detectProgress.total - detectProgress.found} need removal.
+          </div>
+        )}
+
+        {/* Trim pass — tightly crop already-transparent items */}
+        {itemsClean.length > 0 && !trimRunning && !trimDone && (
+          <button style={{...s.btnSecondary, width:"100%"}} onClick={handleBatchTrim}>
+            Trim White Space ({itemsClean.length} clean item{itemsClean.length===1?"":"s"})
+          </button>
+        )}
+        {trimRunning && (
+          <div>
+            <div style={{...s.auditProgressTrack, marginBottom:6}}>
+              <div style={{...s.auditProgressBar, width:`${(trimProgress.done/trimProgress.total)*100}%`}}/>
+            </div>
+            <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:8}}>
+              Trimming {trimProgress.done} / {trimProgress.total}
+              {trimProgress.errors > 0 && ` · ${trimProgress.errors} skipped`}
+            </div>
+            <button style={{...s.btnSecondary, width:"100%"}}
+              onClick={() => { trimStop.current = true; }}>Stop</button>
+          </div>
+        )}
+        {trimDone && (
+          <div style={{fontSize:12, color:"var(--color-success)", fontWeight:500}}>
+            ✓ Trim complete — {trimProgress.done - trimProgress.errors} processed
+            {trimProgress.errors > 0 && `, ${trimProgress.errors} skipped`}
+            <button style={{...s.btnSecondary, width:"100%", marginTop:8}}
+              onClick={() => { setTrimDone(false); setTrimProgress({done:0,total:0,errors:0}); }}>Run Again</button>
           </div>
         )}
       </div>
