@@ -1,6 +1,26 @@
+import { useEffect, useState } from "react";
 import { s } from "../ui/styles.js";
 import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
 import TrimmedImage from "./TrimmedImage.jsx";
+
+// Mobile canvases were rendering items at desktop-sized percent slots in a
+// short landscape box, so `object-fit: contain` left big visual gaps inside
+// each slot. Bumping to a near-square aspect lets tall garments fill their
+// slots and tightens the cluster horizontally too.
+function useIsMobileCollage() {
+  const query = "(max-width: 480px)";
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia(query).matches
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(query);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener?.("change", handler);
+    return () => mq.removeEventListener?.("change", handler);
+  }, []);
+  return isMobile;
+}
 
 // ── EDITORIAL COLLAGE LAYOUTS ────────────────────────────────────────────────
 // Inspired by Pinterest-style flat-lays (white background, items grouped tightly,
@@ -173,6 +193,7 @@ function buildFromLayout(items, layout) {
 // Positions pieces as floating, slightly overlapping items on a clean background
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
 export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride }) {
+  const isMobile = useIsMobileCollage();
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
@@ -183,8 +204,10 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
     ? buildFromLayout(sorted, layoutOverride)
     : buildCollageLayout(sorted);
 
+  const mobileCanvas = isMobile ? { paddingBottom: "105%" } : null;
+
   return (
-    <div style={{ ...s.collageCanvas, ...canvasStyle }}>
+    <div style={{ ...s.collageCanvas, ...mobileCanvas, ...canvasStyle }}>
       {slots.map((slot, i) => (
         <div key={slot.id || i}
           onClick={onItemClick ? () => onItemClick(slot) : undefined}
