@@ -8,6 +8,7 @@
 import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
+import { getSleeveType } from "./item-helpers.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
@@ -585,12 +586,13 @@ function checkStatementCount(response, idMap, allItems) {
 }
 
 /**
- * Check HC_SHOULDER: Work and Work Dinner looks must include Outerwear (blazer/jacket)
- * OR a Knits layer (cardigan, open sweater). No bare shoulders at work.
+ * Check HC_SHOULDER: Work and Work Dinner looks must cover the shoulders in
+ * cool/mild/cold weather. A sleeved top or sleeved dress satisfies this on its
+ * own — only sleeveless pieces (tank, halter, strapless, slip dress) require
+ * an Outerwear/Knits layer over them.
  *
  * Relaxed on hot/warm days — combined with the strict warm-weather rejection
- * of most outerwear and all non-summer knits this was unsatisfiable. The user
- * can wear a sleeved blouse to a 78°F desk without a blazer.
+ * of most outerwear and all non-summer knits this was unsatisfiable.
  */
 function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
   if (!["Work", "Work Dinner"].includes(occasion)) return [];
@@ -609,8 +611,17 @@ function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
     const hasLayer = resolved.some(it =>
       it.category === "Outerwear" || it.category === "Knits"
     );
-    if (!hasLayer) {
-      failures.push(`Look ${i + 1}: ${occasion} requires a covering layer — add a blazer, jacket, cardigan, or open sweater. No bare shoulders at work (HC_SHOULDER).`);
+    // A sleeved top or sleeved dress/jumpsuit covers shoulders on its own;
+    // no extra layer needed. getSleeveType returns "long" | "short" | "sleeveless".
+    const hasSleevedCoverage = resolved.some(it => {
+      const isTop = it.category === "Tops";
+      const isDress = it.category === "Dresses" || it.category === "Jumpsuits";
+      if (!isTop && !isDress) return false;
+      const sleeve = getSleeveType(it);
+      return sleeve === "long" || sleeve === "short";
+    });
+    if (!hasLayer && !hasSleevedCoverage) {
+      failures.push(`Look ${i + 1}: ${occasion} requires shoulder coverage — pair a sleeved top/dress, or add an outerwear/knit layer over a sleeveless piece (HC_SHOULDER).`);
     }
   });
   return failures;

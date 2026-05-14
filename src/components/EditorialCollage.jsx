@@ -3,10 +3,10 @@ import { s } from "../ui/styles.js";
 import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
 import TrimmedImage from "./TrimmedImage.jsx";
 
-// Mobile canvases were rendering items at desktop-sized percent slots in a
-// short landscape box, so `object-fit: contain` left big visual gaps inside
-// each slot. Bumping to a near-square aspect lets tall garments fill their
-// slots and tightens the cluster horizontally too.
+// Mobile gets a portrait canvas (125% padding-bottom ≈ 4:5) and its own
+// layout recipes that mimic Pinterest flat-lays — large hero garment, bag
+// overlapping a hip, shoes grounding the bottom. Desktop keeps the wider
+// landscape composition that already works there.
 function useIsMobileCollage() {
   const query = "(max-width: 480px)";
   const [isMobile, setIsMobile] = useState(() =>
@@ -29,7 +29,38 @@ function useIsMobileCollage() {
 // the margins. We deliberately allow garments to OVERLAP a few percent (top
 // crossing the jacket cuff, bag sitting in front of pants) — that's what reads
 // as a styled flat-lay rather than a sterile grid.
-function buildCollageLayout(items) {
+//
+// Two coord tables: DESKTOP (current landscape canvas) and MOBILE (4:5 portrait
+// matching the user's reference flat-lays — items larger, more overlap, bag
+// tucked into a garment instead of floating in a corner).
+const DESKTOP_RECIPES = {
+  dressLayer:     { layer:{x:4,y:6,w:38,h:62},  dress:{x:34,y:4,w:44,h:80}, belt:{x:26,y:60,w:22,h:10}, bag:{x:66,y:54,w:28,h:28}, shoes:{x:8,y:74,w:28,h:24} },
+  dressTop:       { dress:{x:36,y:4,w:44,h:80}, top:{x:8,y:10,w:34,h:46},   belt:{x:8,y:58,w:22,h:10},  bag:{x:68,y:58,w:26,h:28}, shoes:{x:12,y:76,w:28,h:22} },
+  dressSolo:      { dress:{x:26,y:4,w:48,h:80}, belt:{x:8,y:50,w:22,h:10},  bag:{x:68,y:52,w:28,h:28},  shoes:{x:8,y:74,w:28,h:24} },
+  layerTopBottom: { layer:{x:4,y:6,w:36,h:60},  top:{x:32,y:4,w:34,h:40},   bottom:{x:32,y:40,w:34,h:56}, belt:{x:6,y:60,w:24,h:10}, bag:{x:64,y:46,w:28,h:30}, shoes:{x:8,y:74,w:26,h:24} },
+  layerBottom:    { layer:{x:6,y:4,w:38,h:64},  bottom:{x:42,y:4,w:36,h:80}, belt:{x:8,y:64,w:24,h:10}, bag:{x:64,y:76,w:28,h:22}, shoes:{x:10,y:76,w:26,h:22} },
+  topBottom:      { top:{x:20,y:4,w:46,h:44},   bottom:{x:22,y:44,w:42,h:52}, belt:{x:4,y:42,w:22,h:10}, bag:{x:64,y:50,w:28,h:30}, shoes:{x:8,y:74,w:28,h:24} },
+  topOnly:        { top:{x:18,y:6,w:52,h:58},   bag:{x:64,y:58,w:28,h:30},  shoes:{x:8,y:72,w:28,h:26} },
+  bottomOnly:     { bottom:{x:24,y:4,w:44,h:82}, belt:{x:6,y:30,w:22,h:10}, bag:{x:66,y:54,w:28,h:28}, shoes:{x:6,y:78,w:26,h:20} },
+};
+
+// Mobile: 4:5 portrait canvas. Items sized 40-55% wide, overlapping by 10-25%.
+// Bag never floats in a corner — it overlaps a garment hip. Shoes ground the
+// bottom and overlap the garment hem. Belt is rendered as a horizontal strap
+// across the pants waist (matches inspo). All compositions feel like one
+// dense cluster rather than scattered objects on a card.
+const MOBILE_RECIPES = {
+  dressLayer:     { layer:{x:2,y:4,w:46,h:62},   dress:{x:34,y:6,w:50,h:80},  belt:{x:24,y:56,w:32,h:8},  bag:{x:54,y:54,w:42,h:34},  shoes:{x:4,y:66,w:38,h:30} },
+  dressTop:       { dress:{x:30,y:4,w:54,h:82},  top:{x:2,y:10,w:42,h:50},    belt:{x:2,y:58,w:32,h:8},   bag:{x:56,y:58,w:40,h:34},  shoes:{x:4,y:68,w:38,h:30} },
+  dressSolo:      { dress:{x:22,y:2,w:58,h:78},  belt:{x:14,y:46,w:32,h:8},   bag:{x:54,y:46,w:42,h:36},  shoes:{x:4,y:64,w:42,h:32} },
+  layerTopBottom: { layer:{x:2,y:14,w:42,h:58},  top:{x:18,y:2,w:48,h:46},    bottom:{x:48,y:24,w:46,h:70}, belt:{x:42,y:46,w:48,h:8}, bag:{x:0,y:58,w:36,h:36},  shoes:{x:24,y:70,w:42,h:28} },
+  layerBottom:    { layer:{x:6,y:4,w:46,h:66},   bottom:{x:46,y:8,w:48,h:84}, belt:{x:38,y:50,w:42,h:8},  bag:{x:2,y:58,w:36,h:34},   shoes:{x:18,y:70,w:42,h:28} },
+  topBottom:      { top:{x:14,y:4,w:50,h:54},    bottom:{x:48,y:22,w:46,h:74}, belt:{x:42,y:46,w:48,h:8}, bag:{x:0,y:50,w:34,h:36},   shoes:{x:22,y:70,w:42,h:28} },
+  topOnly:        { top:{x:18,y:4,w:60,h:64},    bag:{x:60,y:58,w:36,h:36},   shoes:{x:6,y:70,w:42,h:28} },
+  bottomOnly:     { bottom:{x:22,y:2,w:54,h:84}, belt:{x:18,y:30,w:42,h:8},   bag:{x:60,y:50,w:36,h:36},  shoes:{x:4,y:74,w:36,h:24} },
+};
+
+function buildCollageLayout(items, isMobile) {
   const all = items;
 
   const getRole = (item) => {
@@ -67,88 +98,55 @@ function buildCollageLayout(items) {
   const hasBottom = g.bottom.length > 0;
   const hasTop    = g.top.length > 0;
   const hasLayer  = g.layer.length > 0;
-  const hasBelt   = g.belt.length > 0;
-  const hasBag    = g.bag.length > 0;
-  const hasShoes  = g.shoes.length > 0;
+
+  // Pick which recipe to use based on which roles are present.
+  const recipeKey = (() => {
+    if (hasDress && hasLayer) return "dressLayer";
+    if (hasDress && hasTop)   return "dressTop";
+    if (hasDress)             return "dressSolo";
+    if (hasLayer && hasTop)   return "layerTopBottom";
+    if (hasLayer)             return "layerBottom";
+    if (hasTop && hasBottom)  return "topBottom";
+    if (hasTop)               return "topOnly";
+    if (hasBottom)            return "bottomOnly";
+    return null;
+  })();
+
+  const recipe = recipeKey
+    ? (isMobile ? MOBILE_RECIPES : DESKTOP_RECIPES)[recipeKey]
+    : null;
 
   const slots = [];
   // Z-order: garments back, accessories front. Top crosses the jacket; bag
   // sits in front of pants; shoes ground the composition; jewelry/belt on top.
   const zMap = { layer:2, top:5, dress:4, bottom:3, shoes:6, bag:7, belt:9, accessory:10 };
-  const place = (role, pos, idx = 0) => {
-    if (g[role][idx]) {
-      slots.push({ ...g[role][idx], x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
+  const place = (role, pos) => {
+    if (g[role][0] && pos) {
+      slots.push({ ...g[role][0], x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
     }
   };
 
-  if (hasDress) {
-    // ── DRESS-BASED LAYOUTS ──
-    if (hasLayer) {
-      // Jacket left, dress overlaps cuff. Bag tucked at hip-right of dress.
-      place("layer", { x: 4,  y: 6,  w: 38, h: 62 });
-      place("dress", { x: 34, y: 4,  w: 44, h: 80 });
-      if (hasBelt)  place("belt",  { x: 26, y: 60, w: 22, h: 10 });
-      if (hasBag)   place("bag",   { x: 66, y: 54, w: 28, h: 28 });
-      if (hasShoes) place("shoes", { x: 8,  y: 74, w: 28, h: 24 });
-    } else if (hasTop) {
-      // Open cardigan/top beside dress, bag at hip right.
-      place("dress", { x: 36, y: 4,  w: 44, h: 80 });
-      place("top",   { x: 8,  y: 10, w: 34, h: 46 });
-      if (hasBelt)  place("belt",  { x: 8,  y: 58, w: 22, h: 10 });
-      if (hasBag)   place("bag",   { x: 68, y: 58, w: 26, h: 28 });
-      if (hasShoes) place("shoes", { x: 12, y: 76, w: 28, h: 22 });
-    } else {
-      // Dress centered — bag overlaps hem right, shoes lower-left.
-      place("dress", { x: 26, y: 4,  w: 48, h: 80 });
-      if (hasBelt)  place("belt",  { x: 8,  y: 50, w: 22, h: 10 });
-      if (hasBag)   place("bag",   { x: 68, y: 52, w: 28, h: 28 });
-      if (hasShoes) place("shoes", { x: 8,  y: 74, w: 28, h: 24 });
-    }
-  } else {
-    // ── SEPARATES LAYOUTS ──
-    if (hasLayer && hasTop) {
-      // Jacket left, top overlaps cuff, pants below top in same column.
-      // Bag at hip-right overlapping pants edge. Shoes lower-left under jacket hem.
-      place("layer",  { x: 4,  y: 6,  w: 36, h: 60 });
-      place("top",    { x: 32, y: 4,  w: 34, h: 40 });
-      place("bottom", { x: 32, y: 40, w: 34, h: 56 });
-      if (hasBelt)  place("belt",  { x: 6,  y: 60, w: 24, h: 10 });
-      if (hasBag)   place("bag",   { x: 64, y: 46, w: 28, h: 30 });
-      if (hasShoes) place("shoes", { x: 8,  y: 74, w: 26, h: 24 });
-    } else if (hasLayer) {
-      // Jacket + bottom, no separate top — jacket and pants side by side.
-      place("layer",  { x: 6,  y: 4,  w: 38, h: 64 });
-      place("bottom", { x: 42, y: 4,  w: 36, h: 80 });
-      if (hasBelt)  place("belt",  { x: 8,  y: 64, w: 24, h: 10 });
-      if (hasBag)   place("bag",   { x: 64, y: 76, w: 28, h: 22 });
-      if (hasShoes) place("shoes", { x: 10, y: 76, w: 26, h: 22 });
-    } else if (hasTop && hasBottom) {
-      // Top + bottom share a tight central column, bag at hip right.
-      place("top",    { x: 20, y: 4,  w: 46, h: 44 });
-      place("bottom", { x: 22, y: 44, w: 42, h: 52 });
-      if (hasBelt)  place("belt",  { x: 4,  y: 42, w: 22, h: 10 });
-      if (hasBag)   place("bag",   { x: 64, y: 50, w: 28, h: 30 });
-      if (hasShoes) place("shoes", { x: 8,  y: 74, w: 28, h: 24 });
-    } else if (hasTop) {
-      place("top",    { x: 18, y: 6,  w: 52, h: 58 });
-      if (hasBag)   place("bag",   { x: 64, y: 58, w: 28, h: 30 });
-      if (hasShoes) place("shoes", { x: 8,  y: 72, w: 28, h: 26 });
-    } else if (hasBottom) {
-      place("bottom", { x: 24, y: 4,  w: 44, h: 82 });
-      if (hasBelt)  place("belt",  { x: 6,  y: 30, w: 22, h: 10 });
-      if (hasBag)   place("bag",   { x: 66, y: 54, w: 28, h: 28 });
-      if (hasShoes) place("shoes", { x: 6,  y: 78, w: 26, h: 20 });
-    }
+  if (recipe) {
+    // Place in z-order so back-most garments render first and overlapping
+    // accessories layer on top correctly.
+    ["layer", "top", "dress", "bottom", "shoes", "bag", "belt"].forEach(role => place(role, recipe[role]));
   }
 
   // ── Accessories: drape ON the garment cluster, not at canvas corners.
   if (g.accessory.length > 0) {
-    const candidates = [
-      { x: 66, y: 6,  w: 20, h: 18 },  // upper right
-      { x: 8,  y: 6,  w: 20, h: 18 },  // upper left
-      { x: 66, y: 28, w: 18, h: 16 },  // mid right
-      { x: 8,  y: 28, w: 18, h: 16 },  // mid left
-    ];
+    const candidates = isMobile
+      ? [
+          { x: 64, y: 4,  w: 22, h: 18 },
+          { x: 4,  y: 4,  w: 22, h: 18 },
+          { x: 60, y: 26, w: 20, h: 16 },
+          { x: 4,  y: 26, w: 20, h: 16 },
+        ]
+      : [
+          { x: 66, y: 6,  w: 20, h: 18 },  // upper right
+          { x: 8,  y: 6,  w: 20, h: 18 },  // upper left
+          { x: 66, y: 28, w: 18, h: 16 },  // mid right
+          { x: 8,  y: 28, w: 18, h: 16 },  // mid left
+        ];
     const isOccupied = (pos) => slots.some(sl =>
       Math.abs(sl.x - pos.x) < 18 && Math.abs(sl.y - pos.y) < 18
     );
@@ -171,7 +169,7 @@ function buildCollageLayout(items) {
 // every piece.
 const CAT_Z = { Outerwear: 2, Bottoms: 3, Dresses: 4, Jumpsuits: 4, Tops: 5, Shoes: 6, Bags: 7, Belts: 9, Accessories: 10, Knits: 5 };
 
-function buildFromLayout(items, layout) {
+function buildFromLayout(items, layout, isMobile) {
   const byId = new Map(layout.map(e => [e.id, e]));
   const positioned = [];
   const missing = [];
@@ -185,7 +183,7 @@ function buildFromLayout(items, layout) {
     }
   }
   if (missing.length > 0) {
-    positioned.push(...buildCollageLayout(missing));
+    positioned.push(...buildCollageLayout(missing, isMobile));
   }
   return positioned.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
 }
@@ -198,13 +196,15 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
 
-  // Assign editorial positions: user-saved layout if present, otherwise the
-  // category-based auto-layout.
-  const slots = Array.isArray(layoutOverride) && layoutOverride.length > 0
-    ? buildFromLayout(sorted, layoutOverride)
-    : buildCollageLayout(sorted);
+  // On mobile, ignore any saved/AI-generated layout and use the built-in
+  // mobile recipes. Override coords were authored against the desktop
+  // landscape canvas and look scattered when re-projected onto a portrait
+  // mobile canvas — consistency across looks beats preserving them here.
+  const slots = !isMobile && Array.isArray(layoutOverride) && layoutOverride.length > 0
+    ? buildFromLayout(sorted, layoutOverride, isMobile)
+    : buildCollageLayout(sorted, isMobile);
 
-  const mobileCanvas = isMobile ? { paddingBottom: "105%" } : null;
+  const mobileCanvas = isMobile ? { paddingBottom: "125%" } : null;
 
   return (
     <div style={{ ...s.collageCanvas, ...mobileCanvas, ...canvasStyle }}>
