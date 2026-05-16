@@ -10,6 +10,7 @@ import { geocodeDestination } from "../../lib/geocode.js";
 import { fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
+import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds } from "./outfits.js";
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -144,40 +145,82 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
   const tempHighForDay = (iso) =>
     forecast?.[iso]?.high ?? brief?.tempHighF ?? null;
 
-  // Resolve item IDs from a plan to item objects
-  const resolveItems = (plan) =>
-    (plan?.items || []).map(id => items.find(it => it.id === id)).filter(Boolean);
+  // Resolve item-id list to item objects, dropping anything missing from the
+  // current wardrobe (deleted items, etc.).
+  const resolveItems = (ids) =>
+    (ids || []).map(id => items.find(it => it.id === id)).filter(Boolean);
 
   // Build the priorDays array (everything ALREADY planned on other days)
   // that the AI uses to avoid repeating the hero piece across the trip.
+  // We flatten every outfit on every other day so a dinner look's items still
+  // count against repetition for the next day's daytime look.
   const buildPriorDays = (currentIso, plansMap) =>
     days
-      .filter(d => d !== currentIso && plansMap[d]?.items?.length)
-      .map(d => ({
-        occasion: plansMap[d].occasion || dayOccasion[d] || "Casual",
+      .filter(d => d !== currentIso && plansMap[d])
+      .flatMap(d => outfitsOf(plansMap[d]).map(o => ({
+        occasion: o.occasion || plansMap[d].occasion || dayOccasion[d] || "Casual",
         weather:  weatherForDay(d),
-        itemIds:  plansMap[d].items || [],
-      }));
+        itemIds:  o.items || [],
+      })));
 
-  // Generate a look for one day
-  const handleGenerate = async (iso) => {
+  // Persist a full plan row (with `outfits` and legacy mirrors) and patch the
+  // local plans map. Used by every mutation path below — generate, regenerate,
+  // add outfit, remove outfit, change occasion.
+  async function persistPlan(iso, outfits) {
+    const payload = buildPlanPayload({
+      date: iso,
+      outfits,
+      source: "trip",
+      notes: trip.destination || null,
+      weather: weatherForDay(iso),
+    });
+    const saved = await savePlan(payload);
+    const row = Array.isArray(saved) ? saved[0] : saved;
+    const merged = { ...(row || {}), ...payload };
+    setPlans(prev => ({ ...prev, [iso]: merged }));
+    return merged;
+  }
+
+  // Generate a look for one outfit slot on a day. outfitIdx === null means
+  // "replace the day's primary outfit if it exists, otherwise create it".
+  // outfitIdx >= 0 regenerates that specific slot. outfitIdx === "append"
+  // adds a new outfit to the day.
+  const handleGenerate = async (iso, outfitIdx = null) => {
     if (!apiKey) { setError("Add your Anthropic API key in Settings first."); return; }
     setGeneratingDay(iso);
     setError("");
     try {
-      const occasion  = dayOccasion[iso] || "Casual";
+      const existing = outfitsOf(plans[iso]);
+      // Decide the occasion for the new/regenerated outfit.
+      let occasion;
+      if (outfitIdx === "append") {
+        // New outfit on the day — pick an occasion not already used, default Dinner.
+        const used = new Set(existing.map(o => o.occasion).filter(Boolean));
+        occasion = ["Dinner","Occasion","Lounge","Casual"].find(o => !used.has(o)) || "Dinner";
+      } else if (outfitIdx == null) {
+        occasion = existing[0]?.occasion || dayOccasion[iso] || "Casual";
+      } else {
+        occasion = existing[outfitIdx]?.occasion || dayOccasion[iso] || "Casual";
+      }
       const weather   = weatherForDay(iso);
       const priorDays = buildPriorDays(iso, plans);
       const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity: trip.activity || "Sightseeing" });
       if (!look) { setError("Couldn't generate a look — try again."); return; }
-      const saved = await savePlan({
-        date: iso,
-        items: look.items,
-        source: "trip",
-        occasion,
-        notes: trip.destination || null,
-      });
-      setPlans(prev => ({ ...prev, [iso]: { ...saved?.[0], date: iso, items: look.items, occasion } }));
+
+      let nextOutfits;
+      if (outfitIdx === "append") {
+        nextOutfits = [...existing, { id: newOutfitId(), label: "", occasion, items: look.items }];
+      } else if (outfitIdx == null || existing.length === 0) {
+        // Replace the primary outfit (or create one if none existed).
+        const id = existing[0]?.id || newOutfitId();
+        const label = existing[0]?.label || "";
+        nextOutfits = [{ id, label, occasion, items: look.items }, ...existing.slice(1)];
+      } else {
+        nextOutfits = existing.map((o, i) => i === outfitIdx
+          ? { ...o, occasion, items: look.items }
+          : o);
+      }
+      await persistPlan(iso, nextOutfits);
     } catch (e) {
       setError(e.message || "Generation failed.");
     } finally {
@@ -191,7 +234,7 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
   const [generatingAll, setGeneratingAll] = useState(false);
   const handleGenerateAll = async () => {
     if (!apiKey) { setError("Add your Anthropic API key in Settings first."); return; }
-    const empty = days.filter(iso => !plans[iso]);
+    const empty = days.filter(iso => outfitsOf(plans[iso]).length === 0);
     if (empty.length === 0) return;
     setGeneratingAll(true);
     setError("");
@@ -204,14 +247,16 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
         const priorDays = buildPriorDays(iso, running);
         const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity: trip.activity || "Sightseeing" });
         if (!look) continue;
-        const saved = await savePlan({
+        const outfits = [{ id: newOutfitId(), label: "", occasion, items: look.items }];
+        const payload = buildPlanPayload({
           date: iso,
-          items: look.items,
+          outfits,
           source: "trip",
-          occasion,
           notes: trip.destination || null,
+          weather,
         });
-        const newPlan = { ...saved?.[0], date: iso, items: look.items, occasion };
+        const saved = await savePlan(payload);
+        const newPlan = { ...(Array.isArray(saved) ? saved[0] : saved || {}), ...payload };
         running = { ...running, [iso]: newPlan };
         setPlans(running);
       } catch (e) {
@@ -229,58 +274,92 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
     } catch { setError("Couldn't clear this day."); }
   };
 
-  const handleOccasionChange = (iso, occ) => {
-    setDayOccasion(prev => ({ ...prev, [iso]: occ }));
-    // Update existing plan's occasion in DB if one exists
-    if (plans[iso]) {
-      savePlan({ ...plans[iso], date: iso, occasion: occ }).catch(() => {});
-      setPlans(prev => ({ ...prev, [iso]: { ...prev[iso], occasion: occ } }));
+  // Remove a single outfit from a day. If it's the last one, delete the whole
+  // plan row so the day looks unplanned again.
+  const handleRemoveOutfit = async (iso, outfitIdx) => {
+    const existing = outfitsOf(plans[iso]);
+    if (existing.length === 0) return;
+    if (existing.length === 1) return handleClearDay(iso);
+    const next = existing.filter((_, i) => i !== outfitIdx);
+    try {
+      await persistPlan(iso, next);
+    } catch (e) {
+      setError(e.message || "Couldn't update this day.");
     }
   };
 
+  // Free-text label edit on a single outfit. Saved immediately so it persists
+  // even if the user navigates away mid-edit.
+  const handleOutfitLabelChange = async (iso, outfitIdx, label) => {
+    const existing = outfitsOf(plans[iso]);
+    if (!existing[outfitIdx]) return;
+    const next = existing.map((o, i) => i === outfitIdx ? { ...o, label } : o);
+    // Optimistic local update so the input stays responsive while saving.
+    setPlans(prev => ({ ...prev, [iso]: { ...(prev[iso] || {}), outfits: next } }));
+    persistPlan(iso, next).catch(() => {});
+  };
+
+  const handleOccasionChange = (iso, outfitIdx, occ) => {
+    const existing = outfitsOf(plans[iso]);
+    if (outfitIdx == null) setDayOccasion(prev => ({ ...prev, [iso]: occ }));
+    if (!existing[outfitIdx]) {
+      // No outfit yet — just remember the picked occasion for when generation runs.
+      setDayOccasion(prev => ({ ...prev, [iso]: occ }));
+      return;
+    }
+    const next = existing.map((o, i) => i === outfitIdx ? { ...o, occasion: occ } : o);
+    persistPlan(iso, next).catch(() => {});
+  };
+
   // ── Derived packing data ──────────────────────────────────────────────────
+  // Flattens every outfit on every day, then groups items by category with
+  // per-item worn-day counts. Coverage warnings now run per OUTFIT — a day
+  // with a daytime look but no dinner look flags the dinner outfit, not the
+  // whole day.
   const packingData = useMemo(() => {
-    const itemDays = {};  // { itemId: [dayIndex, ...] }
+    const itemDays = {};  // { itemId: Set<dayIndex> }
     days.forEach((iso, idx) => {
       const plan = plans[iso];
       if (!plan) return;
-      (plan.items || []).forEach(id => {
-        if (!itemDays[id]) itemDays[id] = [];
-        itemDays[id].push(idx + 1);
-      });
+      for (const id of flattenPlanItemIds(plan)) {
+        if (!itemDays[id]) itemDays[id] = new Set();
+        itemDays[id].add(idx + 1);
+      }
     });
 
     const allIds = Object.keys(itemDays);
     const allItems = allIds.map(id => items.find(it => it.id === id)).filter(Boolean);
 
-    // Group by category
     const byCategory = {};
     allItems.forEach(it => {
       const cat = it.category || "Other";
       if (!byCategory[cat]) byCategory[cat] = [];
-      byCategory[cat].push({ item: it, days: itemDays[it.id] });
+      byCategory[cat].push({ item: it, days: [...itemDays[it.id]].sort((a, b) => a - b) });
     });
 
-    // Sorted by CAT_ORDER
     const sorted = CAT_ORDER
       .filter(c => byCategory[c])
       .map(c => ({ category: c, entries: byCategory[c] }));
     const extra = Object.keys(byCategory).filter(c => !CAT_ORDER.includes(c))
       .map(c => ({ category: c, entries: byCategory[c] }));
 
-    // Coverage warnings: days missing tops+bottom (or dress) and shoes
+    // Coverage warnings — one row per outfit slot that's missing a core piece.
     const warnings = [];
     days.forEach((iso, idx) => {
       const plan = plans[iso];
-      if (!plan) { warnings.push(`Day ${idx + 1}: no outfit planned`); return; }
-      const dayItems = resolveItems(plan);
-      const hasDress = dayItems.some(it => ["Dresses","Jumpsuits","Sets","Occasionwear"].includes(it.category));
-      const hasTop   = dayItems.some(it => ["Tops","Knits"].includes(it.category));
-      const hasBot   = dayItems.some(it => it.category === "Bottoms");
-      const hasShoes = dayItems.some(it => it.category === "Shoes");
-      if (!hasDress && !hasTop) warnings.push(`Day ${idx + 1}: no top or dress`);
-      else if (!hasDress && !hasBot) warnings.push(`Day ${idx + 1}: no bottoms`);
-      if (!hasShoes) warnings.push(`Day ${idx + 1}: no shoes`);
+      const outfits = outfitsOf(plan);
+      if (outfits.length === 0) { warnings.push(`Day ${idx + 1}: no outfit planned`); return; }
+      outfits.forEach((o, oIdx) => {
+        const dayItems = resolveItems(o.items);
+        const hasDress = dayItems.some(it => ["Dresses","Jumpsuits","Sets","Occasionwear"].includes(it.category));
+        const hasTop   = dayItems.some(it => ["Tops","Knits"].includes(it.category));
+        const hasBot   = dayItems.some(it => it.category === "Bottoms");
+        const hasShoes = dayItems.some(it => it.category === "Shoes");
+        const tag = outfits.length > 1 ? ` (${o.label || o.occasion || `Outfit ${oIdx + 1}`})` : "";
+        if (!hasDress && !hasTop) warnings.push(`Day ${idx + 1}${tag}: no top or dress`);
+        else if (!hasDress && !hasBot) warnings.push(`Day ${idx + 1}${tag}: no bottoms`);
+        if (!hasShoes) warnings.push(`Day ${idx + 1}${tag}: no shoes`);
+      });
     });
 
     return {
@@ -290,7 +369,7 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
     };
   }, [plans, days, items]);
 
-  const plannedCount = days.filter(iso => plans[iso]).length;
+  const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
   const weatherBucket = brief ? tempToBucket(brief.tempHighF) : null;
 
   return (
@@ -367,7 +446,7 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
         <div style={{ padding: "16px 16px 0" }}>
           {/* Generate-all CTA: only shown when at least one day is empty. Runs
               sequentially so prior picks inform later ones (variety). */}
-          {days.some(iso => !plans[iso]) && (
+          {days.some(iso => outfitsOf(plans[iso]).length === 0) && (
             <button
               onClick={handleGenerateAll}
               disabled={generatingAll || !apiKey}
@@ -386,25 +465,25 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
               }}>
               {generatingAll
                 ? <><span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span> Styling your trip…</>
-                : `✦ Generate all empty days (${days.filter(iso => !plans[iso]).length})`}
+                : `✦ Generate all empty days (${days.filter(iso => outfitsOf(plans[iso]).length === 0).length})`}
             </button>
           )}
           {days.map((iso, idx) => {
             const plan = plans[iso];
-            const planItems = resolveItems(plan);
-            const occ = dayOccasion[iso] || plan?.occasion || "Casual";
+            const outfits = outfitsOf(plan);
             const wx = weatherForDay(iso);
             const isGenerating = generatingDay === iso;
+            const hasOutfits = outfits.length > 0;
 
             return (
               <div key={iso} style={{
                 marginBottom: 14,
-                border: `1px solid ${plan ? PALETTE.accent + "40" : PALETTE.line}`,
+                border: `1px solid ${hasOutfits ? PALETTE.accent + "40" : PALETTE.line}`,
                 borderRadius: 10,
                 overflow: "hidden",
                 background: "#fff",
               }}>
-                {/* Day header */}
+                {/* Day header — date + temp + count badge */}
                 <div style={{ padding: "10px 12px 8px", borderBottom: `1px solid ${PALETTE.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: PALETTE.ink }}>{friendlyDay(iso, idx)}</div>
@@ -413,58 +492,110 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
                       {(() => {
                         const t = tempHighForDay(iso);
                         if (t == null) return "";
-                        // Mark "~" only when we're falling back to the trip-level brief;
-                        // a real forecast gets a clean temperature.
                         const isForecast = forecast?.[iso]?.high != null;
                         return ` · ${isForecast ? "" : "~"}${t}°F`;
                       })()}
                     </div>
                   </div>
-                  <select value={occ} onChange={e => handleOccasionChange(iso, e.target.value)}
-                    style={{ fontSize: 10, letterSpacing: "0.06em", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 6px", background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
-                    {OCCASIONS.map(o => <option key={o}>{o}</option>)}
-                  </select>
+                  {outfits.length > 1 && (
+                    <div style={{ fontSize: 10, color: PALETTE.muted, padding: "3px 8px", border: `1px solid ${PALETTE.line}`, borderRadius: 12 }}>
+                      {outfits.length} looks
+                    </div>
+                  )}
                 </div>
 
-                {/* Outfit area */}
+                {/* Outfit stack */}
                 {isGenerating ? (
                   <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center", color: PALETTE.muted, fontSize: 12 }}>
                     <span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span>
-                    Styling your {occ.toLowerCase()} look…
+                    Styling your look…
                   </div>
-                ) : planItems.length > 0 ? (
-                  <div style={{ position: "relative" }}>
-                    <EditorialCollage
-                      lookItems={planItems}
-                      layoutOverride={plan?.layout_data || null}
-                      canvasStyle={{ borderRadius: 0 }}
-                    />
-                  </div>
+                ) : !hasOutfits ? (
+                  <>
+                    <div style={{ height: 90, display: "flex", alignItems: "center", justifyContent: "center", color: PALETTE.muted, fontSize: 11, fontStyle: "italic" }}>
+                      No look planned yet
+                    </div>
+                    <div style={{ padding: "8px 12px", borderTop: `1px solid ${PALETTE.line}`, display: "flex", gap: 6 }}>
+                      <select value={dayOccasion[iso] || "Casual"}
+                        onChange={e => handleOccasionChange(iso, null, e.target.value)}
+                        style={{ fontSize: 10, letterSpacing: "0.06em", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "5px 6px", background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
+                        {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+                      </select>
+                      <button onClick={() => handleGenerate(iso, null)}
+                        style={{ flex: 1, padding: "7px 0", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
+                        ✦ Generate
+                      </button>
+                      {onBuildDay && (
+                        <button onClick={() => onBuildDay(iso, [])}
+                          style={{ padding: "7px 12px", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
+                          ⊞ Build
+                        </button>
+                      )}
+                    </div>
+                  </>
                 ) : (
-                  <div style={{ height: 90, display: "flex", alignItems: "center", justifyContent: "center", color: PALETTE.muted, fontSize: 11, fontStyle: "italic" }}>
-                    No look planned yet
-                  </div>
+                  <>
+                    {outfits.map((outfit, outfitIdx) => {
+                      const outfitItems = resolveItems(outfit.items);
+                      const occ = outfit.occasion || "Casual";
+                      return (
+                        <div key={outfit.id} style={{
+                          borderTop: outfitIdx === 0 ? "none" : `1px solid ${PALETTE.line}`,
+                        }}>
+                          {/* Outfit meta row */}
+                          <div style={{ display: "flex", gap: 6, padding: "8px 12px", alignItems: "center", background: PALETTE.cream }}>
+                            <select value={occ}
+                              onChange={e => handleOccasionChange(iso, outfitIdx, e.target.value)}
+                              style={{ flex: "0 0 96px", fontSize: 10, letterSpacing: "0.04em", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "4px 6px", background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
+                              {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+                            </select>
+                            <input type="text"
+                              value={outfit.label || ""}
+                              onChange={e => handleOutfitLabelChange(iso, outfitIdx, e.target.value)}
+                              placeholder="Label (e.g. Daytime, Dinner)"
+                              style={{ flex: 1, fontSize: 11, padding: "4px 8px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, minWidth: 0 }}/>
+                          </div>
+                          {/* Collage */}
+                          {outfitItems.length > 0 ? (
+                            <div style={{ position: "relative" }}>
+                              <EditorialCollage
+                                lookItems={outfitItems}
+                                layoutOverride={outfitIdx === 0 ? (plan?.layout_data || null) : null}
+                                canvasStyle={{ borderRadius: 0 }}
+                              />
+                            </div>
+                          ) : (
+                            <div style={{ height: 70, display: "flex", alignItems: "center", justifyContent: "center", color: PALETTE.muted, fontSize: 11, fontStyle: "italic" }}>
+                              Empty outfit — generate or build to add items
+                            </div>
+                          )}
+                          {/* Per-outfit actions */}
+                          <div style={{ display: "flex", gap: 6, padding: "8px 12px", borderTop: `1px solid ${PALETTE.line}` }}>
+                            <button onClick={() => handleGenerate(iso, outfitIdx)} disabled={isGenerating}
+                              style={{ flex: 1, padding: "7px 0", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: isGenerating ? "default" : "pointer" }}>
+                              {outfitItems.length > 0 ? "↺ Regenerate" : "✦ Generate"}
+                            </button>
+                            {onBuildDay && outfitIdx === 0 && (
+                              <button onClick={() => onBuildDay(iso, outfit.items || [])}
+                                style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
+                                ⊞ Build
+                              </button>
+                            )}
+                            <button onClick={() => handleRemoveOutfit(iso, outfitIdx)}
+                              title={outfits.length > 1 ? "Remove this outfit" : "Clear this day"}
+                              style={{ padding: "7px 10px", background: "transparent", color: PALETTE.muted, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, cursor: "pointer" }}>
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button onClick={() => handleGenerate(iso, "append")} disabled={isGenerating}
+                      style={{ display: "block", margin: "8px 12px 12px", width: "calc(100% - 24px)", padding: "7px 0", background: "transparent", border: `1px dashed ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", color: PALETTE.soft, cursor: isGenerating ? "default" : "pointer" }}>
+                      + Add another outfit
+                    </button>
+                  </>
                 )}
-
-                {/* Actions */}
-                <div style={{ display: "flex", gap: 6, padding: "8px 12px", borderTop: `1px solid ${PALETTE.line}` }}>
-                  <button onClick={() => handleGenerate(iso)} disabled={isGenerating}
-                    style={{ flex: 1, padding: "7px 0", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: isGenerating ? "default" : "pointer" }}>
-                    {planItems.length > 0 ? "↺ Regenerate" : "✦ Generate"}
-                  </button>
-                  {onBuildDay && (
-                    <button onClick={() => onBuildDay(iso, plan?.items || [])}
-                      style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
-                      ⊞ Build
-                    </button>
-                  )}
-                  {planItems.length > 0 && (
-                    <button onClick={() => handleClearDay(iso)}
-                      style={{ padding: "7px 10px", background: "transparent", color: PALETTE.muted, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, cursor: "pointer" }}>
-                      ✕
-                    </button>
-                  )}
-                </div>
               </div>
             );
           })}
