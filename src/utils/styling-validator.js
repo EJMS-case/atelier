@@ -889,7 +889,7 @@ export async function generateValidatedLooks({
         ({ toolBlock, raw } = await invokeToolStream(
           {
             apiKey,
-            model: "claude-sonnet-4-5",
+            model: "claude-sonnet-4-6",
             maxTokens: 5000,
             temperature: 0.7,
             content: messageContent,
@@ -927,7 +927,7 @@ export async function generateValidatedLooks({
         // which caused retries to truncate mid-response.
         ({ toolBlock, raw } = await invokeToolRaw({
           apiKey,
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           maxTokens: 5000,
           temperature: 0.7,
           content: messageContent,

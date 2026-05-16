@@ -49,8 +49,12 @@ export const AutoDetectTool = {
 // 2. generateValidatedLooks — 3-outfit styling response
 // ─────────────────────────────────────────────────────────────────────────────
 
+// id MUST match the W-ID format used throughout the styling pipeline. The
+// regex doubles as a hard guard against the AI hallucinating real wardrobe
+// IDs (timestamp_random suffixes etc.) — those get rejected at the schema
+// layer before reaching the validator's "non-existent item" check.
 const LookItemSchema = z.object({
-  id: z.string(),
+  id: z.string().regex(/^W\d{1,3}$/),
   role: z.string().optional(),
   x: z.number().min(0).max(100).optional(),
   y: z.number().min(0).max(100).optional(),
@@ -97,7 +101,7 @@ export const LooksTool = {
               items: {
                 type: "object",
                 properties: {
-                  id:   { type: "string", description: "Short W-ID from the inventory (W001, W002, …). Never invent IDs, never use timestamps or UUIDs." },
+                  id:   { type: "string", pattern: "^W[0-9]{1,3}$", description: "Short W-ID from the inventory (W001, W002, …). MUST match ^W\\d{1,3}$. Never invent IDs, never use timestamps or UUIDs." },
                   role: { type: "string" },
                   x:    { type: "number", minimum: 0, maximum: 100 },
                   y:    { type: "number", minimum: 0, maximum: 100 },
