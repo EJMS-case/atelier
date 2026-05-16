@@ -115,10 +115,13 @@ export const TRIP_ACTIVITIES = ["Sightseeing", "Theme Park", "Beach", "Resort", 
 
 const ACTIVITY_FILTERS = {
   "Theme Park": {
-    // All-day walking. Hard-ban anything you'd regret by lunch.
+    // All-day walking. Hard-ban anything you'd regret by lunch, including
+    // statement bags (fringe / structured leather totes), printed skirts,
+    // and dressy fabrics. Sandals stay allowed because chunky sport sandals
+    // are fine — strappy/heeled sandals get caught by the regex below.
     bannedCategories: [],
-    bannedSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Cocktail Dresses", "Gowns", "Formal Separates", "Mules"]),
-    bannedRegex: /\b(stiletto|silk.?gown|sequin|delicate|dry.?clean|ankle.?strap|jean)\b/i,
+    bannedSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Cocktail Dresses", "Gowns", "Formal Separates", "Mules", "Skirts"]),
+    bannedRegex: /\b(stiletto|silk.?gown|sequin|delicate|dry.?clean|ankle.?strap|fringe|argyle|brocade|jacquard|metallic|lace|sheer|leather pant)\b/i,
     allowSwim: false,
   },
   "Beach": {
@@ -203,14 +206,40 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const useCount = new Map();
   const wearScore = (id) => useCount.get(id) || 0;
 
-  // Pick one best item from a list for this day, factoring in occasion + variety.
-  const pick = (candidates, occasion) => {
+  // Statement-piece detector — mirrors the Style Me HC8 rule. Used to make
+  // sure each day's outfit has AT MOST ONE statement piece (fringe bag +
+  // argyle skirt in the same look was the kind of thing the user flagged
+  // as "yikes"). Whitelist of patterns + embellishment keywords.
+  const STATEMENT_PATTERNS = new Set([
+    "striped","stripe","stripes","plaid","tartan","houndstooth","gingham",
+    "windowpane","check","checked","chevron","argyle","floral","botanical",
+    "polka-dot","polka dot","polkadot","abstract","abstract print","graphic",
+    "graphic print","print","animal","leopard","zebra","snake","cheetah",
+    "tiger","paisley","tie-dye","tie dye","geometric","camouflage","camo",
+  ]);
+  const isStatement = (item) => {
+    if (!item) return false;
+    const pattern = (item.pattern || "").toLowerCase().trim();
+    if (STATEMENT_PATTERNS.has(pattern)) return true;
+    const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
+    if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|fringe|lace)\b/.test(text)) return true;
+    if (/\b(floral|polka.?dot|leopard|zebra|snake|cheetah|paisley|gingham|houndstooth|chevron|argyle|tartan|tie.?dye|abstract print|graphic print)\b/.test(text)) return true;
+    return false;
+  };
+
+  // Pick one best item from a list for this day, factoring in occasion +
+  // variety + a statement-stacking penalty: if there's already a statement
+  // piece in the day's outfit, candidates that ARE statements get heavily
+  // penalized so we don't end up with a fringe bag + argyle skirt combo.
+  const pick = (candidates, occasion, currentOutfit = []) => {
     if (!candidates.length) return null;
+    const alreadyHasStatement = currentOutfit.some(isStatement);
     let best = null, bestScore = -Infinity;
     for (const c of candidates) {
       const occScore = scoreForOccasion(c, occasion);
       const variety  = -3 * wearScore(c.id);   // 0 → no penalty; 1 wear → -3; 2 → -6
-      const total    = occScore + variety + Math.random() * 0.6; // tiny jitter
+      const stackPen = (alreadyHasStatement && isStatement(c)) ? -15 : 0;
+      const total    = occScore + variety + stackPen + Math.random() * 0.6;
       if (total > bestScore) { bestScore = total; best = c; }
     }
     return best;
@@ -230,38 +259,32 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
 
     // Decide dress vs tops+bottoms. Bias toward dresses for Dinner/Date,
     // toward tops+bottoms for Casual/Work/Active. Either way, fall through
-    // if the preferred path has no candidates.
+    // if the preferred path has no candidates. Each subsequent pick sees
+    // the day's running outfit so the statement-stacking penalty applies.
     const preferDress = /dinner|date|occasion/i.test(occasion);
-    const dressCandidate = pick(dresses, occasion);
-    const topCandidate   = pick(tops, occasion);
-    const bottomCandidate= pick(bottoms, occasion);
+    const dressCandidate = pick(dresses, occasion, day);
 
     if (preferDress && dressCandidate) {
       day.push(dressCandidate);
-    } else if (topCandidate && bottomCandidate) {
-      day.push(topCandidate);
-      day.push(bottomCandidate);
-    } else if (dressCandidate) {
-      day.push(dressCandidate);
-    } else if (topCandidate) {
-      day.push(topCandidate);
-      // Still try a bottom even if we picked a top — pick may have returned null
-      const fallbackBottom = bottomCandidate || pick(bottoms, occasion);
-      if (fallbackBottom) day.push(fallbackBottom);
-    } else if (bottomCandidate) {
-      day.push(bottomCandidate);
+    } else {
+      const topCandidate = pick(tops, occasion, day);
+      if (topCandidate) day.push(topCandidate);
+      const bottomCandidate = pick(bottoms, occasion, day);
+      if (bottomCandidate) day.push(bottomCandidate);
+      // Fallback to dress if we couldn't get a top+bottom pair.
+      if (day.length === 0 && dressCandidate) day.push(dressCandidate);
     }
 
-    const shoe = pick(shoes, occasion);
+    const shoe = pick(shoes, occasion, day);
     if (shoe) day.push(shoe);
 
     // Outerwear only when it's cold enough to want a layer.
     if (hi < 68 && outerwear.length) {
-      const o = pick(outerwear, occasion);
+      const o = pick(outerwear, occasion, day);
       if (o) day.push(o);
     }
 
-    const bag = pick(bags, occasion);
+    const bag = pick(bags, occasion, day);
     if (bag) day.push(bag);
 
     // Bump usage counts so the next day's picks tilt away from these.
