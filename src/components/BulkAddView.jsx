@@ -37,11 +37,14 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           .then(async r => {
             const trimmed = r.has_bg ? r.image : await trimTransparentBorders(r.image);
             const compressed = await compressImage(trimmed, 600, 0.9, true);
-            return { image: compressed, has_bg: r.has_bg };
+            // is_trimmed is set when we actually ran the trim path
+            // (i.e. the bg was removed). Items that retain their bg still
+            // need a future trim pass once a bg removal happens.
+            return { image: compressed, has_bg: r.has_bg, is_trimmed: !r.has_bg };
           })
           .catch(err => {
             console.warn("[F1] bg strip failed:", err);
-            return { image: rawImage, has_bg: true };
+            return { image: rawImage, has_bg: true, is_trimmed: false };
           });
 
         const detectP = apiKey
@@ -57,7 +60,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         // user's typing or the Knits auto-classifier (handleCategoryChange).
         setQueue(q => q.map(i => {
           if (i.id !== id) return i;
-          let next = { ...i, image: bg.image, has_bg: bg.has_bg };
+          let next = { ...i, image: bg.image, has_bg: bg.has_bg, is_trimmed: bg.is_trimmed };
           if (detection) {
             next = applyDetection(next, detection);
             next.detected_at = new Date().toISOString();

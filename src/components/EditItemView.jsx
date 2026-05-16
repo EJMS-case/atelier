@@ -14,6 +14,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     pattern: item.pattern || "",
     price_paid: item.price_paid ?? null,
     has_bg: item.has_bg,
+    is_trimmed: item.is_trimmed,
   });
   const [preview, setPreview] = useState(item.image || null);
   const [confirm, setConfirm] = useState(false);
@@ -50,7 +51,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     const reader = new FileReader();
     reader.onload = ev => {
       setPreview(ev.target.result);
-      setForm(f=>({...f,image:ev.target.result, has_bg: undefined}));
+      setForm(f=>({...f,image:ev.target.result, has_bg: undefined, is_trimmed: undefined}));
       setBgState("idle"); setBgError("");
     };
     reader.readAsDataURL(file);
@@ -74,7 +75,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
       // piece. The bg removal almost always leaves padding around the item.
       const trimmed = await trimTransparentBorders(result.image);
       setPreview(trimmed);
-      setForm(f => ({...f, image: trimmed, has_bg: false}));
+      setForm(f => ({...f, image: trimmed, has_bg: false, is_trimmed: true}));
       setBgState("success");
     } catch (e) {
       setBgState("error");
