@@ -74,9 +74,16 @@ function scoreForOccasion(item, occasion) {
     if (rules.preferTopName?.test(name)) s += 2;
   }
   if (rules.avoidName?.test(name)) s -= 4;
-  // Occasion field on the item itself, if user tagged it.
-  if (item.occasion && item.occasion.toLowerCase().includes((occasion || "").toLowerCase())) s += 4;
-  if (Array.isArray(item.occasions) && item.occasions.some(o => (o || "").toLowerCase() === (occasion || "").toLowerCase())) s += 4;
+  // Occasion field on the item itself, if user tagged it. `occasion` may be
+  // a plain string OR (post-multitag migration) an array of strings — the
+  // old code assumed string and crashed buildDailyOutfits with
+  // ".toLowerCase is not a function" the moment it hit an array-tagged item.
+  const occLc = (occasion || "").toLowerCase();
+  const itemOccs = Array.isArray(item.occasion)
+    ? item.occasion
+    : (typeof item.occasion === "string" ? [item.occasion] : []);
+  if (itemOccs.some(o => typeof o === "string" && o.toLowerCase().includes(occLc))) s += 4;
+  if (Array.isArray(item.occasions) && item.occasions.some(o => typeof o === "string" && o.toLowerCase() === occLc)) s += 4;
   return s;
 }
 
