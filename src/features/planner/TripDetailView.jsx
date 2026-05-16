@@ -6,6 +6,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, updateTrip } from "./plannerApi.js";
 import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
+import { geocodeDestination } from "../../lib/geocode.js";
+import { fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 
@@ -71,6 +73,10 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
   const [generatingDay, setGeneratingDay] = useState(null); // iso
   const [dayOccasion, setDayOccasion] = useState({});  // { iso: occasion }
   const [error, setError] = useState("");
+  // Per-day Open-Meteo forecast at the destination, keyed by iso.
+  // null until geocode + forecast resolve; falls back to the trip-level
+  // brief temperature for days outside the 16-day forecast horizon.
+  const [forecast, setForecast] = useState(null);
 
   const days = useMemo(() => tripDays(trip.start_date, trip.end_date), [trip]);
 
@@ -106,12 +112,37 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip.id]);
 
-  // Weather bucket per day — derived from brief or falls back to seasonal NYC estimate
+  // Geocode the destination once and pull a 16-day forecast for it. Trips
+  // beyond the forecast horizon fall back to the AI brief's typical-high
+  // temperature; trips without a destination skip this entirely.
+  useEffect(() => {
+    if (!trip.destination) { setForecast(null); return; }
+    let cancelled = false;
+    (async () => {
+      const geo = await geocodeDestination(trip.destination);
+      if (!geo || cancelled) return;
+      const fc = await fetchTripForecast(geo.lat, geo.lon, geo.timezone);
+      if (!cancelled) setForecast(fc);
+    })();
+    return () => { cancelled = true; };
+  }, [trip.destination]);
+
+  // Per-day weather bucket. Priority:
+  //   1. Real Open-Meteo forecast at the destination (within 16 days)
+  //   2. AI-brief typical high for the destination (any horizon)
+  //   3. Seasonal NYC estimate (last-resort fallback for trips without a
+  //      destination set or before the brief arrives)
   const SEASONAL_HIGH = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
   const weatherForDay = (iso) => {
+    const forecastHigh = forecast?.[iso]?.high;
+    if (forecastHigh != null) return bucketFromHigh(forecastHigh);
     const highF = brief?.tempHighF ?? SEASONAL_HIGH[new Date(iso + "T00:00:00Z").getMonth()];
     return tempToBucket(highF);
   };
+  // Used for the per-day temperature label (more accurate than brief.tempHighF
+  // when the destination forecast is available).
+  const tempHighForDay = (iso) =>
+    forecast?.[iso]?.high ?? brief?.tempHighF ?? null;
 
   // Resolve item IDs from a plan to item objects
   const resolveItems = (plan) =>
@@ -377,7 +408,17 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
                 <div style={{ padding: "10px 12px 8px", borderBottom: `1px solid ${PALETTE.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: PALETTE.ink }}>{friendlyDay(iso, idx)}</div>
-                    <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 1 }}>{wx}{brief ? ` · ~${brief.tempHighF}°F` : ""}</div>
+                    <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 1 }}>
+                      {wx}
+                      {(() => {
+                        const t = tempHighForDay(iso);
+                        if (t == null) return "";
+                        // Mark "~" only when we're falling back to the trip-level brief;
+                        // a real forecast gets a clean temperature.
+                        const isForecast = forecast?.[iso]?.high != null;
+                        return ` · ${isForecast ? "" : "~"}${t}°F`;
+                      })()}
+                    </div>
                   </div>
                   <select value={occ} onChange={e => handleOccasionChange(iso, e.target.value)}
                     style={{ fontSize: 10, letterSpacing: "0.06em", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 6px", background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
