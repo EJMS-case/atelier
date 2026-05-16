@@ -2,7 +2,7 @@
 // Mobile-first month grid. Tap a day to assign/clear a planned look. The
 // Trip modal lives in this file too.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
 import { buildDailyOutfits, TRIP_VIBES, defaultOccasionsForVibe, alternativesFor } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
@@ -497,6 +497,17 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [swapTarget, setSwapTarget] = useState(null); // { dayIdx, item } when picking a replacement
+  // Ref to the preview section so we can scroll it into view after generation —
+  // on mobile the bottom-sheet button sits at the viewport edge and the per-day
+  // cards render below it, off-screen. Without auto-scroll users tap Preview
+  // and see no reaction, even though state updated correctly.
+  const previewRef = useRef(null);
+
+  useEffect(() => {
+    if (dayOutfits && previewRef.current) {
+      previewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [dayOutfits]);
 
   const dayCount = Math.max(1, Math.round((new Date(end) - new Date(start)) / (24 * 60 * 60 * 1000)) + 1);
 
@@ -721,12 +732,14 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
           </div>
         )}
 
-        <button onClick={handlePreview} disabled={loading} style={{ ...btnPrimary, width: "100%", marginTop: 12 }}>
-          {loading ? "Building looks…" : dayOutfits ? "↺ Rebuild all looks" : "Preview looks"}
+        <button onClick={handlePreview} disabled={loading} style={{ ...btnPrimary, width: "100%", marginTop: 12, opacity: loading ? 0.6 : 1 }}>
+          {loading
+            ? <><span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span> Building looks…</>
+            : dayOutfits ? "↺ Rebuild all looks" : "Preview looks"}
         </button>
 
         {dayOutfits && (
-          <div style={{ marginTop: 16 }}>
+          <div ref={previewRef} style={{ marginTop: 16 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 8 }}>
               {packingList.length} ITEMS TO PACK
               {uncovered.length > 0 && ` · ${uncovered.length} day${uncovered.length === 1 ? "" : "s"} may need more`}
