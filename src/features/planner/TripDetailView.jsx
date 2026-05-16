@@ -117,15 +117,27 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
   const resolveItems = (plan) =>
     (plan?.items || []).map(id => items.find(it => it.id === id)).filter(Boolean);
 
+  // Build the priorDays array (everything ALREADY planned on other days)
+  // that the AI uses to avoid repeating the hero piece across the trip.
+  const buildPriorDays = (currentIso, plansMap) =>
+    days
+      .filter(d => d !== currentIso && plansMap[d]?.items?.length)
+      .map(d => ({
+        occasion: plansMap[d].occasion || dayOccasion[d] || "Casual",
+        weather:  weatherForDay(d),
+        itemIds:  plansMap[d].items || [],
+      }));
+
   // Generate a look for one day
   const handleGenerate = async (iso) => {
     if (!apiKey) { setError("Add your Anthropic API key in Settings first."); return; }
     setGeneratingDay(iso);
     setError("");
     try {
-      const occasion = dayOccasion[iso] || "Casual";
-      const weather  = weatherForDay(iso);
-      const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey);
+      const occasion  = dayOccasion[iso] || "Casual";
+      const weather   = weatherForDay(iso);
+      const priorDays = buildPriorDays(iso, plans);
+      const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief });
       if (!look) { setError("Couldn't generate a look — try again."); return; }
       const saved = await savePlan({
         date: iso,
@@ -140,6 +152,43 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
     } finally {
       setGeneratingDay(null);
     }
+  };
+
+  // Generate looks for every day that doesn't have one yet. Runs sequentially
+  // so each call sees the previous days' picks via a running plans snapshot —
+  // that's what gives us variety across the trip without a single megaprompt.
+  const [generatingAll, setGeneratingAll] = useState(false);
+  const handleGenerateAll = async () => {
+    if (!apiKey) { setError("Add your Anthropic API key in Settings first."); return; }
+    const empty = days.filter(iso => !plans[iso]);
+    if (empty.length === 0) return;
+    setGeneratingAll(true);
+    setError("");
+    let running = { ...plans };
+    for (const iso of empty) {
+      setGeneratingDay(iso);
+      try {
+        const occasion  = dayOccasion[iso] || "Casual";
+        const weather   = weatherForDay(iso);
+        const priorDays = buildPriorDays(iso, running);
+        const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief });
+        if (!look) continue;
+        const saved = await savePlan({
+          date: iso,
+          items: look.items,
+          source: "trip",
+          occasion,
+          notes: trip.destination || null,
+        });
+        const newPlan = { ...saved?.[0], date: iso, items: look.items, occasion };
+        running = { ...running, [iso]: newPlan };
+        setPlans(running);
+      } catch (e) {
+        setError(e.message || `Generation failed for ${iso}.`);
+      }
+    }
+    setGeneratingDay(null);
+    setGeneratingAll(false);
   };
 
   const handleClearDay = async (iso) => {
@@ -285,6 +334,30 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
       {/* ── LOOKS TAB ── */}
       {tab === "looks" && (
         <div style={{ padding: "16px 16px 0" }}>
+          {/* Generate-all CTA: only shown when at least one day is empty. Runs
+              sequentially so prior picks inform later ones (variety). */}
+          {days.some(iso => !plans[iso]) && (
+            <button
+              onClick={handleGenerateAll}
+              disabled={generatingAll || !apiKey}
+              style={{
+                width: "100%",
+                padding: "10px 0",
+                marginBottom: 14,
+                background: PALETTE.ink,
+                color: PALETTE.bg,
+                border: "none",
+                borderRadius: 8,
+                fontSize: 11,
+                letterSpacing: "0.14em",
+                cursor: generatingAll ? "default" : "pointer",
+                opacity: generatingAll ? 0.6 : 1,
+              }}>
+              {generatingAll
+                ? <><span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span> Styling your trip…</>
+                : `✦ Generate all empty days (${days.filter(iso => !plans[iso]).length})`}
+            </button>
+          )}
           {days.map((iso, idx) => {
             const plan = plans[iso];
             const planItems = resolveItems(plan);
