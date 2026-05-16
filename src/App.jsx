@@ -123,6 +123,11 @@ export default function App() {
   const [rmbgKey,    setRmbgKey]    = useState(() => loadRmbgKey());
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const [editItem,   setEditItem]   = useState(null);
+  // Remember which view launched the EditItem flow so Save/Back/Delete
+  // return the user there instead of dumping them on the closet/home.
+  // Editing a piece from Style Me used to land back on Home — annoying when
+  // you wanted to keep flipping through the same look set.
+  const [editReturnView, setEditReturnView] = useState("closet");
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
   const [inspirations, setInspirations] = useState([]);
@@ -840,19 +845,30 @@ export default function App() {
       {/* ── HEADER ── */}
       <header style={s.header}>
         <div style={s.headerInner}>
-          <div style={s.brand}>
+          <button
+            onClick={() => setView("closet")}
+            style={{ ...s.brand, background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", font: "inherit" }}
+            aria-label="Go to closet"
+            title="Go to your closet"
+          >
             <span style={s.brandMark}>✦</span>
             <span style={s.brandName}>ATELIER</span>
+            {items.length > 0 && (
+              <span style={s.badge}>{items.length}</span>
+            )}
             {syncLabel && (
               <span
                 style={{...s.savedPill, background: syncColor, cursor: syncStatus === "error" ? "pointer" : "default"}}
                 title={syncStatus === "error" ? "Tap to retry loading your wardrobe" : undefined}
-                onClick={syncStatus === "error" ? reloadFromSupabase : undefined}
+                onClick={(e) => { if (syncStatus === "error") { e.stopPropagation(); reloadFromSupabase(); } }}
               >{syncStatus === "error" ? "⚠ offline — tap to retry" : syncLabel}</span>
             )}
-          </div>
+          </button>
           <nav style={s.nav}>
-            {[["home","Home"],["closet","Closet"],["style","Style Me"],["planner","Planner"],["favorites","Saved"],["inspiration","Inspo"]].map(([v,label]) => (
+            {/* "Closet" link removed — the ATELIER brand button now takes
+                users to the full closet grid. Home (the curated dashboard)
+                stays as a distinct destination. */}
+            {[["home","Home"],["style","Style Me"],["planner","Planner"],["favorites","Saved"],["inspiration","Inspo"]].map(([v,label]) => (
               <button key={v} onClick={() => {
                 setView(v);
                 // Clicking the Style Me nav always opens the generator
@@ -862,8 +878,6 @@ export default function App() {
               }}
                 style={{...s.navBtn, ...(view===v ? s.navActive : {})}}>
                 {label}
-                {v==="closet" && items.length > 0 &&
-                  <span style={s.badge}>{items.length}</span>}
               </button>
             ))}
             <button
@@ -893,7 +907,7 @@ export default function App() {
             items={items}
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
-            onEditItem={(item) => { setEditItem(item); setView("edit"); }}
+            onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onStyleItem={(item) => {
               setRequest(`Style around my ${item.name}`);
               setView("style");
@@ -1004,7 +1018,7 @@ export default function App() {
                 onSave={(data) => { updateSetMeta(editingSet, data); setEditingSet(null); }}
                 onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
                 onClose={() => setEditingSet(null)}
-                onEditItem={(item) => { setEditItem(item); setView("edit"); setEditingSet(null); }}
+                onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); setEditingSet(null); }}
                 onAddItem={(item) => updateItem(item.id, { set_id: editingSet, is_separable: true })}
               />
             )}
@@ -1035,7 +1049,7 @@ export default function App() {
                       {recentItems.map(item => (
                         <ItemCard key={item.id} item={item} allItems={items}
                           onDelete={deleteItem}
-                          onEdit={() => { setEditItem(item); setView("edit"); }}
+                          onEdit={() => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
                           isFavorited={isFav("piece", item.id)}
                           onToggleFav={() => toggleFav("piece", item.id)}
                           onStyleItem={styleWithItem}/>
@@ -1052,7 +1066,7 @@ export default function App() {
                       {uncategorized.map(item => (
                         <ItemCard key={item.id} item={item} allItems={items}
                           onDelete={deleteItem}
-                          onEdit={() => { setEditItem(item); setView("edit"); }}
+                          onEdit={() => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
                           isFavorited={isFav("piece", item.id)}
                           onToggleFav={() => toggleFav("piece", item.id)}
                           onStyleItem={styleWithItem}/>
@@ -1075,7 +1089,7 @@ export default function App() {
               {filtered.map(item => (
                 <ItemCard key={item.id} item={item} allItems={items}
                   onDelete={deleteItem}
-                  onEdit={() => { setEditItem(item); setView("edit"); }}
+                  onEdit={() => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
                   isFavorited={isFav("piece", item.id)}
                   onToggleFav={() => toggleFav("piece", item.id)}
                   onStyleItem={styleWithItem}/>
@@ -1126,11 +1140,11 @@ export default function App() {
           rmbgKey={rmbgKey}
           onSave={async (fields) => {
             const result = await updateItem(editItem.id, fields);
-            if (result?.ok) setView("closet");
+            if (result?.ok) setView(editReturnView || "closet");
             return result;
           }}
-          onDelete={() => { deleteItem(editItem.id); setView("closet"); }}
-          onBack={() => setView("closet")}
+          onDelete={() => { deleteItem(editItem.id); setView(editReturnView || "closet"); }}
+          onBack={() => setView(editReturnView || "closet")}
           onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}/>
       )}
 
@@ -1203,7 +1217,7 @@ export default function App() {
           )}
           {outfits && outfits.map((look, i) => (
             <LookCard key={i} look={look} items={items}
-              onEditItem={(item) => { setEditItem(item); setView("edit"); }}
+              onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
               onRate={async (lk, rating) => {
                 try {
                   const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
@@ -1276,7 +1290,7 @@ export default function App() {
             items={items}
             apiKey={apiKey}
             onGoToStyleMe={() => setView("style")}
-            onEditItem={(item) => { setEditItem(item); setView("edit"); }}
+            onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onEditPlan={(iso, plan) => {
               setEditingPlan({ iso, plan });
               setManualBuilderOpen(true);
@@ -1299,7 +1313,7 @@ export default function App() {
           favorites={favorites}
           toggleFav={toggleFav}
           isFav={isFav}
-          onEditItem={(item) => { setEditItem(item); setView("edit"); }}
+          onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
           onDeleteLog={async (id) => { await sb.deleteOutfitLog(id); }}
           onUnlog={async (log) => {
             // F6 — decrement wear counts when unlogging. Callers pass the
