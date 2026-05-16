@@ -58,9 +58,13 @@ const LookItemSchema = z.object({
   h: z.number().min(1).max(100).optional(),
 });
 
+// minItems 3 matches the validator's HC2 hard rule (4-6 items per look, with
+// 3 as the absolute floor that still counts as a complete outfit). Setting it
+// at the schema level rejects undersized responses before they reach the
+// expensive runtime validators and the retry loop.
 const LookSchema = z.object({
   vibe: VibeEnum,
-  items: z.array(LookItemSchema).min(1),
+  items: z.array(LookItemSchema).min(3),
   silhouette: z.string().default(""),
   focal_point: z.string().default(""),
   color_strategy: z.string().default(""),
@@ -89,11 +93,11 @@ export const LooksTool = {
             vibe:           { type: "string", enum: VIBE_VOCABULARY },
             items: {
               type: "array",
-              minItems: 1,
+              minItems: 3,
               items: {
                 type: "object",
                 properties: {
-                  id:   { type: "string" },
+                  id:   { type: "string", description: "Short W-ID from the inventory (W001, W002, …). Never invent IDs, never use timestamps or UUIDs." },
                   role: { type: "string" },
                   x:    { type: "number", minimum: 0, maximum: 100 },
                   y:    { type: "number", minimum: 0, maximum: 100 },
