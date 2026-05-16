@@ -50,12 +50,18 @@ const DESKTOP_RECIPES = {
 // across the pants waist (matches inspo). All compositions feel like one
 // dense cluster rather than scattered objects on a card.
 const MOBILE_RECIPES = {
-  dressLayer:     { layer:{x:2,y:4,w:46,h:62},   dress:{x:34,y:6,w:50,h:80},  belt:{x:24,y:56,w:32,h:8},  bag:{x:54,y:54,w:42,h:34},  shoes:{x:4,y:66,w:38,h:30} },
-  dressTop:       { dress:{x:30,y:4,w:54,h:82},  top:{x:2,y:10,w:42,h:50},    belt:{x:2,y:58,w:32,h:8},   bag:{x:56,y:58,w:40,h:34},  shoes:{x:4,y:68,w:38,h:30} },
-  dressSolo:      { dress:{x:22,y:2,w:58,h:78},  belt:{x:14,y:46,w:32,h:8},   bag:{x:54,y:46,w:42,h:36},  shoes:{x:4,y:64,w:42,h:32} },
-  layerTopBottom: { layer:{x:2,y:14,w:42,h:58},  top:{x:18,y:2,w:48,h:46},    bottom:{x:48,y:24,w:46,h:70}, belt:{x:42,y:46,w:48,h:8}, bag:{x:0,y:58,w:36,h:36},  shoes:{x:24,y:70,w:42,h:28} },
-  layerBottom:    { layer:{x:6,y:4,w:46,h:66},   bottom:{x:46,y:8,w:48,h:84}, belt:{x:38,y:50,w:42,h:8},  bag:{x:2,y:58,w:36,h:34},   shoes:{x:18,y:70,w:42,h:28} },
-  topBottom:      { top:{x:14,y:4,w:50,h:54},    bottom:{x:48,y:22,w:46,h:74}, belt:{x:42,y:46,w:48,h:8}, bag:{x:0,y:50,w:34,h:36},   shoes:{x:22,y:70,w:42,h:28} },
+  dressLayer:     { layer:{x:2,y:6,w:42,h:56},   dress:{x:32,y:6,w:50,h:78},  belt:{x:22,y:54,w:34,h:8},  bag:{x:58,y:52,w:40,h:36},  shoes:{x:4,y:66,w:40,h:30} },
+  dressTop:       { dress:{x:30,y:4,w:54,h:82},  top:{x:2,y:8,w:38,h:54},     belt:{x:4,y:60,w:34,h:8},   bag:{x:58,y:54,w:40,h:36},  shoes:{x:6,y:68,w:38,h:30} },
+  dressSolo:      { dress:{x:22,y:2,w:58,h:78},  belt:{x:16,y:46,w:34,h:8},   bag:{x:54,y:46,w:42,h:36},  shoes:{x:4,y:64,w:42,h:32} },
+  // Inspo A: blazer top-center, tank tucked behind on left, pants right with
+  // belt across waist, bag overlapping pants on the right, shoes bottom-left.
+  layerTopBottom: { layer:{x:16,y:8,w:46,h:54},  top:{x:2,y:18,w:34,h:54},    bottom:{x:46,y:22,w:44,h:72}, belt:{x:42,y:42,w:46,h:10}, bag:{x:60,y:54,w:38,h:38}, shoes:{x:4,y:66,w:42,h:30} },
+  // Inspo C: blazer + skirt as a tight central column, tall boot on left,
+  // bag overlapping skirt on the right.
+  layerBottom:    { layer:{x:20,y:4,w:48,h:60},  bottom:{x:32,y:42,w:44,h:56}, belt:{x:30,y:42,w:46,h:8}, bag:{x:58,y:50,w:40,h:40}, shoes:{x:0,y:42,w:30,h:54} },
+  // Inspo D: top upper-left, jeans right with belt across waist, bag
+  // overlapping jeans on the right, shoes bottom-left.
+  topBottom:      { top:{x:14,y:4,w:48,h:56},    bottom:{x:46,y:24,w:42,h:72}, belt:{x:42,y:44,w:46,h:8},  bag:{x:50,y:48,w:44,h:38}, shoes:{x:2,y:66,w:38,h:32} },
   topOnly:        { top:{x:18,y:4,w:60,h:64},    bag:{x:60,y:58,w:36,h:36},   shoes:{x:6,y:70,w:42,h:28} },
   bottomOnly:     { bottom:{x:22,y:2,w:54,h:84}, belt:{x:18,y:30,w:42,h:8},   bag:{x:60,y:50,w:36,h:36},  shoes:{x:4,y:74,w:36,h:24} },
 };
