@@ -56,7 +56,7 @@ export const SET_TAGS = ["Work","Weekend","Evening","Travel","Casual","Date Nigh
 // Lunch / Daytime read identically to the AI). Older saved logs that still
 // reference the legacy labels are normalized at read time — see OCCASION_ALIASES.
 export const OCCASIONS = [
-  "Work", "Work Dinner", "Casual", "Date Night", "Dinner", "Occasion", "Travel", "Lounge",
+  "Work", "Work Dinner", "Casual", "Dinner", "Occasion", "Travel", "Lounge",
 ];
 
 // Map deprecated occasion labels → the bucket they now live in. Used by any
@@ -70,6 +70,8 @@ export const OCCASION_ALIASES = {
   Activity: "Casual",
   Weekend: "Casual",
   "Dinner Party": "Dinner",
+  "Date Night": "Dinner",
+  "Date night": "Dinner",
   Event: "Occasion",
   Evening: "Occasion",
   Cocktail: "Occasion",

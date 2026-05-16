@@ -57,19 +57,17 @@ export const OCCASION_SLOTS = {
     required: { top: true, bottom: true, shoes: true },
     optional: { dress: true, layer: true, bag: true, belt: true, accessory: true },
     banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "CASUAL: Off-duty NYC — covers daytime, brunch, errands, low-key activities. Every look needs a top + bottom (or a dress). Elevated but never trying. Denim welcome. Loafers, flats, low boots, or clean sneakers if she has them.",
-  },
-  "Date Night": {
-    required: { top: ["Blouses","Shirts","Tops","Bodysuits"], bottom: true, shoes: ["Heels"], bag: true },
-    optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Jackets","Cardigans"], belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["T-Shirts","Tanks","Shorts"], keywords: ["chunky","platform","combat","lug"] },
-    promptNote: "DATE NIGHT: Elevated and feminine. Heels required. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Lean into texture variety — silk, satin, leather, fine knit, lace, structured wool all welcome; no single material is mandatory. At least one of the 3 looks should be a dress.",
+    promptNote: "CASUAL: Daytime out — brunch, lunch, hanging with friends, errands, weekend wandering. Every look needs a top + bottom (or a dress). Polished but not trying. Denim welcome. Loafers, flats, low boots, sandals if warm, clean sneakers if she has them. NOT athleisure (that's Lounge).",
   },
   Dinner: {
+    // Dinner = the catch-all for evening outings — dinner parties, dinners
+    // out, date night, drinks. (Date Night used to be its own bucket; users
+    // told us they were treating them identically, so the alias in
+    // taxonomy.js routes legacy "Date Night" data here.)
     required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
     optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
-    promptNote: "DINNER: Chic and considered — covers dinners, dinner parties, occasion events. Every look MUST have a bottom (pants/skirt) OR a dress. Elevated fabrics, polished shoes, a real bag. One look may push slightly bolder (a saturated color, a texture moment).",
+    promptNote: "DINNER: Evening out — dinner parties, dinners with friends, date night, drinks. Elevated and feminine. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Lean into texture variety: silk, satin, leather, fine knit, lace, structured wool. At least one of the 3 looks should be a dress when the closet allows. Heels, refined boots, or a polished loafer. A real bag.",
   },
   Occasion: {
     // Cocktail parties, weddings, galas, black-tie events. The sampler's
@@ -84,16 +82,23 @@ export const OCCASION_SLOTS = {
     promptNote: "OCCASION: Cocktail parties, weddings, galas, black-tie events. Lead with a dress when one is available — the sampler has already narrowed the inventory to Occasionwear pieces (Cocktail Dresses, Gowns, Formal Separates, Evening Accessories) and dresses whose notes describe evening/cocktail/wedding/event wear. If no qualifying dress is available, build with formal separates (silk blouse + satin skirt, tailored trouser + occasion top). Heels REQUIRED. A refined evening or structured bag. NO jeans, NO casual fabrics, NO sneakers, NO athleisure.",
   },
   Travel: {
-    required: { top: true, bottom: true, shoes: true, bag: true },
-    optional: { layer: true, belt: true, accessory: true },
-    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "TRAVEL: Comfortable elegance. Every look needs a top + bottom. Layers, practical shoes, functional bag.",
+    // Travel = vacation wear. WEATHER drives everything here. Hot/Warm =
+    // swim, cover-ups, breezy dresses, sandals. Cool/Cold = warm layers,
+    // boots, athleisure. Swim and Loungewear (athleisure) are ALLOWED here
+    // — that's what makes Travel different from every other occasion.
+    required: { shoes: true },
+    optional: { top: true, bottom: true, dress: true, layer: true, bag: true, belt: true, accessory: true },
+    banned: { categories: [], subcategories: [], keywords: [] },
+    promptNote: "TRAVEL: Vacation wear — weather decides the silhouette. HOT/WARM trips lean swim, cover-ups, breezy dresses, sundresses with strappy details, sandals, raffia/canvas bags. COOL/COLD trips lean knit layers, athleisure, boots, a lightweight coat. Lounge sets and athleisure are fair game here — Travel is the one bucket where comfort outranks polish. Sexy dresses and dinner pieces are also welcome for evening vacation moments. Build looks the climate would actually call for; do not default to a generic 'travel outfit' (jeans + blouse + sneakers).",
   },
   Lounge: {
+    // Lounge = athleisure / chilling at home / running quick errands without
+    // changing. Athleisure category items should be the backbone here, not
+    // an edge case.
     required: { top: true, bottom: true },
-    optional: { layer: true },
-    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "LOUNGE: Relaxed at-home style. Every look needs a top + bottom.",
+    optional: { layer: true, shoes: true },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: ["Heels","Cocktail Dresses","Gowns","Formal Separates"], keywords: ["structured","tailored","suit","cocktail","formal"] },
+    promptNote: "LOUNGE: Athleisure and casual chilling — at home, dog walk, coffee run, low-stakes errands. Heavily favor Athleisure items (matching sets, leggings, joggers, sweatshirts, hoodies, soft tees). Soft knits, oversized cardigans, slip dresses, joggers, pajama-set separates all welcome. Sneakers, slides, or barefoot-equivalent flats. Nothing structured, nothing tailored, no heels, no statement bags.",
   },
 };
 

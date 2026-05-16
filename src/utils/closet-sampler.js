@@ -40,22 +40,29 @@ function seededShuffle(arr, rng) {
 // Items clearly incompatible with the occasion are removed before sampling.
 const OCCASION_PREFILTERS = {
   Lounge: {
+    // Lounge is now explicitly athleisure-led — strip everything structured/
+    // formal/dressy. Heels, blazers, cocktail and gown subcategories all go.
+    // Athleisure category is intentionally NOT removed (it's the backbone).
     removeCategories: new Set(["Outerwear", "Occasionwear"]),
-    removeSubcategories: new Set(["Blazers", "Heels", "Cocktail Dresses", "Gowns", "Formal Separates"]),
-    removeKeywords: ["structured", "tailored", "suit"],
+    removeSubcategories: new Set(["Blazers", "Heels", "Cocktail Dresses", "Gowns", "Formal Separates", "Stiletto"]),
+    removeKeywords: ["structured", "tailored", "suit", "cocktail", "formal", "evening"],
   },
   Casual: {
-    // Casual is the new home for athleisure / brunch / daytime / activity. Strip
-    // the obviously formal stuff and let everything else through; this is the
-    // bucket where the closet should breathe widest.
+    // Casual = brunch, lunch, hanging with friends, errands. Strip cocktail/
+    // formal stuff and athletic-tagged pieces (those belong to Lounge now).
+    // Denim, knits, blouses, casual dresses all welcome.
     removeCategories: new Set(["Occasionwear"]),
     removeSubcategories: new Set(["Cocktail Dresses", "Gowns", "Formal Separates"]),
-    removeKeywords: [],
+    removeKeywords: ["athletic", "athleisure only", "gym only", "workout"],
   },
   Travel: {
+    // Travel = vacation wear. Swim and Athleisure stay in the pool — they
+    // are first-class citizens for hot beach trips and active travel days.
+    // We only drop pieces that explicitly violate the vacation register
+    // (super-stiletto formal evening shoes are too much for most trips).
     removeCategories: new Set([]),
     removeSubcategories: new Set(["Stiletto"]),
-    removeKeywords: ["stiletto"],
+    removeKeywords: ["stiletto", "boardroom only", "office only"],
   },
   Work: {
     // Covers everyday office through interview/executive — drop the
@@ -167,44 +174,84 @@ const COLD_BOOST_SIZE = 0;
  * Fuzzy-match the free-text request against item fields to find force-include items.
  * Returns true if the item is likely referenced by the user's request.
  */
+// Stop words that should never count as a match on their own — they appear in
+// everyday phrasing ("my red blazer", "with the satin top") and would flag
+// random items if treated as content tokens.
+const FREE_TEXT_STOPWORDS = new Set([
+  "the","a","an","my","with","and","or","of","in","on","at","for","to","that","this",
+  "is","it","be","as","by","i","me","include","use","wear","style","please","want","need",
+]);
+
+/**
+ * Multi-field free-text matcher. Checks fields in priority order:
+ *   1. NOTES — if notes describe the piece the user wants, that's the
+ *      strongest signal (the user authored the notes themselves).
+ *   2. BRAND
+ *   3. COLOR
+ *   4. MATERIAL
+ *   plus opportunistic checks on name / subcategory / category / pattern.
+ *
+ * "Favorite Daughter blue blazer" should match an item where brand=Favorite
+ * Daughter + color=blue + subcategory=Blazers. "satin blouse" should match
+ * material=satin + subcategory=Blouses.
+ *
+ * Returns true if the item is likely referenced by the user's request.
+ */
 function matchesFreeText(item, freeText) {
   if (!freeText) return false;
-  const req = freeText.toLowerCase();
-  const itemName = (item.name || "").toLowerCase();
-  const itemColor = (item.color || "").toLowerCase();
-  const itemSub = (item.subcategory || "").toLowerCase();
-  const itemBrand = (item.brand || "").toLowerCase();
-  const itemNotes = (item.notes || "").toLowerCase();
-  const itemPattern = (item.pattern || "").toLowerCase();
+  const req = String(freeText).toLowerCase().trim();
+  if (!req) return false;
 
-  // Check if request contains item identifiers
-  // Split request into meaningful tokens (2+ chars)
-  const tokens = req.split(/[\s,;.!?]+/).filter(t => t.length >= 2);
+  const tokens = req.split(/[\s,;.!?]+/)
+    .filter(t => t.length >= 2 && !FREE_TEXT_STOPWORDS.has(t));
+  if (tokens.length === 0) return false;
 
-  // Check for color + category/subcategory combo (e.g. "red blazer", "navy coat")
-  let colorMatch = false;
-  let typeMatch = false;
+  const fields = {
+    notes:       (item.notes || "").toLowerCase(),
+    name:        (item.name || "").toLowerCase(),
+    brand:       (item.brand || "").toLowerCase(),
+    color:       (item.color || "").toLowerCase(),
+    subcategory: (item.subcategory || "").toLowerCase(),
+    category:    (item.category || "").toLowerCase(),
+    material:    (item.material || "").toLowerCase(),
+    pattern:     (item.pattern || "").toLowerCase(),
+  };
 
+  // Priority 1: NOTES. If notes are present and resolve the request, we don't
+  // need to check anything else — that's what the user told us about the
+  // piece in their own words.
+  if (fields.notes) {
+    if (fields.notes.includes(req)) return true; // full phrase in notes
+    const noteHits = tokens.filter(t => fields.notes.includes(t)).length;
+    if (noteHits >= 2) return true;              // 2+ tokens land in notes
+    if (noteHits >= 1 && tokens.length === 1) return true; // single-token query
+  }
+
+  // Priorities 2-4 + opportunistic. Count distinct FIELDS hit by any token —
+  // brand + color + subcategory is the canonical multi-field signal for
+  // "Favorite Daughter blue blazer". Each field can only score once per query
+  // so spamming the same word across fields doesn't inflate the count.
+  const fieldsHit = new Set();
   for (const token of tokens) {
-    if (itemColor.includes(token) || itemName.includes(token)) colorMatch = true;
-    if (itemSub.includes(token) || itemName.includes(token) || itemPattern.includes(token)) typeMatch = true;
-    if (itemBrand.includes(token)) typeMatch = true;
+    if (fields.brand       && fields.brand.includes(token))       fieldsHit.add("brand");
+    if (fields.color       && fields.color.includes(token))       fieldsHit.add("color");
+    if (fields.material    && fields.material.includes(token))    fieldsHit.add("material");
+    if (fields.subcategory && fields.subcategory.includes(token)) fieldsHit.add("subcategory");
+    if (fields.category    && fields.category.includes(token))    fieldsHit.add("category");
+    if (fields.pattern     && fields.pattern.includes(token))     fieldsHit.add("pattern");
+    if (fields.name        && fields.name.includes(token))        fieldsHit.add("name");
   }
 
-  // Strong match: both color and type mentioned, or name directly referenced
-  if (colorMatch && typeMatch) return true;
+  // Single-token query (e.g. "blazer" or "navy") needs one field hit.
+  // Multi-token query needs at least two distinct fields hit to avoid
+  // matching every item with the word "blue" in some random place.
+  if (tokens.length === 1 && fieldsHit.size >= 1) return true;
+  if (tokens.length >= 2 && fieldsHit.size >= 2) return true;
 
-  // Direct name match (3+ char overlap)
-  const nameWords = itemName.split(/\s+/).filter(w => w.length >= 3);
-  const matchingWords = nameWords.filter(w => req.includes(w));
-  if (matchingWords.length >= 2) return true;
-
-  // Brand + any descriptor
-  if (itemBrand && req.includes(itemBrand.toLowerCase())) {
-    if (tokens.some(t => itemColor.includes(t) || itemSub.includes(t) || itemNotes.includes(t))) {
-      return true;
-    }
-  }
+  // Brand-anchored fallback: when the full brand name appears verbatim in the
+  // request (e.g. "Favorite Daughter"), one additional field hit is enough
+  // because the brand alone is a very strong signal.
+  if (fields.brand && req.includes(fields.brand) && fieldsHit.size >= 1) return true;
 
   return false;
 }

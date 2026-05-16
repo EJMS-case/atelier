@@ -13,10 +13,10 @@ export const TRIP_VIBES = {
   Casual:       { label: "Casual",       pattern: ["Casual"] },
   "Theme Park": { label: "Theme Park",   pattern: ["Casual", "Casual", "Casual"] },
   Beach:        { label: "Beach",        pattern: ["Casual", "Casual", "Dinner"] },
-  "Smart Casual": { label: "Smart Casual", pattern: ["Casual", "Dinner", "Casual", "Date Night"] },
+  "Smart Casual": { label: "Smart Casual", pattern: ["Casual", "Dinner", "Casual", "Dinner"] },
   Business:     { label: "Business",     pattern: ["Work", "Work", "Work Dinner", "Work"] },
   Active:       { label: "Active",       pattern: ["Casual", "Lounge", "Casual"] },
-  Mixed:        { label: "Mixed",        pattern: ["Casual", "Dinner", "Casual", "Date Night", "Travel"] },
+  Mixed:        { label: "Mixed",        pattern: ["Casual", "Dinner", "Casual", "Occasion", "Travel"] },
 };
 
 export function defaultOccasionsForVibe(vibe, dayCount) {
