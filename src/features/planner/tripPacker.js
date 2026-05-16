@@ -173,12 +173,18 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const occasions = opts.occasions && opts.occasions.length === dayCount
     ? opts.occasions
     : Array.from({ length: dayCount }, () => "Casual");
-  const activity = opts.activity || "Sightseeing";
-  const actFilter = ACTIVITY_FILTERS[activity] || ACTIVITY_FILTERS.Sightseeing;
+  // Per-day activity (preferred). Falls back to opts.activity for callers
+  // that haven't migrated yet (single-day reshuffle paths).
+  const fallbackActivity = opts.activity || "Sightseeing";
+  const activities = opts.activities && opts.activities.length === dayCount
+    ? opts.activities
+    : Array.from({ length: dayCount }, () => fallbackActivity);
 
-  // Pool of eligible items per day, filtered by that day's weather + occasion.
+  // Pool of eligible items per day, filtered by that day's weather + activity.
   const dayPools = dailyHighsF.map((hi, d) => {
     const wxBucket = opts.weather || bucketFromHigh(hi);
+    const dayActivity = activities[d] || fallbackActivity;
+    const actFilter = ACTIVITY_FILTERS[dayActivity] || ACTIVITY_FILTERS.Sightseeing;
     let pool = filterByWeather(items, wxBucket).filter(it => {
       if (!it.category) return false;
       // Default-banned: swim + loungewear unless the activity explicitly

@@ -6,7 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
 import { buildDailyOutfits, TRIP_VIBES, TRIP_ACTIVITIES, defaultOccasionsForVibe, alternativesFor } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
-import { fetchNycForecast } from "../../lib/weather.js";
+import { fetchNycForecast, fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
+import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import { analyzeTripDestination, tempToBucket } from "../../lib/ai/tripAdvisor.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
@@ -485,11 +486,17 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
   const [vibe, setVibe] = useState("Casual");
-  // Activity = what they'll actually be doing. Drives item-pool filtering
-  // (Theme Park bans heels + jeans; Beach unbans swim; Active bans silk
-  // and heels). Trip-level rather than per-day since most trips have one
-  // dominant activity.
+  // Trip-level Activity is now the DEFAULT applied to every day at preview
+  // time. Each day's card can override it. The override array
+  // (dayActivities) is seeded from this default and updated independently
+  // when the user picks per-day.
   const [activity, setActivity] = useState("Sightseeing");
+  const [dayActivities, setDayActivities] = useState(null); // string[] | null
+  // Per-day Open-Meteo forecast at the destination, keyed by iso. Used to
+  // show day-high / night-low on each day card AND to pick a per-day
+  // weather bucket that's accurate to the actual forecast rather than a
+  // single trip-level estimate.
+  const [perDayForecast, setPerDayForecast] = useState(null);
   // "auto" means: use the AI-fetched brief if present, else the seasonal estimate
   const [weather, setWeather] = useState("auto");
   // Climate brief (temp range + notes + packing tip) — populated by analyzeTripDestination.
@@ -516,6 +523,21 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       previewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [dayOutfits]);
+
+  // Geocode the destination + pull per-day Open-Meteo forecast. Same path
+  // TripDetailView uses (PR #54). Trips beyond the 16-day forecast horizon
+  // get null entries — those days fall back to the trip-level brief temp.
+  useEffect(() => {
+    if (!destination.trim()) { setPerDayForecast(null); return; }
+    let cancelled = false;
+    (async () => {
+      const geo = await geocodeDestination(destination.trim());
+      if (!geo || cancelled) return;
+      const fc = await fetchTripForecast(geo.lat, geo.lon, geo.timezone);
+      if (!cancelled) setPerDayForecast(fc);
+    })();
+    return () => { cancelled = true; };
+  }, [destination]);
 
   const dayCount = Math.max(1, Math.round((new Date(end) - new Date(start)) / (24 * 60 * 60 * 1000)) + 1);
 
@@ -549,6 +571,18 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     }
   }
 
+  // Compute the per-day high temp. Priority: real Open-Meteo forecast →
+  // AI-brief typical-high → climate-bucket fallback. Mirrors TripDetailView.
+  const perDayHigh = (iso) => {
+    if (perDayForecast?.[iso]?.high != null) return perDayForecast[iso].high;
+    return effectiveHigh();
+  };
+  const perDayLow = (iso) => perDayForecast?.[iso]?.low ?? null;
+  const perDayBucket = (iso) => {
+    const h = perDayHigh(iso);
+    return h != null ? bucketFromHigh(h) : effectiveWeather();
+  };
+
   async function handlePreview() {
     setLoading(true);
     setPreviewError("");
@@ -559,24 +593,29 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         await fetchBrief();
       }
       const occasions = defaultOccasionsForVibe(vibe, dayCount);
-      const highs = Array.from({ length: dayCount }, () => effectiveHigh());
+      const dayIsos = Array.from({ length: dayCount }, (_, i) => isoDate(addDays(new Date(start), i)));
+      const highs = dayIsos.map(iso => perDayHigh(iso));
+      const dayBuckets = dayIsos.map(iso => perDayBucket(iso));
+      // Per-day activity defaults to the trip-level activity for every day.
+      // The user can override individual days from the preview cards.
+      const activities = Array.from({ length: dayCount }, () => activity);
       const { dailyOutfits } = buildDailyOutfits(items, highs, {
         occasions,
-        weather: effectiveWeather(),
-        activity,
+        // Pass an explicit per-day weather array — buildDailyOutfits has a
+        // single-weather override path, so when we want per-day variation
+        // we let bucketFromHigh(hi) handle it for each day naturally.
+        activity, // trip-level fallback for buildDailyOutfits; per-day takes precedence below
+        activities,
       });
-      // Diagnose silent failures — buildDailyOutfits returns one entry per day
-      // even when no items match, so an empty result means every slot was
-      // filtered out by weather/occasion. Surface that to the user instead of
-      // rendering an empty preview that looks like the button did nothing.
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
-      console.log("[Trip Preview] dayCount=", dayCount, "weather=", effectiveWeather(), "highs=", highs, "totalItems=", totalItems, "perDay=", dailyOutfits.map(d => d.length));
+      console.log("[Trip Preview] dayCount=", dayCount, "buckets=", dayBuckets, "highs=", highs, "activities=", activities, "totalItems=", totalItems, "perDay=", dailyOutfits.map(d => d.length));
       if (totalItems === 0) {
-        setPreviewError(`No outfits could be built — your wardrobe has ${items.length} items but none match ${effectiveWeather()} weather for a Casual day. Try a different climate, or add more weather-appropriate pieces.`);
+        setPreviewError(`No outfits could be built — your wardrobe has ${items.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
         return;
       }
       setDayOutfits(dailyOutfits);
       setDayOccasions(occasions);
+      setDayActivities(activities);
     } catch (e) {
       console.error("[Trip Preview] failed:", e);
       setPreviewError(`Couldn't build the preview: ${e.message || "unknown error"}`);
@@ -589,10 +628,27 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   // per-day shuffle button.
   function reshuffleDay(dayIdx) {
     if (!dayOutfits) return;
-    const single = buildDailyOutfits(items, [effectiveHigh()], {
+    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayActivity = dayActivities?.[dayIdx] || activity;
+    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
       occasions: [dayOccasions[dayIdx]],
-      weather: effectiveWeather(),
-      activity,
+      activities: [dayActivity],
+    });
+    const newOutfits = dayOutfits.slice();
+    newOutfits[dayIdx] = single.dailyOutfits[0];
+    setDayOutfits(newOutfits);
+  }
+
+  // Per-day activity override — reshuffles THAT day with the new filter.
+  function changeActivity(dayIdx, act) {
+    const next = (dayActivities || Array.from({ length: dayCount }, () => activity)).slice();
+    next[dayIdx] = act;
+    setDayActivities(next);
+    if (!dayOutfits) return;
+    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
+      occasions: [dayOccasions[dayIdx]],
+      activities: [act],
     });
     const newOutfits = dayOutfits.slice();
     newOutfits[dayIdx] = single.dailyOutfits[0];
@@ -621,10 +677,11 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     newOccasions[dayIdx] = occ;
     setDayOccasions(newOccasions);
     // Reshuffle THAT day to fit the new occasion. Other days untouched.
-    const single = buildDailyOutfits(items, [effectiveHigh()], {
+    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayActivity = dayActivities?.[dayIdx] || activity;
+    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
       occasions: [occ],
-      weather: effectiveWeather(),
-      activity,
+      activities: [dayActivity],
     });
     const newOutfits = dayOutfits.slice();
     newOutfits[dayIdx] = single.dailyOutfits[0];
@@ -743,7 +800,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
 
         <div style={{ marginTop: 10 }}>
           <label style={{ display: "block", fontSize: 11, color: PALETTE.muted }}>
-            Activity
+            Default activity (every day starts here — override per-day below)
             <select value={activity} onChange={e => { setActivity(e.target.value); invalidatePreview(); }}
               style={{ ...dateInput, width: "100%" }}>
               {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
@@ -793,10 +850,15 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
             {/* Per-day editable preview */}
             <div style={{ marginBottom: 12 }}>
               {dayOutfits.map((dayItems, i) => {
+                const dayIso = isoDate(addDays(new Date(start), i));
                 const dateLabel = new Date(addDays(new Date(start), i)).toLocaleDateString("en-US", {
                   weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
                 });
                 const occ = dayOccasions[i];
+                const dayAct = dayActivities?.[i] || activity;
+                const dayHi = perDayHigh(dayIso);
+                const dayLo = perDayLow(dayIso);
+                const hasRealForecast = perDayForecast?.[dayIso]?.high != null;
                 const isThin = uncovered.includes(i);
                 return (
                   <div key={i} style={{
@@ -808,15 +870,30 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: PALETTE.ink, minWidth: 88 }}>{dateLabel}</div>
+                      {dayHi != null && (
+                        <div style={{ fontSize: 10, color: PALETTE.muted, whiteSpace: "nowrap" }}>
+                          ☀ {dayHi}°
+                          {dayLo != null && <> · ☾ {dayLo}°</>}
+                          {!hasRealForecast && " (est)"}
+                        </div>
+                      )}
+                      <button onClick={() => reshuffleDay(i)}
+                        title="Shuffle this day"
+                        style={{ marginLeft: "auto", background: "transparent", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: PALETTE.soft, cursor: "pointer" }}>
+                        ↺
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                       <select value={occ} onChange={e => changeOccasion(i, e.target.value)}
+                        title="Occasion for this day"
                         style={{ flex: 1, fontSize: 11, padding: "4px 6px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
                         {OCCASIONS.map(o => <option key={o}>{o}</option>)}
                       </select>
-                      <button onClick={() => reshuffleDay(i)}
-                        title="Shuffle this day"
-                        style={{ background: "transparent", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: PALETTE.soft, cursor: "pointer" }}>
-                        ↺
-                      </button>
+                      <select value={dayAct} onChange={e => changeActivity(i, e.target.value)}
+                        title="Activity for this day"
+                        style={{ flex: 1, fontSize: 11, padding: "4px 6px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
+                        {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
+                      </select>
                     </div>
                     {isThin && (
                       <div style={{ fontSize: 10, color: PALETTE.accent, marginBottom: 4, lineHeight: 1.4 }}>
@@ -856,19 +933,45 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
               })}
             </div>
 
-            {/* Packing list summary */}
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>FULL PACKING LIST</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 14, maxHeight: 160, overflowY: "auto" }}>
-              {packingList.map(it => (
-                <div key={it.id} style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
-                  {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+            {/* Packing preview — category breakdown + thumb grid so the user
+                can see what they're committing to before tapping Save trip. */}
+            {(() => {
+              const byCat = {};
+              packingList.forEach(it => {
+                const c = it.category || "Other";
+                (byCat[c] ||= []).push(it);
+              });
+              const CAT_ORDER = ["Outerwear","Dresses","Jumpsuits","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Occasionwear","Swim","Loungewear"];
+              const cats = [...CAT_ORDER.filter(c => byCat[c]), ...Object.keys(byCat).filter(c => !CAT_ORDER.includes(c))];
+              const carryOnOk = packingList.length <= 15;
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted }}>PACKING LIST · {packingList.length} ITEMS</div>
+                    <div style={{ padding: "2px 8px", borderRadius: 12, fontSize: 10, background: carryOnOk ? "#E8F5E9" : "#FBE9E7", color: carryOnOk ? "#2E7D32" : PALETTE.accent }}>
+                      {carryOnOk ? "✓ Carry-on" : `⚠ +${packingList.length - 15} over`}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: PALETTE.muted, marginBottom: 6, lineHeight: 1.5 }}>
+                    {cats.map(c => `${c} ${byCat[c].length}`).join(" · ")}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, maxHeight: 160, overflowY: "auto" }}>
+                    {packingList.map(it => (
+                      <div key={it.id} title={it.name} style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
+                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
             <button onClick={handleAssign} disabled={saving} style={{ ...btnPrimary, width: "100%" }}>
-              {saving ? "Pinning…" : "Pin to calendar"}
+              {saving ? "Saving trip…" : "Save trip"}
             </button>
+            <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 6, textAlign: "center", fontStyle: "italic" }}>
+              Saves all {dayCount} days at once. Edit anytime — packing list updates automatically.
+            </div>
           </div>
         )}
 
