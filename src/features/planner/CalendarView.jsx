@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
+import { newOutfitId, buildPlanPayload } from "./outfits.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast, fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
@@ -500,13 +501,17 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   // Climate brief (temp range + notes + packing tip) — populated by analyzeTripDestination.
   const [brief, setBrief] = useState(null);
   const [briefLoading, setBriefLoading] = useState(false);
-  // Local working copy of per-day outfits + per-day occasions. Edits land here
-  // and never touch the database until Pin.
-  const [dayOutfits, setDayOutfits] = useState(null); // Array<item[]>
-  const [dayOccasions, setDayOccasions] = useState(null); // string[]
+  // Local working copy of per-day looks. Each day is an ordered array of
+  // outfit drafts so a single day can hold a daytime look + a dinner look,
+  // etc. Shape: { id, label, occasion, items: Item[] }. Activity stays
+  // per-day (line above) because activity = what you're doing today, while
+  // occasion = which look within the day. Edits land here and never touch
+  // the database until Save trip.
+  const [dayLooks, setDayLooks] = useState(null); // Array<Array<OutfitDraft>>
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [swapTarget, setSwapTarget] = useState(null); // { dayIdx, item } when picking a replacement
+  // { dayIdx, outfitIdx, item } when picking a replacement
+  const [swapTarget, setSwapTarget] = useState(null);
   // Error string from handlePreview — surfaces buildDailyOutfits exceptions or
   // empty-result cases that would otherwise look like the button did nothing.
   const [previewError, setPreviewError] = useState("");
@@ -517,10 +522,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   const previewRef = useRef(null);
 
   useEffect(() => {
-    if (dayOutfits && previewRef.current) {
+    if (dayLooks && previewRef.current) {
       previewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [dayOutfits]);
+  }, [dayLooks]);
 
   // Geocode the destination + pull per-day Open-Meteo forecast. Same path
   // TripDetailView uses (PR #54). Trips beyond the 16-day forecast horizon
@@ -541,7 +546,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
 
   // If user re-runs Preview the working copy is rebuilt — but vibe/weather
   // edits made in the preview don't auto-clear it.
-  const invalidatePreview = () => { setDayOutfits(null); setDayOccasions(null); };
+  const invalidatePreview = () => { setDayLooks(null); };
 
   // Pick the effective weather bucket: explicit override > AI brief > seasonal
   function effectiveWeather() {
@@ -581,6 +586,18 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     return h != null ? bucketFromHigh(h) : effectiveWeather();
   };
 
+  // Build a single OutfitDraft for one day + one occasion. Returns null if the
+  // tripPacker produced no items (e.g. no weather-appropriate pieces).
+  function buildOneOutfit({ dayIso, dayAct, occasion, label = "" }) {
+    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
+      occasions: [occasion],
+      activities: [dayAct],
+    });
+    const outfitItems = single.dailyOutfits?.[0] || [];
+    if (!outfitItems.length) return null;
+    return { id: newOutfitId(), label, occasion, items: outfitItems };
+  }
+
   async function handlePreview() {
     setLoading(true);
     setPreviewError("");
@@ -599,10 +616,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       const activities = Array.from({ length: dayCount }, () => activity);
       const { dailyOutfits } = buildDailyOutfits(items, highs, {
         occasions,
-        // Pass an explicit per-day weather array — buildDailyOutfits has a
-        // single-weather override path, so when we want per-day variation
-        // we let bucketFromHigh(hi) handle it for each day naturally.
-        activity, // trip-level fallback for buildDailyOutfits; per-day takes precedence below
+        activity,
         activities,
       });
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
@@ -611,8 +625,14 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         setPreviewError(`No outfits could be built — your wardrobe has ${items.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
         return;
       }
-      setDayOutfits(dailyOutfits);
-      setDayOccasions(occasions);
+      // Wrap each day's items as a single OutfitDraft. The user can add
+      // more looks (dinner, evening) from the per-day card afterwards.
+      setDayLooks(dailyOutfits.map((dayItems, i) => [{
+        id: newOutfitId(),
+        label: "",
+        occasion: occasions[i],
+        items: dayItems,
+      }]));
       setDayActivities(activities);
     } catch (e) {
       console.error("[Trip Preview] failed:", e);
@@ -622,99 +642,148 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     }
   }
 
-  // Rebuild a single day's outfit, keeping all other days locked. Used by the
-  // per-day shuffle button.
-  function reshuffleDay(dayIdx) {
-    if (!dayOutfits) return;
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
-    const dayActivity = dayActivities?.[dayIdx] || activity;
-    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
-      occasions: [dayOccasions[dayIdx]],
-      activities: [dayActivity],
-    });
-    const newOutfits = dayOutfits.slice();
-    newOutfits[dayIdx] = single.dailyOutfits[0];
-    setDayOutfits(newOutfits);
+  // ── Per-outfit mutations ────────────────────────────────────────────────
+  // All edits go through a single mutateOutfit helper so the day-array
+  // immutability is in one place.
+  function mutateDay(dayIdx, fn) {
+    if (!dayLooks) return;
+    const next = dayLooks.slice();
+    next[dayIdx] = fn(next[dayIdx] || []);
+    setDayLooks(next);
+  }
+  function mutateOutfit(dayIdx, outfitIdx, fn) {
+    mutateDay(dayIdx, looks => looks.map((o, i) => i === outfitIdx ? fn(o) : o));
   }
 
-  // Per-day activity override — reshuffles THAT day with the new filter.
+  function reshuffleOutfit(dayIdx, outfitIdx) {
+    if (!dayLooks) return;
+    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayAct = dayActivities?.[dayIdx] || activity;
+    const target = dayLooks[dayIdx]?.[outfitIdx];
+    if (!target) return;
+    const built = buildOneOutfit({ dayIso, dayAct, occasion: target.occasion, label: target.label });
+    if (!built) return;
+    mutateOutfit(dayIdx, outfitIdx, prev => ({ ...prev, items: built.items }));
+  }
+
   function changeActivity(dayIdx, act) {
     const next = (dayActivities || Array.from({ length: dayCount }, () => activity)).slice();
     next[dayIdx] = act;
     setDayActivities(next);
-    if (!dayOutfits) return;
+    if (!dayLooks) return;
+    // Reshuffle every outfit on the day so the new activity filter applies.
     const dayIso = isoDate(addDays(new Date(start), dayIdx));
-    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
-      occasions: [dayOccasions[dayIdx]],
-      activities: [act],
+    const rebuilt = (dayLooks[dayIdx] || []).map(o => {
+      const fresh = buildOneOutfit({ dayIso, dayAct: act, occasion: o.occasion, label: o.label });
+      return fresh ? { ...o, items: fresh.items } : o;
     });
-    const newOutfits = dayOutfits.slice();
-    newOutfits[dayIdx] = single.dailyOutfits[0];
-    setDayOutfits(newOutfits);
+    mutateDay(dayIdx, () => rebuilt);
   }
 
-  // Swap one item for another within a single day (called from the picker).
-  function swapItem(dayIdx, oldItemId, newItem) {
-    const newOutfits = dayOutfits.map((day, i) => {
-      if (i !== dayIdx) return day;
-      return day.map(it => it.id === oldItemId ? newItem : it);
+  function changeOccasion(dayIdx, outfitIdx, occ) {
+    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayAct = dayActivities?.[dayIdx] || activity;
+    const built = buildOneOutfit({ dayIso, dayAct, occasion: occ });
+    mutateOutfit(dayIdx, outfitIdx, prev => ({
+      ...prev,
+      occasion: occ,
+      items: built?.items ?? prev.items,
+    }));
+  }
+
+  function setOutfitLabel(dayIdx, outfitIdx, label) {
+    mutateOutfit(dayIdx, outfitIdx, prev => ({ ...prev, label }));
+  }
+
+  function addOutfit(dayIdx) {
+    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayAct = dayActivities?.[dayIdx] || activity;
+    // Default new outfits to Dinner when the day already has a daytime look —
+    // otherwise fall through to Casual. Cheap heuristic that picks the right
+    // occasion ~80% of the time.
+    const existing = dayLooks?.[dayIdx] || [];
+    const used = new Set(existing.map(o => o.occasion).filter(Boolean));
+    const fallbacks = ["Dinner", "Occasion", "Lounge", "Casual"];
+    const occ = fallbacks.find(o => !used.has(o)) || "Dinner";
+    const built = buildOneOutfit({ dayIso, dayAct, occasion: occ });
+    if (!built) {
+      // Empty outfit still gets added so the user can swap pieces in manually.
+      mutateDay(dayIdx, looks => [...looks, { id: newOutfitId(), label: "", occasion: occ, items: [] }]);
+      return;
+    }
+    mutateDay(dayIdx, looks => [...looks, built]);
+  }
+
+  function removeOutfit(dayIdx, outfitIdx) {
+    mutateDay(dayIdx, looks => {
+      // Keep at least one outfit per day — clearing the last one would leave
+      // the day with nothing to render. Reshuffle it instead so the user can
+      // still build manually if they want.
+      if (looks.length <= 1) return looks;
+      return looks.filter((_, i) => i !== outfitIdx);
     });
-    setDayOutfits(newOutfits);
+  }
+
+  function swapItem(dayIdx, outfitIdx, oldItemId, newItem) {
+    mutateOutfit(dayIdx, outfitIdx, prev => ({
+      ...prev,
+      items: prev.items.map(it => it.id === oldItemId ? newItem : it),
+    }));
     setSwapTarget(null);
   }
 
-  function removeItem(dayIdx, itemId) {
-    const newOutfits = dayOutfits.map((day, i) =>
-      i === dayIdx ? day.filter(it => it.id !== itemId) : day
-    );
-    setDayOutfits(newOutfits);
+  function removeItem(dayIdx, outfitIdx, itemId) {
+    mutateOutfit(dayIdx, outfitIdx, prev => ({
+      ...prev,
+      items: prev.items.filter(it => it.id !== itemId),
+    }));
   }
 
-  function changeOccasion(dayIdx, occ) {
-    const newOccasions = dayOccasions.slice();
-    newOccasions[dayIdx] = occ;
-    setDayOccasions(newOccasions);
-    // Reshuffle THAT day to fit the new occasion. Other days untouched.
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
-    const dayActivity = dayActivities?.[dayIdx] || activity;
-    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
-      occasions: [occ],
-      activities: [dayActivity],
-    });
-    const newOutfits = dayOutfits.slice();
-    newOutfits[dayIdx] = single.dailyOutfits[0];
-    setDayOutfits(newOutfits);
-  }
-
-  // Derive the packing list (union of all items used) from the working copy.
+  // Derive the packing list (union of all items used across every outfit on
+  // every day) from the working copy.
   const packingList = useMemo(() => {
-    if (!dayOutfits) return [];
+    if (!dayLooks) return [];
     const seen = new Set();
     const list = [];
-    for (const day of dayOutfits) {
-      for (const it of day) {
-        if (!seen.has(it.id)) { seen.add(it.id); list.push(it); }
+    for (const day of dayLooks) {
+      for (const outfit of day) {
+        for (const it of (outfit.items || [])) {
+          if (!seen.has(it.id)) { seen.add(it.id); list.push(it); }
+        }
       }
     }
     return list;
-  }, [dayOutfits]);
+  }, [dayLooks]);
 
-  // Days missing core coverage (no shoes / no top+bottom / no dress).
-  const uncovered = useMemo(() => {
-    if (!dayOutfits) return [];
-    return dayOutfits.reduce((acc, day, i) => {
-      const cats = new Set(day.map(it => it.category));
-      const hasDress = ["Dresses","Jumpsuits","Sets","Occasionwear"].some(c => cats.has(c));
-      const hasTop = cats.has("Tops") || cats.has("Knits");
-      const hasBot = cats.has("Bottoms");
-      const hasShoes = cats.has("Shoes");
-      if ((!hasDress && (!hasTop || !hasBot)) || !hasShoes) acc.push(i);
-      return acc;
-    }, []);
-  }, [dayOutfits]);
+  // Outfits missing core coverage (no shoes / no top+bottom / no dress).
+  // Returns a Set of "dayIdx:outfitIdx" keys.
+  const uncoveredOutfits = useMemo(() => {
+    const out = new Set();
+    if (!dayLooks) return out;
+    dayLooks.forEach((day, dayIdx) => {
+      day.forEach((outfit, outfitIdx) => {
+        const cats = new Set((outfit.items || []).map(it => it.category));
+        const hasDress = ["Dresses","Jumpsuits","Sets","Occasionwear"].some(c => cats.has(c));
+        const hasTop = cats.has("Tops") || cats.has("Knits");
+        const hasBot = cats.has("Bottoms");
+        const hasShoes = cats.has("Shoes");
+        if ((!hasDress && (!hasTop || !hasBot)) || !hasShoes) {
+          out.add(`${dayIdx}:${outfitIdx}`);
+        }
+      });
+    });
+    return out;
+  }, [dayLooks]);
+
+  // Days with any uncovered outfit — used for the top-of-modal count.
+  const uncoveredDayCount = useMemo(() => {
+    const days = new Set();
+    for (const key of uncoveredOutfits) days.add(key.split(":")[0]);
+    return days.size;
+  }, [uncoveredOutfits]);
 
   async function handleAssign() {
-    if (!dayOutfits || saving) return;
+    if (!dayLooks || saving) return;
     setSaving(true);
     try {
       let savedTrip = null;
@@ -733,13 +802,17 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         savedTrip = Array.isArray(rows) ? rows[0] : rows;
       } catch { /* non-fatal */ }
 
-      const plans = dayOutfits.map((dayItems, i) => ({
+      const plans = dayLooks.map((looks, i) => buildPlanPayload({
         date: isoDate(addDays(new Date(start), i)),
-        items: dayItems.map(it => it.id),
+        outfits: looks.map(o => ({
+          id: o.id,
+          label: o.label,
+          occasion: o.occasion || "Travel",
+          items: (o.items || []).map(it => it.id),
+        })),
         source: "trip",
-        occasion: dayOccasions[i] || "Travel",
-        weather: effectiveWeather(),
         notes: destination || null,
+        weather: effectiveWeather(),
       }));
       onAssign(plans, savedTrip);
     } finally {
@@ -822,7 +895,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         <button onClick={handlePreview} disabled={loading} style={{ ...btnPrimary, width: "100%", marginTop: 12, opacity: loading ? 0.6 : 1 }}>
           {loading
             ? <><span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span> Building looks…</>
-            : dayOutfits ? "↺ Rebuild all looks" : "Preview looks"}
+            : dayLooks ? "↺ Rebuild all looks" : "Preview looks"}
         </button>
 
         {previewError && (
@@ -832,35 +905,36 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
           </div>
         )}
 
-        {dayOutfits && (
+        {dayLooks && (
           <div ref={previewRef} style={{ marginTop: 16 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 8 }}>
               {packingList.length} ITEMS TO PACK
-              {uncovered.length > 0 && ` · ${uncovered.length} day${uncovered.length === 1 ? "" : "s"} may need more`}
+              {uncoveredDayCount > 0 && ` · ${uncoveredDayCount} day${uncoveredDayCount === 1 ? "" : "s"} may need more`}
             </div>
 
-            {/* Per-day editable preview */}
+            {/* Per-day editable preview. Each day card holds a stack of outfit
+                blocks so the user can have a daytime look + a dinner look on
+                the same day. */}
             <div style={{ marginBottom: 12 }}>
-              {dayOutfits.map((dayItems, i) => {
-                const dayIso = isoDate(addDays(new Date(start), i));
-                const dateLabel = new Date(addDays(new Date(start), i)).toLocaleDateString("en-US", {
+              {dayLooks.map((looks, dayIdx) => {
+                const dayIso = isoDate(addDays(new Date(start), dayIdx));
+                const dateLabel = new Date(addDays(new Date(start), dayIdx)).toLocaleDateString("en-US", {
                   weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
                 });
-                const occ = dayOccasions[i];
-                const dayAct = dayActivities?.[i] || activity;
+                const dayAct = dayActivities?.[dayIdx] || activity;
                 const dayHi = perDayHigh(dayIso);
                 const dayLo = perDayLow(dayIso);
                 const hasRealForecast = perDayForecast?.[dayIso]?.high != null;
-                const isThin = uncovered.includes(i);
                 return (
-                  <div key={i} style={{
+                  <div key={dayIdx} style={{
                     marginBottom: 10,
-                    padding: "8px 10px",
+                    padding: "10px 10px 8px",
                     background: "#fff",
                     borderRadius: 8,
-                    border: `1px solid ${isThin ? `${PALETTE.accent}55` : PALETTE.line}`,
+                    border: `1px solid ${PALETTE.line}`,
                   }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    {/* Day header: date + temp + per-day activity */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: PALETTE.ink, minWidth: 88 }}>{dateLabel}</div>
                       {dayHi != null && (
                         <div style={{ fontSize: 10, color: PALETTE.muted, whiteSpace: "nowrap" }}>
@@ -869,57 +943,90 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
                           {!hasRealForecast && " (est)"}
                         </div>
                       )}
-                      <button onClick={() => reshuffleDay(i)}
-                        title="Shuffle this day"
-                        style={{ marginLeft: "auto", background: "transparent", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: PALETTE.soft, cursor: "pointer" }}>
-                        ↺
-                      </button>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                      <select value={occ} onChange={e => changeOccasion(i, e.target.value)}
-                        title="Occasion for this day"
-                        style={{ flex: 1, fontSize: 11, padding: "4px 6px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
-                        {OCCASIONS.map(o => <option key={o}>{o}</option>)}
-                      </select>
-                      <select value={dayAct} onChange={e => changeActivity(i, e.target.value)}
+                      <select value={dayAct} onChange={e => changeActivity(dayIdx, e.target.value)}
                         title="Activity for this day"
-                        style={{ flex: 1, fontSize: 11, padding: "4px 6px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
+                        style={{ marginLeft: "auto", fontSize: 11, padding: "3px 6px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, cursor: "pointer", maxWidth: 140 }}>
                         {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
                       </select>
                     </div>
-                    {isThin && (
-                      <div style={{ fontSize: 10, color: PALETTE.accent, marginBottom: 4, lineHeight: 1.4 }}>
-                        ⚠ Missing a core piece for this day — try a different occasion or add items to your wardrobe.
-                      </div>
-                    )}
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                      {dayItems.map(it => (
-                        <div key={it.id} style={{ position: "relative" }}>
-                          <button onClick={() => setSwapTarget({ dayIdx: i, item: it })}
-                            title={`Swap ${it.name}`}
-                            style={{
-                              width: 46, height: 54,
-                              padding: 0, background: PALETTE.cream,
-                              border: `1px solid ${PALETTE.line}`,
-                              borderRadius: 4, overflow: "hidden", cursor: "pointer",
-                            }}>
-                            {it.image
-                              ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
-                              : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.category?.[0]}</span>}
-                          </button>
-                          <button onClick={() => removeItem(i, it.id)}
-                            title="Remove"
-                            style={{ position: "absolute", top: -6, right: -6, width: 16, height: 16, borderRadius: "50%", background: "#fff", border: `1px solid ${PALETTE.line}`, color: PALETTE.muted, fontSize: 11, lineHeight: "14px", padding: 0, cursor: "pointer" }}>
-                            ×
-                          </button>
+
+                    {/* Outfit stack — each outfit gets its own block. */}
+                    {looks.map((outfit, outfitIdx) => {
+                      const isThin = uncoveredOutfits.has(`${dayIdx}:${outfitIdx}`);
+                      return (
+                        <div key={outfit.id} style={{
+                          marginTop: outfitIdx === 0 ? 0 : 8,
+                          padding: "8px",
+                          background: PALETTE.cream,
+                          borderRadius: 6,
+                          border: isThin ? `1px solid ${PALETTE.accent}55` : `1px solid ${PALETTE.line}55`,
+                        }}>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                            <select value={outfit.occasion || "Casual"}
+                              onChange={e => changeOccasion(dayIdx, outfitIdx, e.target.value)}
+                              title="Occasion for this outfit"
+                              style={{ flex: "0 0 96px", fontSize: 11, padding: "4px 6px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
+                              {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+                            </select>
+                            <input type="text"
+                              value={outfit.label}
+                              onChange={e => setOutfitLabel(dayIdx, outfitIdx, e.target.value)}
+                              placeholder="Label (e.g. Daytime, Dinner)"
+                              style={{ flex: 1, fontSize: 11, padding: "4px 8px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, minWidth: 0 }}/>
+                            <button onClick={() => reshuffleOutfit(dayIdx, outfitIdx)}
+                              title="Shuffle this outfit"
+                              style={{ background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: PALETTE.soft, cursor: "pointer" }}>
+                              ↺
+                            </button>
+                            {looks.length > 1 && (
+                              <button onClick={() => removeOutfit(dayIdx, outfitIdx)}
+                                title="Remove this outfit"
+                                style={{ background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: PALETTE.muted, cursor: "pointer" }}>
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                          {isThin && (
+                            <div style={{ fontSize: 10, color: PALETTE.accent, marginBottom: 4, lineHeight: 1.4 }}>
+                              ⚠ Missing a core piece — try a different occasion or shuffle.
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {(outfit.items || []).map(it => (
+                              <div key={it.id} style={{ position: "relative" }}>
+                                <button onClick={() => setSwapTarget({ dayIdx, outfitIdx, item: it })}
+                                  title={`Swap ${it.name}`}
+                                  style={{
+                                    width: 46, height: 54,
+                                    padding: 0, background: "#fff",
+                                    border: `1px solid ${PALETTE.line}`,
+                                    borderRadius: 4, overflow: "hidden", cursor: "pointer",
+                                  }}>
+                                  {it.image
+                                    ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                                    : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.category?.[0]}</span>}
+                                </button>
+                                <button onClick={() => removeItem(dayIdx, outfitIdx, it.id)}
+                                  title="Remove"
+                                  style={{ position: "absolute", top: -6, right: -6, width: 16, height: 16, borderRadius: "50%", background: "#fff", border: `1px solid ${PALETTE.line}`, color: PALETTE.muted, fontSize: 11, lineHeight: "14px", padding: 0, cursor: "pointer" }}>
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            {(outfit.items || []).length === 0 && (
+                              <div style={{ fontSize: 11, color: PALETTE.muted, fontStyle: "italic", padding: "8px 0" }}>
+                                No items — tap ↺ to shuffle in pieces.
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      ))}
-                      {dayItems.length === 0 && (
-                        <div style={{ fontSize: 11, color: PALETTE.muted, fontStyle: "italic", padding: "8px 0" }}>
-                          No items — tap ↺ to shuffle in pieces.
-                        </div>
-                      )}
-                    </div>
+                      );
+                    })}
+
+                    <button onClick={() => addOutfit(dayIdx)}
+                      style={{ marginTop: 8, width: "100%", padding: "6px 0", background: "transparent", border: `1px dashed ${PALETTE.line}`, borderRadius: 6, fontSize: 11, color: PALETTE.soft, cursor: "pointer" }}>
+                      + Add outfit
+                    </button>
                   </div>
                 );
               })}
@@ -971,10 +1078,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
           <SwapPicker
             target={swapTarget}
             items={items}
-            currentDayItems={dayOutfits?.[swapTarget.dayIdx] || []}
+            currentDayItems={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.items || []}
             weather={effW}
-            occasion={dayOccasions?.[swapTarget.dayIdx]}
-            onPick={(newItem) => swapItem(swapTarget.dayIdx, swapTarget.item.id, newItem)}
+            occasion={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.occasion}
+            onPick={(newItem) => swapItem(swapTarget.dayIdx, swapTarget.outfitIdx, swapTarget.item.id, newItem)}
             onClose={() => setSwapTarget(null)}
           />
         )}
