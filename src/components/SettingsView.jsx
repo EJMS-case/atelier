@@ -14,6 +14,23 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
   const [showR,        setShowR]        = useState(false);
+  // Auto-save indicator that flashes briefly after a key change persists.
+  // The "Save Settings" button at the bottom used to be the only way to
+  // persist the API key — users typed it in, didn't tap save, and then got
+  // "Add your API key first" errors from Style Me. Now we debounce-save
+  // every change so typing alone is enough.
+  const [keyJustSaved, setKeyJustSaved] = useState(false);
+  useEffect(() => {
+    if (key === apiKey && rmbg === rmbgKey) return;
+    const t = setTimeout(() => {
+      onSave(key, rmbg, { silent: true });
+      setKeyJustSaved(true);
+      const clearT = setTimeout(() => setKeyJustSaved(false), 1800);
+      return () => clearTimeout(clearT);
+    }, 500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, rmbg]);
   const [prefs,        setPrefs]        = useState(() => loadStylePrefs());
   const [newPair,      setNewPair]      = useState("");
   const [aboutMe,      setAboutMe]      = useState(() => loadAboutMe());
@@ -279,9 +296,16 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
 
       {/* Anthropic key */}
       <div style={s.settingsCard}>
-        <div style={s.settingsTitle}><Icon path={icons.key} size={16}/> Anthropic API Key</div>
+        <div style={{...s.settingsTitle, display: "flex", alignItems: "center", gap: 8}}>
+          <Icon path={icons.key} size={16}/> Anthropic API Key
+          {apiKey && (
+            <span style={{ fontSize: 10, color: "var(--color-success)", letterSpacing: "0.06em", fontWeight: 600 }}>
+              {keyJustSaved ? "✓ JUST SAVED" : "✓ SAVED"}
+            </span>
+          )}
+        </div>
         <p style={s.settingsSub}>
-          Required to generate outfit looks. Stored locally on your device only.
+          Required to generate outfit looks. Stored locally on your device only — changes auto-save as you type.
         </p>
         <div style={{position:"relative"}}>
           <input type={showK?"text":"password"} placeholder="sk-ant-..."
@@ -298,9 +322,16 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
 
       {/* Remove.bg key */}
       <div style={s.settingsCard}>
-        <div style={s.settingsTitle}>✦ Remove.bg API Key</div>
+        <div style={{...s.settingsTitle, display: "flex", alignItems: "center", gap: 8}}>
+          ✦ Remove.bg API Key
+          {rmbgKey && (
+            <span style={{ fontSize: 10, color: "var(--color-success)", letterSpacing: "0.06em", fontWeight: 600 }}>
+              {keyJustSaved ? "✓ JUST SAVED" : "✓ SAVED"}
+            </span>
+          )}
+        </div>
         <p style={s.settingsSub}>
-          Automatically removes backgrounds from clothing photos on upload. Free tier includes 50 images/month.
+          Automatically removes backgrounds from clothing photos on upload. Free tier includes 50 images/month. Auto-saves as you type.
         </p>
         <div style={{position:"relative"}}>
           <input type={showR?"text":"password"} placeholder="your-removebg-key"
