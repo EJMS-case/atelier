@@ -26,9 +26,12 @@ const PALETTE = {
 
 // Subcategory hints that resolve a Loungewear/Athleisure piece to top vs.
 // bottom. Anything tagged with these subcategories slots into the matching
-// silhouette zone so the builder isn't blind to comfortwear.
-const TOP_LIKE_SUBS    = /^(top|tops|long sleeve|short sleeve|bra\/crop top|hoodies|hoodies \/ sweatshirts|sweatshirt|tank|t-shirt)/i;
-const BOTTOM_LIKE_SUBS = /^(bottom|bottoms|pants|shorts|skirt|skirts|joggers|leggings)/i;
+// silhouette zone so the builder isn't blind to comfortwear. Athleisure-only
+// subs (sports bra, skort) are folded in here so every wardrobe item is
+// pickable — the user shouldn't have to guess why an item is missing from
+// the builder pool.
+const TOP_LIKE_SUBS    = /^(top|tops|long sleeve|short sleeve|bra\/crop top|sports bra|hoodies|hoodies \/ sweatshirts|sweatshirt|tank|t-shirt)/i;
+const BOTTOM_LIKE_SUBS = /^(bottom|bottoms|pants|shorts|skirt|skirts|skort|skorts|mini|joggers|leggings)/i;
 const DRESS_LIKE_SUBS  = /^(dress|dresses|romper)/i;
 
 const SLOTS = [
@@ -53,6 +56,24 @@ const MULTI_SLOTS = new Set(["top", "shoes", "bag"]);
 // Stable key for per-instance state (positions, zOrders, autoFitted) so each
 // item in a multi-slot has its own canvas slot.
 const posKey = (slot, itemId) => `${slot}__${itemId}`;
+
+// Item-label format under each picker thumb: "{brand} {color} {name}" all
+// lowercased. Empty parts are skipped, so an item with no brand still reads
+// cleanly. Many existing names end in " | Color" (e.g. "Volley Skort | Black")
+// — strip that suffix so the color doesn't show up twice.
+function pickerLabel(item) {
+  if (!item) return "";
+  const stripTrailingColor = (name, color) => {
+    if (!name) return "";
+    if (!color) return name;
+    // Match " | <color>" at the end, case-insensitive.
+    const escaped = color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return name.replace(new RegExp(`\\s*\\|\\s*${escaped}\\s*$`, "i"), "");
+  };
+  const cleanName = stripTrailingColor(item.name, item.color);
+  const parts = [item.brand, item.color, cleanName].filter(Boolean).map(s => String(s).trim()).filter(Boolean);
+  return parts.join(" ").toLowerCase();
+}
 
 
 // Default canvas positions (% of canvas width/height) per slot.
@@ -703,7 +724,7 @@ export default function SilhouetteBuilder({
                       {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                     </div>
                     <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", overflow: "hidden", maxHeight: 22 }}>
-                      {it.color ? `${it.color} ` : ""}{it.subcategory || it.category}
+                      {pickerLabel(it)}
                     </div>
                   </button>
                 );
