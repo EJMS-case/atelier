@@ -168,12 +168,18 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefs(updated); };
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
 
-  const itemsClean     = items.filter(it => it.image && it.has_bg === false);
-  const itemsNeedingBg = items.filter(it => it.image && it.has_bg === true);
-  const itemsUnknownBg = items.filter(it => it.image && (it.has_bg === null || it.has_bg === undefined));
+  const itemsClean       = items.filter(it => it.image && it.has_bg === false);
+  const itemsNeedingTrim = itemsClean.filter(it => it.is_trimmed !== true);
+  const itemsNeedingBg   = items.filter(it => it.image && it.has_bg === true);
+  const itemsUnknownBg   = items.filter(it => it.image && (it.has_bg === null || it.has_bg === undefined));
 
   const handleBatchTrim = async () => {
-    const toTrim = itemsClean;
+    // Only items that have a transparent background AND haven't been trimmed
+    // yet. The is_trimmed flag is set after a successful pass (whether the
+    // image actually had borders to trim or was already tight) so re-running
+    // the batch on the same closet is a no-op instead of grinding through
+    // every photo again.
+    const toTrim = itemsNeedingTrim;
     if (!toTrim.length) return;
     trimStop.current = false;
     setTrimRunning(true); setTrimDone(false);
@@ -185,10 +191,15 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
       try {
         const base64 = await imageToBase64(item.image);
         const trimmed = await trimTransparentBorders(base64);
-        if (trimmed === base64) { setTrimProgress(p => ({ ...p, done: i + 1 })); continue; }
+        if (trimmed === base64) {
+          // Already tight — just mark it so we don't re-check next time.
+          if (onUpdateItem) await onUpdateItem(item.id, { is_trimmed: true });
+          setTrimProgress(p => ({ ...p, done: i + 1 }));
+          continue;
+        }
         const compressed = await compressImage(trimmed, 600, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
-        if (onUpdateItem) await onUpdateItem(item.id, { image: url });
+        if (onUpdateItem) await onUpdateItem(item.id, { image: url, is_trimmed: true });
       } catch { errors++; }
       setTrimProgress({ done: i + 1, total: toTrim.length, errors });
     }
@@ -213,7 +224,9 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         const trimmed = await trimTransparentBorders(result.image);
         const compressed = await compressImage(trimmed, 600, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
-        if (onUpdateItem) await onUpdateItem(item.id, { image: url, has_bg: false });
+        // BG removal pipeline already trims as its last step, so the trim
+        // flag is set here too — no need for a second pass in handleBatchTrim.
+        if (onUpdateItem) await onUpdateItem(item.id, { image: url, has_bg: false, is_trimmed: true });
       } catch { errors++; }
       setBatchProgress({ done: i + 1, total: toProcess.length, errors });
     }
@@ -519,11 +532,19 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           </div>
         )}
 
-        {/* Trim pass — tightly crop already-transparent items */}
-        {itemsClean.length > 0 && !trimRunning && !trimDone && (
+        {/* Trim pass — tightly crop already-transparent items that haven't
+            been trimmed yet. Items mark themselves is_trimmed: true after a
+            successful pass so re-running this is a no-op when there's
+            nothing new to do. */}
+        {itemsNeedingTrim.length > 0 && !trimRunning && !trimDone && (
           <button style={{...s.btnSecondary, width:"100%"}} onClick={handleBatchTrim}>
-            Trim White Space ({itemsClean.length} clean item{itemsClean.length===1?"":"s"})
+            Trim White Space ({itemsNeedingTrim.length} new / untrimmed item{itemsNeedingTrim.length===1?"":"s"})
           </button>
+        )}
+        {itemsClean.length > 0 && itemsNeedingTrim.length === 0 && !trimRunning && !trimDone && (
+          <div style={{fontSize:11, color:"var(--color-text-muted)", padding:"6px 0"}}>
+            ✓ All {itemsClean.length} transparent item{itemsClean.length===1?"":"s"} already trimmed.
+          </div>
         )}
         {trimRunning && (
           <div>
@@ -624,44 +645,54 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         )}
       </div>
 
-      {/* ── Force Sync ── */}
-      {onForceSync && (
-        <div style={{...s.settingsCard, marginTop:16, borderColor: fSyncDone?.failed > 0 ? "var(--color-danger)" : fSyncDone ? "var(--color-success)" : "#E8DDD5"}}>
-          <div style={s.settingsTitle}>Sync Wardrobe to Cloud</div>
-          <p style={s.settingsSub}>
-            Upserts all {items.length} items from this device to Supabase — existing items are updated in place, nothing is duplicated. Use this after a bulk upload or if your wardrobe isn't showing on other devices.
-          </p>
-          {fSyncProg && (
-            <div style={{marginBottom:10}}>
-              <div style={{height:6, background:"var(--color-border-soft)", borderRadius:3, overflow:"hidden", marginBottom:6}}>
-                <div style={{height:"100%", width:`${Math.round((fSyncProg.done/fSyncProg.total)*100)}%`,
-                  background: fSyncProg.failed > 0 ? "var(--color-danger)" : "#8B6F5E", borderRadius:3, transition:"width 0.3s"}}/>
+      {/* ── Sync Pending Changes ── */}
+      {onForceSync && (() => {
+        const pendingCount = items.filter(it => it.pending_sync === true).length;
+        return (
+          <div style={{...s.settingsCard, marginTop:16, borderColor: fSyncDone?.failed > 0 ? "var(--color-danger)" : fSyncDone ? "var(--color-success)" : "#E8DDD5"}}>
+            <div style={s.settingsTitle}>Sync Wardrobe to Cloud</div>
+            <p style={s.settingsSub}>
+              {pendingCount > 0
+                ? `${pendingCount} of ${items.length} item${items.length === 1 ? "" : "s"} ${pendingCount === 1 ? "has" : "have"} local changes waiting to upload. Only those will sync — items already in Supabase aren't re-uploaded.`
+                : `All ${items.length} items are already in Supabase. New edits sync automatically; this button is only needed if something gets stuck.`}
+            </p>
+            {fSyncProg && fSyncProg.total > 0 && (
+              <div style={{marginBottom:10}}>
+                <div style={{height:6, background:"var(--color-border-soft)", borderRadius:3, overflow:"hidden", marginBottom:6}}>
+                  <div style={{height:"100%", width:`${Math.round((fSyncProg.done/fSyncProg.total)*100)}%`,
+                    background: fSyncProg.failed > 0 ? "var(--color-danger)" : "#8B6F5E", borderRadius:3, transition:"width 0.3s"}}/>
+                </div>
+                <div style={{fontSize:11, color:"#6B6460"}}>
+                  {fSyncRunning
+                    ? `Syncing ${fSyncProg.done} / ${fSyncProg.total}…`
+                    : `Done — ${fSyncDone?.done || 0} synced${fSyncDone?.failed ? `, ${fSyncDone.failed} failed` : " ✓"}`}
+                </div>
               </div>
-              <div style={{fontSize:11, color:"#6B6460"}}>
-                {fSyncRunning
-                  ? `Syncing ${fSyncProg.done} / ${fSyncProg.total}…`
-                  : `Done — ${fSyncDone?.done} synced${fSyncDone?.failed ? `, ${fSyncDone.failed} failed` : " ✓"}`}
-              </div>
-            </div>
-          )}
-          <button style={{...s.settingsBtn, background: fSyncDone && !fSyncDone.failed ? "var(--color-success)" : "#8B6F5E"}}
-            onClick={async () => {
-              setFSyncRunning(true); setFSyncDone(null);
-              setFSyncProg({ done: 0, total: items.length, failed: 0 });
-              const result = await onForceSync((done, total, failed) =>
-                setFSyncProg({ done, total, failed })
-              );
-              setFSyncRunning(false); setFSyncDone(result);
-            }}
-            disabled={fSyncRunning}>
-            {fSyncRunning
-              ? <><span style={s.spinnerSm}/> Syncing…</>
-              : fSyncDone
-                ? (fSyncDone.failed ? "⚠ Some failed — tap to retry" : "✓ All Synced to Supabase")
-                : `Sync All ${items.length} Items to Supabase`}
-          </button>
-        </div>
-      )}
+            )}
+            {fSyncDone?.nothingToSync && !fSyncRunning && (
+              <div style={{fontSize:11, color:"var(--color-success)", marginBottom:10}}>✓ Already up to date — nothing to sync.</div>
+            )}
+            <button style={{...s.settingsBtn, background: fSyncDone && !fSyncDone.failed ? "var(--color-success)" : "#8B6F5E", opacity: pendingCount === 0 && !fSyncRunning && !fSyncDone ? 0.5 : 1}}
+              onClick={async () => {
+                setFSyncRunning(true); setFSyncDone(null);
+                setFSyncProg({ done: 0, total: pendingCount, failed: 0 });
+                const result = await onForceSync((done, total, failed) =>
+                  setFSyncProg({ done, total, failed })
+                );
+                setFSyncRunning(false); setFSyncDone(result);
+              }}
+              disabled={fSyncRunning || (pendingCount === 0 && !fSyncDone)}>
+              {fSyncRunning
+                ? <><span style={s.spinnerSm}/> Syncing…</>
+                : fSyncDone
+                  ? (fSyncDone.failed ? "⚠ Some failed — tap to retry" : fSyncDone.nothingToSync ? "✓ Up to date" : `✓ Synced ${fSyncDone.done} item${fSyncDone.done === 1 ? "" : "s"}`)
+                  : pendingCount === 0
+                    ? "Up to date"
+                    : `Sync ${pendingCount} Pending Item${pendingCount === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        );
+      })()}
 
       <div style={{...s.settingsCard, marginTop:16}}>
         <div style={s.settingsTitle}>About Atelier</div>

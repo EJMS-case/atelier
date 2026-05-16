@@ -416,18 +416,31 @@ export default function App() {
   // Force-sync ALL items currently in React state to Supabase — used after bulk upload failures
   // Reads from live state (has base64 images), uploads them, saves URLs back
   const forceSyncAll = useCallback(async (onProgress) => {
+    // Only sync items that have changed since the last successful upload.
+    // Items get pending_sync: true on add or edit and have the flag cleared
+    // once Supabase confirms. Walking the whole closet was wasteful — a
+    // 393-item wardrobe took ~60s to re-upload every photo on every sync.
+    const toSync = items.filter(it => it.pending_sync === true);
+    if (toSync.length === 0) {
+      flashSync("synced");
+      return { done: 0, failed: 0, skipped: items.length, nothingToSync: true };
+    }
     flashSync("syncing");
     let done = 0, failed = 0, imgFailed = 0;
     const updated = [...items];
-    for (let i = 0; i < updated.length; i++) {
-      const item = updated[i];
+    // Index for in-place replacement (toSync items may not be at the same
+    // indices as the working `updated` array).
+    const indexById = new Map(updated.map((it, i) => [it.id, i]));
+    for (let i = 0; i < toSync.length; i++) {
+      const item = toSync[i];
       try {
         let toSave = item;
         if (item.image?.startsWith("data:")) {
           try {
             const url = await sb.uploadImage(item.id, item.image);
             toSave = { ...item, image: url };
-            updated[i] = toSave;
+            const idx = indexById.get(toSave.id);
+            if (idx != null) updated[idx] = toSave;
             setItems(prev => prev.map(it => it.id === toSave.id ? toSave : it));
           } catch (imgErr) {
             console.error("Force sync image upload failed for", item.name, imgErr);
@@ -435,9 +448,14 @@ export default function App() {
           }
         }
         await sb.upsert(toSave);
+        // Clear the pending flag now that Supabase has it.
+        const cleared = { ...toSave, pending_sync: false };
+        const idx = indexById.get(cleared.id);
+        if (idx != null) updated[idx] = cleared;
+        setItems(prev => prev.map(it => it.id === cleared.id ? cleared : it));
         done++;
       } catch { failed++; }
-      if (onProgress) onProgress(i + 1, updated.length, failed);
+      if (onProgress) onProgress(i + 1, toSync.length, failed);
       await new Promise(r => setTimeout(r, 150));
     }
     saveLocalItems(updated);
@@ -446,7 +464,7 @@ export default function App() {
     if (imgFailed > 0) {
       setTimeout(() => alert(`⚠️ ${imgFailed} photo(s) failed to upload to cloud storage. Item data was saved but those photos are only stored locally.`), 300);
     }
-    return { done, failed };
+    return { done, failed, skipped: items.length - toSync.length };
   }, [items]);
 
   const deleteItem = useCallback(async (id) => {

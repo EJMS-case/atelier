@@ -103,7 +103,7 @@ export const LooksTool = {
               items: {
                 type: "object",
                 properties: {
-                  id:   { type: "string", pattern: "^W[0-9]{1,3}$", description: "Short W-ID from the inventory (W001, W002, …). MUST match ^W\\d{1,3}$. Never invent IDs, never use timestamps or UUIDs." },
+                  id:   { type: "string", pattern: "^W[0-9]{3}$", description: "Short W-ID from the inventory in EXACTLY 3-digit padded format (W001, W014, W092). MUST match ^W\\d{3}$. Never drop leading zeros (W51 → W051), never invent IDs, never use timestamps or UUIDs." },
                   role: { type: "string" },
                   x:    { type: "number", minimum: 0, maximum: 100 },
                   y:    { type: "number", minimum: 0, maximum: 100 },
