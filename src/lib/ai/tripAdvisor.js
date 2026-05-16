@@ -119,6 +119,23 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     destBlock = `\nDESTINATION:\n${bits.join(" ")}\n`;
   }
 
+  // ── Activity block: lifestyle context for the day (Theme Park = comfortable
+  // shoes + no jeans, Beach = swim + cover-ups, Active = no silk or heels).
+  // The trip-level activity is persisted on the trip row; the user selected
+  // it when they created the trip.
+  const activity = opts.activity || "Sightseeing";
+  const ACTIVITY_NOTES = {
+    "Theme Park": "All-day walking and standing. PRIORITIZE sneakers / comfortable flats / sturdy sandals. NO heels, pumps, stilettos, mules, cocktail dresses, gowns, or silk gowns. NO jeans (too restrictive for ride lines and long days). Lean into breathable cotton, athletic-leaning silhouettes, and casual layered pieces. Bag should be a crossbody or backpack.",
+    "Beach": "Pool / beach / waterfront day. Swim, cover-ups, sundresses, sandals, and lightweight sun-protective layers are first-class. NO wool, cashmere, chunky knits, boots, or heels. Raffia / canvas bag.",
+    "Resort": "Pool + poolside dinner. Mix swim / cover-ups with elevated easy pieces (linen, silk, flowy fabrics). NO boots, NO stilettos.",
+    "Active": "Hiking, sport, gym, or city walking. Range of motion is mandatory. NO heels, pumps, stilettos, cocktail dresses, gowns, formal separates, silk, satin, lace, or sequin. Sneakers + athleisure + technical fabrics.",
+    "City Walking": "Sightseeing in a city — walking 5-10 miles. Polished but practical. NO heels, NO stilettos. Jeans + blazers + comfortable boots/flats welcome.",
+    "Sightseeing": "Default — minimal lifestyle constraints. Build for the occasion + weather + destination.",
+  };
+  const activityBlock = activity && activity !== "Sightseeing"
+    ? `\nACTIVITY: ${activity}. ${ACTIVITY_NOTES[activity] || ""}\n`
+    : "";
+
   // ── Variety block: show the AI what's already been worn on OTHER days so it
   // rotates the hero piece. Without this the model picks the same flattering
   // outfit every day. Cap at 6 most-recent days to keep the prompt tight.
@@ -142,7 +159,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
 
 OCCASION: ${occasion}
 WEATHER: ${weather} (around ${highF}°F)
-${destBlock}${varietyBlock}
+${destBlock}${activityBlock}${varietyBlock}
 WARDROBE (use ONLY these IDs):
 ${inventory}
 

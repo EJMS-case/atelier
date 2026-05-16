@@ -5,23 +5,14 @@
 
 import { filterByWeather } from "../../utils/item-helpers.js";
 
-// ── Vibe & occasion helpers ──────────────────────────────────────────────────
-
-// A "vibe" is the dominant style of the trip. It seeds a default occasion
-// rotation, but every day stays user-overridable.
-export const TRIP_VIBES = {
-  Casual:       { label: "Casual",       pattern: ["Casual"] },
-  "Theme Park": { label: "Theme Park",   pattern: ["Casual", "Casual", "Casual"] },
-  Beach:        { label: "Beach",        pattern: ["Casual", "Casual", "Dinner"] },
-  "Smart Casual": { label: "Smart Casual", pattern: ["Casual", "Dinner", "Casual", "Dinner"] },
-  Business:     { label: "Business",     pattern: ["Work", "Work", "Work Dinner", "Work"] },
-  Active:       { label: "Active",       pattern: ["Casual", "Lounge", "Casual"] },
-  Mixed:        { label: "Mixed",        pattern: ["Casual", "Dinner", "Casual", "Occasion", "Travel"] },
-};
-
-export function defaultOccasionsForVibe(vibe, dayCount) {
-  const v = TRIP_VIBES[vibe] || TRIP_VIBES.Casual;
-  return Array.from({ length: dayCount }, (_, i) => v.pattern[i % v.pattern.length]);
+// ── Default occasion seed ──────────────────────────────────────────────────
+// We used to gate this through a "vibe" concept (Casual / Theme Park / Beach
+// / Smart Casual / Business / Active / Mixed) that picked a pattern of
+// occasions. After per-day occasion + per-day activity landed, vibe was
+// redundant — the user can just override each day directly. Removed.
+// New default: every day starts as "Casual"; user adjusts per-day.
+export function defaultOccasions(dayCount) {
+  return Array.from({ length: dayCount }, () => "Casual");
 }
 
 // Which item slots are "appropriate" for an occasion. Used to bias selection

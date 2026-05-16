@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
-import { buildDailyOutfits, TRIP_VIBES, TRIP_ACTIVITIES, defaultOccasionsForVibe, alternativesFor } from "./tripPacker.js";
+import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast, fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
@@ -485,11 +485,9 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   const [start, setStart] = useState(isoDate(new Date()));
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
-  const [vibe, setVibe] = useState("Casual");
-  // Trip-level Activity is now the DEFAULT applied to every day at preview
-  // time. Each day's card can override it. The override array
-  // (dayActivities) is seeded from this default and updated independently
-  // when the user picks per-day.
+  // Trip-level Activity is the DEFAULT applied to every day at preview time.
+  // Each day's card can override it. Persisted on the trip row so the
+  // AI generation in TripDetailView can honor it later.
   const [activity, setActivity] = useState("Sightseeing");
   const [dayActivities, setDayActivities] = useState(null); // string[] | null
   // Per-day Open-Meteo forecast at the destination, keyed by iso. Used to
@@ -592,7 +590,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       if (!brief && destination.trim() && apiKey) {
         await fetchBrief();
       }
-      const occasions = defaultOccasionsForVibe(vibe, dayCount);
+      const occasions = defaultOccasions(dayCount);
       const dayIsos = Array.from({ length: dayCount }, (_, i) => isoDate(addDays(new Date(start), i)));
       const highs = dayIsos.map(iso => perDayHigh(iso));
       const dayBuckets = dayIsos.map(iso => perDayBucket(iso));
@@ -727,6 +725,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
           destination: destination || null,
           // Persist the brief so TripDetailView can reuse it without a re-fetch.
           notes: brief ? JSON.stringify(brief) : null,
+          // Trip-level activity drives the per-day AI generation in
+          // TripDetailView — without persisting it, the AI defaults to
+          // "Sightseeing" no matter what the user picked here.
+          activity: activity || "Sightseeing",
         });
         savedTrip = Array.isArray(rows) ? rows[0] : rows;
       } catch { /* non-fatal */ }
@@ -782,10 +784,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
 
         <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
-            Vibe
-            <select value={vibe} onChange={e => { setVibe(e.target.value); invalidatePreview(); }}
+            Default activity
+            <select value={activity} onChange={e => { setActivity(e.target.value); invalidatePreview(); }}
               style={dateInput}>
-              {Object.keys(TRIP_VIBES).map(v => <option key={v}>{v}</option>)}
+              {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
             </select>
           </label>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
@@ -797,18 +799,8 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
             </select>
           </label>
         </div>
-
-        <div style={{ marginTop: 10 }}>
-          <label style={{ display: "block", fontSize: 11, color: PALETTE.muted }}>
-            Default activity (every day starts here — override per-day below)
-            <select value={activity} onChange={e => { setActivity(e.target.value); invalidatePreview(); }}
-              style={{ ...dateInput, width: "100%" }}>
-              {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
-            </select>
-          </label>
-          <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic" }}>
-            Theme Park bans heels &amp; delicate fabrics · Beach unbans swim · Active bans silk &amp; heels
-          </div>
+        <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic" }}>
+          Theme Park bans heels &amp; delicate fabrics · Beach unbans swim · Active bans silk &amp; heels. Per-day overrides below.
         </div>
 
         {/* Climate brief — only shown once a destination + brief exists. */}

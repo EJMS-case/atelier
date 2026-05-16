@@ -168,7 +168,7 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
       const occasion  = dayOccasion[iso] || "Casual";
       const weather   = weatherForDay(iso);
       const priorDays = buildPriorDays(iso, plans);
-      const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief });
+      const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity: trip.activity || "Sightseeing" });
       if (!look) { setError("Couldn't generate a look — try again."); return; }
       const saved = await savePlan({
         date: iso,
@@ -202,7 +202,7 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
         const occasion  = dayOccasion[iso] || "Casual";
         const weather   = weatherForDay(iso);
         const priorDays = buildPriorDays(iso, running);
-        const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief });
+        const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity: trip.activity || "Sightseeing" });
         if (!look) continue;
         const saved = await savePlan({
           date: iso,
