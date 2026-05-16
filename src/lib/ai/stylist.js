@@ -45,7 +45,10 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
-  const { mood = "", feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "" } = extras;
+  const { mood = "", feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", count = 3 } = extras;
+  // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
+  // classic 3-up generation. Values outside this range fall back to 3.
+  const lookCount = (count >= 1 && count <= 3) ? count : 3;
 
   // Defend against legacy occasion strings ("Interview"/"Executive"/"Daytime"/…)
   // that may still arrive from saved planner entries or older callers.
@@ -116,7 +119,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const colorStrategies = pickRandom(STYLING_STRATEGIES.color);
   const proportionStrategies = pickRandom(STYLING_STRATEGIES.proportion);
   const heroStrategies = pickRandom(STYLING_STRATEGIES.hero);
-  const stylingDirections = [0, 1, 2].map(i => ({
+  // One direction per look. Single-look generation only ships one direction.
+  const stylingDirections = Array.from({ length: lookCount }, (_, i) => ({
     color: colorStrategies[i % colorStrategies.length],
     proportion: proportionStrategies[i % proportionStrategies.length],
     hero: heroStrategies[i % heroStrategies.length],
@@ -134,6 +138,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     occasionSlots: slots,
     availabilityNote,
     stylingDirections,
+    lookCount,
     moodPrompt: moodPromptFor(mood),
     requestedShortIds,
     inspirationVibes,
