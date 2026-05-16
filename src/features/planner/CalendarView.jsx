@@ -477,7 +477,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
 // All edits stay local until "Pin to calendar".
 const WEATHER_BUCKETS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
 const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
-const OCCASIONS = ["Casual", "Travel", "Work", "Work Dinner", "Dinner", "Date Night", "Lounge"];
+const OCCASIONS = ["Casual", "Travel", "Work", "Work Dinner", "Dinner", "Occasion", "Lounge"];
 const SEASONAL = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
 
 function TripModal({ items, apiKey, onClose, onAssign }) {

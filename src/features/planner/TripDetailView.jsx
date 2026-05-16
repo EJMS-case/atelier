@@ -21,7 +21,7 @@ const PALETTE = {
   accent: "#6D1A2E",
 };
 
-const OCCASIONS = ["Travel", "Casual", "Work", "Work Dinner", "Dinner", "Date Night", "Lounge"];
+const OCCASIONS = ["Travel", "Casual", "Work", "Work Dinner", "Dinner", "Occasion", "Lounge"];
 
 const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Sets", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts", "Occasionwear"];
 

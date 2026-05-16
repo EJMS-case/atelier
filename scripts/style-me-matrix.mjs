@@ -126,7 +126,7 @@ function isCool(w) { return /cool|40-54/i.test(w); }
 function isCold(w) { return /cold|below 40/i.test(w); }
 
 function pickTop(occasion, w) {
-  // Tanks are banned for Work / Work Dinner / Date Night / Dinner. Use a
+  // Tanks are banned for Work / Work Dinner / Dinner. Use a
   // blouse everywhere except cold (where a long-sleeve blouse is still
   // fine — the validator only flags absent items, not sleeves on tops).
   return reverseMap["blouse"];
@@ -138,11 +138,10 @@ function pickBottom(occasion, w) {
 }
 
 function pickShoes(occasion, w) {
-  // Sandals are banned for Work / Work Dinner / Dinner / Occasion. Date Night
-  // and Occasion are heels-only. Dinner allows boots in cold but otherwise
-  // heels. Casual / Travel / Lounge are the only buckets that take sandals
-  // in hot weather.
-  if (occasion === "Date Night" || occasion === "Occasion") return reverseMap["heels"];
+  // Sandals are banned for Work / Work Dinner / Dinner / Occasion. Occasion
+  // is heels-only. Dinner allows boots in cold but otherwise heels. Casual /
+  // Travel / Lounge are the only buckets that take sandals in hot weather.
+  if (occasion === "Occasion") return reverseMap["heels"];
   if (occasion === "Dinner") {
     return isCold(w) ? reverseMap["boots"] : reverseMap["heels"];
   }
@@ -214,9 +213,9 @@ function candidateLooksFor(occasion, weather) {
       })
     : null;
 
-  // Variant B: a dress for cells where it's appropriate (Casual / Date Night / Dinner)
+  // Variant B: a dress for cells where it's appropriate (Casual / Dinner)
   const useDress =
-    (occasion === "Date Night" || occasion === "Dinner" || occasion === "Casual") &&
+    (occasion === "Dinner" || occasion === "Casual") &&
     !isCold(weather);
   const altDress = useDress
     ? buildLook({

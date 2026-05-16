@@ -522,45 +522,77 @@ export default function App() {
   // each word independently, so this is the cleanest bridge.
   const weatherLabel = [...weather].join(" + ");
 
-  const handleStyle = async () => {
-    if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
-    if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
-    setStyling(true); setStyleErr(""); setOutfits(null);
+  // Style Me uses single-look generation by default — the first look arrives
+  // in ~20s instead of waiting ~60s for all three. "Style 2 more" generates
+  // additional looks sequentially in the background; the App-level outfits
+  // state means the user can navigate away while it runs and come back to
+  // find new looks waiting.
+  const generateAndAppendLooks = async (count, mode) => {
+    // mode === "fresh" replaces outfits; mode === "append" keeps existing
+    // looks and adds new ones (used by "Style 2 more").
     let streamedAny = false;
     try {
       const onLook = (look) => {
         const normalized = normalizeLooks([look], occasion);
-        setOutfits(prev => [...(prev || []), ...normalized]);
+        setOutfits(prev => mode === "append"
+          ? [...(prev || []), ...normalized]
+          : [...(prev || []), ...normalized]);
         if (!streamedAny) {
           streamedAny = true;
-          setView("style");
-          setStyling("partial"); // switch from full-page spinner to subtle banner
+          if (mode === "fresh") setView("style");
+          setStyling("partial");
         }
       };
-      // Pull inspiration vibe notes tagged to the active occasion + weather.
-      // We only send the vibe TEXT (not images, not items) — keeps generation
-      // cheap and prevents the AI from substituting inspo pieces for closet pieces.
       const inspirationVibes = vibesFor(inspirations, occasion, [...weather][0] || "")
         .map(r => r.vibe_text)
         .filter(Boolean);
-      // Personal style patterns (soft bias). Falls back to empty string when
-      // the fingerprint hasn't been generated yet — the prompt block is
-      // skipped entirely in that case.
       const fingerprintText = styleFingerprint?.text || "";
-      const result = await generateOutfit(items, occasion, weatherLabel, request, apiKey, allLooks, loadStylePrefs(), loadAboutMe(), styleExcludes, { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText });
+      const result = await generateOutfit(
+        items, occasion, weatherLabel, request, apiKey, allLooks,
+        loadStylePrefs(), loadAboutMe(), styleExcludes,
+        { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, count }
+      );
       const looks = result?.looks;
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
         throw new Error("AI returned no looks — try again.");
       }
-      // Replace streamed looks with the final validated set (may differ if retry happened)
       const normalizedLooks = normalizeLooks(looks, occasion);
-      setOutfits(normalizedLooks);
+      // Replace the streamed slice for THIS generation with the validated
+      // final set. For "fresh", normalizedLooks is the whole thing; for
+      // "append", we need to keep prior looks and replace only the tail.
+      setOutfits(prev => {
+        if (mode === "append") {
+          // Discard the (possibly partial) tail streamed in this batch and
+          // splice in the validated final looks.
+          const priorCount = (prev?.length || 0) - normalizedLooks.length;
+          const head = (prev || []).slice(0, Math.max(0, priorCount));
+          return [...head, ...normalizedLooks];
+        }
+        return normalizedLooks;
+      });
       setAllLooks(prev => [...prev, ...normalizedLooks].slice(-30));
-      setView("style");
     } catch(e) {
       setStyleErr(e.message || "Styling failed — check your API key.");
       console.error("Generation error:", e);
-    } finally { setStyling(false); }
+    }
+  };
+
+  const handleStyle = async () => {
+    if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
+    if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
+    setStyling(true); setStyleErr(""); setOutfits(null);
+    await generateAndAppendLooks(1, "fresh");
+    setStyling(false);
+  };
+
+  // "Style 2 more" — appends two additional looks to the existing set without
+  // clearing what's already there. Runs after the first look has arrived.
+  const handleStyleMore = async () => {
+    if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
+    if (styling) return; // a generation is already in flight
+    setStyling("partial"); setStyleErr("");
+    await generateAndAppendLooks(2, "append");
+    setStyling(false);
   };
 
   // Apply multi-select filters
@@ -814,7 +846,7 @@ export default function App() {
             disabled={styling}>
             {styling
               ? <><span style={s.spinnerSmLight}/> Styling…</>
-              : <><Icon path={icons.sparkle} size={15}/> Generate 3 Looks</>}
+              : <><Icon path={icons.sparkle} size={15}/> Style Me</>}
           </button>
         </>
       )}
@@ -878,6 +910,21 @@ export default function App() {
               }}
                 style={{...s.navBtn, ...(view===v ? s.navActive : {})}}>
                 {label}
+                {v === "style" && styling && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      marginLeft: 6,
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: "var(--color-accent)",
+                      animation: "pulse 1.4s ease-in-out infinite",
+                      verticalAlign: "middle",
+                    }}
+                    title="Styling in background"
+                  />
+                )}
               </button>
             ))}
             <button
@@ -1256,6 +1303,27 @@ export default function App() {
                 setStylePanelOpen(true);
               }}/>
           ))}
+          {/* "Style 2 more" — show once we have at least one look but fewer
+              than 3, and no generation is in flight. Lets the user stretch
+              the first-look-fast flow into the full 3-up when they want it. */}
+          {outfits && outfits.length > 0 && outfits.length < 3 && !styling && (
+            <button
+              onClick={handleStyleMore}
+              style={{
+                ...s.btnSecondary,
+                width: "100%",
+                padding: "12px 16px",
+                marginTop: 12,
+                fontSize: 13,
+                letterSpacing: "0.06em",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}>
+              <Icon path={icons.sparkle} size={14}/> Style {3 - outfits.length} more
+            </button>
+          )}
           {!outfits && !styling && (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>

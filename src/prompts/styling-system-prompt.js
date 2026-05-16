@@ -26,8 +26,11 @@ WHO YOU'RE DRESSING: Elyce dresses effortlessly, elegantly, with feminine flare 
 OCCASION TONE:
 • Work: Polished, taken seriously, never stiff or corporate. Chic, effortless, powerful.
 • Work Dinner: Work-appropriate but elevated — desk to restaurant without changing.
-• Dinner / Date Night: Show silhouette. Feminine, considered, a little sharp. Effortless, chic, classy.
+• Casual: Daytime out — brunch, lunch, friends, errands. Polished but easy. Denim welcome. NOT athleisure.
+• Dinner: Evening out — dinner, date, drinks. Show silhouette. Feminine, considered, a little sharp.
 • Occasion: Cocktail parties, weddings, galas, black-tie. Dress-led when an occasion-flagged dress exists; otherwise formal separates (silk × satin, structured × fluid). Heels and a refined bag.
+• Travel: Vacation. WEATHER drives the look. Hot = swim, cover-ups, sundresses, sandals. Cool = layers, athleisure, boots. Comfort outranks polish here.
+• Lounge: Athleisure and chilling at home. Sets, leggings, joggers, soft knits, slip dresses. Sneakers or barefoot-flats.
 • All occasions: Effortless and elegant with feminine flare and a subtle edge.
 
 BRAND REGISTER (aesthetic, not label): tailored/minimal — The Row, Totême, Khaite, Saint Laurent; easy/feminine — Sézane, Generation Love, Posse, Faithfull, Love Shack Fancy, Tularosa.
@@ -70,7 +73,7 @@ Notes do TWO jobs and you must read them for both:
    • "winter only" / "cold weather" → exclude from Hot/Warm/Mild generations.
    • "summer only" / "warm weather" → exclude from Cool/Cold generations.
    • "evening only" / "formal only" → exclude from daytime/Casual occasions.
-   • "wedding only" / "occasion only" → exclude from Work/Casual/Date Night generations unless the occasion explicitly matches.
+   • "wedding only" / "occasion only" → exclude from Work/Casual/Dinner generations unless the occasion explicitly matches.
    • Any "X only" or "for X" phrase in notes is the user telling you "don't suggest this outside of X." Honor it.
 
 ★ ELEGANCE — WHO YOU'RE STYLING FOR ★
@@ -102,6 +105,7 @@ export function buildStylingPrompt({
   occasionSlots,
   availabilityNote,
   stylingDirections = [],
+  lookCount = 3,
   moodPrompt = "",
   requestedShortIds = [],
   inspirationVibes = [],
@@ -126,15 +130,17 @@ export function buildStylingPrompt({
 
   const weatherBlock = formatWeather(weather);
 
+  const countWord = lookCount === 1 ? "ONE" : lookCount === 2 ? "BOTH" : "ALL THREE";
+  const countNoun = lookCount === 1 ? "the look" : `${lookCount === 2 ? "both" : "the three"} looks`;
   const requestBlock = freeTextRequest
-    ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis is the THEME for ALL THREE looks — every look must honor it, not just the first. Read it as a styling brief: if she says "all black", every look is black; if she says "navy and brown", every look uses that palette; if she says "include my red blazer", at least one look features the blazer. The three looks should still feel distinct (different hero piece, different proportion, different texture story) but each one resolves the same brief in its own way.\n`
+    ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis is the THEME for ${countWord} look${lookCount === 1 ? "" : "s"} — ${lookCount === 1 ? "the look must honor it" : "every look must honor it, not just the first"}. Read it as a styling brief: if she says "all black", ${countNoun} ${lookCount === 1 ? "is" : "are"} black; if she says "navy and brown", ${countNoun} use that palette; if she says "include my red blazer", at least one look features the blazer.${lookCount > 1 ? ` ${countNoun.charAt(0).toUpperCase() + countNoun.slice(1)} should still feel distinct (different hero piece, different proportion, different texture story) but each one resolves the same brief in its own way.` : ""}\n`
     : "";
 
   // Items the sampler matched against the free-text request. The AI tends to
   // ignore "include my red blazer" — pinning the matched IDs explicitly fixes
   // that. The validator also enforces ≥1 of these IDs appears in the output.
   const requiredItemsBlock = requestedShortIds.length > 0
-    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the looks (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ALL THREE looks. Do not substitute the named pieces; do not water down the theme on looks 2 and 3.\n\n⚠️ EXPLICIT-REQUEST OVERRIDE: these named pieces override the occasion's default item-type bans for this generation (e.g. if she asked for jeans on Work, jeans are allowed in the look that uses them — weather and toggled exclusions still apply). Build looks that flatter the named pieces; lean into a "polished casual" register if the named piece is more casual than the occasion's norm.\n`
+    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the look${lookCount === 1 ? "" : "s"} (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ${countWord} look${lookCount === 1 ? "" : "s"}.${lookCount > 1 ? " Do not substitute the named pieces; do not water down the theme on subsequent looks." : ""}\n\n⚠️ EXPLICIT-REQUEST OVERRIDE: these named pieces override the occasion's default item-type bans for this generation (e.g. if she asked for jeans on Work, jeans are allowed in the look that uses them — weather and toggled exclusions still apply). Build looks that flatter the named pieces; lean into a "polished casual" register if the named piece is more casual than the occasion's norm.\n`
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
@@ -162,15 +168,18 @@ export function buildStylingPrompt({
   // "TEXTURE HERO:") that the model used to parrot verbatim into the rationale.
   // Strip the label prefix so only the descriptive prose reaches the AI.
   const stripStrategyLabel = (s) => (s || "").replace(/^[A-Z][A-Z0-9\s+/\-]{2,}:\s*/, "").trim();
-  const directionsBlock = stylingDirections.length === 3
+  const ORDINALS = ["first", "second", "third"];
+  const directionsBlock = stylingDirections.length >= 1
     ? `\nCREATIVE BRIEFS — internal directives. They shape what you build but must NOT appear in the rationale text.
 
-For the first look — color: ${stripStrategyLabel(stylingDirections[0].color)} | proportion: ${stripStrategyLabel(stylingDirections[0].proportion)} | hero: ${stripStrategyLabel(stylingDirections[0].hero)}
-For the second look — color: ${stripStrategyLabel(stylingDirections[1].color)} | proportion: ${stripStrategyLabel(stylingDirections[1].proportion)} | hero: ${stripStrategyLabel(stylingDirections[1].hero)}
-For the third look — color: ${stripStrategyLabel(stylingDirections[2].color)} | proportion: ${stripStrategyLabel(stylingDirections[2].proportion)} | hero: ${stripStrategyLabel(stylingDirections[2].hero)}
+${stylingDirections.map((d, i) =>
+  `For the ${ORDINALS[i] || `${i+1}th`} look — color: ${stripStrategyLabel(d.color)} | proportion: ${stripStrategyLabel(d.proportion)} | hero: ${stripStrategyLabel(d.hero)}`
+).join("\n")}
 
 Honor these silently — the rationale stays a friendly caption (see rationale style rules above).\n`
     : "";
+
+  const lookCountInstruction = `\nRETURN EXACTLY ${lookCount} look${lookCount === 1 ? "" : "s"} via the return_looks tool.${lookCount === 1 ? " Just one — single look generation, fast path." : ""}\n`;
 
   const dynamicBody = `════════════════════════════════════════════════════════
 REQUEST
@@ -180,7 +189,7 @@ OCCASION: ${occasionNote}
 ${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}
 ${stylePrefsBlock}${recentBlock}
 ${availabilityNote}
-${directionsBlock}
+${directionsBlock}${lookCountInstruction}
 ────────────────────────────────────────────────────────
 WARDROBE INVENTORY (${closetCount} items — USE ONLY THESE):
 ${closetItems}
