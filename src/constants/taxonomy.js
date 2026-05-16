@@ -14,7 +14,7 @@ export const TAXONOMY = {
   Sets:         ["Day Sets","Night Sets"],
   Jumpsuits:    [],
   Loungewear:   ["Bottoms","Hoodies / Sweatshirts","Tops"],
-  Athleisure:   ["Bra/Crop Top","Dresses","Long Sleeve","Pants","Short Sleeve","Shorts","Skirts"],
+  Athleisure:   ["Bra/Crop Top","Dresses","Leggings","Long Sleeve","Pants","Short Sleeve","Shorts","Skirts"],
   Swim:         ["Swimsuits","Cover-Ups"],
   Outerwear:    ["Blazers","Coats","Jackets"],
   Occasionwear: ["Cocktail Dresses","Evening Accessories","Formal Separates","Gowns"],
