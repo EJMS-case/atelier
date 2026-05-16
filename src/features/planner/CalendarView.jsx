@@ -497,6 +497,9 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [swapTarget, setSwapTarget] = useState(null); // { dayIdx, item } when picking a replacement
+  // Error string from handlePreview — surfaces buildDailyOutfits exceptions or
+  // empty-result cases that would otherwise look like the button did nothing.
+  const [previewError, setPreviewError] = useState("");
   // Ref to the preview section so we can scroll it into view after generation —
   // on mobile the bottom-sheet button sits at the viewport edge and the per-day
   // cards render below it, off-screen. Without auto-scroll users tap Preview
@@ -543,6 +546,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
 
   async function handlePreview() {
     setLoading(true);
+    setPreviewError("");
     try {
       // Get the climate brief first (if we don't already have one) so the
       // generated outfits use destination-accurate weather, not NYC May.
@@ -555,8 +559,21 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         occasions,
         weather: effectiveWeather(),
       });
+      // Diagnose silent failures — buildDailyOutfits returns one entry per day
+      // even when no items match, so an empty result means every slot was
+      // filtered out by weather/occasion. Surface that to the user instead of
+      // rendering an empty preview that looks like the button did nothing.
+      const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
+      console.log("[Trip Preview] dayCount=", dayCount, "weather=", effectiveWeather(), "highs=", highs, "totalItems=", totalItems, "perDay=", dailyOutfits.map(d => d.length));
+      if (totalItems === 0) {
+        setPreviewError(`No outfits could be built — your wardrobe has ${items.length} items but none match ${effectiveWeather()} weather for a Casual day. Try a different climate, or add more weather-appropriate pieces.`);
+        return;
+      }
       setDayOutfits(dailyOutfits);
       setDayOccasions(occasions);
+    } catch (e) {
+      console.error("[Trip Preview] failed:", e);
+      setPreviewError(`Couldn't build the preview: ${e.message || "unknown error"}`);
     } finally {
       setLoading(false);
     }
@@ -737,6 +754,13 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
             ? <><span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span> Building looks…</>
             : dayOutfits ? "↺ Rebuild all looks" : "Preview looks"}
         </button>
+
+        {previewError && (
+          <div style={{ marginTop: 12, padding: "10px 12px", background: "#FBE9E7", border: `1px solid ${PALETTE.accent}`, borderRadius: 6, fontSize: 12, color: PALETTE.accent, lineHeight: 1.5 }}>
+            {previewError}
+            <button onClick={() => setPreviewError("")} style={{ marginLeft: 8, background: "none", border: "none", color: PALETTE.accent, cursor: "pointer", fontSize: 11, padding: 0 }}>✕</button>
+          </div>
+        )}
 
         {dayOutfits && (
           <div ref={previewRef} style={{ marginTop: 16 }}>
