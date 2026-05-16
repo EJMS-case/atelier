@@ -1506,11 +1506,13 @@ export default function App() {
           rmbgKey={rmbgKey}
           items={items}
           onUpdateItem={updateItem}
-          onSave={(k, rk) => {
+          onSave={(k, rk, opts = {}) => {
             saveApiKey(k);  setApiKey(k);
             saveRmbgKey(rk); setRmbgKey(rk);
             sb.saveSettings({ anthropicKey: k, rmbgKey: rk }).catch(() => {});
-            setView("closet");
+            // Auto-save (silent) doesn't navigate; only the explicit
+            // Save Settings button bounces back to closet.
+            if (!opts.silent) setView("closet");
           }}
           onAddItems={addItems}
           onForceSync={forceSyncAll}
