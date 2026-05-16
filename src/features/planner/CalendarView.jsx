@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
-import { buildDailyOutfits, TRIP_VIBES, defaultOccasionsForVibe, alternativesFor } from "./tripPacker.js";
+import { buildDailyOutfits, TRIP_VIBES, TRIP_ACTIVITIES, defaultOccasionsForVibe, alternativesFor } from "./tripPacker.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast } from "../../lib/weather.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
@@ -485,6 +485,11 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
   const [vibe, setVibe] = useState("Casual");
+  // Activity = what they'll actually be doing. Drives item-pool filtering
+  // (Theme Park bans heels + jeans; Beach unbans swim; Active bans silk
+  // and heels). Trip-level rather than per-day since most trips have one
+  // dominant activity.
+  const [activity, setActivity] = useState("Sightseeing");
   // "auto" means: use the AI-fetched brief if present, else the seasonal estimate
   const [weather, setWeather] = useState("auto");
   // Climate brief (temp range + notes + packing tip) — populated by analyzeTripDestination.
@@ -558,6 +563,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       const { dailyOutfits } = buildDailyOutfits(items, highs, {
         occasions,
         weather: effectiveWeather(),
+        activity,
       });
       // Diagnose silent failures — buildDailyOutfits returns one entry per day
       // even when no items match, so an empty result means every slot was
@@ -586,6 +592,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     const single = buildDailyOutfits(items, [effectiveHigh()], {
       occasions: [dayOccasions[dayIdx]],
       weather: effectiveWeather(),
+      activity,
     });
     const newOutfits = dayOutfits.slice();
     newOutfits[dayIdx] = single.dailyOutfits[0];
@@ -617,6 +624,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     const single = buildDailyOutfits(items, [effectiveHigh()], {
       occasions: [occ],
       weather: effectiveWeather(),
+      activity,
     });
     const newOutfits = dayOutfits.slice();
     newOutfits[dayIdx] = single.dailyOutfits[0];
@@ -731,6 +739,19 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
               {WEATHER_BUCKETS.map(w => <option key={w} value={w}>{w}</option>)}
             </select>
           </label>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <label style={{ display: "block", fontSize: 11, color: PALETTE.muted }}>
+            Activity
+            <select value={activity} onChange={e => { setActivity(e.target.value); invalidatePreview(); }}
+              style={{ ...dateInput, width: "100%" }}>
+              {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
+            </select>
+          </label>
+          <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic" }}>
+            Theme Park bans heels &amp; delicate fabrics · Beach unbans swim · Active bans silk &amp; heels
+          </div>
         </div>
 
         {/* Climate brief — only shown once a destination + brief exists. */}
