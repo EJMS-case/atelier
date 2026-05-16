@@ -49,12 +49,14 @@ export const AutoDetectTool = {
 // 2. generateValidatedLooks — 3-outfit styling response
 // ─────────────────────────────────────────────────────────────────────────────
 
-// id MUST match the W-ID format used throughout the styling pipeline. The
-// regex doubles as a hard guard against the AI hallucinating real wardrobe
-// IDs (timestamp_random suffixes etc.) — those get rejected at the schema
-// layer before reaching the validator's "non-existent item" check.
+// id format is enforced at the JSON-schema layer (sent to Anthropic so the
+// model gets a pattern constraint) and at the normalize step in
+// styling-validator (drops non-W-ID items before downstream checks). We
+// deliberately keep Zod permissive here so a partially-bad response can
+// flow through to normalize → strip → "use only W-IDs" retry hint, rather
+// than getting a generic "schema validation failed" message.
 const LookItemSchema = z.object({
-  id: z.string().regex(/^W\d{1,3}$/),
+  id: z.string(),
   role: z.string().optional(),
   x: z.number().min(0).max(100).optional(),
   y: z.number().min(0).max(100).optional(),
