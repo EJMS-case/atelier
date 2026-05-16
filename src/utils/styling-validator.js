@@ -695,17 +695,28 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
 
 function normalizeResponse(parsed) {
   if (!parsed.looks) return parsed;
+  let strippedTotal = 0;
   parsed.looks = parsed.looks.map(look => {
     if (!look.items) return look;
-    look.items = look.items.map(item => {
-      if (typeof item === "string") {
-        return { id: item.replace(/^ID:/i, "").trim(), role: "supporting" };
-      }
-      if (item.id) {
-        item.id = String(item.id).replace(/^ID:/i, "").trim();
-      }
-      return item;
-    });
+    // Filter out anything whose id isn't a valid W-ID (W001, W014, etc.).
+    // The model occasionally hallucinates real-looking IDs (timestamp_random
+    // suffixes) that aren't in the sampled inventory. Stripping them at the
+    // normalize step means downstream validators see only legitimate items;
+    // if a look ends up undersized, HC2 catches it and triggers a retry with
+    // an explicit "use only W-IDs" prompt.
+    const before = look.items.length;
+    look.items = look.items
+      .map(item => {
+        if (typeof item === "string") {
+          return { id: item.replace(/^ID:/i, "").trim(), role: "supporting" };
+        }
+        if (item.id) {
+          item.id = String(item.id).replace(/^ID:/i, "").trim();
+        }
+        return item;
+      })
+      .filter(item => /^W\d{1,3}$/.test(item.id));
+    strippedTotal += before - look.items.length;
     // Fill in defaults for missing new-format fields
     if (!look.vibe) look.vibe = look.mood || "";
     if (!look.silhouette) look.silhouette = "";
@@ -720,6 +731,10 @@ function normalizeResponse(parsed) {
   // commentary to the user. App.jsx no longer renders it, but clear it here
   // too so downstream consumers (saved looks, planner) don't see it either.
   delete parsed.notes;
+  // Side-channel: how many items were dropped for having non-W-ID format.
+  // The retry loop uses this to send the model an unambiguous corrective
+  // prompt without echoing the bad IDs back (which only encourages copying).
+  parsed.__strippedInvalidIds = strippedTotal;
   return parsed;
 }
 
@@ -835,13 +850,21 @@ export async function generateValidatedLooks({
 
   let lastFailures = [];
   let lastParsed = null;
+  let lastStrippedCount = 0;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     // Append retry failures to the dynamic body — never to the cached preamble.
     let dynamicText = dynamicBody;
     if (attempt > 0 && lastFailures.length > 0) {
       const failureList = lastFailures.map(f => `- ${f.message}`).join("\n");
-      dynamicText += `\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
+      let prefix = "";
+      // If the prior response had stripped IDs, lead with a clear correction.
+      // We intentionally don't echo the bad IDs back — that tends to make the
+      // model reuse them. State the rule and the count instead.
+      if (lastStrippedCount > 0) {
+        prefix = `\n\n🛑 IDs RULE VIOLATION: your last response had ${lastStrippedCount} item ID(s) that did NOT match the required W-ID format (W001-W999). Those items were discarded, which is why looks below are undersized.\n\nYou MUST use ONLY W-IDs from the WARDROBE INVENTORY above. Examples of valid IDs: W001, W014, W092. NEVER return long numeric IDs, timestamps, or UUIDs.\n`;
+      }
+      dynamicText += `${prefix}\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
     }
 
     // Build message content — always an array. Cache the static preamble so
@@ -955,8 +978,11 @@ export async function generateValidatedLooks({
       continue;
     }
 
-    // Normalize the response to the old-format callers expect
+    // Normalize the response to the old-format callers expect. Side effect:
+    // sets parsed.__strippedInvalidIds so the next retry can warn the model
+    // about hallucinated IDs without echoing them back.
     let parsed = normalizeResponse(shapeCheck.data);
+    lastStrippedCount = parsed.__strippedInvalidIds || 0;
 
     // Run all validation checks
     const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds);
@@ -969,7 +995,7 @@ export async function generateValidatedLooks({
 
     lastFailures = failures;
     lastParsed = parsed;
-    console.warn(`[Atelier Validator] Attempt ${attempt + 1} failed with ${failures.length} issues:`,
+    console.warn(`[Atelier Validator] Attempt ${attempt + 1} failed with ${failures.length} issues (stripped ${lastStrippedCount} invalid IDs):`,
       failures.map(f => f.message));
   }
 
