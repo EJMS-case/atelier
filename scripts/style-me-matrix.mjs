@@ -328,10 +328,12 @@ const positives = [
 ];
 
 const negatives = [
-  // Work + Cool with no layer must fail HC_SHOULDER (bare shoulders at work).
+  // Work + Cool with a sleeveless tank and no layer must fail HC_SHOULDER —
+  // a sleeved blouse alone now satisfies the rule, so the negative case
+  // requires bare shoulders (tank) to verify the validator still triggers.
   expectRejected(
-    "Work + Cool with no layer",
-    { looks: [buildLook({ vibe: "polished", items: [reverseMap["blouse"], reverseMap["trousers-wool"], reverseMap["loafers"], reverseMap["bag"]] })] },
+    "Work + Cool with sleeveless top and no layer",
+    { looks: [buildLook({ vibe: "polished", items: [reverseMap["tank"], reverseMap["trousers-wool"], reverseMap["loafers"], reverseMap["bag"]] })] },
     { slots: slotsFor("Work", "Cool (40-54°F)"), occasion: "Work", weather: "Cool (40-54°F)" }
   ),
   // Hot + a wool blazer must fail the weather check.
