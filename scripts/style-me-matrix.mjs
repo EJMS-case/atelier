@@ -138,10 +138,11 @@ function pickBottom(occasion, w) {
 }
 
 function pickShoes(occasion, w) {
-  // Sandals are banned for Work / Work Dinner / Dinner and "Dinner" also
-  // bans Tanks/Shorts/T-Shirts. For Dinner-class occasions on hot/warm we
-  // fall back to heels (Dinner allows them) or flats / loafers elsewhere.
-  if (occasion === "Date Night") return reverseMap["heels"];
+  // Sandals are banned for Work / Work Dinner / Dinner / Occasion. Date Night
+  // and Occasion are heels-only. Dinner allows boots in cold but otherwise
+  // heels. Casual / Travel / Lounge are the only buckets that take sandals
+  // in hot weather.
+  if (occasion === "Date Night" || occasion === "Occasion") return reverseMap["heels"];
   if (occasion === "Dinner") {
     return isCold(w) ? reverseMap["boots"] : reverseMap["heels"];
   }

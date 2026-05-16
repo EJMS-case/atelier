@@ -71,6 +71,18 @@ export const OCCASION_SLOTS = {
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
     promptNote: "DINNER: Chic and considered — covers dinners, dinner parties, occasion events. Every look MUST have a bottom (pants/skirt) OR a dress. Elevated fabrics, polished shoes, a real bag. One look may push slightly bolder (a saturated color, a texture moment).",
   },
+  Occasion: {
+    // Cocktail parties, weddings, galas, black-tie events. The sampler's
+    // OCCASION_PREFILTERS.Occasion drops every non-event piece up front —
+    // only Occasionwear items and dresses whose notes describe evening/
+    // cocktail/event/wedding/formal/gown wear reach the inventory. Required
+    // shoes are heels; the look is dress-led with elevated separates as
+    // backup if no qualifying dress exists.
+    required: { shoes: ["Heels"], bag: true },
+    optional: { dress: ["Cocktail Dresses","Gowns","Midi","Mini"], top: ["Blouses","Bodysuits","Tops"], bottom: ["Formal Separates","Satin/Silk","Skirts"], layer: ["Blazers","Jackets"], belt: true, accessory: ["Evening Accessories"] },
+    banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals"], keywords: ["casual only","sneakers","athletic","weekend only"] },
+    promptNote: "OCCASION: Cocktail parties, weddings, galas, black-tie events. Lead with a dress when one is available — the sampler has already narrowed the inventory to Occasionwear pieces (Cocktail Dresses, Gowns, Formal Separates, Evening Accessories) and dresses whose notes describe evening/cocktail/wedding/event wear. If no qualifying dress is available, build with formal separates (silk blouse + satin skirt, tailored trouser + occasion top). Heels REQUIRED. A refined evening or structured bag. NO jeans, NO casual fabrics, NO sneakers, NO athleisure.",
+  },
   Travel: {
     required: { top: true, bottom: true, shoes: true, bag: true },
     optional: { layer: true, belt: true, accessory: true },

@@ -27,6 +27,7 @@ OCCASION TONE:
 • Work: Polished, taken seriously, never stiff or corporate. Chic, effortless, powerful.
 • Work Dinner: Work-appropriate but elevated — desk to restaurant without changing.
 • Dinner / Date Night: Show silhouette. Feminine, considered, a little sharp. Effortless, chic, classy.
+• Occasion: Cocktail parties, weddings, galas, black-tie. Dress-led when an occasion-flagged dress exists; otherwise formal separates (silk × satin, structured × fluid). Heels and a refined bag.
 • All occasions: Effortless and elegant with feminine flare and a subtle edge.
 
 BRAND REGISTER (aesthetic, not label): tailored/minimal — The Row, Totême, Khaite, Saint Laurent; easy/feminine — Sézane, Generation Love, Posse, Faithfull, Love Shack Fancy, Tularosa.
