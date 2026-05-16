@@ -74,6 +74,27 @@ const OCCASION_PREFILTERS = {
     removeSubcategories: new Set(["Jeans", "Gowns", "Formal Separates"]),
     removeKeywords: ["ripped", "distressed", "gown", "formal"],
   },
+  Occasion: {
+    // Cocktail parties, weddings, galas, black-tie events. Strip everyday
+    // casual stuff and anything athletic / loungey. The real discriminator
+    // is `keep` below — for Dresses, only Occasionwear-category items or
+    // dresses whose notes describe evening/cocktail/wedding/formal wear
+    // pass through. Other categories (Tops, Bottoms, Shoes, Bags) keep
+    // their full pools so the AI can build occasion-appropriate separates
+    // when no qualifying dress exists.
+    removeCategories: new Set(["Athleisure", "Loungewear", "Swim"]),
+    removeSubcategories: new Set(["Jeans", "T-Shirts", "Tanks", "Shorts", "Sneakers"]),
+    removeKeywords: ["ripped", "distressed", "athletic", "sneakers", "casual only", "weekend only"],
+    // Category-specific KEEP gate: dresses outside Occasionwear must explicitly
+    // be flagged as event-appropriate in their notes/name/subcategory.
+    keep: (item) => {
+      if (item.category !== "Dresses") return true;
+      const sub = (item.subcategory || "").toLowerCase();
+      if (/cocktail|gown|formal|evening/.test(sub)) return true;
+      const text = ((item.name || "") + " " + (item.notes || "")).toLowerCase();
+      return /\b(cocktail|evening|gown|formal|black.?tie|wedding|gala|event|occasion|black.?tie.?optional|red.?carpet)\b/.test(text);
+    },
+  },
 };
 
 // ── Exclusion filter → item test mapping ─────────────────────────────────────
@@ -267,6 +288,9 @@ export function sampleClosetItems({
         const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
         if (preFilter.removeKeywords.some(kw => text.includes(kw))) return false;
       }
+      // Optional category-specific keep gate (e.g. Occasion: dresses must be
+      // Occasionwear-category or have evening/cocktail keywords in notes).
+      if (typeof preFilter.keep === "function" && !preFilter.keep(it)) return false;
       return true;
     });
   }
