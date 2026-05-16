@@ -114,18 +114,89 @@ function itemSlot(it) {
  *                                        (applied to every day if set)
  * @returns {{ dailyOutfits: Object[][], packingList: Object[], uncovered: number[] }}
  */
+// ── Activity-based filters ────────────────────────────────────────────────────
+// Activity is a trip-level intent (Theme Park / Beach / Resort / Active /
+// Sightseeing). It layers on top of weather + occasion and removes items
+// that don't make sense for the activity regardless of how they score
+// for the day's occasion. Without this layer Hot+Casual at Disney was
+// returning heels and silk maxis because nothing was hard-banning them.
+export const TRIP_ACTIVITIES = ["Sightseeing", "Theme Park", "Beach", "Resort", "Active", "City Walking"];
+
+const ACTIVITY_FILTERS = {
+  "Theme Park": {
+    // All-day walking. Hard-ban anything you'd regret by lunch.
+    bannedCategories: [],
+    bannedSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Cocktail Dresses", "Gowns", "Formal Separates", "Mules"]),
+    bannedRegex: /\b(stiletto|silk.?gown|sequin|delicate|dry.?clean|ankle.?strap|jean)\b/i,
+    allowSwim: false,
+  },
+  "Beach": {
+    // Swim and Loungewear are first-class here. Heels banned.
+    bannedCategories: [],
+    bannedSubcategories: new Set(["Heels", "Pumps", "Boots", "Stiletto"]),
+    bannedRegex: /\b(wool|cashmere|chunky|knit dress)\b/i,
+    allowSwim: true,
+  },
+  "Resort": {
+    // Spa / pool day plus poolside dinner. Heels-out, swim in, sandals in.
+    bannedCategories: [],
+    bannedSubcategories: new Set(["Boots", "Stiletto"]),
+    bannedRegex: /\b(wool|cashmere|chunky)\b/i,
+    allowSwim: true,
+  },
+  "Active": {
+    // Hiking, sports, gym, anything that demands range of motion.
+    bannedCategories: ["Occasionwear"],
+    bannedSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Mules", "Cocktail Dresses", "Gowns", "Formal Separates"]),
+    bannedRegex: /\b(silk|satin|lace|sequin|stiletto|delicate|dry.?clean)\b/i,
+    allowSwim: false,
+  },
+  "City Walking": {
+    // Sightseeing in a city — leans casual but still polished. No heels,
+    // jeans allowed, blazers allowed for evening transitions.
+    bannedCategories: [],
+    bannedSubcategories: new Set(["Heels", "Stiletto", "Mules"]),
+    bannedRegex: /\b(stiletto|ankle.?strap)\b/i,
+    allowSwim: false,
+  },
+  // Default — minimal filtering.
+  "Sightseeing": {
+    bannedCategories: [],
+    bannedSubcategories: new Set(),
+    bannedRegex: null,
+    allowSwim: false,
+  },
+};
+
 export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const dayCount = dailyHighsF.length;
   const occasions = opts.occasions && opts.occasions.length === dayCount
     ? opts.occasions
     : Array.from({ length: dayCount }, () => "Casual");
+  const activity = opts.activity || "Sightseeing";
+  const actFilter = ACTIVITY_FILTERS[activity] || ACTIVITY_FILTERS.Sightseeing;
 
   // Pool of eligible items per day, filtered by that day's weather + occasion.
   const dayPools = dailyHighsF.map((hi, d) => {
     const wxBucket = opts.weather || bucketFromHigh(hi);
-    const pool = filterByWeather(items, wxBucket).filter(it =>
-      it.category && it.category !== "Swim" && it.category !== "Loungewear"
-    );
+    let pool = filterByWeather(items, wxBucket).filter(it => {
+      if (!it.category) return false;
+      // Default-banned: swim + loungewear unless the activity explicitly
+      // re-admits them (Beach / Resort want swim + cover-ups).
+      if (!actFilter.allowSwim && (it.category === "Swim" || it.category === "Loungewear")) return false;
+      // Hot-weather hard filter on heels regardless of activity — knit and
+      // boot bans live in filterByWeather but heels-in-heat sneaks through
+      // because heels are technically light-fabric.
+      if (/^hot$/i.test(wxBucket) && /heel|pump|stiletto/i.test(it.subcategory || "")) return false;
+      // Activity-specific bans.
+      if (actFilter.bannedCategories.includes(it.category)) return false;
+      if (actFilter.bannedSubcategories.has(it.subcategory)) return false;
+      if (actFilter.bannedRegex) {
+        const text = ((it.name || "") + " " + (it.notes || "") + " " + (it.material || "")).toLowerCase();
+        if (actFilter.bannedRegex.test(text)) return false;
+      }
+      return true;
+    });
     return { pool, occasion: occasions[d], wxBucket, hi };
   });
 
