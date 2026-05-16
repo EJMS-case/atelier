@@ -704,14 +704,24 @@ function normalizeResponse(parsed) {
     // normalize step means downstream validators see only legitimate items;
     // if a look ends up undersized, HC2 catches it and triggers a retry with
     // an explicit "use only W-IDs" prompt.
+    //
+    // Sonnet 4-6 occasionally drops leading zeros ("W51" instead of "W051").
+    // Pad to 3 digits so the validator's W001-padded idMap matches what the
+    // AI returned — without this every unpadded W-ID was triggering a false
+    // "non-existent item" failure.
+    const normalizeWId = (id) => {
+      const m = String(id).match(/^W(\d{1,3})$/i);
+      return m ? `W${m[1].padStart(3, "0")}` : id;
+    };
     const before = look.items.length;
     look.items = look.items
       .map(item => {
         if (typeof item === "string") {
-          return { id: item.replace(/^ID:/i, "").trim(), role: "supporting" };
+          const cleaned = item.replace(/^ID:/i, "").trim();
+          return { id: normalizeWId(cleaned), role: "supporting" };
         }
         if (item.id) {
-          item.id = String(item.id).replace(/^ID:/i, "").trim();
+          item.id = normalizeWId(String(item.id).replace(/^ID:/i, "").trim());
         }
         return item;
       })
