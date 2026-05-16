@@ -74,8 +74,15 @@ export async function analyzeTripDestination(destination, startDate, apiKey) {
  * @param {string}   weather      - "Hot" | "Warm" | "Mild" | "Cool" | "Cold"
  * @param {string}   destination  - e.g. "Paris"
  * @param {string}   apiKey
+ * @param {Object}   [opts]
+ * @param {Array}    [opts.priorDays] - [{ occasion, weather, itemIds: [...] }, ...]
+ *                   for variety across the trip. The AI sees the names of items
+ *                   already used on other days and avoids repeating the hero piece.
+ * @param {Object}   [opts.brief]    - destination brief { climate, weatherNotes,
+ *                   packingTip, tempHighF, tempLowF } — strengthens destination
+ *                   weighting so a Lisbon trip isn't styled like Manhattan.
  */
-export async function generateTripDayLook(items, occasion, weather, destination, apiKey) {
+export async function generateTripDayLook(items, occasion, weather, destination, apiKey, opts = {}) {
   if (!apiKey || !items?.length) return null;
 
   const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
@@ -98,12 +105,44 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}`
   ).join("\n");
 
+  // ── Destination context block: feed the brief in so the AI weighs the city
+  // beyond just "for a trip day in X". Climate notes + packing tip already
+  // capture local sensibility (humidity, walkability, dress codes).
+  const brief = opts.brief;
+  let destBlock = "";
+  if (destination) {
+    const bits = [`This outfit is for **${destination}**.`];
+    if (brief?.climate)      bits.push(`Climate: ${brief.climate}.`);
+    if (brief?.weatherNotes) bits.push(brief.weatherNotes);
+    if (brief?.packingTip)   bits.push(`Local note: ${brief.packingTip}`);
+    bits.push("Match the dress codes, formality, and aesthetic typical for this destination — do not default to NYC styling if the city calls for something else.");
+    destBlock = `\nDESTINATION:\n${bits.join(" ")}\n`;
+  }
+
+  // ── Variety block: show the AI what's already been worn on OTHER days so it
+  // rotates the hero piece. Without this the model picks the same flattering
+  // outfit every day. Cap at 6 most-recent days to keep the prompt tight.
+  const priorDays = (opts.priorDays || []).slice(-6);
+  let varietyBlock = "";
+  if (priorDays.length > 0) {
+    const nameById = new Map(items.map(it => [it.id, it]));
+    const summary = priorDays.map((d, i) => {
+      const names = (d.itemIds || [])
+        .map(id => nameById.get(id))
+        .filter(Boolean)
+        .map(it => it.name)
+        .slice(0, 6);
+      return `  · ${d.occasion || "?"} (${d.weather || "?"}): ${names.join(", ") || "(empty)"}`;
+    }).join("\n");
+    varietyBlock = `\nALREADY WORN ON OTHER TRIP DAYS — DO NOT REPEAT:\n${summary}\n\nVARIETY RULES:\n- Rotate the hero/statement garment (the most distinctive top, dress, blazer, or layer). The hero must NOT appear in more than one day.\n- Basics like jeans, a black turtleneck, or a neutral cardigan may repeat at most twice across the trip.\n- Never produce the exact same outfit twice.\n- Shoes may repeat if the occasion calls for it, but vary them when possible.\n`;
+  }
+
   const destNote = destination ? ` in ${destination}` : "";
   const prompt = `You are a stylist building ONE complete outfit for a trip day${destNote}.
 
 OCCASION: ${occasion}
 WEATHER: ${weather} (around ${highF}°F)
-
+${destBlock}${varietyBlock}
 WARDROBE (use ONLY these IDs):
 ${inventory}
 
