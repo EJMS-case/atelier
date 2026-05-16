@@ -555,10 +555,33 @@ function checkCoordSets(response, idMap, allItems) {
  * cues (satin sheen, fringe, suede) DON'T count — they're accents, not
  * statements, and counting them would block normal tonal layering.
  */
+/**
+ * Statement-piece detector for HC8 (one statement per look). The HC8 rule lists
+ * specific kinds of statement: non-solid PATTERNS (floral, polka, plaid, animal,
+ * paisley, etc.) and explicit EMBELLISHMENT keywords (sequin, lace, brocade…).
+ *
+ * Earlier this used a "not solid" blacklist on the pattern field, which falsely
+ * flagged anything with a non-empty texture tag (e.g. a denim slingback whose
+ * pattern got auto-detected as "denim", or a leather bag tagged "leather").
+ * Now it's a whitelist of pattern values that genuinely read as statement.
+ */
+const STATEMENT_PATTERNS = new Set([
+  "striped", "stripe", "stripes",
+  "plaid", "tartan", "houndstooth", "gingham", "windowpane", "check", "checked", "chevron", "argyle",
+  "floral", "botanical",
+  "polka-dot", "polka dot", "polkadot", "polka.dot",
+  "abstract", "abstract print", "graphic", "graphic print", "print",
+  "animal", "leopard", "zebra", "snake", "cheetah", "tiger",
+  "paisley",
+  "tie-dye", "tie dye",
+  "geometric",
+  "camouflage", "camo",
+]);
+
 function isStatementPiece(item) {
   if (!item) return false;
   const pattern = (item.pattern || "").toLowerCase().trim();
-  if (pattern && pattern !== "solid" && pattern !== "—" && pattern !== "none") return true;
+  if (STATEMENT_PATTERNS.has(pattern)) return true;
   const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
   if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|featherwork|lace)\b/i.test(text)) return true;
   // Bold prints in the name even when pattern field is unset (sparse metadata).
@@ -866,7 +889,7 @@ export async function generateValidatedLooks({
         ({ toolBlock, raw } = await invokeToolStream(
           {
             apiKey,
-            model: "claude-sonnet-4-5",
+            model: "claude-sonnet-4-6",
             maxTokens: 5000,
             temperature: 0.7,
             content: messageContent,
@@ -899,10 +922,13 @@ export async function generateValidatedLooks({
           }
         ));
       } else {
+        // Retries appended a failure list to the dynamic body, so they need
+        // at least as much budget as attempt 0 — not less. Previously 3500,
+        // which caused retries to truncate mid-response.
         ({ toolBlock, raw } = await invokeToolRaw({
           apiKey,
-          model: "claude-sonnet-4-5",
-          maxTokens: 3500,
+          model: "claude-sonnet-4-6",
+          maxTokens: 5000,
           temperature: 0.7,
           content: messageContent,
           tool: LooksTool,
