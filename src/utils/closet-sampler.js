@@ -1,6 +1,11 @@
 // ── STRATIFIED CLOSET SAMPLER ─────────────────────────────────────────────────
-// Intelligently samples ~160 items from the full closet for each generation,
-// ensuring category balance, cold-item boosting, and occasion compatibility.
+// Filters the closet by occasion + weather + exclusions, then passes the FULL
+// surviving pool to the AI. Was a strict ~92-item sample, but the user wanted
+// every eligible piece in play — so the bucket targets below are effectively
+// uncapped. Cold-item logic kept around for ordering bias (under-rotated
+// pieces sort first within each bucket).
+
+import { normalizeOccasion } from "../constants/taxonomy.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -48,37 +53,59 @@ const OCCASION_PREFILTERS = {
     removeKeywords: ["structured", "tailored", "suit", "cocktail", "formal", "evening"],
   },
   Casual: {
-    // Casual = brunch, lunch, hanging with friends, errands. Strip cocktail/
-    // formal stuff and athletic-tagged pieces (those belong to Lounge now).
-    // Denim, knits, blouses, casual dresses all welcome.
+    // Casual = brunch, lunch, hanging with friends, errands. The user wants
+    // Athleisure + Loungewear pulled in here too (sport top with jeans, lounge
+    // hoodie over a denim skirt). Denim — both pants and shorts — fully
+    // welcome. Skirts and shorts surface in warmer weather via the regular
+    // weather pass. Only formal/cocktail stuff is excluded.
     removeCategories: new Set(["Occasionwear"]),
-    removeSubcategories: new Set(["Cocktail Dresses", "Gowns", "Formal Separates"]),
-    removeKeywords: ["athletic", "athleisure only", "gym only", "workout"],
+    removeSubcategories: new Set(["Cocktail Dresses", "Gowns", "Formal Separates", "Stiletto"]),
+    removeKeywords: ["cocktail only", "evening only", "boardroom only"],
   },
-  Travel: {
-    // Travel = vacation wear. Swim and Athleisure stay in the pool — they
-    // are first-class citizens for hot beach trips and active travel days.
-    // We only drop pieces that explicitly violate the vacation register
-    // (super-stiletto formal evening shoes are too much for most trips).
+  Active: {
+    // Active = gym, hike, pilates, run, anything athletic. ONLY Athleisure
+    // items show up — leggings, sports bras, performance tops, athletic
+    // shorts. Plus shoes (for sneakers) and accessories (hair ties, etc.)
+    // since both categories are useful here without polluting the look with
+    // dress sandals or evening clutches.
+    keepCategories: new Set(["Athleisure", "Shoes"]),
+    removeCategories: new Set(),
+    removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Mules", "Loafers"]),
+    removeKeywords: [],
+  },
+  "Travel Day": {
+    // Travel Day = airports, road trips, long-haul transit. Comfort-first —
+    // Athleisure and Loungewear lead, no heels. Lighter category bans than
+    // the old "Travel" bucket because comfort genuinely outranks polish here.
+    removeCategories: new Set(["Occasionwear"]),
+    removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Cocktail Dresses", "Gowns", "Formal Separates"]),
+    removeKeywords: ["boardroom only", "office only", "evening only"],
+  },
+  Vacation: {
+    // Vacation = on-trip resort/beach mode. Swim and cover-ups are first-
+    // class (paired with the warm-weather pass these naturally surface).
+    // Athleisure stays in for active travel days (hike, paddleboard). Drop
+    // the formal-evening stuff that doesn't travel well.
     removeCategories: new Set([]),
-    removeSubcategories: new Set(["Stiletto"]),
-    removeKeywords: ["stiletto", "boardroom only", "office only"],
+    removeSubcategories: new Set(["Pumps", "Stiletto", "Cocktail Dresses", "Gowns", "Formal Separates"]),
+    removeKeywords: ["boardroom only", "office only"],
   },
   Work: {
-    // Covers everyday office through interview/executive — drop the
-    // categorically wrong stuff at the sample stage so evening dresses,
-    // gowns, formal separates, and athleisure never reach the AI for a
-    // Work generation. The OCCASION_SLOTS banned list does the finer-
-    // grained no-jeans / no-tee enforcement on top of this.
+    // Covers everyday office through interview/executive. The user wears
+    // jeans to work (jean pants only — denim shorts are still out), so
+    // "Jeans" stays in-pool here; the OCCASION_SLOTS banned list still
+    // catches shorts and other casual-only subcategories.
     removeCategories: new Set(["Athleisure", "Loungewear", "Swim", "Occasionwear"]),
-    removeSubcategories: new Set(["Jeans", "Cocktail Dresses", "Gowns", "Formal Separates", "Evening Accessories"]),
+    removeSubcategories: new Set(["Shorts", "Cocktail Dresses", "Gowns", "Formal Separates", "Evening Accessories"]),
     removeKeywords: ["ripped", "distressed", "evening", "cocktail", "gown", "formal"],
   },
   "Work Dinner": {
-    // Same hard removals as Work for fit-for-purpose pieces, but cocktail
-    // dresses are allowed (the silhouette can still read professional).
-    removeCategories: new Set(["Athleisure", "Loungewear", "Swim"]),
-    removeSubcategories: new Set(["Jeans", "Gowns", "Formal Separates"]),
+    // Same fit-for-purpose pieces as Work — but no Occasionwear category
+    // (per the user: Work Dinner should never pull from Occasionwear). Note:
+    // cocktail dresses are technically in Occasionwear, so dropping the
+    // whole category excludes them too — that's the user's intent.
+    removeCategories: new Set(["Athleisure", "Loungewear", "Swim", "Occasionwear"]),
+    removeSubcategories: new Set(["Jeans", "Shorts", "Gowns", "Formal Separates"]),
     removeKeywords: ["ripped", "distressed", "gown", "formal"],
   },
   Occasion: {
@@ -152,18 +179,20 @@ function getBucket(item) {
   return "accessories"; // fallback
 }
 
+// Per-bucket caps. The user wants the AI to see everything that survived the
+// occasion + weather + exclusion pre-filters, not a sample of it ("the purpose
+// of this app is so I get use out of everything I have"). 9999 is effectively
+// unlimited — any closet larger than this won't fit in the model context
+// anyway, and at that point we'd want to rework, not paper over with a slice.
 const BUCKET_TARGETS = {
-  tops: 24,
-  bottoms: 18,
-  dresses: 12,
-  outerwear: 10,
-  shoes: 14,
-  bags: 8,
-  accessories: 6,
+  tops: 9999,
+  bottoms: 9999,
+  dresses: 9999,
+  outerwear: 9999,
+  shoes: 9999,
+  bags: 9999,
+  accessories: 9999,
 };
-// Total ~92 items per generation — was 160. Smaller pool = faster API calls
-// AND the cold-boost (40 items) becomes a much larger fraction of what the AI
-// sees, so under-rotated pieces actually surface instead of being drowned out.
 
 const TOTAL_TARGET = Object.values(BUCKET_TARGETS).reduce((a, b) => a + b, 0);
 
@@ -287,6 +316,9 @@ export function sampleClosetItems({
   userId = "default",
 }) {
   const excludeSet = styleExcludes instanceof Set ? styleExcludes : new Set(styleExcludes);
+  // Map legacy occasion strings (e.g. "Travel", "Athleisure", "Activity") to
+  // their current bucket so the prefilter lookup below hits the new keys.
+  occasion = normalizeOccasion(occasion) || occasion;
 
   // ── 0. Free-text override set ──
   // Match the user's request against the UNFILTERED closet. Items she
@@ -329,6 +361,11 @@ export function sampleClosetItems({
   if (preFilter) {
     pool = pool.filter(it => {
       if (freeTextOverrideIds.has(it.id)) return true;
+      // keepCategories acts as an allow-list: if present, items whose category
+      // isn't in the set get dropped immediately. Used by Active (athleisure +
+      // shoes only) to keep evening dresses, work blazers, etc. completely out
+      // of the AI's view.
+      if (preFilter.keepCategories && !preFilter.keepCategories.has(it.category)) return false;
       if (preFilter.removeCategories.has(it.category)) return false;
       if (preFilter.removeSubcategories.has(it.subcategory)) return false;
       if (preFilter.removeKeywords.length > 0) {

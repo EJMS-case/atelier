@@ -52,11 +52,14 @@ export const BAG_NAME_RE = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|
 
 export const SET_TAGS = ["Work","Weekend","Evening","Travel","Casual","Date Night","Seasonal","Formal","Vacation"];
 
-// Tightened to six. Anything finer was overlapping (Dinner / Dinner Party /
-// Lunch / Daytime read identically to the AI). Older saved logs that still
-// reference the legacy labels are normalized at read time — see OCCASION_ALIASES.
+// Occasions the user selects in Style Me, the planner, and the builder. Each
+// is paired with an entry in `OCCASION_SLOTS` (styling.js) and
+// `OCCASION_PREFILTERS` (closet-sampler.js) — adding a new occasion here
+// requires matching entries in both. Legacy labels are routed through
+// OCCASION_ALIASES below so historical logs don't break.
 export const OCCASIONS = [
-  "Work", "Work Dinner", "Casual", "Dinner", "Occasion", "Travel", "Lounge",
+  "Work", "Work Dinner", "Casual", "Active", "Dinner", "Occasion",
+  "Travel Day", "Vacation", "Lounge",
 ];
 
 // Map deprecated occasion labels → the bucket they now live in. Used by any
@@ -66,9 +69,11 @@ export const OCCASION_ALIASES = {
   Executive: "Work",
   "Lunch/Brunch": "Casual",
   Daytime: "Casual",
-  Athleisure: "Casual",
-  Activity: "Casual",
   Weekend: "Casual",
+  // "Athleisure" and "Activity" used to fold into Casual; now they have a
+  // dedicated bucket (Active = athleisure-only generation).
+  Athleisure: "Active",
+  Activity: "Active",
   "Dinner Party": "Dinner",
   "Date Night": "Dinner",
   "Date night": "Dinner",
@@ -80,6 +85,11 @@ export const OCCASION_ALIASES = {
   Gala: "Occasion",
   Formal: "Occasion",
   "Black Tie": "Occasion",
+  // The old single "Travel" bucket was overloaded — long-haul flight clothes
+  // are very different from beach vacation clothes. Existing logs default to
+  // "Travel Day" (transit/airport); the user re-tags trip days as "Vacation"
+  // when they want resort-mode generation.
+  Travel: "Travel Day",
 };
 
 export function normalizeOccasion(o) {
