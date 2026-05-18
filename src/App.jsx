@@ -128,6 +128,11 @@ export default function App() {
   // Editing a piece from Style Me used to land back on Home — annoying when
   // you wanted to keep flipping through the same look set.
   const [editReturnView, setEditReturnView] = useState("closet");
+  // Where to send the user when the SilhouetteBuilder closes. Mirrors
+  // editReturnView for the item-edit screen: capture the caller's view on
+  // open, restore it on close — otherwise saving a planner edit dumps you
+  // on the empty Style Me screen instead of the page you came from.
+  const [builderReturnView, setBuilderReturnView] = useState(null);
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
   const [inspirations, setInspirations] = useState([]);
@@ -1253,7 +1258,16 @@ export default function App() {
             setFavorites(prev => [...(Array.isArray(result) ? result : [result]), ...prev]);
           }}
           onSchedule={async (plan) => { await savePlan(plan); }}
-          onClose={() => { setManualBuilderOpen(false); setEditingPlan(null); }}
+          onClose={() => {
+            setManualBuilderOpen(false);
+            setEditingPlan(null);
+            // Return to whatever view opened the builder (Saved, Planner,
+            // etc.). Clear the saved return so the next opener can set it.
+            if (builderReturnView && builderReturnView !== "style") {
+              setView(builderReturnView);
+            }
+            setBuilderReturnView(null);
+          }}
         />
       )}
 
@@ -1379,11 +1393,13 @@ export default function App() {
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onEditPlan={(iso, plan) => {
               setEditingPlan({ iso, plan });
+              setBuilderReturnView(viewRef.current);
               setManualBuilderOpen(true);
               setView("style");
             }}
             onBuildDay={(iso, existingIds) => {
               setEditingPlan({ iso, plan: { date: iso, items: existingIds } });
+              setBuilderReturnView(viewRef.current);
               setManualBuilderOpen(true);
               setView("style");
             }}

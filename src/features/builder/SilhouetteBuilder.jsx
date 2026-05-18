@@ -622,6 +622,17 @@ export default function SilhouetteBuilder({
                     style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
                     ↓ Back
                   </button>
+                  {/* Direct remove — way faster than reopening the slot picker
+                      to un-toggle. Clears the canvas active-key after the
+                      item is gone so the toolbar collapses. */}
+                  <button
+                    onClick={() => {
+                      togglePick(activeItem.slot, activeItem.item.id);
+                      setActiveCanvasKey(null);
+                    }}
+                    style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.accent, cursor: "pointer", letterSpacing: "0.04em" }}>
+                    ✕ Remove
+                  </button>
                 </>
               );
             })()}
@@ -739,26 +750,28 @@ export default function SilhouetteBuilder({
         placeholder={saveMode === "schedule" ? "What you're doing (optional)" : "Name this look (optional)"}
         style={{ width: "100%", padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, marginBottom: 10, background: "#fff" }}/>
 
-      {/* Save-mode selector (Style Me flow only — calendar edits go straight to Save) */}
-      {saveMode !== "schedule" && (
-        <div style={{ display: "flex", gap: 4, marginBottom: 8, border: `1px solid ${PALETTE.line}`, borderRadius: 6, padding: 3, background: "#fff" }}>
-          {[["looks","Save"],["favorite","Favorite"]].map(([k, label]) => (
-            <button key={k} onClick={() => setSaveMode(k)}
-              style={{
-                flex: 1,
-                padding: "7px 4px",
-                border: "none",
-                borderRadius: 4,
-                background: saveMode === k ? PALETTE.ink : "transparent",
-                color: saveMode === k ? PALETTE.bg : PALETTE.soft,
-                fontSize: 11,
-                letterSpacing: "0.06em",
-                cursor: "pointer",
-                fontWeight: saveMode === k ? 600 : 400,
-              }}>{label}</button>
-          ))}
-        </div>
-      )}
+      {/* Save-mode selector. Save = log to outfit history; Favorite = save +
+          add to favorites; Schedule = pin to a specific calendar date (past
+          or future). Pre-PR-X, Schedule was only reachable via the planner's
+          ✎ Edit flow — making it a first-class mode lets you build a fresh
+          look and pin it to any calendar day without leaving the builder. */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 8, border: `1px solid ${PALETTE.line}`, borderRadius: 6, padding: 3, background: "#fff" }}>
+        {[["looks","Save"],["favorite","Favorite"],["schedule","Schedule"]].map(([k, label]) => (
+          <button key={k} onClick={() => setSaveMode(k)}
+            style={{
+              flex: 1,
+              padding: "7px 4px",
+              border: "none",
+              borderRadius: 4,
+              background: saveMode === k ? PALETTE.ink : "transparent",
+              color: saveMode === k ? PALETTE.bg : PALETTE.soft,
+              fontSize: 11,
+              letterSpacing: "0.06em",
+              cursor: "pointer",
+              fontWeight: saveMode === k ? 600 : 400,
+            }}>{label}</button>
+        ))}
+      </div>
 
       {/* Occasion + weather as multi-select chips. Tap to toggle each tag —
           a saved look can carry multiple occasions and multiple weather
