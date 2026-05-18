@@ -11,6 +11,7 @@ import { fetchNycForecast, fetchTripForecast, bucketFromHigh } from "../../lib/w
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import { analyzeTripDestination, tempToBucket } from "../../lib/ai/tripAdvisor.js";
+import { OCCASIONS } from "../../constants/taxonomy.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import TripDetailView from "./TripDetailView.jsx";
@@ -479,7 +480,6 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
 // All edits stay local until "Pin to calendar".
 const WEATHER_BUCKETS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
 const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
-const OCCASIONS = ["Casual", "Travel", "Work", "Work Dinner", "Dinner", "Occasion", "Lounge"];
 const SEASONAL = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
 
 function TripModal({ items, apiKey, onClose, onAssign }) {

@@ -319,17 +319,27 @@ export const sb = {
     return res.json().catch(() => []);
   },
   async savePlan(plan) {
-    const payload = { ...plan, updated_at: new Date().toISOString() };
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
+    // Self-healing upsert: on PGRST204 ("column not found"), strip the
+    // unknown column and retry. Lets newer client code (activity, day_label)
+    // remain compatible with Supabase projects that haven't run the latest
+    // migration — same pattern as saveOutfitLog.
+    let payload = { ...plan, updated_at: new Date().toISOString() };
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`savePlan failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
       throw new Error(err?.message || `savePlan failed ${res.status}`);
     }
-    return res.json();
+    throw new Error("savePlan failed after stripping unknown columns");
   },
   async deletePlan(date) {
     const res = await fetch(

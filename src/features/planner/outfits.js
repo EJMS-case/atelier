@@ -55,7 +55,7 @@ export function flattenPlanItemIds(plan) {
 // the legacy fields so anything still reading plan.items / plan.occasion keeps
 // rendering the "primary" look for the day. Calendar grid, DayModal, weekly
 // agenda — none of those needed changes.
-export function buildPlanPayload({ date, outfits, source, notes, weather }) {
+export function buildPlanPayload({ date, outfits, source, notes, weather, activity, day_label }) {
   const first = outfits[0] || { items: [], occasion: null };
   return {
     date,
@@ -70,5 +70,7 @@ export function buildPlanPayload({ date, outfits, source, notes, weather }) {
     source,
     notes,
     weather,
+    activity: activity || null,
+    day_label: day_label || null,
   };
 }
