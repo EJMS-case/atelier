@@ -40,24 +40,41 @@ export const STYLE_PREFS = {
 
 export const OCCASION_SLOTS = {
   Work: {
-    required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], layer: ["Blazers","Coats","Jackets","Cardigans"], shoes: ["Heels","Loafers","Flats","Boots"], bag: true },
+    // The user wears JEAN PANTS to work (denim shorts never). The sampler's
+    // OCCASION_PREFILTERS handles the "no shorts" rule at the pool stage; the
+    // banned list below no longer drops "Jeans" so denim pants reach the AI.
+    required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Jeans","Trousers","Ponte","Satin/Silk","Skirts","Pants"], layer: ["Blazers","Coats","Jackets","Cardigans"], shoes: ["Heels","Loafers","Flats","Boots"], bag: true },
     optional: { belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories"], keywords: ["evening","cocktail","gown","formal"] },
-    promptNote: "WORK: Polished professional — covers everyday office, executive meetings, and interviews. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, or ponte pants. NO evening or cocktail dresses, NO gowns, NO formal-separates. NO casual fabrics, no jeans, no sneakers.",
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories"], keywords: ["evening","cocktail","gown","formal","ripped","distressed"] },
+    promptNote: "WORK: Polished professional — covers everyday office, executive meetings, and interviews. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind.",
   },
   "Work Dinner": {
-    // Hybrid of Work + Dinner: still client-facing polish, but silk/satin and
-    // midi/cocktail dresses become eligible; sneakers, jeans, gowns are out.
+    // No Occasionwear pulled here per the user — Work Dinner stays this side
+    // of evening polish, so cocktail dresses (which live in Occasionwear) and
+    // gowns are all dropped at the sampler stage.
     required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], shoes: ["Heels","Loafers","Boots"], bag: true },
-    optional: { dress: ["Midi","Mini","Cocktail Dresses"], layer: ["Blazers","Coats","Jackets"], belt: true, accessory: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Gowns","Formal Separates"], keywords: ["gown","formal"] },
-    promptNote: "WORK DINNER: Polished but elevated — covers client dinners, after-work events, evening meetings. Tailored separates or a midi/cocktail dress that still reads professional. Mix fabrics for texture (wool, leather, silk, satin, fine knit, structured cotton) — no single material is mandatory; the right answer depends on the closet. Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO gowns, NO formal-separates.",
+    optional: { dress: ["Midi","Mini"], layer: ["Blazers","Coats","Jackets"], belt: true, accessory: true },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Gowns","Formal Separates","Cocktail Dresses","Evening Accessories"], keywords: ["gown","formal","cocktail"] },
+    promptNote: "WORK DINNER: Polished but elevated — client dinners, after-work events, evening meetings. Tailored separates or a midi dress that still reads professional. Mix fabrics for texture (wool, leather, silk, satin, fine knit, structured cotton). Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO occasionwear (this is still work-adjacent, not a party).",
   },
   Casual: {
+    // Athleisure + Loungewear are explicitly allowed per the user. Denim
+    // pants, denim shorts, regular shorts, skirts all fair game (the weather
+    // pass will surface shorts only when it's warm). The banned list is
+    // intentionally minimal — only occasionwear-formal stuff is out.
     required: { top: true, bottom: true, shoes: true },
     optional: { dress: true, layer: true, bag: true, belt: true, accessory: true },
-    banned: { categories: ["Occasionwear","Swim"], subcategories: [], keywords: [] },
-    promptNote: "CASUAL: Daytime out — brunch, lunch, hanging with friends, errands, weekend wandering. Every look needs a top + bottom (or a dress). Polished but not trying. Denim welcome. Loafers, flats, low boots, sandals if warm, clean sneakers if she has them. NOT athleisure (that's Lounge).",
+    banned: { categories: ["Occasionwear","Swim"], subcategories: ["Cocktail Dresses","Gowns","Formal Separates","Stiletto"], keywords: ["cocktail only","evening only","boardroom only"] },
+    promptNote: "CASUAL: Daytime out — brunch, lunch, hanging with friends, errands, weekend wandering. Every look needs a top + bottom (or a dress). Polished but not trying. Denim — pants AND shorts — fully welcome. Skirts and shorts surface naturally in warm weather. Athleisure and lounge pieces (hoodies, joggers, sport tops paired with denim) work great here. Loafers, flats, low boots, sneakers, sandals when warm. The vibe is real life, not a costume.",
+  },
+  Active: {
+    // Athleisure + sneakers only. The OCCASION_PREFILTERS.Active keepCategories
+    // already narrows the pool — the slot rules below describe what a complete
+    // "active" outfit looks like to the validator.
+    required: { top: true, bottom: true, shoes: ["Flats"] },
+    optional: { layer: true, accessory: true },
+    banned: { categories: ["Tops","Knits","Bottoms","Dresses","Sets","Jumpsuits","Outerwear","Occasionwear","Bags","Belts"], subcategories: ["Heels","Pumps","Stiletto","Mules","Loafers"], keywords: ["formal","cocktail","evening","tailored","structured"] },
+    promptNote: "ACTIVE: Gym, hike, pilates, run, yoga, biking. ONLY pull from Athleisure pieces (leggings, sports bras, performance tops, athletic shorts, technical tanks) and sneakers/trainers. NEVER a heeled shoe, NEVER a structured top or tailored bottom. Build a performance-functional silhouette: supportive bra, technical top, leggings or athletic shorts, training shoes. Layer a light zip-up or hoodie if cool.",
   },
   Dinner: {
     // Dinner = the catch-all for evening outings — dinner parties, dinners
@@ -81,15 +98,24 @@ export const OCCASION_SLOTS = {
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals"], keywords: ["casual only","sneakers","athletic","weekend only"] },
     promptNote: "OCCASION: Cocktail parties, weddings, galas, black-tie events. Lead with a dress when one is available — the sampler has already narrowed the inventory to Occasionwear pieces (Cocktail Dresses, Gowns, Formal Separates, Evening Accessories) and dresses whose notes describe evening/cocktail/wedding/event wear. If no qualifying dress is available, build with formal separates (silk blouse + satin skirt, tailored trouser + occasion top). Heels REQUIRED. A refined evening or structured bag. NO jeans, NO casual fabrics, NO sneakers, NO athleisure.",
   },
-  Travel: {
-    // Travel = vacation wear. WEATHER drives everything here. Hot/Warm =
-    // swim, cover-ups, breezy dresses, sandals. Cool/Cold = warm layers,
-    // boots, athleisure. Swim and Loungewear (athleisure) are ALLOWED here
-    // — that's what makes Travel different from every other occasion.
+  "Travel Day": {
+    // The transit/airport/road-trip day. Comfort-first, no heels. The user
+    // explicitly asked for Lounge + Athleisure to lead here. Heels and dress
+    // sandals don't survive long flights or rental-car ankles, so they're out.
+    required: { top: true, bottom: true, shoes: ["Flats"] },
+    optional: { dress: true, layer: true, bag: true, accessory: true },
+    banned: { categories: ["Occasionwear"], subcategories: ["Heels","Pumps","Stiletto","Cocktail Dresses","Gowns","Formal Separates"], keywords: ["boardroom only","office only","evening only","cocktail"] },
+    promptNote: "TRAVEL DAY: Airports, road trips, long-haul transit. Comfort wins. Lean into Athleisure + Loungewear — joggers, soft leggings, oversized sweatshirts, knit sets, soft cardigans. Slip-on sneakers, low boots, or comfortable flats. A roomy tote. NO heels (the user explicitly excluded these). One layer for plane temperatures. This is the comfortable-but-presentable bucket — not a costume, not pajamas.",
+  },
+  Vacation: {
+    // On-trip resort/beach mode. Weather decides the silhouette — hot/warm
+    // = swim + cover-ups + sundresses + sandals; cool/cold = layered knits
+    // + boots + lightweight coat. Athleisure stays in for active travel
+    // days (hike, paddleboard).
     required: { shoes: true },
     optional: { top: true, bottom: true, dress: true, layer: true, bag: true, belt: true, accessory: true },
-    banned: { categories: [], subcategories: [], keywords: [] },
-    promptNote: "TRAVEL: Vacation wear — weather decides the silhouette. HOT/WARM trips lean swim, cover-ups, breezy dresses, sundresses with strappy details, sandals, raffia/canvas bags. COOL/COLD trips lean knit layers, athleisure, boots, a lightweight coat. Lounge sets and athleisure are fair game here — Travel is the one bucket where comfort outranks polish. Sexy dresses and dinner pieces are also welcome for evening vacation moments. Build looks the climate would actually call for; do not default to a generic 'travel outfit' (jeans + blouse + sneakers).",
+    banned: { categories: [], subcategories: ["Pumps","Stiletto","Cocktail Dresses","Gowns","Formal Separates"], keywords: ["boardroom only","office only"] },
+    promptNote: "VACATION: On-trip resort/beach/holiday wear. Weather is the entire game. HOT/WARM = swim, cover-ups, breezy dresses, sundresses, strappy sandals, raffia/canvas bags, lightweight fabrics. COOL/COLD = knit layers, athleisure, boots, lightweight coat or jacket. Athleisure is welcome for active vacation days (hike, beach walk, paddleboard). Sexy dresses + heels are welcome for evening vacation moments — but skip pumps and stilettos in favor of block-heel sandals or strappy mid-heels that handle uneven ground. Never a generic 'travel outfit' (jeans + blouse + sneakers) — build for what the destination actually feels like.",
   },
   Lounge: {
     // Lounge = athleisure / chilling at home / running quick errands without
