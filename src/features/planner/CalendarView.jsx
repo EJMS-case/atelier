@@ -10,7 +10,8 @@ import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
 import { fetchNycForecast, fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
-import { analyzeTripDestination, tempToBucket } from "../../lib/ai/tripAdvisor.js";
+import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
+import { OCCASIONS } from "../../constants/taxonomy.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import TripDetailView from "./TripDetailView.jsx";
@@ -145,6 +146,30 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
     } catch (e) {
       setSyncError(`Couldn't save the ${iso} plan to the cloud — local only. Tap Refresh to retry, or try again.`);
     }
+    setActiveDay(null);
+  }
+
+  // Inline AI generation for a calendar day. Lets the user pin a fresh
+  // look straight from the DayModal instead of bouncing through Style Me +
+  // Save + come-back-to-pin. Uses the same generateTripDayLook the trip
+  // detail view does, with destination null (NYC default).
+  async function handleGenerateForDay(iso, occasion) {
+    if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
+    const wxBucket = forecast?.[iso]?.bucket || "";
+    const look = await generateTripDayLook(items, occasion, wxBucket, null, apiKey, {});
+    if (!look) throw new Error("Couldn't generate a look — try again.");
+    const plan = {
+      date: iso,
+      items: look.items || [],
+      source: "generated",
+      occasion,
+      occasions: [occasion],
+      weather: wxBucket || null,
+      weathers: wxBucket ? [wxBucket] : [],
+    };
+    const saved = await savePlan(plan);
+    setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));
+    setSyncError("");
     setActiveDay(null);
   }
 
@@ -294,12 +319,19 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
           items={items}
           outfitLogs={outfitLogs}
           forecast={forecast}
+          hasApiKey={!!apiKey}
           onClose={() => setActiveDay(null)}
           onPickSaved={(log, overrides) => handleAssignSaved(activeDay, log, overrides)}
+          onGenerate={(occasion) => handleGenerateForDay(activeDay, occasion)}
           onGoToStyleMe={() => { setActiveDay(null); onGoToStyleMe?.(); }}
           onClear={() => handleClear(activeDay)}
           onEditItem={onEditItem ? (it) => { setActiveDay(null); onEditItem(it); } : undefined}
           onEditPlan={onEditPlan ? () => { const p = plans[activeDay]; setActiveDay(null); onEditPlan(activeDay, p); } : undefined}
+          onBuildDay={onBuildDay ? () => {
+            const existing = plans[activeDay]?.items || [];
+            setActiveDay(null);
+            onBuildDay(activeDay, existing);
+          } : undefined}
         />
       )}
 
@@ -324,7 +356,74 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
 }
 
 // ── Day Assignment Modal ─────────────────────────────────────────────────────
-function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved, onGoToStyleMe, onClear, onEditItem, onEditPlan }) {
+// Inline generator inside the DayModal — replaces the old dead-end that
+// kicked the user out to Style Me. Pick an occasion, hit Generate; on
+// success the modal closes and the new look is pinned to the day.
+// Build manually opens SilhouetteBuilder pre-loaded with the day so the
+// user can save → schedule from there.
+function GenerateForDay({ iso, isPast, forecast, hasApiKey, onGenerate, onGoToStyleMe, onBuildDay }) {
+  const [occasion, setOccasion] = useState("Casual");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const wxBucket = forecast?.[iso]?.bucket || "";
+
+  async function runGenerate() {
+    if (!onGenerate) return;
+    setBusy(true);
+    setErr("");
+    try { await onGenerate(occasion); }
+    catch (e) { setErr(e.message || "Couldn't generate."); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ padding: "8px 4px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 10, letterSpacing: "0.14em", color: PALETTE.muted }}>OCCASION</span>
+        <select value={occasion} onChange={e => setOccasion(e.target.value)}
+          style={{ flex: 1, padding: "6px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, background: "#fff", fontSize: 12 }}>
+          {OCCASIONS.map(o => <option key={o}>{o}</option>)}
+        </select>
+        {wxBucket && (
+          <span style={{ fontSize: 10, color: PALETTE.muted }}>{wxBucket}</span>
+        )}
+      </div>
+
+      {err && (
+        <div style={{ padding: "6px 10px", background: "#FBE9E7", border: `1px solid ${PALETTE.accent}`, borderRadius: 6, fontSize: 11, color: PALETTE.accent, marginBottom: 8 }}>
+          {err}
+        </div>
+      )}
+
+      <button onClick={runGenerate} disabled={busy || !onGenerate || !hasApiKey}
+        style={{ ...btnPrimary, width: "100%", opacity: busy || !hasApiKey ? 0.6 : 1, cursor: (busy || !hasApiKey) ? "default" : "pointer" }}>
+        {busy
+          ? <><span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span>Styling…</>
+          : isPast ? `✦ Generate ${occasion} look for this day` : `✦ Generate & pin to this day`}
+      </button>
+
+      {onBuildDay && (
+        <button onClick={onBuildDay}
+          style={{ ...btnSecondary, width: "100%", marginTop: 8 }}>
+          ⊞ Build manually
+        </button>
+      )}
+
+      <button onClick={onGoToStyleMe}
+        style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 11, marginTop: 12, cursor: "pointer", display: "block", margin: "12px auto 0" }}>
+        Or open Style Me to see 3 options →
+      </button>
+
+      {!hasApiKey && (
+        <div style={{ fontSize: 11, color: PALETTE.muted, textAlign: "center", marginTop: 10, fontStyle: "italic" }}>
+          Add your Anthropic API key in Settings to enable AI generation.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onEditItem, onEditPlan, onBuildDay }) {
   // Language adapts to past/today/future. Past = "What you wore" (a log, not
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
@@ -456,14 +555,15 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
         })()}
 
         {tab === "generate" && (
-          <div style={{ padding: 16, textAlign: "center" }}>
-            <p style={{ fontSize: 12, color: PALETTE.soft, marginBottom: 16 }}>
-              {isPast
-                ? "Open Style Me to build a look, save it, then log it for this past date."
-                : "Open Style Me to generate fresh looks, then come back here to pin one to this date."}
-            </p>
-            <button onClick={onGoToStyleMe} style={btnPrimary}>✦ Go to Style Me</button>
-          </div>
+          <GenerateForDay
+            iso={iso}
+            isPast={isPast}
+            forecast={forecast}
+            hasApiKey={hasApiKey}
+            onGenerate={onGenerate}
+            onGoToStyleMe={onGoToStyleMe}
+            onBuildDay={onBuildDay}
+          />
         )}
       </div>
     </div>
@@ -479,7 +579,6 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, onClose, onPickSaved
 // All edits stay local until "Pin to calendar".
 const WEATHER_BUCKETS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
 const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
-const OCCASIONS = ["Casual", "Travel", "Work", "Work Dinner", "Dinner", "Occasion", "Lounge"];
 const SEASONAL = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
 
 function TripModal({ items, apiKey, onClose, onAssign }) {

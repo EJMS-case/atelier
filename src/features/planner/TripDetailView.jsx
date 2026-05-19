@@ -11,6 +11,8 @@ import { fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds } from "./outfits.js";
+import { TRIP_ACTIVITIES } from "./tripPacker.js";
+import { OCCASIONS } from "../../constants/taxonomy.js";
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -21,8 +23,6 @@ const PALETTE = {
   line:   "var(--color-border-strong)",
   accent: "#6D1A2E",
 };
-
-const OCCASIONS = ["Travel", "Casual", "Work", "Work Dinner", "Dinner", "Occasion", "Lounge"];
 
 const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Sets", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts", "Occasionwear"];
 
@@ -66,13 +66,25 @@ function parseBrief(notes) {
  * @param {Function} props.onBack
  * @param {Function} props.onBuildDay - (iso, existingItemIds) → opens SilhouetteBuilder
  */
-export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay }) {
+export default function TripDetailView({ trip: initialTrip, items, apiKey, onBack, onBuildDay }) {
+  // Local copy so "+ Add day" can mutate end_date without re-fetching the
+  // trip list. Re-syncs to the parent's prop if the user picks a different
+  // trip (handled by the useEffect on initialTrip.id below).
+  const [trip, setTrip] = useState(initialTrip);
+  useEffect(() => { setTrip(initialTrip); }, [initialTrip.id]);
+
   const [tab, setTab] = useState("looks");
   const [plans, setPlans] = useState({});       // { iso: plan }
   const [brief, setBrief] = useState(() => parseBrief(trip.notes));
   const [briefLoading, setBriefLoading] = useState(false);
   const [generatingDay, setGeneratingDay] = useState(null); // iso
   const [dayOccasion, setDayOccasion] = useState({});  // { iso: occasion }
+  // Per-day Activity (Theme Park / Beach / Resort / …). Overrides trip.activity
+  // for generation on that day. Persisted on the plan row's `activity` column.
+  const [dayActivity, setDayActivity] = useState({});  // { iso: activity }
+  // Free-text day-level label ("Disneyland with kids", "Pool day"). Editable
+  // before any outfit exists; persisted on the plan row's `day_label` column.
+  const [dayLabel, setDayLabel] = useState({});        // { iso: label }
   const [error, setError] = useState("");
   // Per-day Open-Meteo forecast at the destination, keyed by iso.
   // null until geocode + forecast resolve; falls back to the trip-level
@@ -88,9 +100,15 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
       const map = {};
       for (const r of rows || []) {
         map[r.date] = r;
-        // Restore per-day occasion overrides from saved plan
+        // Restore per-day overrides from saved plan
         if (r.occasion && !dayOccasion[r.date]) {
           setDayOccasion(prev => ({ ...prev, [r.date]: r.occasion }));
+        }
+        if (r.activity && !dayActivity[r.date]) {
+          setDayActivity(prev => ({ ...prev, [r.date]: r.activity }));
+        }
+        if (r.day_label && !dayLabel[r.date]) {
+          setDayLabel(prev => ({ ...prev, [r.date]: r.day_label }));
         }
       }
       setPlans(map);
@@ -166,13 +184,15 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
   // Persist a full plan row (with `outfits` and legacy mirrors) and patch the
   // local plans map. Used by every mutation path below — generate, regenerate,
   // add outfit, remove outfit, change occasion.
-  async function persistPlan(iso, outfits) {
+  async function persistPlan(iso, outfits, extras = {}) {
     const payload = buildPlanPayload({
       date: iso,
       outfits,
       source: "trip",
       notes: trip.destination || null,
       weather: weatherForDay(iso),
+      activity: extras.activity ?? dayActivity[iso] ?? null,
+      day_label: extras.day_label ?? dayLabel[iso] ?? null,
     });
     const saved = await savePlan(payload);
     const row = Array.isArray(saved) ? saved[0] : saved;
@@ -204,7 +224,8 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
       }
       const weather   = weatherForDay(iso);
       const priorDays = buildPriorDays(iso, plans);
-      const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity: trip.activity || "Sightseeing" });
+      const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
+      const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity });
       if (!look) { setError("Couldn't generate a look — try again."); return; }
 
       let nextOutfits;
@@ -245,7 +266,8 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
         const occasion  = dayOccasion[iso] || "Casual";
         const weather   = weatherForDay(iso);
         const priorDays = buildPriorDays(iso, running);
-        const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity: trip.activity || "Sightseeing" });
+        const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
+        const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity });
         if (!look) continue;
         const outfits = [{ id: newOutfitId(), label: "", occasion, items: look.items }];
         const payload = buildPlanPayload({
@@ -254,6 +276,8 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
           source: "trip",
           notes: trip.destination || null,
           weather,
+          activity: dayActivity[iso] || null,
+          day_label: dayLabel[iso] || null,
         });
         const saved = await savePlan(payload);
         const newPlan = { ...(Array.isArray(saved) ? saved[0] : saved || {}), ...payload };
@@ -309,6 +333,42 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
     }
     const next = existing.map((o, i) => i === outfitIdx ? { ...o, occasion: occ } : o);
     persistPlan(iso, next).catch(() => {});
+  };
+
+  // Per-day Activity override. Persisted on the plan row even when the day
+  // has no outfit yet — otherwise it'd evaporate the moment the user picks
+  // an activity before generating.
+  const handleDayActivityChange = (iso, act) => {
+    setDayActivity(prev => ({ ...prev, [iso]: act }));
+    const existing = outfitsOf(plans[iso]);
+    persistPlan(iso, existing, { activity: act }).catch(() => {});
+  };
+
+  // Free-text day-level label. Same persist-on-empty-day rule.
+  const handleDayLabelChange = (iso, label) => {
+    setDayLabel(prev => ({ ...prev, [iso]: label }));
+    const existing = outfitsOf(plans[iso]);
+    // Optimistic — keep the input responsive even if the upsert lags.
+    setPlans(prev => ({ ...prev, [iso]: { ...(prev[iso] || { date: iso }), day_label: label } }));
+    persistPlan(iso, existing, { day_label: label }).catch(() => {});
+  };
+
+  // Extend the trip by one day at the end. The new day starts empty (no
+  // plan row); the user picks activity / occasion / generates from there.
+  const [addingDay, setAddingDay] = useState(false);
+  const handleAddDay = async () => {
+    if (addingDay) return;
+    setAddingDay(true);
+    try {
+      const cur = new Date(trip.end_date + "T00:00:00Z");
+      const nextEnd = new Date(cur.getTime() + 86400000).toISOString().slice(0, 10);
+      await updateTrip(trip.id, { end_date: nextEnd });
+      setTrip(prev => ({ ...prev, end_date: nextEnd }));
+    } catch (e) {
+      setError(e.message || "Couldn't add a day.");
+    } finally {
+      setAddingDay(false);
+    }
   };
 
   // ── Derived packing data ──────────────────────────────────────────────────
@@ -504,6 +564,22 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
                   )}
                 </div>
 
+                {/* Per-day Activity + free-text label. Always visible, even on
+                    empty days — so the user can plan ("theme park day", "beach
+                    day") before any outfit is generated. */}
+                <div style={{ display: "flex", gap: 6, padding: "8px 12px", borderBottom: `1px solid ${PALETTE.line}`, background: PALETTE.cream }}>
+                  <select value={dayActivity[iso] || trip.activity || "Sightseeing"}
+                    onChange={e => handleDayActivityChange(iso, e.target.value)}
+                    style={{ flex: "0 0 120px", fontSize: 10, letterSpacing: "0.04em", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "4px 6px", background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
+                    {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
+                  </select>
+                  <input type="text"
+                    value={dayLabel[iso] || ""}
+                    onChange={e => handleDayLabelChange(iso, e.target.value)}
+                    placeholder="Day label (e.g. Disneyland, Pool day)"
+                    style={{ flex: 1, fontSize: 11, padding: "4px 8px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, minWidth: 0 }}/>
+                </div>
+
                 {/* Outfit stack */}
                 {isGenerating ? (
                   <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center", color: PALETTE.muted, fontSize: 12 }}>
@@ -599,6 +675,26 @@ export default function TripDetailView({ trip, items, apiKey, onBack, onBuildDay
               </div>
             );
           })}
+
+          {/* Extend the trip end-date by one day. The new day starts empty;
+              the user picks activity/occasion and generates from there. */}
+          <button onClick={handleAddDay} disabled={addingDay}
+            style={{
+              width: "100%",
+              padding: "10px 0",
+              marginTop: 4,
+              marginBottom: 18,
+              background: "transparent",
+              color: PALETTE.soft,
+              border: `1px dashed ${PALETTE.line}`,
+              borderRadius: 8,
+              fontSize: 11,
+              letterSpacing: "0.14em",
+              cursor: addingDay ? "default" : "pointer",
+              opacity: addingDay ? 0.6 : 1,
+            }}>
+            {addingDay ? "Adding…" : "+ Add a day"}
+          </button>
         </div>
       )}
 
