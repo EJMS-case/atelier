@@ -4,7 +4,7 @@ import LooksView from "./LooksView.jsx";
 import OutfitHistory from "./OutfitHistory.jsx";
 import FavoritesView from "./FavoritesView.jsx";
 
-export default function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey }) {
+export default function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar }) {
   // The Wear tab and its metrics (most-worn / neglected / cost-per-wear) moved
   // to the Home dashboard. Saved is now strictly: All your saved looks,
   // History (with subcategories), and Favorites.
@@ -19,7 +19,7 @@ export default function SavedView({ items, favorites, toggleFav, onEditItem, onW
         ))}
       </div>
       {tab === "looks" && (
-        <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem}/>
+        <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar}/>
       )}
       {tab === "history" && (
         <OutfitHistory

@@ -6,7 +6,7 @@ import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
 
-export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem }) {
+export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -107,7 +107,12 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
                     <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
                   </div>
                 ) : (
-                  <div style={{ display:"flex", gap:6 }}>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {onBuildSimilar && (
+                      <button style={s.histDeleteBtn} onClick={() => onBuildSimilar(log)} title="Open Style Me seeded with this look's silhouette + occasion + weather + mood">
+                        ✦ Build similar
+                      </button>
+                    )}
                     <button style={s.histDeleteBtn} onClick={() => { setEditingLook(log); setShowBuilder(true); }}>Edit</button>
                     <button style={s.histDeleteBtn} onClick={() => setDeleteId(log.id)}>Remove</button>
                   </div>

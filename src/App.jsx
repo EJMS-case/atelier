@@ -487,6 +487,41 @@ export default function App() {
     setStylePanelOpen(true);
   }, [setView]);
 
+  // "Build a similar look" from a saved log. Seeds Style Me with the original
+  // look's silhouette description + its occasion / weather / mood, then opens
+  // the panel. The free-text prompt nudges the AI to keep the silhouette shape
+  // (e.g. midi-skirt + silk-blouse + heels) while varying colors and specific
+  // pieces — not regenerate the same outfit.
+  const buildSimilarLook = useCallback((log) => {
+    const ids = log?.garment_ids || [];
+    const wear = ids.map(id => items.find(it => it.id === id)).filter(Boolean);
+    const silhouetteParts = wear.map(it => {
+      const sub = (it.subcategory || it.category || "").toLowerCase().trim();
+      const color = (it.color || "").toLowerCase().trim();
+      const composed = [color, sub].filter(Boolean).join(" ");
+      return composed || it.name?.toLowerCase() || "";
+    }).filter(Boolean);
+    const silhouette = silhouetteParts.join(" + ");
+    if (silhouette) {
+      setRequest(`Build a similar silhouette to: ${silhouette}. Keep the shape and category mix but vary the specific pieces and color story — different items, different palette, same overall vibe.`);
+    } else {
+      setRequest("");
+    }
+    // Pre-fill occasion / weather / mood from the original look so the user
+    // doesn't have to re-set them. Multi-tag aware (legacy logs use the
+    // singular field, newer ones use the plural array).
+    const occ = (Array.isArray(log?.occasions) ? log.occasions[0] : null) || log?.occasion;
+    if (occ) setOccasion(occ);
+    const wx = (Array.isArray(log?.weathers) ? log.weathers[0] : null) || log?.weather;
+    if (wx) setWeather(new Set([wx]));
+    try {
+      const meta = log?.collage_url ? JSON.parse(log.collage_url) : null;
+      if (meta?.mood) setMood(meta.mood);
+    } catch { /* meta not JSON — ignore */ }
+    setView("style");
+    setStylePanelOpen(true);
+  }, [items, setView]);
+
   const isFav = useCallback((type, refId) =>
     favorites.some(f => f.type === type && f.reference_id === refId),
   [favorites]);
@@ -1486,6 +1521,7 @@ export default function App() {
             setView("style");
             setStylePanelOpen(true);
           }}
+          onBuildSimilar={buildSimilarLook}
         />
       )}
 
