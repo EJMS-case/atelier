@@ -53,6 +53,39 @@ const EXCLUSION_CHECKS = {
   "no-knits": (item) => item.category === "Knits",
 };
 
+// ── Garment role classifier ──────────────────────────────────────────────────
+// Maps an item to its structural role — upper-half, lower-half, dress, outer,
+// shoes, bag, accessory. For traditional categories the category IS the role;
+// for Athleisure / Loungewear / Swim (which mix tops + bottoms + dresses
+// inside a single category) we infer from the subcategory the same way the
+// closet-sampler's getBucket does. Without this, Active-occasion looks (pool
+// = Athleisure + Shoes) always fail the upper/lower-half checks because no
+// item carries category "Tops" or "Bottoms".
+const ATHL_SUB_TOP = /top|sleeve|bra|crop|hoodie|sweatshirt/i;
+const ATHL_SUB_BOTTOM = /pant|short|skirt|legging|jogger|bottom/i;
+const ATHL_SUB_DRESS = /dress/i;
+
+function getGarmentRole(item) {
+  if (!item) return "other";
+  const cat = item.category;
+  if (cat === "Tops" || cat === "Knits") return "upper";
+  if (cat === "Bottoms") return "lower";
+  if (cat === "Dresses" || cat === "Occasionwear" || cat === "Jumpsuits" || cat === "Sets") return "dress";
+  if (cat === "Outerwear") return "outer";
+  if (cat === "Shoes") return "shoes";
+  if (cat === "Bags") return "bag";
+  if (cat === "Accessories" || cat === "Belts") return "accessory";
+  if (cat === "Athleisure" || cat === "Loungewear" || cat === "Swim") {
+    const sub = (item.subcategory || "").toLowerCase();
+    if (ATHL_SUB_DRESS.test(sub)) return "dress";
+    if (ATHL_SUB_BOTTOM.test(sub)) return "lower";
+    if (ATHL_SUB_TOP.test(sub)) return "upper";
+    // Default: read as upper (sports bra / tank / generic top).
+    return "upper";
+  }
+  return "other";
+}
+
 // ── 8 Validation Checks ──────────────────────────────────────────────────────
 
 /**
@@ -124,7 +157,9 @@ function checkNoDuplicates(response) {
 }
 
 /**
- * Check 4: Each look has a bottom or dress (lower-half coverage).
+ * Check 4: Each look has a bottom or dress (lower-half coverage). Uses the
+ * role classifier so Athleisure/Loungewear/Swim items count via their
+ * subcategory (Athleisure leggings = lower, swim dress = dress, etc.).
  */
 function checkLowerHalf(response, idMap, allItems) {
   const failures = [];
@@ -136,13 +171,12 @@ function checkLowerHalf(response, idMap, allItems) {
       return allItems.find(it => it.id === realId);
     }).filter(Boolean);
 
-    const hasBottom = resolved.some(it => it.category === "Bottoms");
-    const hasDress = resolved.some(it =>
-      it.category === "Dresses" || it.category === "Occasionwear" ||
-      it.category === "Jumpsuits" || it.category === "Sets"
-    );
+    const hasCoverage = resolved.some(it => {
+      const role = getGarmentRole(it);
+      return role === "lower" || role === "dress";
+    });
 
-    if (!hasBottom && !hasDress) {
+    if (!hasCoverage) {
       failures.push(`Look ${i + 1} has no bottom or dress — missing lower-half coverage.`);
     }
   });
@@ -164,14 +198,10 @@ function checkUpperHalf(response, idMap, allItems) {
       return allItems.find(it => it.id === realId);
     }).filter(Boolean);
 
-    const hasDress = resolved.some(it =>
-      it.category === "Dresses" || it.category === "Occasionwear" ||
-      it.category === "Jumpsuits" || it.category === "Sets"
-    );
-    if (hasDress) return;
+    const roles = resolved.map(getGarmentRole);
+    if (roles.includes("dress")) return;
 
-    const hasTop = resolved.some(it => it.category === "Tops" || it.category === "Knits");
-    if (!hasTop) {
+    if (!roles.includes("upper")) {
       failures.push(`Look ${i + 1} has no top or knit — every separates look needs an upper-half garment. Outerwear is a layer, not a top.`);
     }
   });
