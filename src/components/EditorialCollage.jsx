@@ -83,6 +83,18 @@ function buildCollageLayout(items, isMobile) {
     if (cat === "Accessories" && (BAG_SUBCATEGORIES.has(sub) || BAG_NAME_RE.test(name))) return "bag";
     if (cat === "Accessories" && /\bbelt\b/i.test(name)) return "belt";
     if (cat === "Accessories") return "accessory";
+    // Athleisure / Loungewear / Swim live in their own category but the role
+    // (upper vs lower vs dress) is encoded in the subcategory. Without this
+    // branch a polka-dot sweatpants + sweatshirt + bra + sandals look only
+    // renders the sweatpants — every Loungewear/Athleisure piece falls
+    // through to "top", then `place()` keeps just g.top[0]. Same logic as
+    // styling-validator's getGarmentRole.
+    if (cat === "Athleisure" || cat === "Loungewear" || cat === "Swim") {
+      const subL = sub.toLowerCase();
+      if (/dress/.test(subL)) return "dress";
+      if (/pant|short|skirt|legging|jogger|bottom/.test(subL)) return "bottom";
+      return "top";
+    }
     return "top";
   };
 

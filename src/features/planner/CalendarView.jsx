@@ -906,7 +906,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         outfits: looks.map(o => ({
           id: o.id,
           label: o.label,
-          occasion: o.occasion || "Travel",
+          occasion: o.occasion || "Casual",
           items: (o.items || []).map(it => it.id),
         })),
         source: "trip",
