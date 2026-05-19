@@ -12,7 +12,7 @@ import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds } from "./outfits.js";
 import { TRIP_ACTIVITIES } from "./tripPacker.js";
-import { OCCASIONS } from "../../constants/taxonomy.js";
+import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -613,7 +613,12 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                   <>
                     {outfits.map((outfit, outfitIdx) => {
                       const outfitItems = resolveItems(outfit.items);
-                      const occ = outfit.occasion || "Casual";
+                      // Legacy plan rows can carry retired occasion labels
+                      // (e.g. "Travel" → "Travel Day"). The <select> needs a
+                      // value that matches one of OCCASIONS, else browsers
+                      // silently render the first option ("Work") even though
+                      // the underlying data isn't Work.
+                      const occ = normalizeOccasion(outfit.occasion) || "Casual";
                       return (
                         <div key={outfit.id} style={{
                           borderTop: outfitIdx === 0 ? "none" : `1px solid ${PALETTE.line}`,
