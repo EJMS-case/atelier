@@ -49,6 +49,8 @@ const SilhouetteBuilder = lazy(() => import("./features/builder/SilhouetteBuilde
 const InspirationView   = lazy(() => import("./features/inspiration/InspirationView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
+import { outfitsOf, buildPlanPayload } from "./features/planner/outfits.js";
+import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 
 // Minimal placeholder while a lazy chunk loads. Reuses the existing spinner
 // styles so the visual register matches the rest of the app.
@@ -1292,7 +1294,41 @@ export default function App() {
             const result = await sb.addFavorite("outfit", savedLog.id);
             setFavorites(prev => [...(Array.isArray(result) ? result : [result]), ...prev]);
           }}
-          onSchedule={async (plan) => { await savePlan(plan); }}
+          onSchedule={async (plan) => {
+            // Trip-day edit: the plan row for this date has multiple
+            // outfits in the `outfits` JSONB array. Fetch the latest, swap
+            // the specific outfit's items + layout, and save the full
+            // payload. Without this branch, savePlan would only update the
+            // legacy top-level `items` column and the user's edits would
+            // be invisible in TripDetailView (which reads from outfits[]).
+            if (editingPlan?.tripOutfitIdx != null) {
+              try {
+                const rows = await fetchPlansBetween(plan.date, plan.date);
+                const existing = (Array.isArray(rows) && rows[0]) || null;
+                const current = outfitsOf(existing);
+                const idx = editingPlan.tripOutfitIdx;
+                if (current[idx]) {
+                  current[idx] = { ...current[idx], items: plan.items };
+                  const merged = buildPlanPayload({
+                    date: plan.date,
+                    outfits: current,
+                    source: existing?.source || "trip",
+                    notes: existing?.notes || plan.notes || null,
+                    weather: existing?.weather || plan.weather || null,
+                    activity: existing?.activity || null,
+                    day_label: existing?.day_label || null,
+                  });
+                  // Preserve the per-outfit layout when editing outfit #0
+                  // (the only one whose layout currently persists at the
+                  // plan-row level).
+                  if (idx === 0 && plan.layout_data) merged.layout_data = plan.layout_data;
+                  await savePlan(merged);
+                  return;
+                }
+              } catch { /* fall through to plain save */ }
+            }
+            await savePlan(plan);
+          }}
           onClose={() => {
             setManualBuilderOpen(false);
             setEditingPlan(null);
@@ -1432,8 +1468,13 @@ export default function App() {
               setManualBuilderOpen(true);
               setView("style");
             }}
-            onBuildDay={(iso, existingIds) => {
-              setEditingPlan({ iso, plan: { date: iso, items: existingIds } });
+            onBuildDay={(iso, existingIds, tripOutfitIdx = null) => {
+              // tripOutfitIdx is set when Build is opened from a specific
+              // outfit on a trip-detail day. We carry it through editingPlan
+              // so the save path can update outfits[idx] in the JSONB array
+              // instead of overwriting the legacy `items` column (which the
+              // trip view doesn't read from when outfits[] is present).
+              setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx });
               setBuilderReturnView(viewRef.current);
               setManualBuilderOpen(true);
               setView("style");

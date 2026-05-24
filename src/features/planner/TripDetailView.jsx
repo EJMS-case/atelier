@@ -671,7 +671,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                               {outfitItems.length > 0 ? "↺ Regenerate" : "✦ Generate"}
                             </button>
                             {onBuildDay && (
-                              <button onClick={() => onBuildDay(iso, outfit.items || [])}
+                              <button onClick={() => onBuildDay(iso, outfit.items || [], outfitIdx)}
                                 style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                                 ⊞ Build
                               </button>
