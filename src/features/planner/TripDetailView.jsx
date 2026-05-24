@@ -648,13 +648,15 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                               placeholder="Label (e.g. Daytime, Dinner)"
                               style={{ flex: 1, fontSize: 11, padding: "4px 8px", border: `1px solid ${PALETTE.line}`, borderRadius: 4, background: "#fff", color: PALETTE.ink, minWidth: 0 }}/>
                           </div>
-                          {/* Collage */}
+                          {/* Collage. Compact grid keeps the trip-day outfits
+                              looking like a tight set rather than scattered
+                              across a tall 4:5 mobile canvas. */}
                           {outfitItems.length > 0 ? (
                             <div style={{ position: "relative" }}>
                               <EditorialCollage
                                 lookItems={outfitItems}
-                                layoutOverride={outfitIdx === 0 ? (plan?.layout_data || null) : null}
-                                canvasStyle={{ borderRadius: 0 }}
+                                compact
+                                canvasStyle={{ borderRadius: 0, padding: "8px 12px" }}
                               />
                             </div>
                           ) : (
@@ -668,7 +670,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                               style={{ flex: 1, padding: "7px 0", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: isGenerating ? "default" : "pointer" }}>
                               {outfitItems.length > 0 ? "↺ Regenerate" : "✦ Generate"}
                             </button>
-                            {onBuildDay && outfitIdx === 0 && (
+                            {onBuildDay && (
                               <button onClick={() => onBuildDay(iso, outfit.items || [])}
                                 style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                                 ⊞ Build
