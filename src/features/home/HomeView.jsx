@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween } from "../planner/plannerApi.js";
 import { mostWornItems, neglectedItems, costPerWear } from "../wear/wearApi.js";
+import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -20,14 +21,28 @@ const PALETTE = {
 };
 
 export default function HomeView({ items, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem }) {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
+  // which flips the date forward in the evening for users west of UTC.
+  const todayIso = nyToday();
+  // Show the next 14 days; render the first 5 non-empty ones as "Coming up".
+  const horizonIso = addDaysIso(todayIso, 14);
   const [todayPlan, setTodayPlan] = useState(null);
+  const [upcomingPlans, setUpcomingPlans] = useState([]);
 
   useEffect(() => {
-    fetchPlansBetween(todayIso, todayIso)
-      .then(rows => setTodayPlan(rows?.[0] || null))
+    fetchPlansBetween(todayIso, horizonIso)
+      .then(rows => {
+        const list = Array.isArray(rows) ? rows : [];
+        setTodayPlan(list.find(r => r.date === todayIso) || null);
+        setUpcomingPlans(
+          list
+            .filter(r => r.date > todayIso && (r.items?.length || 0) > 0)
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .slice(0, 5)
+        );
+      })
       .catch(() => {});
-  }, [todayIso]);
+  }, [todayIso, horizonIso]);
 
   const topWorn   = useMemo(() => mostWornItems(items, 5), [items]);
   const neglected = useMemo(() => neglectedItems(items, 60), [items]);
@@ -54,7 +69,9 @@ export default function HomeView({ items, onOpenPlanner, onOpenStyle, onEditItem
       {todayPlanItems.length > 0 ? (
         <button onClick={onOpenPlanner}
           style={{ width: "100%", textAlign: "left", padding: 14, background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 16, cursor: "pointer" }}>
-          <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted, marginBottom: 8 }}>PLANNED FOR TODAY</div>
+          <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted, marginBottom: 8 }}>
+            PLANNED FOR TODAY · {friendlyDate(todayIso)}
+          </div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
             {todayPlanItems.slice(0, 6).map(it => (
               <div key={it.id} style={{ flexShrink: 0, width: 56, height: 56, background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 4, overflow: "hidden" }}>
@@ -68,6 +85,39 @@ export default function HomeView({ items, onOpenPlanner, onOpenStyle, onEditItem
           style={{ width: "100%", padding: "14px 16px", background: PALETTE.ink, color: PALETTE.cream, border: "none", borderRadius: 10, marginBottom: 16, fontSize: 13, letterSpacing: "0.08em", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
           ✦ Style me for today
         </button>
+      )}
+
+      {/* Coming Up — next planned days within the 2-week horizon. Tap to jump
+          straight into the planner on that date. Hidden when nothing's planned
+          to avoid an empty section. */}
+      {upcomingPlans.length > 0 && (
+        <section style={sectionStyle}>
+          <div style={sectionHeader}>COMING UP</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {upcomingPlans.map(plan => {
+              const planItems = (plan.items || [])
+                .map(id => items.find(it => it.id === id))
+                .filter(Boolean);
+              const tag = plan.day_label || plan.occasion || "";
+              return (
+                <button key={plan.date} onClick={onOpenPlanner}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ minWidth: 70 }}>
+                    <div style={{ fontSize: 11, color: PALETTE.ink, fontWeight: 500 }}>{friendlyDate(plan.date)}</div>
+                    {tag && <div style={{ fontSize: 9, letterSpacing: "0.04em", color: PALETTE.muted, marginTop: 2 }}>{tag}</div>}
+                  </div>
+                  <div style={{ display: "flex", gap: 4, overflow: "hidden", flex: 1 }}>
+                    {planItems.slice(0, 5).map(it => (
+                      <div key={it.id} style={{ flexShrink: 0, width: 40, height: 40, background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 3, overflow: "hidden" }}>
+                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Most-worn metric */}
