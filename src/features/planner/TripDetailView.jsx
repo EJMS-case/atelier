@@ -313,7 +313,19 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
   };
 
   // Free-text label edit on a single outfit. Saved immediately so it persists
-  // even if the user navigates away mid-edit.
+  // "+ Add another outfit" → just append an empty slot. Previously this
+  // auto-fired generation; users wanted to choose Generate vs Build vs leave
+  // it blank themselves. The empty-outfit branch of the per-outfit render
+  // (line ~644) shows the right CTA buttons.
+  const handleAppendEmptyOutfit = async (iso) => {
+    const existing = outfitsOf(plans[iso]);
+    const used = new Set(existing.map(o => o.occasion).filter(Boolean));
+    const occasion = ["Dinner","Occasion","Lounge","Casual"].find(o => !used.has(o)) || "Casual";
+    const next = [...existing, { id: newOutfitId(), label: "", occasion, items: [] }];
+    setPlans(prev => ({ ...prev, [iso]: { ...(prev[iso] || {}), outfits: next } }));
+    persistPlan(iso, next).catch(() => {});
+  };
+
   const handleOutfitLabelChange = async (iso, outfitIdx, label) => {
     const existing = outfitsOf(plans[iso]);
     if (!existing[outfitIdx]) return;
@@ -671,7 +683,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                         </div>
                       );
                     })}
-                    <button onClick={() => handleGenerate(iso, "append")} disabled={isGenerating}
+                    <button onClick={() => handleAppendEmptyOutfit(iso)} disabled={isGenerating}
                       style={{ display: "block", margin: "8px 12px 12px", width: "calc(100% - 24px)", padding: "7px 0", background: "transparent", border: `1px dashed ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", color: PALETTE.soft, cursor: isGenerating ? "default" : "pointer" }}>
                       + Add another outfit
                     </button>
