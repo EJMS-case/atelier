@@ -54,7 +54,7 @@ const SLOTS = [
 // (cardigan under coat), accessories stack (necklace + earrings +
 // bracelet + belt), shoes and bags read as "options to compare." Dress
 // stays single because you can only wear one.
-const MULTI_SLOTS = new Set(["top", "bottom", "outerwear", "shoes", "bag", "accessory"]);
+const MULTI_SLOTS = new Set(["top", "bottom", "outerwear", "swim", "shoes", "bag", "accessory"]);
 
 // Stable key for per-instance state (positions, zOrders, autoFitted) so each
 // item in a multi-slot has its own canvas slot.

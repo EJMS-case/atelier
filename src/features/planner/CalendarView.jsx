@@ -298,8 +298,8 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
                 <div style={{ position: "relative", flex: 1, marginTop: 2 }}>
                   <EditorialCollage
                     lookItems={planItems}
-                    layoutOverride={layoutOverride}
-                    canvasStyle={{ position: "absolute", inset: 0, width: "100%", height: "100%", paddingBottom: 0 }}/>
+                    compact
+                    canvasStyle={{ position: "absolute", inset: 0 }}/>
                 </div>
               )}
             </button>

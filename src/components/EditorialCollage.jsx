@@ -224,11 +224,54 @@ function buildFromLayout(items, layout, isMobile) {
 
 // Positions pieces as floating, slightly overlapping items on a clean background
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
-export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride }) {
+//
+// `compact` switches to a tight flex grid — items sized equally, no recipes,
+// no white-space gaps. Use for tiny canvases (calendar tiles) and for views
+// where the user wants pieces grouped tightly rather than scattered across
+// a tall portrait canvas.
+export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride, compact = false }) {
   const isMobile = useIsMobileCollage();
   const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
   const sorted = [...lookItems]
     .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
+
+  if (compact) {
+    const visible = sorted.slice(0, 6);
+    // Cell scaling: 1 → 1 col, 2 → 2 cols, 3-4 → 2 cols, 5-6 → 3 cols. Keeps
+    // each thumb roughly square at common canvas widths.
+    const cols = visible.length <= 1 ? 1 : visible.length <= 4 ? 2 : 3;
+    return (
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gap: 2,
+        padding: 2,
+        width: "100%",
+        ...canvasStyle,
+      }}>
+        {visible.map((it, i) => (
+          <div key={it.id || i}
+            onClick={onItemClick ? () => onItemClick(it) : undefined}
+            style={{
+              aspectRatio: "1",
+              background: "#fff",
+              borderRadius: 2,
+              overflow: "hidden",
+              cursor: onItemClick ? "pointer" : "default",
+            }}>
+            {it.image ? (
+              <TrimmedImage src={it.image} alt={it.name}
+                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}/>
+            ) : (
+              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#888" }}>
+                {it.category?.[0] || "?"}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   // On mobile, ignore any saved/AI-generated layout and use the built-in
   // mobile recipes. Override coords were authored against the desktop
