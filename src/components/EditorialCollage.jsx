@@ -89,10 +89,16 @@ function buildCollageLayout(items, isMobile) {
     // renders the sweatpants — every Loungewear/Athleisure piece falls
     // through to "top", then `place()` keeps just g.top[0]. Same logic as
     // styling-validator's getGarmentRole.
+    //
+    // Order matters: dress first, then top (so "Short Sleeve" doesn't get
+    // caught by the /short/ in bottom), then bottom.
     if (cat === "Athleisure" || cat === "Loungewear" || cat === "Swim") {
       const subL = sub.toLowerCase();
-      if (/dress/.test(subL)) return "dress";
-      if (/pant|short|skirt|legging|jogger|bottom/.test(subL)) return "bottom";
+      if (/dress|gown/.test(subL)) return "dress";
+      if (/top|sleeve|bra|crop|hoodie|sweatshirt|tank/.test(subL)) return "top";
+      if (/pant|short|skirt|skort|legging|jogger|bottom/.test(subL)) return "bottom";
+      // Swim cover-ups are tunic/kaftan-shaped — treat as dress for layout.
+      if (cat === "Swim" && /cover/.test(subL)) return "dress";
       return "top";
     }
     return "top";

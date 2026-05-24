@@ -61,9 +61,9 @@ const EXCLUSION_CHECKS = {
 // closet-sampler's getBucket does. Without this, Active-occasion looks (pool
 // = Athleisure + Shoes) always fail the upper/lower-half checks because no
 // item carries category "Tops" or "Bottoms".
-const ATHL_SUB_TOP = /top|sleeve|bra|crop|hoodie|sweatshirt/i;
-const ATHL_SUB_BOTTOM = /pant|short|skirt|legging|jogger|bottom/i;
-const ATHL_SUB_DRESS = /dress/i;
+const ATHL_SUB_TOP = /top|sleeve|bra|crop|hoodie|sweatshirt|tank/i;
+const ATHL_SUB_BOTTOM = /pant|short|skirt|skort|legging|jogger|bottom/i;
+const ATHL_SUB_DRESS = /dress|gown/i;
 
 function getGarmentRole(item) {
   if (!item) return "other";
@@ -78,9 +78,11 @@ function getGarmentRole(item) {
   if (cat === "Athleisure" || cat === "Loungewear" || cat === "Swim") {
     const sub = (item.subcategory || "").toLowerCase();
     if (ATHL_SUB_DRESS.test(sub)) return "dress";
-    if (ATHL_SUB_BOTTOM.test(sub)) return "lower";
+    // Check TOP before BOTTOM so "Short Sleeve" doesn't get matched by the
+    // /short/ inside ATHL_SUB_BOTTOM and classified as a lower-half piece.
     if (ATHL_SUB_TOP.test(sub)) return "upper";
-    // Default: read as upper (sports bra / tank / generic top).
+    if (ATHL_SUB_BOTTOM.test(sub)) return "lower";
+    if (cat === "Swim" && /cover/.test(sub)) return "dress";
     return "upper";
   }
   return "other";

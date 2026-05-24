@@ -48,10 +48,13 @@ const SLOTS = [
   { key: "accessory", label: "ACCESSORY", match: (it) => ["Accessories", "Belts"].includes(it.category), optional: true },
 ];
 
-// Slots that accept multiple items at once. Tops layer (tank under blouse
-// under cardigan); shoes and bags act as "options I'm considering" the user
-// can stage side-by-side in the canvas and pick visually.
-const MULTI_SLOTS = new Set(["top", "shoes", "bag"]);
+// Slots that accept multiple items at once. Every slot except dress is
+// multi: tops layer (tank under blouse under cardigan), bottoms can stage
+// shorts-under-skirt or alternatives side-by-side, outerwear layers
+// (cardigan under coat), accessories stack (necklace + earrings +
+// bracelet + belt), shoes and bags read as "options to compare." Dress
+// stays single because you can only wear one.
+const MULTI_SLOTS = new Set(["top", "bottom", "outerwear", "shoes", "bag", "accessory"]);
 
 // Stable key for per-instance state (positions, zOrders, autoFitted) so each
 // item in a multi-slot has its own canvas slot.

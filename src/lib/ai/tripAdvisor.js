@@ -88,11 +88,19 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
   const highF = WEATHER_HIGH[weather] || 60;
 
-  // Filter by weather and exclude swim/loungewear
-  const eligible = items.filter(it =>
-    it.category && it.category !== "Swim" && it.category !== "Loungewear" &&
-    filterByWeather([it], weather).length > 0
-  );
+  // Beach / Resort days explicitly want swim + cover-ups in the inventory.
+  // Everything else excludes Swim / Loungewear so the AI doesn't propose a
+  // bikini for City Walking. Without this branch the brief said "swim and
+  // cover-ups are first-class" but the AI never saw any swimwear and would
+  // fall back to a knit maxi skirt.
+  const activity = opts.activity || "Sightseeing";
+  const allowSwim = activity === "Beach" || activity === "Resort";
+
+  const eligible = items.filter(it => {
+    if (!it.category) return false;
+    if (!allowSwim && (it.category === "Swim" || it.category === "Loungewear")) return false;
+    return filterByWeather([it], weather).length > 0;
+  });
 
   if (eligible.length < 4) return null;
 
@@ -121,9 +129,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
 
   // ── Activity block: lifestyle context for the day (Theme Park = comfortable
   // shoes + no jeans, Beach = swim + cover-ups, Active = no silk or heels).
-  // The trip-level activity is persisted on the trip row; the user selected
-  // it when they created the trip.
-  const activity = opts.activity || "Sightseeing";
+  // `activity` is declared above where it gates the swim/loungewear filter.
   const ACTIVITY_NOTES = {
     "Theme Park": "All-day walking and standing. PRIORITIZE sneakers / comfortable flats / sturdy sandals. NO heels, pumps, stilettos, mules, cocktail dresses, gowns, or silk gowns. NO jeans (too restrictive for ride lines and long days). Lean into breathable cotton, athletic-leaning silhouettes, and casual layered pieces. Bag should be a crossbody or backpack.",
     "Beach": "Pool / beach / waterfront day. Swim, cover-ups, sundresses, sandals, and lightweight sun-protective layers are first-class. NO wool, cashmere, chunky knits, boots, or heels. Raffia / canvas bag.",
