@@ -78,6 +78,16 @@ function buildCollageLayout(items, isMobile) {
     if (cat === "Bottoms")   return "bottom";
     if (cat === "Shoes")     return "shoes";
     if (cat === "Dresses" || cat === "Jumpsuits" || (cat === "Occasionwear" && /dress|gown/i.test(sub))) return "dress";
+    // Sets: same inference as the styling-validator — read the name /
+    // subcategory to figure out whether this Set is a top half, bottom half,
+    // or a unified dress-like piece.
+    if (cat === "Sets") {
+      const text = `${sub} ${name}`.toLowerCase();
+      if (/dress|gown/.test(text)) return "dress";
+      if (/skort|skirt|short|pant|legging|jogger|bottom/.test(text)) return "bottom";
+      if (/zip|hood|sweat|crew|tank|tee|crop|top|sleeve/.test(text)) return "top";
+      return "top";
+    }
     if (cat === "Bags") return "bag";
     if (cat === "Belts") return "belt";
     if (cat === "Accessories" && (BAG_SUBCATEGORIES.has(sub) || BAG_NAME_RE.test(name))) return "bag";

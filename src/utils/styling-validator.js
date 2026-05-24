@@ -65,12 +65,30 @@ const ATHL_SUB_TOP = /top|sleeve|bra|crop|hoodie|sweatshirt|tank/i;
 const ATHL_SUB_BOTTOM = /pant|short|skirt|skort|legging|jogger|bottom/i;
 const ATHL_SUB_DRESS = /dress|gown/i;
 
+// "Sets" is a coordinated-piece category that gets tagged inconsistently —
+// some rows are individual halves (Fast Break Zip-Up, Pirouette Skort), some
+// are intended as full sets / day-set dresses. Treating every "Sets" item as
+// `dress` makes checkLowerHalf pass for a Lounge look that's literally a
+// zip-up + sandals + bag (no bottom). Infer from name + subcategory instead.
+function getSetsRole(item) {
+  const sub = (item.subcategory || "").toLowerCase();
+  const name = (item.name || "").toLowerCase();
+  if (ATHL_SUB_DRESS.test(sub) || ATHL_SUB_DRESS.test(name)) return "dress";
+  if (ATHL_SUB_TOP.test(name) || ATHL_SUB_TOP.test(sub)) return "upper";
+  if (ATHL_SUB_BOTTOM.test(name) || ATHL_SUB_BOTTOM.test(sub)) return "lower";
+  // "Day Sets" / "Matching Sets" with no top/bottom signal — assume an upper
+  // half (a sweatshirt-and-shorts set photographed together is usually the
+  // top half in the picker). Better to under-claim coverage than to fake it.
+  return "upper";
+}
+
 function getGarmentRole(item) {
   if (!item) return "other";
   const cat = item.category;
   if (cat === "Tops" || cat === "Knits") return "upper";
   if (cat === "Bottoms") return "lower";
-  if (cat === "Dresses" || cat === "Occasionwear" || cat === "Jumpsuits" || cat === "Sets") return "dress";
+  if (cat === "Dresses" || cat === "Occasionwear" || cat === "Jumpsuits") return "dress";
+  if (cat === "Sets") return getSetsRole(item);
   if (cat === "Outerwear") return "outer";
   if (cat === "Shoes") return "shoes";
   if (cat === "Bags") return "bag";
