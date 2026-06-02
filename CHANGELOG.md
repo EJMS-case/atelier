@@ -2,6 +2,15 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Builder stylist chat sees the whole closet — 2026-06-02
+
+### Why
+In the manual-build "Ask your stylist" chat, asking about a category she'd already placed (e.g. "Why don't my black bags work?") made the stylist insist she owned no such pieces. Root cause: `buildContext` filtered the reference inventory to only the categories of *empty* slots, so any filled-slot category (Bags, once a bag was picked) was dropped from the closet list entirely — the model only "saw" the one assembled bag. The all-slots-filled fallback (`closetItems.slice(0, 80)`) had the same failure mode, arbitrarily truncating whole categories.
+
+### Changed — Builder chat (`src/features/builder/builderChat.js`)
+- `buildContext` now sends the **whole closet**, grouped by category, with a per-category cap (40) so a large wardrobe stays within context without ever dropping a category. Empty-slot categories sort first (the most likely ask), then everything else — so the stylist can recommend swaps/alternatives in any category, including ones already filled.
+- Closet heading reworded to make clear the listed pieces are available to *complete or refine* the look, swaps included.
+
 ## [Unreleased] — Generator audit: kill conflicts, clean up rationale, faster — 2026-05-05
 
 ### Why

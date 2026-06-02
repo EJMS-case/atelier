@@ -29,13 +29,28 @@ function formatItem(it) {
   ].filter(Boolean).join(" | ");
 }
 
+// Cap per category so a large closet stays within context without ever dropping
+// an entire category. (Previously the reference list was filtered to *empty*
+// slots only — so when e.g. the bag slot was already filled, every bag in her
+// closet was hidden and the stylist wrongly reported she owned none.)
+const PER_CATEGORY_CAP = 40;
+
 function buildContext(assembledItems, closetItems, emptySlots) {
   const assembledText = assembledItems.map(formatItem).join("\n");
 
+  // Show the whole closet — grouped by category — so the stylist can suggest
+  // swaps/alternatives in *any* category, not just the unfilled slots. Empty-slot
+  // categories sort first (they're the most likely ask), then everything else.
   const relevantCats = new Set(emptySlots.flatMap(s => SLOT_CATEGORIES[s] || []));
-  const referenceItems = relevantCats.size > 0
-    ? closetItems.filter(it => relevantCats.has(it.category))
-    : closetItems.slice(0, 80);
+  const byCat = new Map();
+  for (const it of closetItems) {
+    const cat = it.category || "Other";
+    if (!byCat.has(cat)) byCat.set(cat, []);
+    byCat.get(cat).push(it);
+  }
+  const referenceItems = [...byCat.keys()]
+    .sort((a, b) => (relevantCats.has(b) - relevantCats.has(a)) || a.localeCompare(b))
+    .flatMap(cat => byCat.get(cat).slice(0, PER_CATEGORY_CAP));
 
   const referenceText = referenceItems.length > 0
     ? referenceItems.map(formatItem).join("\n")
@@ -46,7 +61,7 @@ function buildContext(assembledItems, closetItems, emptySlots) {
 ASSEMBLED SO FAR:
 ${assembledText}
 
-HER CLOSET — pieces available to complete the look:
+HER CLOSET — pieces available to complete or refine the look (including swaps for what she's already placed):
 ${referenceText}
 
 RULES:
