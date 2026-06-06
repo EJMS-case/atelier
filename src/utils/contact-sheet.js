@@ -8,17 +8,41 @@ const CELL_HEIGHT = THUMB_SIZE + LABEL_HEIGHT;
 const COLS = 10;
 const MAX_PER_SHEET = 80; // 10 cols × 8 rows
 
+// Module-level cache of decoded wardrobe images keyed by URL. Wardrobe photos
+// are immutable per URL (Supabase storage), so once an item's image is decoded
+// we can redraw it into every later contact sheet without re-fetching or
+// re-decoding it. This removes the dominant per-generation cost: back-to-back
+// "Style Me" re-rolls used to reload every eligible image (up to the full
+// closet) on the main thread before the API call could even start. Only
+// successful loads are cached — a transient timeout/error must not poison the
+// URL permanently.
+const imageCache = new Map(); // src -> HTMLImageElement
+const MAX_CACHED_IMAGES = 600;
+
+function cacheImage(src, img) {
+  // FIFO bound so a very large closet browsed over a long session can't grow
+  // the cache without limit.
+  if (imageCache.size >= MAX_CACHED_IMAGES) {
+    const oldest = imageCache.keys().next().value;
+    if (oldest !== undefined) imageCache.delete(oldest);
+  }
+  imageCache.set(src, img);
+}
+
 function loadImage(src, timeoutMs = 9000) {
   return new Promise((resolve) => {
     if (!src) { resolve(null); return; }
+    const cached = imageCache.get(src);
+    if (cached) { resolve(cached); return; }
     const img = new Image();
     img.crossOrigin = "anonymous";
     // Background tabs have image loads deprioritized by Chrome. Without a
     // timeout the Promise.all in generateContactSheets can stall indefinitely,
     // blocking the entire Anthropic API call. Resolve with null on timeout so
-    // generation continues with text-only inventory for that item.
+    // generation continues with text-only inventory for that item. A late
+    // onload after a timeout still populates the cache for the next roll.
     const timer = setTimeout(() => resolve(null), timeoutMs);
-    img.onload  = () => { clearTimeout(timer); resolve(img); };
+    img.onload  = () => { clearTimeout(timer); cacheImage(src, img); resolve(img); };
     img.onerror = () => { clearTimeout(timer); resolve(null); };
     img.src = src;
   });

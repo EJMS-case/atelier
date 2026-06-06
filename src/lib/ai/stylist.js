@@ -183,7 +183,7 @@ export async function classifyKnitAI(imgStr, apiKey) {
   if (!source) throw new Error("No image");
   return invokeTool({
     apiKey,
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     maxTokens: 200,
     content: [
       { type: "image", source },
@@ -220,7 +220,7 @@ ${wardrobeItems ? "Fill in pairingCount, pairingItemIds (up to 5), and dimension
 
   return invokeTool({
     apiKey,
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     maxTokens: 900,
     content: [
       { type: "image", source },
@@ -251,7 +251,7 @@ export async function generateStyleProfile(items, outfitLogs, analysis, apiKey) 
   const res = await fetch(API_URL, {
     method: "POST",
     headers: headers(apiKey),
-    body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 300, messages: [{ role: "user", content: prompt }] })
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 300, messages: [{ role: "user", content: prompt }] })
   });
   if (!res.ok) throw new Error("Profile generation failed");
   const data = await res.json();
@@ -265,7 +265,7 @@ export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, on
   const res = await fetch(API_URL, {
     method: "POST",
     headers: headers(apiKey),
-    body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] }),
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] }),
   });
   if (!res.ok || !res.body) throw new Error("Profile generation failed");
 
@@ -328,7 +328,7 @@ For each gap, suggest ONE specific product to buy. Be specific: brand, color, fa
 
     return invokeTool({
       apiKey,
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       maxTokens: 2000,
       content: [
         { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
@@ -362,7 +362,7 @@ Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. B
 
   return invokeTool({
     apiKey,
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     maxTokens: 2000,
     content: [
       { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },

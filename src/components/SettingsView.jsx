@@ -124,7 +124,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
             "anthropic-dangerous-direct-browser-access": "true",
           },
           body: JSON.stringify({
-            model: "claude-opus-4-5",
+            model: "claude-opus-4-8",
             max_tokens: 256,
             messages: [{
               role: "user",
