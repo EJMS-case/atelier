@@ -394,27 +394,49 @@ export function sampleClosetItems({
     pool = filterByWeather(pool, weather);
   }
 
-  // ── 3b. Hard-drop recently-worn or recently-suggested items so the same
-  // pieces don't surface generation after generation. The threshold was
-  // previously 80, which meant narrow occasion pools (e.g. Work + Warm)
-  // never benefited from the filter — the polka-dot skirt the user wore
-  // yesterday kept reappearing today. We now drop them if we'd still have
-  // a workable 30-item pool, which is enough to assemble three looks of
-  // 5–7 items each. Force-included items (matched against the user's
-  // free-text request) bypass this filter so "include my polka-dot skirt"
-  // still works on demand.
+  // ── 3b. Rotate out recently-worn / recently-suggested pieces so the same
+  // items don't surface tap after tap. The old rule was all-or-nothing: drop
+  // every repeat, but ONLY if ≥30 items survived — otherwise keep the full
+  // pool. That meant narrow pools (Work + Hot, Occasion, …) got ZERO rotation
+  // and the same heroes came straight back. We now drop repeats *per
+  // structural category*: every fresh (non-repeated) piece is always kept,
+  // plus a floor of the least-recently-used repeats per category, so three
+  // distinct looks are still buildable while we rotate as hard as the pool
+  // allows. Items the user explicitly named in the request are never dropped.
   const norepeatBlocked = new Set([
     ...(recentlyWornItems || []),
     ...(recentlySuggestedItems || []),
   ]);
   if (norepeatBlocked.size > 0) {
-    const reqText = (freeTextRequest || "").toLowerCase();
-    const trimmed = pool.filter(it => {
-      if (!norepeatBlocked.has(it.id)) return true;
-      // Spare items the user explicitly asked for from this filter.
-      return reqText && matchesFreeText(it, freeTextRequest);
-    });
-    if (trimmed.length >= 30) pool = trimmed;
+    // Per-category floor — how many options each bucket must retain so the
+    // validator can still assemble three non-overlapping looks (1 shoe + 1 bag
+    // + a lower half + a top per look, plus outerwear when cold).
+    const KEEP_FLOOR = {
+      tops: 6, bottoms: 4, dresses: 2, outerwear: 3, shoes: 4, bags: 4, accessories: 5,
+    };
+
+    // Group the surviving pool by structural bucket.
+    const byBucket = {};
+    for (const it of pool) (byBucket[getBucket(it)] ||= []).push(it);
+
+    const rotated = [];
+    for (const [bucket, group] of Object.entries(byBucket)) {
+      const floor = KEEP_FLOOR[bucket] ?? 4;
+      const fresh = [];
+      const stale = [];
+      for (const it of group) {
+        // Spare freshly-eligible pieces AND anything the user explicitly asked
+        // for (freeTextOverrideIds was matched against the unfiltered closet).
+        if (!norepeatBlocked.has(it.id) || freeTextOverrideIds.has(it.id)) fresh.push(it);
+        else stale.push(it);
+      }
+      // Drop the MOST-repeated stale items first; keep the least-used ones to
+      // backfill up to the floor when there aren't enough fresh pieces.
+      stale.sort((a, b) => (itemSuggestionCounts[a.id] || 0) - (itemSuggestionCounts[b.id] || 0));
+      const need = Math.max(0, floor - fresh.length);
+      rotated.push(...fresh, ...stale.slice(0, need));
+    }
+    pool = rotated;
   }
 
   // Down-vote drop removed — feedbackScores now only contains positive ratings
