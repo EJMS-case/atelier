@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
 import EditorialCollage from "./EditorialCollage.jsx";
+import ItemDetailSheet from "./ItemDetailSheet.jsx";
 import SaveLookModal from "./SaveLookModal.jsx";
 
 export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem, onEditItem }) {
@@ -51,47 +52,12 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
       <EditorialCollage lookItems={lookItems} layoutOverride={look.layout_data} onItemClick={item => setDetailItem(item)}/>
 
       {/* Item detail sheet */}
-      {detailItem && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 200, display: "flex", alignItems: "flex-end" }}
-          onClick={() => setDetailItem(null)}>
-          <div style={{ background: "var(--color-bg)", borderRadius: "16px 16px 0 0", padding: "20px 20px 36px", width: "100%", maxHeight: "70vh", overflowY: "auto" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", gap: 14, marginBottom: 14 }}>
-              {detailItem.image && (
-                <img src={detailItem.image} alt="" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: 8, background: "var(--color-surface)", flexShrink: 0 }}/>
-              )}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 16, marginBottom: 4, color: "var(--color-ink)" }}>{detailItem.name}</div>
-                {detailItem.brand && <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 2 }}>{detailItem.brand}</div>}
-                <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-                  {[detailItem.category, detailItem.subcategory].filter(Boolean).join(" › ")}
-                  {detailItem.color && <span> · {detailItem.color}</span>}
-                </div>
-                {detailItem.material && <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>{detailItem.material}</div>}
-                {detailItem.notes && <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 6, fontStyle: "italic" }}>{detailItem.notes}</div>}
-              </div>
-            </div>
-            {onEditItem && (
-              <button
-                onClick={() => { onEditItem(detailItem); setDetailItem(null); }}
-                style={{ width: "100%", padding: "12px 0", background: "var(--color-ink)", color: "var(--color-bg)", border: "none", borderRadius: 8, fontSize: 13, letterSpacing: "0.06em", cursor: "pointer" }}>
-                ✎ Edit this piece
-              </button>
-            )}
-            {onStyleItem && (
-              <button
-                onClick={() => { onStyleItem(detailItem); setDetailItem(null); }}
-                style={{ width: "100%", marginTop: 8, padding: "10px 0", background: "transparent", border: "1px solid var(--color-border-strong)", borderRadius: 8, fontSize: 12, color: "var(--color-text)", cursor: "pointer" }}>
-                ✦ Style an outfit around this piece
-              </button>
-            )}
-            <button onClick={() => setDetailItem(null)}
-              style={{ width: "100%", marginTop: 8, padding: "10px 0", background: "transparent", border: "1px solid var(--color-border-strong)", borderRadius: 8, fontSize: 12, color: "var(--color-text-muted)", cursor: "pointer" }}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      <ItemDetailSheet
+        item={detailItem}
+        onClose={() => setDetailItem(null)}
+        onEditItem={onEditItem}
+        onStyleItem={onStyleItem}
+      />
 
       {/* Rationale / styling teaser — use rationale (new) or styling (legacy) */}
       {(look.rationale || look.styling || look.jewelry) && (
