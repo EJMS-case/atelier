@@ -972,9 +972,12 @@ export async function generateValidatedLooks({
         ({ toolBlock, raw } = await invokeToolStream(
           {
             apiKey,
-            model: "claude-sonnet-4-6",
+            // Styling brain runs on Opus 4.8 for stronger outfit judgment.
+            // Opus 4.8 removed the sampling params — passing `temperature`
+            // now 400s. Look-to-look variety still comes from the per-look
+            // creative briefs and the random Seed line in the dynamic body.
+            model: "claude-opus-4-8",
             maxTokens: 5000,
-            temperature: 0.7,
             content: messageContent,
             tool: LooksTool,
           },
@@ -1010,9 +1013,9 @@ export async function generateValidatedLooks({
         // which caused retries to truncate mid-response.
         ({ toolBlock, raw } = await invokeToolRaw({
           apiKey,
-          model: "claude-sonnet-4-6",
+          // Match the streaming path: Opus 4.8, no sampling params.
+          model: "claude-opus-4-8",
           maxTokens: 5000,
-          temperature: 0.7,
           content: messageContent,
           tool: LooksTool,
         }));
