@@ -2,6 +2,7 @@ import { useState } from "react";
 import { s } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import SetPanel from "./SetPanel.jsx";
+import Thumb from "./Thumb.jsx";
 
 export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, onStyleItem }) {
   const [confirm,  setConfirm]  = useState(false);
@@ -11,7 +12,7 @@ export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited
     <div style={s.card}>
       <div style={s.cardImg} onClick={onEdit}>
         {item.image
-          ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.cardPhoto}/>
+          ? <Thumb item={item} alt={item.name} style={s.cardPhoto}/>
           : <div style={s.cardPlaceholder}>{item.category?.[0] || "?"}</div>}
         {isPartOfSet && (
           <button style={s.setBadge}

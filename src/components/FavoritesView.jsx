@@ -3,6 +3,7 @@ import { s } from "../ui/styles.js";
 import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
+import Thumb from "./Thumb.jsx";
 
 export default function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
   const [tab, setTab] = useState("outfits");
@@ -64,7 +65,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
               {favPieces.map(item => (
                 <div key={item.id} style={s.card}>
                   <div style={s.cardImg} onClick={() => onEditItem(item)}>
-                    {item.image ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.cardPhoto}/> : <div style={s.cardPlaceholder}>{item.category?.[0]}</div>}
+                    {item.image ? <Thumb item={item} alt={item.name} style={s.cardPhoto}/> : <div style={s.cardPlaceholder}>{item.category?.[0]}</div>}
                   </div>
                   <div style={s.cardBody}>
                     <div style={s.cardCat}>{item.category}</div>
