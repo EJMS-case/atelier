@@ -39,8 +39,9 @@ const SLOTS = [
       || (["Loungewear", "Athleisure"].includes(it.category) && TOP_LIKE_SUBS.test(it.subcategory || "")) },
   { key: "bottom",    label: "BOTTOM",    match: (it) => ["Bottoms"].includes(it.category)
       || (["Loungewear", "Athleisure"].includes(it.category) && BOTTOM_LIKE_SUBS.test(it.subcategory || "")) },
-  { key: "dress",     label: "DRESS",     match: (it) => ["Dresses", "Jumpsuits", "Sets", "Occasionwear"].includes(it.category)
+  { key: "dress",     label: "DRESS",     match: (it) => ["Dresses", "Jumpsuits", "Occasionwear"].includes(it.category)
       || (it.category === "Athleisure" && DRESS_LIKE_SUBS.test(it.subcategory || "")), optional: true },
+  { key: "set",       label: "SET",       match: (it) => it.category === "Sets", optional: true },
   { key: "swim",      label: "SWIM",      match: (it) => it.category === "Swim", optional: true },
   { key: "shoes",     label: "SHOES",     match: (it) => it.category === "Shoes" },
   { key: "outerwear", label: "OUTER",     match: (it) => it.category === "Outerwear", optional: true },
@@ -85,6 +86,7 @@ const DEFAULT_POSITIONS = {
   outerwear: { x:  0, y: 10, w: 100, h: 68 },
   top:       { x: 12, y: 12, w:  76, h: 38 },
   dress:     { x: 12, y: 12, w:  76, h: 80 },
+  set:       { x: 12, y: 12, w:  76, h: 80 },
   bottom:    { x: 12, y: 42, w:  76, h: 48 },
   shoes:     { x: 20, y: 76, w:  60, h: 22 },
   bag:       { x: 68, y: 44, w:  28, h: 16 },
