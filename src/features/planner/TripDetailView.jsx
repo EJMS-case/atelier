@@ -57,6 +57,27 @@ function parseBrief(notes) {
   try { return JSON.parse(notes); } catch { return null; }
 }
 
+// Compare two id lists order-independently.
+function sameIds(a, b) {
+  const x = [...(a || [])].sort();
+  const y = [...(b || [])].sort();
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+}
+
+// Heal rows corrupted by the old bare-savePlan divergence: a plan's legacy
+// top-level `items` is the most-recently-written truth for the primary outfit
+// (the calendar reads it), but `outfits[0]` could be stale if a build saved
+// only `items`. When they disagree, trust `items` for outfit #0 and keep the
+// other outfits untouched. Returns { plan, changed }.
+function healPlan(r) {
+  if (!Array.isArray(r?.items) || r.items.length === 0) return { plan: r, changed: false };
+  if (!Array.isArray(r?.outfits) || r.outfits.length === 0) return { plan: r, changed: false };
+  const first = r.outfits[0];
+  if (sameIds(first?.items, r.items)) return { plan: r, changed: false };
+  const outfits = [{ ...first, items: r.items }, ...r.outfits.slice(1)];
+  return { plan: { ...r, outfits }, changed: true };
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 /**
@@ -98,7 +119,21 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
     try {
       const rows = await fetchPlansBetween(trip.start_date, trip.end_date);
       const map = {};
-      for (const r of rows || []) {
+      for (const raw of rows || []) {
+        // Repair any row left divergent by the old save bug, then persist the
+        // repair once so the trip and calendar agree from here on.
+        const { plan: r, changed } = healPlan(raw);
+        if (changed) {
+          savePlan(buildPlanPayload({
+            date: r.date,
+            outfits: outfitsOf(r),
+            source: r.source || "trip",
+            notes: r.notes || null,
+            weather: r.weather || null,
+            activity: r.activity || null,
+            day_label: r.day_label || null,
+          })).catch(() => {});
+        }
         map[r.date] = r;
         // Restore per-day overrides from saved plan
         if (r.occasion && !dayOccasion[r.date]) {

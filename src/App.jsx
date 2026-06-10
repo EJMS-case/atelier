@@ -49,7 +49,7 @@ const SilhouetteBuilder = lazy(() => import("./features/builder/SilhouetteBuilde
 const InspirationView   = lazy(() => import("./features/inspiration/InspirationView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
-import { outfitsOf, buildPlanPayload } from "./features/planner/outfits.js";
+import { outfitsOf, buildPlanPayload, newOutfitId } from "./features/planner/outfits.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 
 // Minimal placeholder while a lazy chunk loads. Reuses the existing spinner
@@ -1295,39 +1295,48 @@ export default function App() {
             setFavorites(prev => [...(Array.isArray(result) ? result : [result]), ...prev]);
           }}
           onSchedule={async (plan) => {
-            // Trip-day edit: the plan row for this date has multiple
-            // outfits in the `outfits` JSONB array. Fetch the latest, swap
-            // the specific outfit's items + layout, and save the full
-            // payload. Without this branch, savePlan would only update the
-            // legacy top-level `items` column and the user's edits would
-            // be invisible in TripDetailView (which reads from outfits[]).
-            if (editingPlan?.tripOutfitIdx != null) {
-              try {
-                const rows = await fetchPlansBetween(plan.date, plan.date);
-                const existing = (Array.isArray(rows) && rows[0]) || null;
-                const current = outfitsOf(existing);
-                const idx = editingPlan.tripOutfitIdx;
-                if (current[idx]) {
-                  current[idx] = { ...current[idx], items: plan.items };
-                  const merged = buildPlanPayload({
-                    date: plan.date,
-                    outfits: current,
-                    source: existing?.source || "trip",
-                    notes: existing?.notes || plan.notes || null,
-                    weather: existing?.weather || plan.weather || null,
-                    activity: existing?.activity || null,
-                    day_label: existing?.day_label || null,
-                  });
-                  // Preserve the per-outfit layout when editing outfit #0
-                  // (the only one whose layout currently persists at the
-                  // plan-row level).
-                  if (idx === 0 && plan.layout_data) merged.layout_data = plan.layout_data;
-                  await savePlan(merged);
-                  return;
-                }
-              } catch { /* fall through to plain save */ }
+            // A planner/trip day stores its looks in the `outfits` JSONB array;
+            // the calendar grid reads the legacy top-level `items` mirror.
+            // Supabase's merge-duplicates upsert only writes the columns we
+            // send, so a bare savePlan({date, items}) updates `items` but
+            // leaves a STALE `outfits[]` behind — which made trip days keep
+            // showing the previously generated look (read from outfits[]) even
+            // though the calendar (read from items) updated. So we ALWAYS
+            // reconcile against the existing row's outfits[] and write a
+            // consistent payload, updating just the target outfit slot.
+            try {
+              const rows = await fetchPlansBetween(plan.date, plan.date);
+              const existing = (Array.isArray(rows) && rows[0]) || null;
+              const current = outfitsOf(existing);
+              // tripOutfitIdx identifies which outfit on a multi-look day is
+              // being edited; a plain planner-day edit targets the primary (#0).
+              const idx = editingPlan?.tripOutfitIdx ?? 0;
+              if (current.length === 0) {
+                current.push({ id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] });
+              } else if (current[idx]) {
+                current[idx] = { ...current[idx], items: plan.items || [], occasion: current[idx].occasion || plan.occasion || null };
+              } else {
+                current.push({ id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] });
+              }
+              const isTrip = editingPlan?.tripOutfitIdx != null || existing?.source === "trip";
+              const merged = buildPlanPayload({
+                date: plan.date,
+                outfits: current,
+                source: existing?.source || (isTrip ? "trip" : plan.source) || "planner",
+                notes: existing?.notes ?? plan.notes ?? null,
+                weather: existing?.weather ?? plan.weather ?? null,
+                activity: existing?.activity ?? null,
+                day_label: existing?.day_label ?? null,
+              });
+              // Persist the manual canvas arrangement for the primary outfit
+              // (the only slot whose layout currently round-trips at the row).
+              if (idx === 0 && plan.layout_data) merged.layout_data = plan.layout_data;
+              else if (existing?.layout_data) merged.layout_data = existing.layout_data;
+              await savePlan(merged);
+            } catch {
+              // Last-resort fallback so a fetch hiccup still saves *something*.
+              await savePlan(plan);
             }
-            await savePlan(plan);
           }}
           onClose={() => {
             setManualBuilderOpen(false);
