@@ -19,6 +19,13 @@ export const STORAGE_HEADERS = {
   "Authorization": `Bearer ${SUPABASE_KEY}`,
 };
 
+// Public URL for an item's small grid thumbnail. Thumbs live under a `thumbs/`
+// prefix in the same bucket, keyed by item id, so the URL is derivable without
+// a DB column. Generated lazily client-side (see components/Thumb.jsx).
+export function thumbUrl(itemId) {
+  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/thumbs/${itemId}`;
+}
+
 export const sb = {
   async fetchAll() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?select=*&order=created_at.asc`, {
@@ -100,11 +107,30 @@ export const sb = {
     throw lastErr;
   },
 
+  // Upload a small grid thumbnail under `thumbs/<itemId>`. Mirrors uploadImage
+  // but to the thumb path. Best-effort: one attempt, returns the public URL.
+  async uploadThumb(itemId, base64DataUrl) {
+    const [header, base64] = base64DataUrl.split(",");
+    const mime = header.match(/data:([^;]+)/)?.[1] || "image/png";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: mime });
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/thumbs/${itemId}`, {
+      method: "POST",
+      headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
+      body: blob,
+    });
+    if (!res.ok) throw new Error(`Thumb upload failed (HTTP ${res.status})`);
+    return thumbUrl(itemId);
+  },
+
   async removeImage(itemId) {
     await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
       method: "DELETE",
       headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify({ prefixes: [itemId] }),
+      // Remove the full image AND its derived thumbnail so deletes don't orphan.
+      body: JSON.stringify({ prefixes: [itemId, `thumbs/${itemId}`] }),
     });
   },
 
