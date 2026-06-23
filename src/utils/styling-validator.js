@@ -598,6 +598,44 @@ function checkCoordSets(response, idMap, allItems) {
 }
 
 /**
+ * Check (HC9): A dress, gown, or jumpsuit is a complete one-piece base.
+ *   · No Top layered UNDER it (the bodysuit-under-a-dress mistake the user
+ *     flagged). Outerwear / Knit OVER a dress is fine, so we only flag the
+ *     Tops category — cardigans/pullovers (Knits) legitimately layer over.
+ *   · No belt finishing a dress/jumpsuit — belts are for separates only.
+ * Both are hard: the look must be rebuilt without the offending piece.
+ */
+function checkDressStyling(response, idMap, allItems) {
+  const failures = [];
+  const DRESS_CATS = new Set(["Dresses", "Jumpsuits", "Occasionwear"]);
+  const isBelt = (it) =>
+    it.category === "Belts" ||
+    it.subcategory === "Belts" ||
+    /\bbelt\b/i.test(it.name || "");
+
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    if (!resolved.some(it => DRESS_CATS.has(it.category))) return; // not a dress look
+
+    const topUnder = resolved.find(it => it.category === "Tops");
+    if (topUnder) {
+      failures.push(`Look ${i + 1} layers "${topUnder.name}" (a top) under a dress/jumpsuit — remove it and finish the look another way. A dress is worn on its own; only outerwear layers over it.`);
+    }
+    const belt = resolved.find(isBelt);
+    if (belt) {
+      failures.push(`Look ${i + 1} adds belt "${belt.name}" to a dress/jumpsuit — drop the belt. Belts are for separates (trousers, skirts), not dresses.`);
+    }
+  });
+  return failures;
+}
+
+/**
  * Check 13: One statement piece per look. The styling-system rule already
  * says "one focal point" but the AI doesn't always honor it; this enforces
  * it. A statement = a non-solid pattern OR explicit heavy embellishment
@@ -723,6 +761,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
+  allFailures.push(...checkDressStyling(response, idMap, allItems).map(f => ({ type: "dress_styling", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
   allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: true })));
   allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion, weather).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
@@ -992,6 +1031,7 @@ export async function generateValidatedLooks({
                 ...checkItemsExist(candidate, idMap),
                 ...checkLowerHalf(candidate, idMap, allItems),
                 ...checkUpperHalf(candidate, idMap, allItems),
+                ...checkDressStyling(candidate, idMap, allItems),
               ];
               // Also guard against duplicating items already shown.
               const newIds = (candidate.looks[0]?.items || []).map(it =>

@@ -90,10 +90,12 @@ export default function FilterBar({ items, activeFilters, onChange }) {
         </div>
       )}
 
-      {/* Sleeve length filter — only when Tops or Dresses is selected */}
+      {/* Sleeve length filter — only when Tops is selected. (Dropped for
+          Dresses: it keyed off a sleeve_length field most dresses never had,
+          so it filtered to nothing.) */}
       {(() => {
         const cat = selectedCats.length === 1 ? selectedCats[0] : null;
-        if (cat !== "Tops" && cat !== "Dresses") return null;
+        if (cat !== "Tops") return null;
         const SLEEVE_OPTIONS = ["Sleeveless", "Short Sleeve", "Long Sleeve"];
         return (
           <div style={s.filterSection}>

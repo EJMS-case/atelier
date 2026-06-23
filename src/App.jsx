@@ -703,7 +703,7 @@ export default function App() {
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
     if (activeFilters.subcategory?.length) base = base.filter(it => activeFilters.subcategory.includes(it.subcategory));
-    // Sleeve length filter — uses subcategory mapping for Tops, sleeve_length field for Dresses
+    // Sleeve length filter — maps Tops subcategories to a sleeve length.
     if (activeFilters.sleeveLength) {
       const sl = activeFilters.sleeveLength;
       const TOPS_SLEEVE_MAP = {
@@ -714,8 +714,7 @@ export default function App() {
       };
       base = base.filter(it => {
         if (it.category === "Tops") return TOPS_SLEEVE_MAP[it.subcategory] === sl;
-        if (it.category === "Dresses") return (it.sleeve_length || "").toLowerCase() === sl.toLowerCase();
-        return true;   // don't filter non-Tops/Dresses items
+        return true;   // sleeve filter applies to Tops only
       });
     }
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
