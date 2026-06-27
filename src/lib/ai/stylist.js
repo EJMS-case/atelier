@@ -45,7 +45,7 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
-  const { mood = "", feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", count = 3 } = extras;
+  const { mood = "", feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], count = 3 } = extras;
   // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
   // classic 3-up generation. Values outside this range fall back to 3.
   const lookCount = (count >= 1 && count <= 3) ? count : 3;
@@ -126,6 +126,24 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     hero: heroStrategies[i % heroStrategies.length],
   }));
 
+  // Loved looks → compact TEXT exemplars (no W-IDs, so they never pollute item
+  // selection). Each becomes "[Occasion] color subcategory + color subcategory…"
+  // — enough for the model to read the level of polish and the kinds of
+  // combinations she rates highly, without copying the exact pieces.
+  const lovedLookLines = (lovedLooks || [])
+    .slice(0, 5)
+    .map(ll => {
+      const pieces = (ll.garment_ids || ll.items || [])
+        .map(id => items.find(it => it.id === id))
+        .filter(Boolean)
+        .slice(0, 8)
+        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
+      if (pieces.length < 2) return null;
+      const occ = ll.occasion ? `[${ll.occasion}] ` : "";
+      return `${occ}${pieces.join(" + ")}`;
+    })
+    .filter(Boolean);
+
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
     weather,
@@ -143,6 +161,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     requestedShortIds,
     inspirationVibes,
     styleFingerprint,
+    lovedLooks: lovedLookLines,
   });
 
   let contactSheets = [];
