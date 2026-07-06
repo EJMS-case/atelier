@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { s } from "../ui/styles.js";
 import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
+import { OCCASIONS, OCCASION_ALIASES } from "../constants/taxonomy.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import Thumb from "./Thumb.jsx";
 
@@ -25,6 +26,40 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
   };
   const tabs = [["outfits","Outfits",favOutfits.length],["pieces","Pieces",favPieces.length],["shopping","Shopping",0]];
 
+  // Group saved outfits by occasion so the page is scannable instead of one long
+  // date-sorted list. Weather isn't stored on logs, so occasion (normalized to
+  // its current bucket via aliases) is the primary axis; within each group the
+  // fetch order (date_worn desc) already keeps newest first. Groups follow the
+  // taxonomy order, with anything unrecognized falling to the end.
+  const occRank = (occ) => { const i = OCCASIONS.indexOf(occ); return i === -1 ? OCCASIONS.length : i; };
+  const groupedOutfits = (() => {
+    const map = new Map();
+    favOutfits.forEach(log => {
+      const occ = OCCASION_ALIASES[log.occasion] || log.occasion || "Other";
+      if (!map.has(occ)) map.set(occ, []);
+      map.get(occ).push(log);
+    });
+    return [...map.entries()].sort((a, b) => occRank(a[0]) - occRank(b[0]) || a[0].localeCompare(b[0]));
+  })();
+
+  const renderSavedOutfit = (log) => {
+    const subtitle = (
+      <>
+        {formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+      </>
+    );
+    return (
+      <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
+        headerRight={
+          <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
+              strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+          </button>
+        }
+      />
+    );
+  };
+
   return (
     <div style={nested ? {} : s.page}>
       {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Favorites</h2>}
@@ -40,23 +75,14 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
       {!loading && tab === "outfits" && (
         favOutfits.length === 0
           ? <div style={s.empty}><p style={s.emptyText}>No favorite outfits yet. Tap the heart on any outfit in History.</p></div>
-          : favOutfits.map(log => {
-              const subtitle = (
-                <>
-                  {formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
-                </>
-              );
-              return (
-                <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
-                  headerRight={
-                    <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                      <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
-                        strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
-                    </button>
-                  }
-                />
-              );
-            })
+          : groupedOutfits.map(([occ, group]) => (
+              <div key={occ}>
+                <div style={{ ...s.sectionLabel, textTransform:"uppercase", marginTop:8 }}>
+                  {occ}<span style={{ marginLeft:8, opacity:0.6 }}>{group.length}</span>
+                </div>
+                {group.map(renderSavedOutfit)}
+              </div>
+            ))
       )}
       {!loading && tab === "pieces" && (
         favPieces.length === 0
