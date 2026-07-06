@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react"
 // need to be re-imported here.
 import { MOODS } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
+import { generateStyleFingerprint } from "./features/stylist/styleFingerprint.js";
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
 import { bumpWearCounts, unbumpWearCounts } from "./features/wear/wearApi.js";
 import HomeView from "./features/home/HomeView.jsx";
@@ -137,6 +138,9 @@ export default function App() {
   const [builderReturnView, setBuilderReturnView] = useState(null);
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
+  // Hearted outfits, resolved to {garment_ids, occasion} — fed to the stylist
+  // as elevated exemplars ("the bar"). Text-only in the prompt, so no W-IDs.
+  const [lovedLooks, setLovedLooks] = useState([]);
   const [inspirations, setInspirations] = useState([]);
   // { text, source_count, generated_at } | null — loaded from user_settings
   // and refreshed via the Settings → Update Style Fingerprint button.
@@ -230,21 +234,52 @@ export default function App() {
   // (initial items came from the lazy useState init above, no need to re-read).
   useEffect(() => {
     sb.ensureBucket().catch(() => {});
-    sb.fetchFavorites().then(setFavorites).catch(() => {});
-
     // F2 — load aggregate feedback scores so sampler can weight future picks
     fetchItemFeedbackScores().then(setFeedbackScores).catch(() => {});
 
-    // F2 — compute items worn in last 3 days from outfit_logs
-    sb.fetchOutfitLogs().then(logs => {
+    // Background refresh of the style fingerprint when history has grown enough
+    // since it was last generated. It used to refresh ONLY from a Settings
+    // button, so it silently went stale; this keeps "personal patterns" current
+    // without the user doing anything. Fully best-effort.
+    const maybeRefreshFingerprint = async (logs) => {
+      if (!apiKey) return;
+      const count = (logs || []).length;
+      if (count < 5) return;
+      try {
+        const fp = await sb.getStyleFingerprint().catch(() => null);
+        const have = fp?.source_count || 0;
+        if (fp && count - have < 10) return;   // still fresh enough
+        const plans = await sb.fetchAllPlans().catch(() => []);
+        const fresh = await generateStyleFingerprint({ items, logs, plans, apiKey });
+        if (fresh?.text) { setStyleFingerprint(fresh); sb.saveStyleFingerprint(fresh).catch(() => {}); }
+      } catch { /* non-fatal — regenerate next session */ }
+    };
+
+    // Favorites + outfit history together → recently-worn (anti-repeat) and
+    // loved looks (elevation exemplars for the stylist), plus the fingerprint
+    // refresh above.
+    Promise.all([sb.fetchFavorites(), sb.fetchOutfitLogs()]).then(([favs, logs]) => {
+      setFavorites(favs || []);
+
       const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const ids = new Set();
+      const wornIds = new Set();
       (logs || []).forEach(log => {
         if (log.date_worn && log.date_worn >= cutoff) {
-          (log.garment_ids || []).forEach(id => ids.add(id));
+          (log.garment_ids || []).forEach(id => wornIds.add(id));
         }
       });
-      setRecentlyWornItems([...ids]);
+      setRecentlyWornItems([...wornIds]);
+
+      // Loved looks = hearted outfit_logs (newest first, capped).
+      const lovedIds = new Set((favs || []).filter(f => f.type === "outfit").map(f => f.reference_id));
+      setLovedLooks(
+        (logs || [])
+          .filter(l => lovedIds.has(l.id) && (l.garment_ids || []).length >= 2)
+          .slice(0, 6)
+          .map(l => ({ garment_ids: l.garment_ids, occasion: l.occasion }))
+      );
+
+      maybeRefreshFingerprint(logs || []);
     }).catch(() => {});
 
     // Load sets metadata from Supabase and backfill any local-only sets.
@@ -610,7 +645,7 @@ export default function App() {
       const result = await generateOutfit(
         items, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
-        { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, count }
+        { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, count }
       );
       const looks = result?.looks;
       if (!looks || !Array.isArray(looks) || looks.length === 0) {

@@ -38,6 +38,11 @@ BRAND REGISTER (aesthetic, not label): tailored/minimal — The Row, Totême, Kh
 ★ MOLLY DICKSON TASTE-TEST — apply before finalizing every look ★
 Could Molly Dickson (IT-girl stylist, never costume-y, always assembled) have put this together? (1) Exactly ONE hero. (2) ≥2 fabric weights/finishes (silk × wool, leather × cashmere, matte × sheen). (3) Chic, effortless, slightly edgy — not safe, not over-styled. If any answer is no, rework before returning.
 
+★ ELEVATION MOVES — what separates "dressed" from "styled" ★
+- THE THIRD PIECE: the most elevated looks carry a considered element beyond top + bottom + shoes — a jacket, blazer, vest, scarf, OR one real piece of jewelry. Reach for one whenever it doesn't break the one-statement rule (HC8); top + bottom + shoes alone reads unfinished. (A dress already counts as resolved — elevate it with outerwear and/or jewelry, never an under-layer or belt per HC9.)
+- ONE DELIBERATE TENSION per look: structured × fluid, masculine × feminine, high × low, polished × undone. A look with no tension reads safe.
+- FINISH WITH INTENTION: jewelry, a considered belt on separates, or the right bag is a finishing move, not an afterthought — but restraint beats pile-on. One or two intentional finishing notes, never a stack.
+
 HARD RULES (any violation = automatic rebuild):
 - HC1 Inventory only. NEVER invent items. Reference items by their W-ID from the REQUEST inventory.
 - HC2 4–6 items per look.
@@ -111,6 +116,7 @@ export function buildStylingPrompt({
   requestedShortIds = [],
   inspirationVibes = [],
   styleFingerprint = "",
+  lovedLooks = [],
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
@@ -154,6 +160,14 @@ export function buildStylingPrompt({
     ? `\n👤 PERSONAL PATTERNS — soft preferences from her actual worn + planned outfit history (use as gentle bias, NOT hard rule):\n${styleFingerprint.trim()}\n\nHonor these patterns when they fit naturally; depart freely when the closet, occasion, or weather call for something different. NEVER error or refuse a look just because it departs from a pattern — the patterns describe taste, not constraints.\n`
     : "";
 
+  // Loved looks — outfits she explicitly hearted. TEXT-ONLY exemplars of the
+  // polish/combination level she considers elevated. Like inspiration vibes,
+  // these are NOT inventory and carry no W-IDs, so they can't pollute the
+  // model's item selection — they only raise the bar.
+  const lovedLooksBlock = (lovedLooks && lovedLooks.length > 0)
+    ? `\n✨ LOOKS SHE LOVED — outfits she rated highly. This is the BAR: the level of polish, proportion, and finish she considers elevated. Build NEW looks from the inventory below — do NOT copy these verbatim — but match this intention and ambition. Notice what they have in common.\n${lovedLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
+    : "";
+
   // Inspiration vibe notes — TEXT-ONLY style direction tied to this occasion +
   // weather. These are NOT inventory. The block hard-asserts that twice:
   // the items array still comes only from the wardrobe inventory below.
@@ -187,7 +201,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}
+${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}
 ${stylePrefsBlock}${recentBlock}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
