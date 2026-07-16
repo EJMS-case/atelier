@@ -95,6 +95,7 @@ const DEFAULT_POSITIONS = {
 
 export default function SilhouetteBuilder({
   items,
+  setsMeta = {},
   onSave,
   onFavoriteLook,
   onSchedule,
@@ -280,6 +281,80 @@ export default function SilhouetteBuilder({
     }
     return pool;
   }, [activeSlot, items, search, subcatFilter]);
+
+  // ── Coordinated sets in the SET slot ──────────────────────────────────────
+  // The SET slot used to show ONLY items literally categorized "Sets", so the
+  // user's coordinated sets (separates linked by a shared set_id) never appeared
+  // there — they scattered into Top/Bottom/etc. Surface every coordinated set as
+  // one pickable card; tapping it drops each member into its natural slot so the
+  // canvas composes the whole set at once.
+  const naturalSlotFor = (it) => (SLOTS.find(sl => sl.key !== "set" && sl.match(it))?.key) || "set";
+
+  const coordSets = useMemo(() => {
+    const groups = new Map();
+    (items || []).forEach(it => {
+      if (!it.set_id) return;
+      if (!groups.has(it.set_id)) groups.set(it.set_id, []);
+      groups.get(it.set_id).push(it);
+    });
+    return [...groups.entries()]
+      .filter(([, members]) => members.length >= 2)
+      .map(([setId, members]) => ({
+        kind: "coord",
+        key: setId,
+        members,
+        image: members.find(m => m.image)?.image || null,
+        label: setsMeta?.[setId]?.name
+          || `Set · ${[...new Set(members.map(m => m.subcategory || m.category).filter(Boolean))].slice(0, 3).join(" + ")}`,
+      }));
+  }, [items, setsMeta]);
+
+  // category="Sets" one-piece items that aren't part of a coordinated group —
+  // still individually pickable (a co-ord photographed as a single garment).
+  const singleSetItems = useMemo(
+    () => (items || []).filter(it => it.category === "Sets" && !it.set_id),
+    [items]
+  );
+
+  const setEntries = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const singles = singleSetItems.map(it => ({ kind: "single", key: it.id, image: it.image, label: pickerLabel(it), item: it }));
+    const all = [...coordSets, ...singles];
+    return q ? all.filter(e => (e.label || "").toLowerCase().includes(q)) : all;
+  }, [coordSets, singleSetItems, search]);
+
+  // How many of a set's members are currently on the canvas: none / partial / full.
+  const setSelectionState = (entry) => {
+    const members = entry.kind === "single" ? [entry.item] : entry.members;
+    const pickedCount = members.filter(m => {
+      const slot = entry.kind === "single" ? "set" : naturalSlotFor(m);
+      const cur = Array.isArray(selections[slot]) ? selections[slot] : (selections[slot] ? [selections[slot]] : []);
+      return cur.includes(m.id);
+    }).length;
+    if (pickedCount === 0) return "none";
+    if (pickedCount === members.length) return "full";
+    return "partial";
+  };
+
+  const toggleSet = (entry) => {
+    if (entry.kind === "single") { togglePick("set", entry.item.id); return; }
+    const removing = setSelectionState(entry) === "full";
+    setSelections(prev => {
+      const next = { ...prev };
+      entry.members.forEach(m => {
+        const slot = naturalSlotFor(m);
+        const isMulti = MULTI_SLOTS.has(slot);
+        const cur = Array.isArray(next[slot]) ? [...next[slot]] : (next[slot] ? [next[slot]] : []);
+        if (removing) {
+          const filtered = cur.filter(x => x !== m.id);
+          if (filtered.length) next[slot] = filtered; else delete next[slot];
+        } else if (!cur.includes(m.id)) {
+          next[slot] = isMulti ? [...cur, m.id] : [m.id];
+        }
+      });
+      return next;
+    });
+  };
 
   // Flatten the multi-item slots into a single list of {slot, item} pairs.
   // The slot is preserved so default positions / z-order / layout controls
@@ -713,7 +788,7 @@ export default function SilhouetteBuilder({
                 style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 12, background: "#fff", boxSizing: "border-box" }}/>
             </div>
             {/* Subcategory chips */}
-            {subcatsForSlot.length > 1 && (
+            {subcatsForSlot.length > 1 && activeSlot !== "set" && (
               <div style={{ display: "flex", gap: 5, overflowX: "auto", padding: "0 16px 8px" }}>
                 <button onClick={() => setSubcatFilter("")}
                   style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${subcatFilter === "" ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === "" ? PALETTE.ink : "transparent", color: subcatFilter === "" ? PALETTE.cream : PALETTE.muted }}>All</button>
@@ -727,6 +802,32 @@ export default function SilhouetteBuilder({
             )}
             {/* 3-column item grid */}
             <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 32px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignContent: "start" }}>
+              {/* SET slot shows coordinated sets (+ one-piece "Sets" items).
+                  Tapping a coordinated set drops all its pieces onto the canvas. */}
+              {activeSlot === "set" ? (
+                setEntries.length === 0 ? (
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12, color: PALETTE.muted, padding: "28px 0", textAlign: "center" }}>No sets yet. Link pieces into a set from the closet.</div>
+                ) : setEntries.map(entry => {
+                  const state = setSelectionState(entry);
+                  const on = state !== "none";
+                  return (
+                    <button key={entry.key} onClick={() => toggleSet(entry)}
+                      style={{ background: state === "full" ? PALETTE.ink : "#fff", border: `2px solid ${on ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: state === "full" ? PALETTE.bg : PALETTE.soft, textAlign: "left", position: "relative" }}>
+                      <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4, position: "relative" }}>
+                        {entry.image && <img src={entry.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {entry.kind === "coord" && (
+                          <span style={{ position: "absolute", top: 3, right: 3, fontSize: 8, fontWeight: 600, letterSpacing: "0.04em", background: "rgba(28,24,20,0.82)", color: "#fff", borderRadius: 8, padding: "1px 5px" }}>
+                            {entry.members.length} pcs{state === "partial" ? " ·" : ""}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", overflow: "hidden", maxHeight: 22 }}>
+                        {entry.label}
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (<>
               {poolForSlot.length === 0 && (
                 <div style={{ gridColumn: "1 / -1", fontSize: 12, color: PALETTE.muted, padding: "28px 0", textAlign: "center" }}>No items in this category.</div>
               )}
@@ -745,6 +846,7 @@ export default function SilhouetteBuilder({
                   </button>
                 );
               })}
+              </>)}
             </div>
           </div>
         </>

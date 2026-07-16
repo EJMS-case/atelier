@@ -606,6 +606,11 @@ export default function App() {
       layout_data: look.layout_data || aiLayout || undefined,
       mood: look.vibe || look.mood || "",
       occasion: look.occasion || fallbackOccasion,
+      // Stamp the weather the look was generated under so saving it to History
+      // captures weather too (the manual builder already did; Style Me didn't).
+      // outfit_logs has weather + weathers columns, so this round-trips.
+      weather: look.weather || ([...weather].join(" + ") || null),
+      weathers: look.weathers || [...weather],
       styling: look.rationale || look.styling || "",
       colorStory: look.color_strategy || look.colorStory || "",
       reasoning: look.rationale || look.reasoning || "",
@@ -1293,6 +1298,7 @@ export default function App() {
       {view === "style" && manualBuilderOpen && (
         <SilhouetteBuilder
           items={items}
+          setsMeta={setsMeta}
           apiKey={apiKey}
           initialLook={editingPlan ? {
             // Synthetic "log shape" so SilhouetteBuilder's initialSelections
