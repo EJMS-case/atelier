@@ -18,6 +18,11 @@ export default function SaveLookModal({ look, lookItems, onSave, onClose }) {
         garment_ids: (look.items || []),
         date_worn: logAsWorn ? dateWorn : null,
         occasion,
+        // Carry the weather the look was generated under (stamped in
+        // normalizeLooks) so History/Saved capture it — enables a future
+        // weather sort. Harmless if absent; saveOutfitLog strips unknown cols.
+        weather: look.weather || null,
+        weathers: look.weathers || null,
         notes: notes.trim() || null,
         collage_url: JSON.stringify({ mood: look.mood, styling: look.styling || look.why }),
       });
