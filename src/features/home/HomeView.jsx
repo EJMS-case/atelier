@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween } from "../planner/plannerApi.js";
 import { mostWornItems, neglectedItems, costPerWear } from "../wear/wearApi.js";
 import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
+import LookBackCard from "../recap/LookBackCard.jsx";
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -20,7 +21,7 @@ const PALETTE = {
   accent: "var(--color-accent)",
 };
 
-export default function HomeView({ items, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem }) {
+export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -85,6 +86,14 @@ export default function HomeView({ items, onOpenPlanner, onOpenStyle, onEditItem
           style={{ width: "100%", padding: "14px 16px", background: PALETTE.ink, color: PALETTE.cream, border: "none", borderRadius: 10, marginBottom: 16, fontSize: 13, letterSpacing: "0.08em", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
           ✦ Style me for today
         </button>
+      )}
+
+      {/* Monthly look-back — recap of the last 30 days (worn diary + AI picks
+          + leaned-on pieces + forward nudges). Self-contained; fetches its own
+          calendar window. */}
+      {items.length > 0 && (
+        <LookBackCard items={items} favorites={favorites || []} apiKey={apiKey}
+          onEditItem={onEditItem} onStyleItem={onStyleItem}/>
       )}
 
       {/* Coming Up — next planned days within the 2-week horizon. Tap to jump

@@ -1051,6 +1051,8 @@ export default function App() {
           </div>
           <HomeView
             items={items}
+            favorites={favorites}
+            apiKey={apiKey}
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
