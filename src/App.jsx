@@ -935,7 +935,7 @@ export default function App() {
             style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
           {request && (
             <div style={{fontSize:10, color:"var(--color-text-muted)", marginTop:-4, marginBottom:8, fontStyle:"italic"}}>
-              ✦ Used as the theme for all 3 looks. Named pieces are force-included.
+              ✦ Applied as the theme for every look you generate. Named pieces are force-included.
             </div>
           )}
 
