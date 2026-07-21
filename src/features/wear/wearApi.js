@@ -4,8 +4,55 @@
 // so the same code path works from every save entry point.
 
 import { SUPABASE_URL, SB_HEADERS } from "../../lib/supabase.js";
+import { outfitsOf } from "../planner/outfits.js";
 
 const H = { ...SB_HEADERS, Prefer: "return=minimal" };
+
+/**
+ * Derive TRUE wear stats from the actual wear record — calendar (planned_outfits)
+ * + legacy worn logs (outfit_logs) — rather than the stored wear_count/last_worn
+ * cache, which only updated on the old "log as worn" flow and went stale once the
+ * user switched to the calendar. Counts distinct days per item (a piece worn in
+ * two looks on one day = one wear).
+ *
+ * @returns {Object.<string,{wears:number,lastWorn:string}>}
+ */
+export function deriveWearStats(plans = [], logs = []) {
+  const byItem = new Map(); // id -> Set(dateIso)
+  const add = (id, date) => {
+    if (!id || !date) return;
+    if (!byItem.has(id)) byItem.set(id, new Set());
+    byItem.get(id).add(date);
+  };
+  (plans || []).forEach(p => {
+    if (!p?.date) return;
+    outfitsOf(p).forEach(o => (o.items || []).forEach(id => add(id, p.date)));
+  });
+  (logs || []).forEach(l => {
+    if (!l?.date_worn) return; // only actually-worn logs count
+    (l.garment_ids || []).forEach(id => add(id, l.date_worn));
+  });
+  const stats = {};
+  for (const [id, dates] of byItem) {
+    const arr = [...dates].sort();
+    stats[id] = { wears: arr.length, lastWorn: arr[arr.length - 1] };
+  }
+  return stats;
+}
+
+/**
+ * Overlay derived wear stats onto items so the existing metric helpers (which
+ * read wear_count / last_worn) become accurate without signature changes. Items
+ * with a real calendar/log record use the derived values; anything with no
+ * record falls back to whatever was stored (covers pre-calendar legacy data).
+ */
+export function applyWearStats(items = [], stats = {}) {
+  return (items || []).map(it => {
+    const s = stats[it.id];
+    if (!s) return it;
+    return { ...it, wear_count: s.wears, last_worn: s.lastWorn };
+  });
+}
 
 /**
  * Increment wear_count by 1 for each id in the list. Uses PATCH per item —

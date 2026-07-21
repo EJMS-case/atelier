@@ -136,6 +136,11 @@ export function buildStylingPrompt({
     ? `\n🔄 FRESHNESS: ${recentlySuggestedItems.length} items have been suggested in recent generations and were filtered out of the inventory below when possible. Build looks from what you see — don't ask for pieces that aren't here.\n`
     : "";
 
+  // Variety nudge — complements the sampler's cross-generation rotation. Pushes
+  // the model to spread across the inventory instead of anchoring on the same
+  // handful of salient pieces tap after tap (the "same few tops" complaint).
+  const varietyNote = `\n🎲 VARIETY: Range widely across the inventory shown. When several pieces would work equally well for a slot, favor one you haven't already leaned on — don't rebuild around the same few hero pieces every time. Each pull should feel like a fresh look into her closet.\n`;
+
   const weatherBlock = formatWeather(weather);
 
   const countWord = lookCount === 1 ? "ONE" : lookCount === 2 ? "BOTH" : "ALL THREE";
@@ -220,7 +225,7 @@ REQUEST
 
 OCCASION: ${occasionNote}
 ${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}
-${stylePrefsBlock}${recentBlock}
+${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
 ────────────────────────────────────────────────────────
