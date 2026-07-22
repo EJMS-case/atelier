@@ -34,7 +34,6 @@ function monthLabel(startIso, endIso) {
 export default function LookBackCard({ items, favorites = [], apiKey, onEditItem, onStyleItem }) {
   const todayIso = nyToday();
   const [plans, setPlans] = useState(null);
-  const [expanded, setExpanded] = useState(false);
   const [stylish, setStylish] = useState(null);
   const [judging, setJudging] = useState(false);
   const [judgeErr, setJudgeErr] = useState("");
@@ -86,12 +85,8 @@ export default function LookBackCard({ items, favorites = [], apiKey, onEditItem
   return (
     <section style={card}>
       {/* Header + glance */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+      <div style={{ marginBottom: 8 }}>
         <div style={label}>LOOK-BACK · {monthLabel(recap.window.startIso, recap.window.endIso)}</div>
-        <button onClick={() => setExpanded(x => !x)}
-          style={{ fontSize: 10, color: PALETTE.muted, background: "none", border: "none", cursor: "pointer", letterSpacing: "0.04em" }}>
-          {expanded ? "Less ▴" : "More ▾"}
-        </button>
       </div>
       <div style={{ fontSize: 13, color: PALETTE.soft, lineHeight: 1.5 }}>
         <strong style={{ color: PALETTE.ink }}>{glance.outfitCount} outfits</strong> over {glance.daysWorn} days
@@ -103,7 +98,7 @@ export default function LookBackCard({ items, favorites = [], apiKey, onEditItem
       {/* Where you went */}
       {wheres.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
-          {wheres.slice(0, expanded ? 12 : 5).map((w, i) => (
+          {wheres.slice(0, 8).map((w, i) => (
             <span key={i} title={friendlyDate(w.date)}
               style={{ fontSize: 10, padding: "3px 8px", borderRadius: 12, background: "#fff", border: `1px solid ${PALETTE.soft_line}`, color: PALETTE.soft }}>
               {w.isTrip ? "✈ " : ""}{w.where}
@@ -146,8 +141,8 @@ export default function LookBackCard({ items, favorites = [], apiKey, onEditItem
         ))}
       </div>
 
-      {/* Everything below is behind "More" to keep Home tidy */}
-      {expanded && (
+      {/* Retrospective + forward sections */}
+      {(
         <>
           {/* Leaned-on pieces */}
           {leanedOn.length > 0 && (

@@ -53,6 +53,10 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // Defend against legacy occasion strings ("Interview"/"Executive"/"Daytime"/…)
   // that may still arrive from saved planner entries or older callers.
   occasion = normalizeOccasion(occasion) || "Casual";
+  // Comfort occasions: ease over elevation. These opt OUT of the editorial hero
+  // briefs and the "elevation moves" preamble (which were pushing blazers,
+  // statement jewelry, and dressy fabrics onto loungewear).
+  const comfortMode = new Set(["Lounge", "Active", "Travel Day"]).has(occasion);
   const baseSlots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Casual;
   const w = (weather || "").toLowerCase();
   const isHotOrWarm = /hot|warm|85|70-84/i.test(w);
@@ -162,6 +166,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     inspirationVibes,
     styleFingerprint,
     lovedLooks: lovedLookLines,
+    comfortMode,
   });
 
   let contactSheets = [];

@@ -131,6 +131,39 @@ const OCCASION_PREFILTERS = {
   },
 };
 
+// ── Comfort occasions + note-based occasion affinity ─────────────────────────
+// Lounge / Active / Travel Day are comfort-first. Two rules apply to them:
+//   1. Dressy garments (silk/satin/leather bottoms, blazers, heels…) are filtered
+//      out — that's what kept putting silk pants in a Lounge look.
+//   2. The user's OWN notes are honored: a piece she tagged "good for athleisure"
+//      is rescued INTO the occasion even if its category would exclude it.
+export const COMFORT_OCCASIONS = new Set(["Lounge", "Active", "Travel Day"]);
+
+const OCCASION_NOTE_HINTS = {
+  Lounge:       /\b(athleisure|lounge|loungewear|comfy|cozy|cosy|relax|soft|weekend|home|casual|everyday)\b/i,
+  Active:       /\b(athleisure|active|work.?out|gym|training|performance|sport|running|run|yoga|pilates|hik|athletic|technical|sweat)\b/i,
+  "Travel Day": /\b(travel|airport|flight|plane|comfy|cozy|cosy|lounge|athleisure|soft|casual|everyday)\b/i,
+};
+// True when the user's own note/name marks this piece as fit for the occasion.
+export function noteSaysOccasion(item, occasion) {
+  const rx = OCCASION_NOTE_HINTS[occasion];
+  if (!rx) return false;
+  return rx.test(((item.name || "") + " " + (item.notes || "")).toLowerCase());
+}
+
+// Garments (not shoes/bags/accessories — a leather sneaker is fine for Lounge)
+// that are too dressy for a comfort occasion, unless she noted otherwise.
+const DRESSY_COMFORT_CATS = new Set(["Tops", "Knits", "Bottoms", "Dresses", "Jumpsuits", "Sets", "Outerwear", "Occasionwear"]);
+const DRESSY_COMFORT_SUBS = new Set(["Satin/Silk", "Blazers", "Cocktail Dresses", "Gowns", "Formal Separates", "Heels", "Pumps", "Stiletto", "Mules"]);
+const DRESSY_COMFORT_MATERIAL = /\b(silk|satin|charmeuse|leather|suede|lace|sequin|velvet|chiffon|organza|brocade|taffeta|tweed)\b/i;
+function tooDressyForComfort(item, occasion) {
+  if (!DRESSY_COMFORT_CATS.has(item.category)) return false;
+  if (noteSaysOccasion(item, occasion)) return false; // she vouched for it
+  if (DRESSY_COMFORT_SUBS.has(item.subcategory)) return true;
+  const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
+  return DRESSY_COMFORT_MATERIAL.test(text);
+}
+
 // ── Exclusion filter → item test mapping ─────────────────────────────────────
 function matchesExclusion(item, exclusionKey) {
   const name = (item.name || "").toLowerCase();
@@ -334,6 +367,17 @@ export function sampleClosetItems({
       : []
   );
 
+  // Note-rescue set: for a comfort occasion, pieces she tagged "good for
+  // athleisure/lounge/travel" in their notes are treated as occasion-appropriate
+  // even if their category would otherwise exclude them (e.g. a Top she wears to
+  // work out otherwise banned from Active). Only bypasses category-level bans —
+  // subcategory bans (heels), weather, and toggle exclusions still apply.
+  const isComfort = COMFORT_OCCASIONS.has(occasion);
+  const occasionNoteIds = new Set(
+    isComfort ? items.filter(it => noteSaysOccasion(it, occasion)).map(it => it.id) : []
+  );
+  const catRescued = (it) => freeTextOverrideIds.has(it.id) || occasionNoteIds.has(it.id);
+
   // ── 1. Pre-filter by occasion bans (from OCCASION_SLOTS) ──
   const slots = occasionSlots || {};
   const bannedCats = new Set(slots.banned?.categories || []);
@@ -346,7 +390,9 @@ export function sampleClosetItems({
 
   let pool = items.filter(it => {
     if (freeTextOverrideIds.has(it.id)) return true;
-    if (bannedCats.has(it.category)) return false;
+    // catRescued bypasses the CATEGORY ban only (a noted-athleisure Top clears
+    // the Active "no Tops" ban); subcategory / keyword bans still apply.
+    if (bannedCats.has(it.category) && !catRescued(it)) return false;
     if (bannedSubs.has(it.subcategory)) return false;
     if (bannedSubs.has("Jeans") && isDenim(it)) return false;
     if (bannedKeywords.length > 0) {
@@ -364,9 +410,9 @@ export function sampleClosetItems({
       // keepCategories acts as an allow-list: if present, items whose category
       // isn't in the set get dropped immediately. Used by Active (athleisure +
       // shoes only) to keep evening dresses, work blazers, etc. completely out
-      // of the AI's view.
-      if (preFilter.keepCategories && !preFilter.keepCategories.has(it.category)) return false;
-      if (preFilter.removeCategories.has(it.category)) return false;
+      // of the AI's view. A note-rescued piece bypasses the category gates.
+      if (preFilter.keepCategories && !preFilter.keepCategories.has(it.category) && !catRescued(it)) return false;
+      if (preFilter.removeCategories.has(it.category) && !catRescued(it)) return false;
       if (preFilter.removeSubcategories.has(it.subcategory)) return false;
       if (preFilter.removeKeywords.length > 0) {
         const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
@@ -377,6 +423,13 @@ export function sampleClosetItems({
       if (typeof preFilter.keep === "function" && !preFilter.keep(it)) return false;
       return true;
     });
+  }
+
+  // ── 1c. Comfort-occasion dressiness gate ──
+  // Keep silk/satin/leather/blazer-type garments out of Lounge/Active/Travel
+  // Day. Pieces she named in the request, or noted as comfort-appropriate, stay.
+  if (isComfort) {
+    pool = pool.filter(it => freeTextOverrideIds.has(it.id) || !tooDressyForComfort(it, occasion));
   }
 
   // ── 2. Pre-filter by active exclusions ──

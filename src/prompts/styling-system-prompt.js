@@ -117,6 +117,7 @@ export function buildStylingPrompt({
   inspirationVibes = [],
   styleFingerprint = "",
   lovedLooks = [],
+  comfortMode = false,
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
@@ -135,6 +136,11 @@ export function buildStylingPrompt({
     ? `\n🔄 FRESHNESS: ${recentlySuggestedItems.length} items have been suggested in recent generations and were filtered out of the inventory below when possible. Build looks from what you see — don't ask for pieces that aren't here.\n`
     : "";
 
+  // Variety nudge — complements the sampler's cross-generation rotation. Pushes
+  // the model to spread across the inventory instead of anchoring on the same
+  // handful of salient pieces tap after tap (the "same few tops" complaint).
+  const varietyNote = `\n🎲 VARIETY: Range widely across the inventory shown. When several pieces would work equally well for a slot, favor one you haven't already leaned on — don't rebuild around the same few hero pieces every time. Each pull should feel like a fresh look into her closet.\n`;
+
   const weatherBlock = formatWeather(weather);
 
   const countWord = lookCount === 1 ? "ONE" : lookCount === 2 ? "BOTH" : "ALL THREE";
@@ -151,6 +157,20 @@ export function buildStylingPrompt({
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
+
+  // Comfort-occasion override. The static preamble pushes "elevation" (a third
+  // piece, deliberate tension, an edge) on every look — right for Dinner, wrong
+  // for Lounge/Active/Travel Day. This block explicitly switches that off and
+  // steers toward genuine ease. Placed high in the body so it outranks the
+  // cached elevation guidance.
+  const comfortBlock = comfortMode
+    ? `\n🛋️ COMFORT OCCASION — this OVERRIDES the elevation guidance in your instructions:
+This look is about EASE, not elevation. IGNORE the "elevation moves" (the third piece, deliberate tension, the Molly Dickson edge) — they do NOT apply to ${occasion}.
+• NO blazers, tailored trousers, or dressy fabrics (silk, satin, leather, lace, sequin, velvet). NO heels. NO statement jewelry or statement bags.
+• Build genuine, soft, real-life comfort: athleisure sets, leggings, joggers, soft/ribbed knits, cotton/jersey/ponte/fleece${occasion === "Active" ? ", performance tops, sports bras — trainers/sneakers only" : ", relaxed denim — sneakers, slides, or soft flats"}.
+• Keep it simple: a good top + a soft bottom (or one comfy dress/set), plus ONE easy layer only if the weather calls for it. Do not turn it into an outfit it isn't.
+Weather still governs fabric weight and coverage.\n`
+    : "";
 
   // Personal patterns observed across her ENTIRE worn + planned outfit
   // history. These are SOFT preferences — bias only, never hard rule. The
@@ -184,7 +204,10 @@ export function buildStylingPrompt({
   // Strip the label prefix so only the descriptive prose reaches the AI.
   const stripStrategyLabel = (s) => (s || "").replace(/^[A-Z][A-Z0-9\s+/\-]{2,}:\s*/, "").trim();
   const ORDINALS = ["first", "second", "third"];
-  const directionsBlock = stylingDirections.length >= 1
+  // Comfort occasions (Lounge / Active / Travel Day) skip the editorial creative
+  // briefs entirely — a "DEEP JEWEL / OUTERWEAR HERO" brief on loungewear is
+  // exactly how silk-and-blazer nonsense ends up on a coffee-run outfit.
+  const directionsBlock = (!comfortMode && stylingDirections.length >= 1)
     ? `\nCREATIVE BRIEFS — internal directives. They shape what you build but must NOT appear in the rationale text.
 
 ${stylingDirections.map((d, i) =>
@@ -201,8 +224,8 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}
-${stylePrefsBlock}${recentBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}
+${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
 ────────────────────────────────────────────────────────

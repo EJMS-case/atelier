@@ -5,8 +5,9 @@
 // Style Me CTA and the user's plan for today (if any).
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchPlansBetween } from "../planner/plannerApi.js";
-import { mostWornItems, neglectedItems, costPerWear } from "../wear/wearApi.js";
+import { fetchPlansBetween, fetchAllPlans } from "../planner/plannerApi.js";
+import { mostWornItems, neglectedItems, costPerWear, deriveWearStats, applyWearStats } from "../wear/wearApi.js";
+import { sb } from "../../lib/supabase.js";
 import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
 
@@ -45,10 +46,22 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
       .catch(() => {});
   }, [todayIso, horizonIso]);
 
-  const topWorn   = useMemo(() => mostWornItems(items, 5), [items]);
-  const neglected = useMemo(() => neglectedItems(items, 60), [items]);
+  // Real wear stats come from the calendar (planned_outfits) + legacy worn logs,
+  // NOT the stored wear_count/last_worn cache (which froze when the user moved to
+  // the calendar). Overlay the derived truth onto items so every metric below —
+  // and the Look-Back card — reads accurate wears.
+  const [wearStats, setWearStats] = useState(null);
+  useEffect(() => {
+    Promise.all([fetchAllPlans().catch(() => []), sb.fetchOutfitLogs().catch(() => [])])
+      .then(([plans, logs]) => setWearStats(deriveWearStats(plans || [], logs || [])))
+      .catch(() => setWearStats({}));
+  }, []);
+  const wearItems = useMemo(() => applyWearStats(items, wearStats || {}), [items, wearStats]);
 
-  const itemsWithPrice = useMemo(() => items.filter(it => Number(it.price_paid) > 0), [items]);
+  const topWorn   = useMemo(() => mostWornItems(wearItems, 5), [wearItems]);
+  const neglected = useMemo(() => neglectedItems(wearItems, 60), [wearItems]);
+
+  const itemsWithPrice = useMemo(() => wearItems.filter(it => Number(it.price_paid) > 0), [wearItems]);
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
   const avgCpw         = cpwValues.length > 0 ? cpwValues.reduce((a, b) => a + b, 0) / cpwValues.length : null;
 
@@ -92,7 +105,7 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
           + leaned-on pieces + forward nudges). Self-contained; fetches its own
           calendar window. */}
       {items.length > 0 && (
-        <LookBackCard items={items} favorites={favorites || []} apiKey={apiKey}
+        <LookBackCard items={wearItems} favorites={favorites || []} apiKey={apiKey}
           onEditItem={onEditItem} onStyleItem={onStyleItem}/>
       )}
 
