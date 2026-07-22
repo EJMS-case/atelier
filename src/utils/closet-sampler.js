@@ -68,7 +68,7 @@ const OCCASION_PREFILTERS = {
     // shorts. Plus shoes (for sneakers) and accessories (hair ties, etc.)
     // since both categories are useful here without polluting the look with
     // dress sandals or evening clutches.
-    keepCategories: new Set(["Athleisure", "Shoes"]),
+    keepCategories: new Set(["Athleisure", "Shoes", "Accessories", "Belts"]),
     removeCategories: new Set(),
     removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Mules", "Loafers"]),
     removeKeywords: [],

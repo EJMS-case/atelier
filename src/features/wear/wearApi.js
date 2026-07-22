@@ -5,6 +5,7 @@
 
 import { SUPABASE_URL, SB_HEADERS } from "../../lib/supabase.js";
 import { outfitsOf } from "../planner/outfits.js";
+import { nyToday } from "../../lib/time.js";
 
 const H = { ...SB_HEADERS, Prefer: "return=minimal" };
 
@@ -18,9 +19,11 @@ const H = { ...SB_HEADERS, Prefer: "return=minimal" };
  * @returns {Object.<string,{wears:number,lastWorn:string}>}
  */
 export function deriveWearStats(plans = [], logs = []) {
+  const today = nyToday();
   const byItem = new Map(); // id -> Set(dateIso)
   const add = (id, date) => {
     if (!id || !date) return;
+    if (date > today) return; // future planned outfits are NOT wears
     if (!byItem.has(id)) byItem.set(id, new Set());
     byItem.get(id).add(date);
   };

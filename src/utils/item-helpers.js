@@ -9,27 +9,18 @@ import {
 
 // ── SLEEVE CLASSIFICATION ───────────────────────────────────────────────────
 export function getSleeveType(item) {
-  // Explicit sleeve_length (set via the Sleeve dropdown) is authoritative —
-  // "Thin strap"/"Thick strap" are both bare-armed (sleeveless for weather),
-  // "3/4" is threeQuarter, else short/long.
-  const sl = (item.sleeve_length || "").toLowerCase();
-  if (sl) {
-    if (sl.includes("strap") || sl.includes("sleeveless") || sl.includes("tank")) return "sleeveless";
-    if (sl.includes("3/4") || sl.includes("three") || sl.includes("¾") || sl.includes("quarter")) return "threeQuarter";
-    if (sl.includes("short") || sl.includes("cap")) return "short";
-    if (sl.includes("long")) return "long";
-  }
+  // Notes-driven only (no dropdown — the user relies on her own notes). Returns
+  // "unknown" when nothing signals a sleeve length, and "unknown" is NEVER
+  // weather-excluded — she layers, so any sleeve works. Only a piece she has
+  // explicitly noted as long-sleeve is treated as long (kept out of hot).
   const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeve":"short", "Bra/Crop Top":"sleeveless" };
   if (item.category === "Tops" && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
-  if (/\bsleeveless\b/i.test(item.notes || "")) return "sleeveless";
-  if (/\bshort.?sleeve\b/i.test(item.notes || "")) return "short";
-  if (/\bcap.?sleeve\b/i.test(item.notes || "")) return "short";
-  if (/\blong.?sleeve\b/i.test(item.notes || "")) return "long";
-  if (item.sleeve_length) return item.sleeve_length.toLowerCase().includes("short") ? "short" : item.sleeve_length.toLowerCase().includes("sleeveless") ? "sleeveless" : "long";
-  // Default to SHORT when nothing says otherwise (per user): most untagged tops
-  // are short/sleeveless summer pieces, and defaulting to "long" wrongly
-  // excluded them from hot-weather looks.
-  return "short";
+  const notes = (item.notes || "").toLowerCase();
+  if (/\b(sleeveless|tank|strap|strappy|strapless|halter|tube)\b/.test(notes)) return "sleeveless";
+  if (/\b(short.?sleeve|cap.?sleeve)\b/.test(notes)) return "short";
+  if (/\b(3\/4|three.?quarter)\b/.test(notes)) return "threeQuarter";
+  if (/\blong.?sleeve\b/.test(notes)) return "long";
+  return "unknown";
 }
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
@@ -77,10 +68,8 @@ export function filterByWeather(items, weather) {
       if (it.subcategory === "Boots") return false;
       if (isHeavyFabric) return false;
       if (seasonTag === "winter") return false;
-      // Long sleeves belong on a LAYER here, not the base top — a long-sleeve
-      // base top reads too warm at 70-84°F. The light-outerwear rule below keeps
-      // a coverage layer available; the base should be short/sleeveless.
-      if (it.category === "Tops" && sleeve === "long") return false;
+      // No sleeve-based top exclusion in warm — she layers, so any sleeve works;
+      // her notes + the stylist handle it. Fabric/knit/season rules still apply.
       // For warm, ALL outerwear must be tagged as a light fabric. Items with no
       // material info default to "not light" — better to skip the layer than
       // ship a wool floral coat at 78°F.
@@ -98,7 +87,9 @@ export function filterByWeather(items, weather) {
       if (it.subcategory === "Coats" && isHeavyFabric && !isLightOuter) return false;
     }
     if (isCool || isCold) {
-      if (it.category === "Tops" && (sleeve === "sleeveless" || sleeve === "short")) return false;
+      // No sleeve-based top exclusion — a sleeveless/short top layered under a
+      // coat or blazer is exactly how she dresses for the cold. Fabric/season
+      // still filtered; the stylist adds the outer layer.
       if (it.subcategory === "Sandals") return false;
       if (it.subcategory === "Shorts") return false;
     }

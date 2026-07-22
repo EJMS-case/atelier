@@ -12,7 +12,6 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable ?? true,
     material: item.material || "",
     pattern: item.pattern || "",
-    sleeve_length: item.sleeve_length || "",
     price_paid: item.price_paid ?? null,
     has_bg: item.has_bg,
     is_trimmed: item.is_trimmed,
@@ -156,19 +155,6 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           </div>
         </div>
 
-        {/* Sleeve length — drives the weather filter (bare-armed vs covered).
-            Only shown for pieces that actually have sleeves/straps. Explicit
-            selection here beats any guessing from the name/notes. */}
-        {["Tops","Knits","Dresses","Occasionwear","Jumpsuits","Sets","Outerwear"].includes(form.category) && (
-          <div>
-            <div style={s.fieldLabel}>Sleeve length</div>
-            <select style={{...s.select,width:"100%"}} value={form.sleeve_length}
-              onChange={e=>setForm(f=>({...f,sleeve_length:e.target.value}))}>
-              <option value="">— Not set —</option>
-              {["Thin strap","Thick strap","Short","3/4","Long"].map(sl => <option key={sl}>{sl}</option>)}
-            </select>
-          </div>
-        )}
 
         {/* F6 — purchase price for cost-per-wear */}
         <div>

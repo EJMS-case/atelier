@@ -759,12 +759,22 @@ export default function App() {
     }
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
+      // Denim "wash" chips (Light/Medium/Dark/Black Wash) are pushed into this
+      // same color array but are NOT color families — effectiveColorFamily never
+      // returns a "…Wash" string, so matching only on family filtered them to
+      // zero. Match wash tokens as a substring of the item's color/notes/name.
+      const washSel = activeFilters.color.filter(c => /wash/i.test(c));
       base = base.filter(it => {
         // Family is derived from the actual color string when possible, so
         // a "Gray" item saved with the legacy "Neutral" family resolves to
         // "Gray" and stays out of the Neutrals bucket.
         const family = effectiveColorFamily(it);
-        return activeFilters.color.includes(family);
+        if (activeFilters.color.includes(family)) return true;
+        if (washSel.length) {
+          const text = ((it.color || "") + " " + (it.notes || "") + " " + (it.name || "")).toLowerCase();
+          if (washSel.some(w => text.includes(w.toLowerCase()))) return true;
+        }
+        return false;
       });
     }
     // Sets filter
@@ -1172,8 +1182,9 @@ export default function App() {
             )}
           </>)}
 
-          {/* Landing view: Recently Added + uncategorized when no filters active */}
-          {!isSetView && !activeFilters.category?.length && !activeFilters.subcategory?.length && !activeFilters.color?.length && !activeFilters.brand?.length && !activeFilters.sets && !activeFilters.lastWorn && (() => {
+          {/* Landing view: Recently Added + uncategorized when no filters active
+              AND no search is running (else it stacks above search results). */}
+          {!isSetView && !closetSearch.trim() && !activeFilters.category?.length && !activeFilters.subcategory?.length && !activeFilters.color?.length && !activeFilters.brand?.length && !activeFilters.sets && !activeFilters.lastWorn && (() => {
             const now = Date.now();
             const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
             const recentItems = items
