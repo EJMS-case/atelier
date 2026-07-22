@@ -104,10 +104,21 @@ export async function generateTripDayLook(items, occasion, weather, destination,
 
   if (eligible.length < 4) return null;
 
-  // Compact inventory — no short IDs, just real IDs for simplicity
+  // Compact inventory — no short IDs, just real IDs for simplicity.
+  // Sample PER CATEGORY so shoes/bags/accessories are ALWAYS present. A flat
+  // slice(0,60) after a category sort could cut them off entirely once
+  // tops+bottoms+dresses exceeded 60, leaving the model unable to complete a
+  // look it's required to build (silent no-result for the day). Per-category
+  // caps keep the prompt bounded.
   const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts"];
-  const sorted = [...eligible].sort((a, b) => (CAT_ORDER.indexOf(a.category) ?? 99) - (CAT_ORDER.indexOf(b.category) ?? 99));
-  const sampled = sorted.slice(0, 60);
+  const CAT_CAP = { Outerwear: 6, Dresses: 8, Jumpsuits: 3, Tops: 12, Knits: 6, Bottoms: 10, Shoes: 8, Bags: 5, Accessories: 5, Belts: 2 };
+  const byCat = {};
+  eligible.forEach(it => { (byCat[it.category] ||= []).push(it); });
+  const sampled = [
+    ...CAT_ORDER.flatMap(cat => (byCat[cat] || []).slice(0, CAT_CAP[cat] ?? 5)),
+    // categories not in CAT_ORDER (Sets, Athleisure, Swim on beach days…)
+    ...Object.keys(byCat).filter(cat => !CAT_ORDER.includes(cat)).flatMap(cat => byCat[cat].slice(0, 4)),
+  ];
 
   const inventory = sampled.map(it =>
     `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}`
@@ -209,10 +220,8 @@ Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:
 
 // ── Weather bucket helper ─────────────────────────────────────────────────────
 
-export function tempToBucket(highF) {
-  if (highF >= 82) return "Hot";
-  if (highF >= 68) return "Warm";
-  if (highF >= 52) return "Mild";
-  if (highF >= 38) return "Cool";
-  return "Cold";
-}
+// Canonical temp→bucket lives in lib/weather.js (85/70/55/40 — matching the
+// calendar + Style Me chips). Re-export so a trip buckets a temperature the
+// SAME way the calendar does (previously 82/68/52/38 → 83°F was "Hot" on a trip
+// but "Warm" on the calendar, filtering the wardrobe differently).
+export { bucketFromHigh as tempToBucket } from "../weather.js";

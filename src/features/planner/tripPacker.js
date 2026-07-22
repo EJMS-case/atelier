@@ -4,6 +4,7 @@
 // derived packing list (union of items actually used).
 
 import { filterByWeather } from "../../utils/item-helpers.js";
+import { bucketFromHigh } from "../../lib/weather.js";
 
 // ── Default occasion seed ──────────────────────────────────────────────────
 // We used to gate this through a "vibe" concept (Casual / Theme Park / Beach
@@ -342,12 +343,3 @@ export function alternativesFor(items, currentItem, opts = {}) {
     .map(x => x.item);
 }
 
-// ── bucket helper ────────────────────────────────────────────────────────────
-// (Mirrors tripAdvisor.tempToBucket so this file has no cross-feature dep.)
-function bucketFromHigh(highF) {
-  if (highF >= 82) return "Hot";
-  if (highF >= 68) return "Warm";
-  if (highF >= 52) return "Mild";
-  if (highF >= 38) return "Cool";
-  return "Cold";
-}
