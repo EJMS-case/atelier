@@ -48,6 +48,7 @@ const BulkAddView       = lazy(() => import("./components/BulkAddView.jsx"));
 const EditItemView      = lazy(() => import("./components/EditItemView.jsx"));
 const SilhouetteBuilder = lazy(() => import("./features/builder/SilhouetteBuilder.jsx"));
 const InspirationView   = lazy(() => import("./features/inspiration/InspirationView.jsx"));
+const VisionPilotView   = lazy(() => import("./components/VisionPilotView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
 import { outfitsOf, buildPlanPayload, newOutfitId } from "./features/planner/outfits.js";
@@ -1749,6 +1750,10 @@ export default function App() {
           setStyleFingerprint={setStyleFingerprint}
           onNavigate={setView}
           onBack={() => setView("closet")}/>
+      )}
+
+      {view === "visionpilot" && (
+        <VisionPilotView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
       </Suspense>
     </div>

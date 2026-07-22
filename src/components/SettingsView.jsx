@@ -363,6 +363,9 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
             <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("shop")}>
               ✦ Shopping — gap analysis and find pieces to fill them
             </button>
+            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("visionpilot")}>
+              ✦ Visual AI (pilot) — check how accurately AI reads your pieces
+            </button>
           </div>
         </div>
       )}
