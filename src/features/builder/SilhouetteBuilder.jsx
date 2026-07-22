@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
+import { slotForItem } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
@@ -24,29 +25,20 @@ const PALETTE = {
   accent: "#6D1A2E",
 };
 
-// Subcategory hints that resolve a Loungewear/Athleisure piece to top vs.
-// bottom. Anything tagged with these subcategories slots into the matching
-// silhouette zone so the builder isn't blind to comfortwear. Athleisure-only
-// subs (sports bra, skort) are folded in here so every wardrobe item is
-// pickable — the user shouldn't have to guess why an item is missing from
-// the builder pool.
-const TOP_LIKE_SUBS    = /^(top|tops|long sleeve|short sleeve|bra\/crop top|sports bra|hoodies|hoodies \/ sweatshirts|sweatshirt|tank|t-shirt)/i;
-const BOTTOM_LIKE_SUBS = /^(bottom|bottoms|pants|shorts|skirt|skirts|skort|skorts|mini|joggers|leggings)/i;
-const DRESS_LIKE_SUBS  = /^(dress|dresses|romper)/i;
-
+// Slots route through the shared slotForItem classifier (utils/item-helpers) so
+// the builder, the sampler, and the availability note agree on where every piece
+// belongs — including comfortwear (leggings/skorts/bras) which each used to
+// classify differently. slotForItem returns exactly these slot keys.
 const SLOTS = [
-  { key: "top",       label: "TOP",       match: (it) => ["Tops", "Knits"].includes(it.category)
-      || (["Loungewear", "Athleisure"].includes(it.category) && TOP_LIKE_SUBS.test(it.subcategory || "")) },
-  { key: "bottom",    label: "BOTTOM",    match: (it) => ["Bottoms"].includes(it.category)
-      || (["Loungewear", "Athleisure"].includes(it.category) && BOTTOM_LIKE_SUBS.test(it.subcategory || "")) },
-  { key: "dress",     label: "DRESS",     match: (it) => ["Dresses", "Jumpsuits", "Occasionwear"].includes(it.category)
-      || (it.category === "Athleisure" && DRESS_LIKE_SUBS.test(it.subcategory || "")), optional: true },
-  { key: "set",       label: "SET",       match: (it) => it.category === "Sets", optional: true },
-  { key: "swim",      label: "SWIM",      match: (it) => it.category === "Swim", optional: true },
-  { key: "shoes",     label: "SHOES",     match: (it) => it.category === "Shoes" },
-  { key: "outerwear", label: "OUTER",     match: (it) => it.category === "Outerwear", optional: true },
-  { key: "bag",       label: "BAG",       match: (it) => it.category === "Bags", optional: true },
-  { key: "accessory", label: "ACCESSORY", match: (it) => ["Accessories", "Belts"].includes(it.category), optional: true },
+  { key: "top",       label: "TOP",       match: (it) => slotForItem(it) === "top" },
+  { key: "bottom",    label: "BOTTOM",    match: (it) => slotForItem(it) === "bottom" },
+  { key: "dress",     label: "DRESS",     match: (it) => slotForItem(it) === "dress", optional: true },
+  { key: "set",       label: "SET",       match: (it) => slotForItem(it) === "set", optional: true },
+  { key: "swim",      label: "SWIM",      match: (it) => slotForItem(it) === "swim", optional: true },
+  { key: "shoes",     label: "SHOES",     match: (it) => slotForItem(it) === "shoes" },
+  { key: "outerwear", label: "OUTER",     match: (it) => slotForItem(it) === "outerwear", optional: true },
+  { key: "bag",       label: "BAG",       match: (it) => slotForItem(it) === "bag", optional: true },
+  { key: "accessory", label: "ACCESSORY", match: (it) => slotForItem(it) === "accessory", optional: true },
 ];
 
 // Slots that accept multiple items at once. Every slot except dress is

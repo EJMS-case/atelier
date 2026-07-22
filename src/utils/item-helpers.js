@@ -23,6 +23,33 @@ export function getSleeveType(item) {
   return "unknown";
 }
 
+// ── UNIFIED ITEM → SLOT CLASSIFIER ───────────────────────────────────────────
+// Single source of truth for "which slot does this garment fill." Used by the
+// sampler (rotation buckets + lower-half availability) and the manual builder
+// (canvas slots). Previously each place had its own regex and they disagreed —
+// e.g. Athleisure "Leggings"/"Skort" fell through to "tops". Returns builder-
+// vocabulary slots: top | bottom | dress | set | swim | outerwear | shoes | bag
+// | accessory.
+export function slotForItem(item) {
+  const cat = item?.category;
+  const sub = (item?.subcategory || "").toLowerCase();
+  if (cat === "Shoes") return "shoes";
+  if (cat === "Bags") return "bag";
+  if (cat === "Belts" || cat === "Accessories") return "accessory";
+  if (cat === "Outerwear") return "outerwear";
+  if (cat === "Sets") return "set";
+  if (cat === "Swim") return "swim";
+  if (cat === "Dresses" || cat === "Occasionwear" || cat === "Jumpsuits") return "dress";
+  if (cat === "Bottoms") return "bottom";
+  if (cat === "Tops" || cat === "Knits") return "top";
+  if (cat === "Athleisure" || cat === "Loungewear") {
+    if (/legging|jogger|trouser|pant|short|skirt|skort|bottom/.test(sub)) return "bottom";
+    if (/dress|romper|jumpsuit/.test(sub)) return "dress";
+    return "top"; // bra/crop/tank/tee/shirt/hoodie/sweatshirt/sleeve/polo/top…
+  }
+  return "accessory";
+}
+
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
 export function filterByWeather(items, weather) {
   const raw = (weather || "").toLowerCase();
