@@ -70,8 +70,15 @@ const btnSecondary = {
  * @param {Object[]} props.outfitLogs   - saved outfits for the "pick saved" picker
  * @param {() => void} props.onGoToStyleMe
  */
+// Remember the month the user was viewing so returning to the planner — after
+// opening a day, Style Me, editing an item, etc. all remount CalendarView —
+// restores that month instead of snapping back to the current one. Session-
+// scoped (a full page reload sensibly starts back at today).
+let lastAnchorTime = null;
+
 export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
-  const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
+  const [anchor, setAnchor] = useState(() => lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date()));
+  useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
@@ -312,14 +319,24 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
         ✦ Plan a trip
       </button>
 
-      {activeDay && (
+      {activeDay && (() => {
+        // Days in the visible month that actually have an outfit, sorted — lets
+        // the day view flip prev/next through them without closing + reopening.
+        const outfitDays = Object.keys(plans).filter(d => (plans[d]?.items?.length || 0) > 0).sort();
+        const idx = outfitDays.indexOf(activeDay);
+        const prevDay = idx > 0 ? outfitDays[idx - 1] : null;
+        const nextDay = idx >= 0 && idx < outfitDays.length - 1 ? outfitDays[idx + 1] : null;
+        return (
         <DayModal
+          key={activeDay}
           iso={activeDay}
           plan={plans[activeDay]}
           items={items}
           outfitLogs={outfitLogs}
           forecast={forecast}
           hasApiKey={!!apiKey}
+          onPrev={prevDay ? () => setActiveDay(prevDay) : undefined}
+          onNext={nextDay ? () => setActiveDay(nextDay) : undefined}
           onClose={() => setActiveDay(null)}
           onPickSaved={(log, overrides) => handleAssignSaved(activeDay, log, overrides)}
           onGenerate={(occasion) => handleGenerateForDay(activeDay, occasion)}
@@ -333,7 +350,8 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
             onBuildDay(activeDay, existing);
           } : undefined}
         />
-      )}
+        );
+      })()}
 
       {showTrip && (
         <TripModal
@@ -423,7 +441,7 @@ function GenerateForDay({ iso, isPast, forecast, hasApiKey, onGenerate, onGoToSt
   );
 }
 
-function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onEditItem, onEditPlan, onBuildDay }) {
+function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onEditItem, onEditPlan, onBuildDay }) {
   // Language adapts to past/today/future. Past = "What you wore" (a log, not
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
@@ -465,7 +483,17 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onClose, 
               </div>
             )}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 22, cursor: "pointer" }}>×</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {(onPrev || onNext) && (
+              <>
+                <button onClick={onPrev} disabled={!onPrev} aria-label="Previous outfit"
+                  style={{ background: "none", border: "none", color: PALETTE.ink, fontSize: 24, lineHeight: 1, padding: "0 4px", cursor: onPrev ? "pointer" : "default", opacity: onPrev ? 1 : 0.25 }}>‹</button>
+                <button onClick={onNext} disabled={!onNext} aria-label="Next outfit"
+                  style={{ background: "none", border: "none", color: PALETTE.ink, fontSize: 24, lineHeight: 1, padding: "0 4px", cursor: onNext ? "pointer" : "default", opacity: onNext ? 1 : 0.25 }}>›</button>
+              </>
+            )}
+            <button onClick={onClose} style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 22, cursor: "pointer", padding: "0 4px" }}>×</button>
+          </div>
         </div>
 
         {planItems.length > 0 && (
