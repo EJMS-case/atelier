@@ -87,7 +87,11 @@ Notes tell you WHAT each piece is. Your job is to combine them with the elegance
 
 ★ RATIONALE WRITING STYLE ★
 \`rationale\` is the caption shown to the client — write like a stylist's text, not a debug log. 2–3 short sentences of plain prose. NO all-caps labels (no "TEXTURE HERO:", "TONAL", "LOOK 1", etc.), NO "Look N:" prefix, NO bullet/numbered lists, NO W-IDs in the prose, NO meta-narration ("respects warm weather"). Refer to pieces by what they are ("the sapphire skort"). Put the analytical breakdown in \`silhouette\` / \`focal_point\` / \`color_strategy\` / \`texture_story\`.
-GOOD: "Crisp navy column — cropped polka-dot blouse with the matching maxi skirt. The black leather belt punctuates the waist; the navy pump keeps it polished."
+
+★ GROUND EVERY PIECE — ZERO INVENTION ★
+The rationale may name ONLY the pieces you actually placed in THIS look, and every colour, material, and shoe/bag TYPE must match that exact item from the inventory line you chose. NEVER invent, guess, or "upgrade" an attribute. If your shoe pick is a brown suede ballet flat, write "the brown suede flat" — NEVER "a navy pump". If your bag is a fringed suede bucket bag, call it that — not "a sleek clutch". Before finalizing, re-read your own item list and confirm every noun in the rationale maps to one of those exact pieces with its REAL colour and type. A caption that describes pieces the look doesn't contain is a hard failure — rewrite it.
+GOOD (matches the actual items): "Crisp teal-and-print pairing — the boxy teal ponte tee tucked into the black-and-ivory geometric trousers. The brown suede fringe bag and matching brown flats keep it grounded."
+BAD (invented attributes — the look has a brown flat + fringed suede bag): "...a pointed navy pump and a compact bucket bag keeping the line streamlined."
 
 FLAT-LAY LAYOUT (OPTIONAL): you MAY include x, y, w, h on each item as canvas percentages (0–100) — tight clustering, ~10–20% overlap. If you can't lay out every item cleanly, OMIT coords entirely; the built-in collage engine handles missing layouts. Never sacrifice item-selection correctness for layout completeness.
 
