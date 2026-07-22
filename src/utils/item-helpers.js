@@ -9,6 +9,16 @@ import {
 
 // ── SLEEVE CLASSIFICATION ───────────────────────────────────────────────────
 export function getSleeveType(item) {
+  // Explicit sleeve_length (set via the Sleeve dropdown) is authoritative —
+  // "Thin strap"/"Thick strap" are both bare-armed (sleeveless for weather),
+  // "3/4" is threeQuarter, else short/long.
+  const sl = (item.sleeve_length || "").toLowerCase();
+  if (sl) {
+    if (sl.includes("strap") || sl.includes("sleeveless") || sl.includes("tank")) return "sleeveless";
+    if (sl.includes("3/4") || sl.includes("three") || sl.includes("¾") || sl.includes("quarter")) return "threeQuarter";
+    if (sl.includes("short") || sl.includes("cap")) return "short";
+    if (sl.includes("long")) return "long";
+  }
   const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeve":"short", "Bra/Crop Top":"sleeveless" };
   if (item.category === "Tops" && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
   if (/\bsleeveless\b/i.test(item.notes || "")) return "sleeveless";
