@@ -224,6 +224,19 @@ export const sb = {
     });
     if (!res.ok) throw new Error("Update last_worn failed");
   },
+  // Set last_worn on many items in ONE request (all get the same date) instead
+  // of a PATCH per garment — logging a 6-piece outfit was firing 6 round-trips.
+  async setLastWornBulk(ids = [], date) {
+    const list = [...new Set(ids)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=in.(${inList})`, {
+      method: "PATCH",
+      headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+      body: JSON.stringify({ last_worn: date }),
+    });
+    if (!res.ok) throw new Error("Bulk last_worn update failed");
+  },
   async listStorageImages() {
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/wardrobe-images`, {
       method: "POST",

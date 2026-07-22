@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef, lazy, Suspense } from "react";
 // Outfit generation, knit classify, color analyze — sole entry points into
 // the AI layer from App.jsx. The lower-level helpers (sampler / validator /
 // prompt builder / rotation tracker) live behind generateOutfit and don't
@@ -590,6 +590,13 @@ export default function App() {
     setStylePanelOpen(true);
   }, [setView]);
 
+  // Stable handlers for the memo'd ItemCard grid (see ItemCard.jsx) — they take
+  // the item so the closures don't need to be recreated per card each render.
+  const handleEditItemCard = useCallback((item) => {
+    setEditItem(item); setEditReturnView(viewRef.current); setView("edit");
+  }, [setView]);
+  const handleToggleFavPiece = useCallback((item) => toggleFav("piece", item.id), [toggleFav]);
+
   // "Build a similar look" from a saved log. Seeds Style Me with the original
   // look's silhouette description + its occasion / weather / mood, then opens
   // the panel. The free-text prompt nudges the AI to keep the silhouette shape
@@ -799,7 +806,12 @@ export default function App() {
     return result;
   })() : null;
 
-  const filtered = (() => {
+  // Defer the search term so typing stays responsive — the 400-item filter+sort
+  // runs against the deferred value while the input updates immediately. Memoize
+  // so it only recomputes when the inputs actually change (not on every render,
+  // e.g. the sync-status flash timer).
+  const deferredSearch = useDeferredValue(closetSearch);
+  const filtered = useMemo(() => {
     let base = items;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
@@ -852,15 +864,15 @@ export default function App() {
       }
     }
     // Global search filter — matches name, brand, color, subcategory, notes
-    if (closetSearch.trim()) {
-      const q = closetSearch.toLowerCase().trim();
+    if (deferredSearch.trim()) {
+      const q = deferredSearch.toLowerCase().trim();
       base = base.filter(it => {
         const fields = [it.name, it.brand, it.color, it.color_family, it.subcategory, it.category, it.notes, it.pattern].filter(Boolean);
         return fields.some(f => f.toLowerCase().includes(q));
       });
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
-  })();
+  }, [items, activeFilters, deferredSearch, isSetView]);
 
   // Sync status indicator
   const syncLabel = syncStatus === "syncing" ? "⟳ syncing"
@@ -1309,9 +1321,9 @@ export default function App() {
               {filtered.map(item => (
                 <ItemCard key={item.id} item={item} allItems={items}
                   onDelete={deleteItem}
-                  onEdit={() => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
+                  onEdit={handleEditItemCard}
                   isFavorited={isFav("piece", item.id)}
-                  onToggleFav={() => toggleFav("piece", item.id)}
+                  onToggleFav={handleToggleFavPiece}
                   onStyleItem={styleWithItem}/>
               ))}
             </div>
@@ -1513,7 +1525,7 @@ export default function App() {
                 const dateWorn = log.date_worn;
                 const ids = log.garment_ids || [];
                 if (dateWorn) {
-                  await Promise.all(ids.map(id => sb.updateItemLastWorn(id, dateWorn)));
+                  await sb.setLastWornBulk(ids, dateWorn);
                   bumpWearCounts(ids); // F6 — track wear count
                   const updated = items.map(it =>
                     ids.includes(it.id)
@@ -1635,7 +1647,7 @@ export default function App() {
           onLogAsWorn={async (log, date) => {
             await sb.updateOutfitLog(log.id, { date_worn: date });
             const ids = log?.garment_ids || [];
-            await Promise.all(ids.map(gid => sb.updateItemLastWorn(gid, date)));
+            await sb.setLastWornBulk(ids, date);
             bumpWearCounts(ids); // F6
             // Pin this look to the planner on the date worn so the calendar
             // reflects what she actually wore (user request: "items I mark
@@ -1660,7 +1672,7 @@ export default function App() {
             };
             await sb.saveOutfitLog(newLog);
             const ids = log.garment_ids || [];
-            await Promise.all(ids.map(id => sb.updateItemLastWorn(id, today)));
+            await sb.setLastWornBulk(ids, today);
             bumpWearCounts(ids); // F6
             // Mirror the wear onto the planner calendar.
             pinWornToDate({ date: today, itemIds: ids, occasion: log.occasion }).catch(() => {});
