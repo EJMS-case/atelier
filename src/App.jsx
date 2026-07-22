@@ -9,6 +9,7 @@ import { generateStyleFingerprint } from "./features/stylist/styleFingerprint.js
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
 import { bumpWearCounts, unbumpWearCounts } from "./features/wear/wearApi.js";
 import HomeView from "./features/home/HomeView.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, si, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, OCCASIONS } from "./constants/taxonomy.js";
@@ -1128,6 +1129,7 @@ export default function App() {
       </header>
 
       <Suspense fallback={<RouteFallback/>}>
+      <ErrorBoundary scope="view" key={view} onReset={() => setView("closet")}>
       {/* ── CLOSET ── */}
       {view === "home" && (
         <div style={s.page}>
@@ -1755,6 +1757,7 @@ export default function App() {
       {view === "visionpilot" && (
         <VisionPilotView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
+      </ErrorBoundary>
       </Suspense>
     </div>
   );
