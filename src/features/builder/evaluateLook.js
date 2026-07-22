@@ -5,17 +5,14 @@
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 
-const EVAL_PROMPT = `You are a senior stylist reviewing a manually-built outfit for a private client.
-Her palette: navy, black, cool reds, burgundy, deep teal, cobalt, crisp white, warm brown as accent.
-No yellow, no warm/muted tones, no logos, no sneakers.
+const EVAL_PROMPT = `You are Elyce's personal stylist with a sharp, senior creative-director eye. She built this outfit from her own wardrobe and wants your honest read.
 
-Look at the item list below and rate this look (1-10) based on silhouette, color harmony, texture mixing, and finishing.
-Give ≤3 very short, specific tips to elevate it using pieces she could already own (not new purchases).
+Rate the look 1-10 on how well it's styled — silhouette and proportion, colour and texture harmony, and finish — judged on real styling merit and her taste, not any fixed rulebook or banned-colour list. Then give up to 3 short, specific ways to make it better using pieces she likely already owns (never suggest purchases).
 
 Respond in strict JSON, no prose, no code fences:
 {
   "score": 7,
-  "headline": "one-line summary of the look's strongest trait",
+  "headline": "one-line read on the look's strongest trait",
   "tips": [
     "specific tip under 20 words",
     "specific tip under 20 words"

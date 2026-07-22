@@ -14,8 +14,12 @@ export function getSleeveType(item) {
   if (/\bsleeveless\b/i.test(item.notes || "")) return "sleeveless";
   if (/\bshort.?sleeve\b/i.test(item.notes || "")) return "short";
   if (/\bcap.?sleeve\b/i.test(item.notes || "")) return "short";
+  if (/\blong.?sleeve\b/i.test(item.notes || "")) return "long";
   if (item.sleeve_length) return item.sleeve_length.toLowerCase().includes("short") ? "short" : item.sleeve_length.toLowerCase().includes("sleeveless") ? "sleeveless" : "long";
-  return "long";
+  // Default to SHORT when nothing says otherwise (per user): most untagged tops
+  // are short/sleeveless summer pieces, and defaulting to "long" wrongly
+  // excluded them from hot-weather looks.
+  return "short";
 }
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
@@ -45,7 +49,10 @@ export function filterByWeather(items, weather) {
       if (isKnitDress) return false;
       if (it.subcategory === "Sweater Dress") return false;
       if (it.subcategory === "Boots") return false;
-      if (it.category === "Outerwear") return false; // hot = no outerwear, period
+      // Hot = LIGHT outerwear only. Not a blanket ban: a linen blazer / unlined
+      // cardigan is exactly the shoulder-covering layer she wants for AC,
+      // evening, or an indoor lunch when it's 90° outside. Heavy layers still go.
+      if (it.category === "Outerwear" && !isLightOuter) return false;
       if (it.subcategory === "Jackets" && isHeavyFabric) return false;
       if (it.category === "Tops" && sleeve === "long") return false;
       if (it.category === "Dresses" && /long.?sleeve/i.test(nameNotes)) return false;
@@ -60,6 +67,10 @@ export function filterByWeather(items, weather) {
       if (it.subcategory === "Boots") return false;
       if (isHeavyFabric) return false;
       if (seasonTag === "winter") return false;
+      // Long sleeves belong on a LAYER here, not the base top — a long-sleeve
+      // base top reads too warm at 70-84°F. The light-outerwear rule below keeps
+      // a coverage layer available; the base should be short/sleeveless.
+      if (it.category === "Tops" && sleeve === "long") return false;
       // For warm, ALL outerwear must be tagged as a light fabric. Items with no
       // material info default to "not light" — better to skip the layer than
       // ship a wool floral coat at 78°F.
