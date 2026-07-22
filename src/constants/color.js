@@ -70,13 +70,13 @@ export const COLOR_FAMILIES = [
     {name:"Cobalt",    hex:"#0044C4"},
     {name:"Blue",      hex:"#1976D2"},
     {name:"Sky",       hex:"#64B5F6"},
+    {name:"Teal",      hex:"#00897B"},
+    {name:"Deep Teal", hex:"#00474F"},
   ]},
   { name:"Green",    hex:"#1B5E20", shades:[
     {name:"Forest",    hex:"#1B5E20"},
     {name:"Hunter",    hex:"#2C5F2D"},
     {name:"Emerald",   hex:"#00695C"},
-    {name:"Deep Teal", hex:"#00474F"},
-    {name:"Teal",      hex:"#00897B"},
     {name:"Green",     hex:"#388E3C"},
     {name:"Sage",      hex:"#9CAF88"},
   ]},
@@ -121,26 +121,40 @@ export const SHADE_TO_FAMILY = (() => {
 // Free-form color string → family. Hits the SHADE_TO_FAMILY table first,
 // then falls back to keyword regex for items whose `color` is something
 // like "Dark Navy Wash" or "Soft Pink Stripe".
+// Achromatic families — treated as modifiers when a chromatic colour is also
+// present, so "black cherry" reads Red (not Black) and "navy floral" reads Blue.
+const ACHROMATIC = new Set(["Black", "Gray", "White", "Neutrals"]);
+
 export function familyForColorString(color) {
   if (!color) return "";
   const c = color.toLowerCase().trim();
-  if (SHADE_TO_FAMILY[c]) return SHADE_TO_FAMILY[c];
-  // Word-boundary lookup for compound color descriptions.
+  if (SHADE_TO_FAMILY[c]) return SHADE_TO_FAMILY[c]; // exact single-colour match
+
+  // Word-boundary shade lookup. A chromatic hit wins immediately; achromatic
+  // hits are only used if NO chromatic colour appears anywhere in the string.
+  let achro = "";
   for (const [shade, family] of Object.entries(SHADE_TO_FAMILY)) {
-    if (new RegExp(`\\b${shade.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(c)) return family;
+    if (new RegExp(`\\b${shade.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(c)) {
+      if (!ACHROMATIC.has(family)) return family;
+      if (!achro) achro = family;
+    }
   }
-  // Last-resort keyword buckets — covers wash/dye descriptors.
-  if (/\b(black|jet|onyx|noir)\b/.test(c)) return "Black";
-  if (/\b(gray|grey|slate|charcoal|smoke|graphite)\b/.test(c)) return "Gray";
-  if (/\b(brown|espresso|caramel|chocolate|cognac|walnut|cocoa|chestnut|mahogany)\b/.test(c)) return "Brown";
-  if (/\b(beige|camel|tan|nude|oat|sand|neutral|khaki|stone|taupe|mushroom)\b/.test(c)) return "Neutrals";
-  if (/\b(white|ivory|cream|ecru|alabaster|off.white|chalk|bone)\b/.test(c)) return "White";
-  if (/\b(yellow|mustard|gold|ochre|amber|honey)\b/.test(c)) return "Yellow";
+
+  // Keyword buckets — chromatic first (so a compound colour resolves to its
+  // actual hue), achromatic last as the fallback / modifier.
   if (/\b(red|cherry|crimson|burgundy|wine|oxblood|merlot|maroon|brick)\b/.test(c)) return "Red";
-  if (/\b(pink|blush|rose|magenta|fuchsia|coral|salmon)\b/.test(c)) return "Pink";
+  if (/\b(pink|blush|rose|magenta|fuchsia|coral|salmon|peach)\b/.test(c)) return "Pink";
   if (/\b(purple|violet|lavender|plum|lilac|aubergine|orchid)\b/.test(c)) return "Purple";
-  if (/\b(blue|navy|sapphire|cobalt|sky|denim|indigo|midnight|cerulean|periwinkle)\b/.test(c)) return "Blue";
-  if (/\b(green|forest|teal|emerald|sage|hunter|olive|moss|jade|mint)\b/.test(c)) return "Green";
+  if (/\b(blue|navy|sapphire|cobalt|sky|teal|denim|wash|indigo|midnight|cerulean|periwinkle)\b/.test(c)) return "Blue";
+  if (/\b(green|forest|emerald|sage|hunter|olive|moss|jade|mint|pine)\b/.test(c)) return "Green";
+  if (/\b(yellow|mustard|gold|ochre|amber|honey)\b/.test(c)) return "Yellow";
+  if (/\b(brown|espresso|caramel|chocolate|cognac|walnut|cocoa|chestnut|mahogany|tobacco|coffee|mocha)\b/.test(c)) return "Brown";
+  // Achromatic (only reached when no chromatic colour matched above).
+  if (achro) return achro;
+  if (/\b(beige|camel|tan|nude|oat|sand|neutral|khaki|stone|taupe|mushroom|greige)\b/.test(c)) return "Neutrals";
+  if (/\b(white|ivory|cream|ecru|alabaster|off.white|chalk|bone)\b/.test(c)) return "White";
+  if (/\b(gray|grey|slate|charcoal|smoke|graphite|silver|metallic|pewter)\b/.test(c)) return "Gray";
+  if (/\b(black|jet|onyx|noir)\b/.test(c)) return "Black";
   return "";
 }
 
@@ -163,9 +177,25 @@ export function effectiveColorFamily(item) {
     "Neutral":  "Neutrals", // old AI bucketed singular "Neutral"; filter uses plural "Neutrals"
     "Cool Red": "Red",
     "Cool Pink": "Pink",
-    "Deep Teal": "Green",
+    "Deep Teal": "Blue",     // user tags teal as blue; teal now lives in the Blue family
     "Burgundy": "Red",
     "Navy": "Blue",
+    // Old plural / compound taxonomy that predates the current chips — these
+    // were stored on items and matched no filter chip, making those pieces
+    // invisible to color filtering. Normalize them to the current families.
+    "Blacks": "Black",
+    "Grays": "Gray", "Greys": "Gray",
+    "Browns": "Brown",
+    "Neutrals & Beige": "Neutrals",
+    "Whites & Creams": "White", "Whites": "White",
+    "Yellows": "Yellow", "Golds": "Yellow",
+    "Reds & Burgundy": "Red", "Reds": "Red",
+    "Pinks & Blush": "Pink", "Pinks": "Pink",
+    "Purples": "Purple",
+    "Blues": "Blue",
+    "Greens": "Green",
+    "Denims": "Blue",        // denim reads blue for the color chip; wash sub-filter handles light/dark
+    "Metallics": "Gray",     // silver/pewter → Gray; gold resolves to Yellow via the color string
   };
   if (stored && LEGACY[stored]) return LEGACY[stored];
   return stored;
