@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { s } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import SetPanel from "./SetPanel.jsx";
 import Thumb from "./Thumb.jsx";
 
-export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, onStyleItem }) {
+// memo'd so the 400-item grid doesn't re-render every card on unrelated App
+// state changes (sync-status flash, search typing, theme). onEdit/onToggleFav
+// take the item so the parent can pass STABLE useCallback handlers.
+function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, onStyleItem }) {
   const [confirm,  setConfirm]  = useState(false);
   const [showSet,  setShowSet]  = useState(false);
   const isPartOfSet = item.set_id && item.is_separable;
   return (
     <div style={s.card}>
-      <div style={s.cardImg} onClick={onEdit}>
+      <div style={s.cardImg} onClick={() => onEdit(item)}>
         {item.image
           ? <Thumb item={item} alt={item.name} style={s.cardPhoto}/>
           : <div style={s.cardPlaceholder}>{item.category?.[0] || "?"}</div>}
@@ -38,7 +41,7 @@ export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited
           </button>
         )}
         {onToggleFav && (
-          <button style={s.iconBtn} onClick={onToggleFav} title="Favorite">
+          <button style={s.iconBtn} onClick={() => onToggleFav(item)} title="Favorite">
             <svg width={13} height={13} viewBox="0 0 24 24"
               fill={isFavorited ? "var(--color-danger)" : "none"}
               stroke={isFavorited ? "var(--color-danger)" : "currentColor"}
@@ -47,7 +50,7 @@ export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited
             </svg>
           </button>
         )}
-        <button style={s.iconBtn} onClick={onEdit} title="Edit">
+        <button style={s.iconBtn} onClick={() => onEdit(item)} title="Edit">
           <Icon path={icons.edit} size={13}/>
         </button>
         <button style={{...s.iconBtn, color: confirm ? "var(--color-danger)" : "var(--color-border-muted)"}}
@@ -59,3 +62,5 @@ export default function ItemCard({ item, allItems, onDelete, onEdit, isFavorited
     </div>
   );
 }
+
+export default memo(ItemCard);
