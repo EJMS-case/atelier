@@ -6,6 +6,7 @@
 // pieces sort first within each bucket).
 
 import { normalizeOccasion } from "../constants/taxonomy.js";
+import { slotForItem } from "./item-helpers.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -201,24 +202,15 @@ function matchesExclusion(item, exclusionKey) {
 
 // ── Category bucketing ───────────────────────────────────────────────────────
 // Maps each item's category to one of the sampling buckets.
+// Rotation bucket for an item, derived from the shared slotForItem classifier
+// so the sampler, the builder, and the availability note all agree (previously
+// Athleisure Leggings/Skort fell to "tops" here, skewing rotation floors).
+const SLOT_TO_BUCKET = {
+  top: "tops", bottom: "bottoms", dress: "dresses", set: "dresses", swim: "dresses",
+  outerwear: "outerwear", shoes: "shoes", bag: "bags", accessory: "accessories",
+};
 function getBucket(item) {
-  const cat = item.category;
-  if (cat === "Tops" || cat === "Knits") return "tops";
-  if (cat === "Bottoms") return "bottoms";
-  if (cat === "Dresses" || cat === "Occasionwear" || cat === "Jumpsuits" || cat === "Sets") return "dresses";
-  if (cat === "Outerwear") return "outerwear";
-  if (cat === "Shoes") return "shoes";
-  if (cat === "Bags") return "bags";
-  if (cat === "Accessories" || cat === "Belts") return "accessories";
-  if (cat === "Loungewear" || cat === "Athleisure" || cat === "Swim") {
-    // Map loungewear/athleisure tops and bottoms to their respective buckets
-    const sub = (item.subcategory || "").toLowerCase();
-    if (/top|sleeve|bra|crop|hoodie|sweatshirt/i.test(sub)) return "tops";
-    if (/pant|short|skirt|bottom/i.test(sub)) return "bottoms";
-    if (/dress/i.test(sub)) return "dresses";
-    return "tops"; // default fallback
-  }
-  return "accessories"; // fallback
+  return SLOT_TO_BUCKET[slotForItem(item)] || "accessories";
 }
 
 // Per-bucket caps. The user wants the AI to see everything that survived the

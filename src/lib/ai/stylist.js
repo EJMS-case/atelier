@@ -11,7 +11,7 @@ import { sampleClosetItems, formatInventory } from "../../utils/closet-sampler.j
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
 import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
-import { getSleeveType, filterByWeather, shuffle } from "../../utils/item-helpers.js";
+import { getSleeveType, filterByWeather, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { moodPromptFor } from "../../features/stylist/moods.js";
 import { invokeTool } from "./toolUse.js";
 import {
@@ -112,11 +112,18 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
 
   const inventory = formatInventory(sampled, getSleeveType);
 
-  const skirtCount = sampled.filter(it => it.subcategory === "Skirts" || (it.category === "Bottoms" && /skirt/i.test(it.name || ""))).length;
-  const dressCount = sampled.filter(it => it.category === "Dresses" || it.category === "Occasionwear").length;
-  const pantsCount = sampled.filter(it => it.category === "Bottoms" && !(it.subcategory === "Skirts" || /skirt/i.test(it.name || ""))).length;
+  // Lower-half availability via the shared slotForItem classifier so athleisure
+  // bottoms (leggings/skorts) count too — previously an Active pool reported
+  // "0 pants, 0 skirts, 0 dresses" and told the model to use pants that weren't
+  // there. "bottom" covers pants/leggings/skirts/skorts; skirt-likes are split
+  // out for the skirt-or-dress nudge.
+  const isSkirtLike = (it) => /skirt|skort|mini|midi|maxi/i.test((it.subcategory || "") + " " + (it.name || ""));
+  const dressCount = sampled.filter(it => { const s = slotForItem(it); return s === "dress" || s === "set"; }).length;
+  const bottoms = sampled.filter(it => slotForItem(it) === "bottom");
+  const skirtCount = bottoms.filter(isSkirtLike).length;
+  const pantsCount = bottoms.length - skirtCount;
   const skirtDressAvailable = skirtCount + dressCount > 0;
-  const availabilityNote = `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the 3 looks MUST use a skirt or dress (not pants)." : "Only pants available, so all 3 looks will use pants."}`;
+  const availabilityNote = `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants/leggings, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the looks should use a skirt or dress (not pants)." : "Only pants/leggings available, so build the lower half from those."}`;
 
   // `shuffle` already clones internally; pass the array directly.
   const pickRandom = (arr) => shuffle(arr);
