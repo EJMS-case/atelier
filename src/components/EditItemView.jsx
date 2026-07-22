@@ -155,6 +155,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           </div>
         </div>
 
+
         {/* F6 — purchase price for cost-per-wear */}
         <div>
           <div style={s.fieldLabel}>Purchase price (USD, optional)</div>

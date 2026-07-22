@@ -68,7 +68,7 @@ const OCCASION_PREFILTERS = {
     // shorts. Plus shoes (for sneakers) and accessories (hair ties, etc.)
     // since both categories are useful here without polluting the look with
     // dress sandals or evening clutches.
-    keepCategories: new Set(["Athleisure", "Shoes"]),
+    keepCategories: new Set(["Athleisure", "Shoes", "Accessories", "Belts"]),
     removeCategories: new Set(),
     removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Mules", "Loafers"]),
     removeKeywords: [],
@@ -129,6 +129,15 @@ const OCCASION_PREFILTERS = {
       return /\b(cocktail|evening|gown|formal|black.?tie|wedding|gala|event|occasion|black.?tie.?optional|red.?carpet)\b/.test(text);
     },
   },
+  Dinner: {
+    // Evening out (dinner/date/drinks). The OCCASION_SLOTS.Dinner.banned list
+    // already drops athleisure/lounge/swim + tees/tanks/shorts/sandals; this
+    // light prefilter just strips anything explicitly tagged athletic or
+    // strictly-casual so those don't slip into an elevated evening look.
+    removeCategories: new Set(),
+    removeSubcategories: new Set(),
+    removeKeywords: ["athletic", "gym", "workout", "sporty", "weekend only", "casual only"],
+  },
 };
 
 // ── Comfort occasions + note-based occasion affinity ─────────────────────────
@@ -178,7 +187,7 @@ function matchesExclusion(item, exclusionKey) {
     case "no-dresses":
       return item.category === "Dresses" || item.category === "Occasionwear";
     case "trousers-only":
-      return item.category === "Bottoms" && !["Trousers", "Satin/Silk", "Ponte"].includes(item.subcategory);
+      return item.category === "Bottoms" && !["Trousers", "Pants", "Wide Leg", "Straight", "Satin/Silk", "Ponte"].includes(item.subcategory);
     case "no-boots":
       return item.subcategory === "Boots";
     case "heels-only":
@@ -389,10 +398,12 @@ export function sampleClosetItems({
     /\b(jeans|denim|jean)\b/i.test((it.name || "") + " " + (it.notes || ""));
 
   let pool = items.filter(it => {
-    if (freeTextOverrideIds.has(it.id)) return true;
-    // catRescued bypasses the CATEGORY ban only (a noted-athleisure Top clears
-    // the Active "no Tops" ban); subcategory / keyword bans still apply.
-    if (bannedCats.has(it.category) && !catRescued(it)) return false;
+    // Free-text does NOT bypass the occasion's banned CATEGORIES — a bare color
+    // or word (e.g. "black" on Work) must not drag in an Occasionwear cocktail
+    // dress. Only the note-rescue (a piece she tagged for a comfort occasion)
+    // clears a category ban here; free-text can still rescue items past the
+    // softer prefilters in step 1b below.
+    if (bannedCats.has(it.category) && !occasionNoteIds.has(it.id)) return false;
     if (bannedSubs.has(it.subcategory)) return false;
     if (bannedSubs.has("Jeans") && isDenim(it)) return false;
     if (bannedKeywords.length > 0) {

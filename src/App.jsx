@@ -67,6 +67,67 @@ migrateLocalStorage();
 
 
 
+// ── Worn-pin reconcilers ─────────────────────────────────────────────────────
+// Marking a look worn (or un-marking it) must NOT clobber a trip/manual plan that
+// already lives on that date. Both helpers reconcile against the row's existing
+// outfits[] (mirroring the onSchedule path) instead of a bare savePlan/deletePlan
+// — the bare versions left a stale outfits[] (so outfitsOf masked the real look)
+// and deletePlan wiped the whole day, losing trips.
+const sameItemSet = (a = [], b = []) => a.length === b.length && a.every(x => b.includes(x));
+
+async function pinWornToDate({ date, itemIds, occasion }) {
+  if (!date || !(itemIds || []).length) return;
+  try {
+    const rows = await fetchPlansBetween(date, date);
+    const existing = (Array.isArray(rows) && rows[0]) || null;
+    const current = outfitsOf(existing);
+    // Append the worn look as its own outfit unless an identical one is already there.
+    const outfits = current.some(o => sameItemSet(o.items, itemIds))
+      ? current
+      : [...current, { id: newOutfitId(), label: "", occasion: occasion || null, items: itemIds }];
+    const merged = buildPlanPayload({
+      date, outfits,
+      source: existing?.source || "worn",
+      notes: existing?.notes ?? null,
+      weather: existing?.weather ?? null,
+      activity: existing?.activity ?? null,
+      day_label: existing?.day_label ?? null,
+    });
+    if (existing?.layout_data) merged.layout_data = existing.layout_data;
+    await savePlan(merged);
+  } catch {
+    // Last-resort fallback keeps the old behavior so a fetch blip still records something.
+    await savePlan({ date, items: itemIds, source: "worn", occasion: occasion || "Work", notes: null }).catch(() => {});
+  }
+}
+
+async function unpinWornFromDate({ date, itemIds }) {
+  if (!date) return;
+  try {
+    const rows = await fetchPlansBetween(date, date);
+    const existing = (Array.isArray(rows) && rows[0]) || null;
+    if (!existing) return;
+    const current = outfitsOf(existing);
+    const remaining = current.filter(o => !sameItemSet(o.items, itemIds));
+    if (remaining.length === current.length) return; // nothing matched — leave it
+    if (remaining.length === 0) {
+      // Only delete the row if this worn look was the ONLY thing on the day.
+      await deletePlan(date);
+      return;
+    }
+    const merged = buildPlanPayload({
+      date, outfits: remaining,
+      source: existing.source || "worn",
+      notes: existing.notes ?? null,
+      weather: existing.weather ?? null,
+      activity: existing.activity ?? null,
+      day_label: existing.day_label ?? null,
+    });
+    if (existing.layout_data) merged.layout_data = existing.layout_data;
+    await savePlan(merged);
+  } catch { /* leave the row untouched on failure */ }
+}
+
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
@@ -759,12 +820,22 @@ export default function App() {
     }
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
     if (activeFilters.color?.length) {
+      // Denim "wash" chips (Light/Medium/Dark/Black Wash) are pushed into this
+      // same color array but are NOT color families — effectiveColorFamily never
+      // returns a "…Wash" string, so matching only on family filtered them to
+      // zero. Match wash tokens as a substring of the item's color/notes/name.
+      const washSel = activeFilters.color.filter(c => /wash/i.test(c));
       base = base.filter(it => {
         // Family is derived from the actual color string when possible, so
         // a "Gray" item saved with the legacy "Neutral" family resolves to
         // "Gray" and stays out of the Neutrals bucket.
         const family = effectiveColorFamily(it);
-        return activeFilters.color.includes(family);
+        if (activeFilters.color.includes(family)) return true;
+        if (washSel.length) {
+          const text = ((it.color || "") + " " + (it.notes || "") + " " + (it.name || "")).toLowerCase();
+          if (washSel.some(w => text.includes(w.toLowerCase()))) return true;
+        }
+        return false;
       });
     }
     // Sets filter
@@ -1172,8 +1243,9 @@ export default function App() {
             )}
           </>)}
 
-          {/* Landing view: Recently Added + uncategorized when no filters active */}
-          {!isSetView && !activeFilters.category?.length && !activeFilters.subcategory?.length && !activeFilters.color?.length && !activeFilters.brand?.length && !activeFilters.sets && !activeFilters.lastWorn && (() => {
+          {/* Landing view: Recently Added + uncategorized when no filters active
+              AND no search is running (else it stacks above search results). */}
+          {!isSetView && !closetSearch.trim() && !activeFilters.category?.length && !activeFilters.subcategory?.length && !activeFilters.color?.length && !activeFilters.brand?.length && !activeFilters.sets && !activeFilters.lastWorn && (() => {
             const now = Date.now();
             const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
             const recentItems = items
@@ -1328,7 +1400,7 @@ export default function App() {
               : await sb.saveOutfitLog(patch);
             if (log.date_worn) {
               bumpWearCounts(log.garment_ids || []);
-              savePlan({ date: log.date_worn, items: log.garment_ids || [], source: "worn", occasion: log.occasion || "Work", notes: null }).catch(() => {});
+              pinWornToDate({ date: log.date_worn, itemIds: log.garment_ids || [], occasion: log.occasion }).catch(() => {});
             }
             return Array.isArray(result) ? result[0] : result;
           }}
@@ -1554,7 +1626,7 @@ export default function App() {
             unbumpWearCounts(ids);
             // Clear the matching planner pin (if it was created by the
             // wear-log auto-pin and hasn't been overwritten manually).
-            if (dateWorn) deletePlan(dateWorn).catch(() => {});
+            if (dateWorn) unpinWornFromDate({ date: dateWorn, itemIds: ids }).catch(() => {});
             const updated = items.map(it =>
               ids.includes(it.id) ? {...it, wear_count: Math.max(0, (it.wear_count || 0) - 1)} : it
             );
@@ -1568,7 +1640,7 @@ export default function App() {
             // Pin this look to the planner on the date worn so the calendar
             // reflects what she actually wore (user request: "items I mark
             // as worn, put them on the calendar on the date that I wore them").
-            savePlan({ date, items: ids, source: "worn", occasion: log?.occasion || "Work", notes: null }).catch(() => {});
+            pinWornToDate({ date, itemIds: ids, occasion: log?.occasion }).catch(() => {});
             const updated = items.map(it =>
               ids.includes(it.id)
                 ? {...it, last_worn: date, wear_count: (it.wear_count || 0) + 1}
@@ -1591,7 +1663,7 @@ export default function App() {
             await Promise.all(ids.map(id => sb.updateItemLastWorn(id, today)));
             bumpWearCounts(ids); // F6
             // Mirror the wear onto the planner calendar.
-            savePlan({ date: today, items: ids, source: "worn", occasion: log.occasion || "Work", notes: null }).catch(() => {});
+            pinWornToDate({ date: today, itemIds: ids, occasion: log.occasion }).catch(() => {});
             const updated = items.map(it =>
               ids.includes(it.id)
                 ? {...it, last_worn: today, wear_count: (it.wear_count || 0) + 1}
@@ -1613,7 +1685,7 @@ export default function App() {
             if (log.date_worn) {
               bumpWearCounts(log.garment_ids || []);
               // Pin to the planner on the date worn.
-              savePlan({ date: log.date_worn, items: log.garment_ids || [], source: "worn", occasion: log.occasion || "Work", notes: null }).catch(() => {});
+              pinWornToDate({ date: log.date_worn, itemIds: log.garment_ids || [], occasion: log.occasion }).catch(() => {});
             }
             return Array.isArray(result) ? result[0] : result;
           }}

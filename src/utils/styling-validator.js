@@ -433,8 +433,20 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
       const lightOnly = /tank|sleeveless|sandal|bikini|swim|shorts/i.test(text) || resolved.subcategory === "Sandals" || resolved.subcategory === "Tanks";
 
       if (isHot || isWarm) {
-        if (resolved.category === "Knits" && !(isWarm && resolved.knit_weight === "Fine/Summer")) {
-          failures.push(`Look ${i + 1}: "${resolved.name}" is a knit — too warm for ${weather}.`);
+        if (resolved.category === "Knits") {
+          // Match filterByWeather: in HOT no knits at all; in WARM only genuinely
+          // warm knits (chunky/winter weight, heavy fabric, a pullover, or a
+          // winter-tagged piece). A fine OR untagged cardigan is fine at 70-84°F.
+          // The old rule failed every knit whose knit_weight wasn't exactly
+          // "Fine/Summer" — including the common null case — so it rejected
+          // pieces the sampler had legitimately offered, wasting retries and
+          // silently dropping looks.
+          const knitTooWarm = isHot
+            ? true
+            : (resolved.knit_weight === "Chunky/Winter" || heavy || resolved.subcategory === "Pullovers" || sw === "winter");
+          if (knitTooWarm) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is a knit — too warm for ${weather}.`);
+          }
         }
         // The broad "heavy fabric" check applies to garments worn ON the body
         // (tops, bottoms, dresses). Outerwear gets evaluated by the
