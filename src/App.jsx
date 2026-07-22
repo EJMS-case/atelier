@@ -590,13 +590,6 @@ export default function App() {
     setStylePanelOpen(true);
   }, [setView]);
 
-  // Stable handlers for the memo'd ItemCard grid (see ItemCard.jsx) — they take
-  // the item so the closures don't need to be recreated per card each render.
-  const handleEditItemCard = useCallback((item) => {
-    setEditItem(item); setEditReturnView(viewRef.current); setView("edit");
-  }, [setView]);
-  const handleToggleFavPiece = useCallback((item) => toggleFav("piece", item.id), [toggleFav]);
-
   // "Build a similar look" from a saved log. Seeds Style Me with the original
   // look's silhouette description + its occasion / weather / mood, then opens
   // the panel. The free-text prompt nudges the AI to keep the silhouette shape
@@ -646,6 +639,14 @@ export default function App() {
       setFavorites(prev => [...result, ...prev]);
     }
   }, [favorites]);
+
+  // Stable handlers for the memo'd ItemCard grid (see ItemCard.jsx). Declared
+  // AFTER toggleFav so their dep arrays don't reference it in the temporal dead
+  // zone — that ordering bug (#100) crashed every render with a blank screen.
+  const handleEditItemCard = useCallback((item) => {
+    setEditItem(item); setEditReturnView(viewRef.current); setView("edit");
+  }, [setView]);
+  const handleToggleFavPiece = useCallback((item) => toggleFav("piece", item.id), [toggleFav]);
 
   const normalizeLooks = (looks, fallbackOccasion) => looks.map(look => {
     const aiLayout = (() => {
