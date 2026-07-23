@@ -242,13 +242,25 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
             });
           })()}
         </select>
-        {form.set_id && (
+        {form.category === "Sets" ? (
+          // A "Sets" item stored as one piece: let her declare whether it's a
+          // complete two-piece to keep together (styled as one look, like a
+          // dress) or pieces she also wears apart. Checked = keep together =
+          // is_separable false. This is the control that was missing for a
+          // single-item set (the old checkbox only appeared once a set_id link
+          // existed), so a set she never split had no way to be marked as one.
+          <label style={{display:"flex", alignItems:"flex-start", gap:8, fontSize:12, color:"var(--color-text)", cursor:"pointer"}}>
+            <input type="checkbox" checked={form.is_separable === false}
+              onChange={e => setForm(f => ({ ...f, is_separable: !e.target.checked }))}/>
+            <span>Complete two-piece — keep it together as one look (don't split into separate pieces). Uncheck if you also wear the top and bottom apart.</span>
+          </label>
+        ) : form.set_id ? (
           <label style={{display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--color-text)", cursor:"pointer"}}>
             <input type="checkbox" checked={form.is_separable}
               onChange={e => setForm(f => ({ ...f, is_separable: e.target.checked }))}/>
             Show as individual piece in its own category (separable)
           </label>
-        )}
+        ) : null}
       </div>
 
       {onStyleAround && (
