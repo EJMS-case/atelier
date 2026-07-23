@@ -80,6 +80,13 @@ const CLOSET = [
   // browsing UI; the underlying garment is a bottom).
   item({ id: "lounge-pant",   category: "Bottoms",    subcategory: "Pants",        name: "Soft lounge pant",   material: "cotton", notes: "relaxed knit pant, soft" }),
 
+  // Athleisure — the ONLY clothing Active admits (it bans Tops/Bottoms/Bags/
+  // Outerwear/Loafers). Without these the Active row can't produce any valid
+  // look, since every structured piece above is banned for that occasion.
+  item({ id: "athl-top",      category: "Athleisure", subcategory: "Performance Top", name: "Technical training top", material: "jersey", notes: "moisture-wicking" }),
+  item({ id: "athl-bottom",   category: "Athleisure", subcategory: "Leggings",       name: "Compression leggings",  material: "nylon" }),
+  item({ id: "athl-zip",      category: "Athleisure", subcategory: "Zip-Ups",        name: "Light training zip-up", material: "jersey", notes: "light layer" }),
+
   // Dresses / Jumpsuits
   item({ id: "dress",         category: "Dresses",    subcategory: "Day Dresses",  name: "Cotton midi dress",  material: "cotton" }),
   item({ id: "jumpsuit",      category: "Jumpsuits",  subcategory: "Day Jumpsuits",name: "Linen jumpsuit",     material: "linen" }),
@@ -193,6 +200,17 @@ function buildLook({ vibe, items, role = "supporting" }) {
 }
 
 function candidateLooksFor(occasion, weather) {
+  // Active is athleisure-only: sneakers, a performance top, leggings, and (when
+  // cool/cold) a light zip-up as the layer. No bag (Bags is banned), no
+  // structured pieces. Weather never changes the shape — athleisure reads fine
+  // across the range and the zip-up covers the cold cells.
+  if (occasion === "Active") {
+    const layer = (isMild(weather) || isCool(weather) || isCold(weather)) ? reverseMap["athl-zip"] : null;
+    const base = buildLook({ vibe: "sporty", items: [reverseMap["athl-top"], reverseMap["athl-bottom"], reverseMap["sneakers"], layer] });
+    const noLayer = buildLook({ vibe: "sporty", items: [reverseMap["athl-top"], reverseMap["athl-bottom"], reverseMap["sneakers"]] });
+    return [base, noLayer];
+  }
+
   const top    = pickTop(occasion, weather);
   const bottom = pickBottom(occasion, weather);
   const shoes  = pickShoes(occasion, weather);
