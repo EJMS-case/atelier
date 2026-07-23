@@ -741,6 +741,13 @@ function isStatementPiece(item) {
   if (!item) return false;
   const pattern = (item.pattern || "").toLowerCase().trim();
   if (STATEMENT_PATTERNS.has(pattern)) return true;
+  // Visual-AI read: when the closet has been enriched, the vision model reports
+  // the actual pattern off the photo — this catches bold prints the user never
+  // tagged (a floral or plaid saved with a blank pattern field), so HC8's
+  // one-statement rule stops two loud prints from landing in the same look.
+  // ("solid"/"colourblock" aren't in STATEMENT_PATTERNS, so they never trip it.)
+  const vpattern = (item.vision_data?.pattern || "").toLowerCase().trim();
+  if (STATEMENT_PATTERNS.has(vpattern)) return true;
   const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
   if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|featherwork|lace)\b/i.test(text)) return true;
   // Bold prints in the name even when pattern field is unset (sparse metadata).
