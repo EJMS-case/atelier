@@ -394,23 +394,10 @@ function checkCategoryBalance(response, idMap, allItems) {
         failures.push(`Look ${i + 1} has ${catCounts[cat]} ${cat} items (max ${max} allowed). Remove extras.`);
       }
     }
-
-    // Combined tops-family check: Tops + non-cardigan Knits together must not exceed 1.
-    // Cardigans and open-front knits are LAYERS (worn over a top), not tops themselves —
-    // a blouse + cardigan is valid. Pullovers/turtlenecks ARE tops and count against the limit.
-    const resolvedItems = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
-    const isCardigan = (it) => it?.category === "Knits" && /cardigan/i.test(it?.subcategory || "");
-    const topsFamilyCount = resolvedItems.filter(it =>
-      (it.category === "Tops" || it.category === "Knits") && !isCardigan(it)
-    ).length;
-    if (topsFamilyCount > 1) {
-      failures.push(`Look ${i + 1} has ${topsFamilyCount} tops-family items (Tops + non-cardigan Knits combined). Max 1 — use either a knit pullover OR a top, not both.`);
-    }
+    // NOTE: a single Top + a single Knit together is NOT flagged here — a woven
+    // shirt or blouse under a knit pullover (collar and cuffs peeking out) is a
+    // hallmark quiet-luxury layer, not "two tops". The per-category caps above
+    // (Tops ≤ 1, Knits ≤ 1) still stop genuine stacking like two blouses.
   });
   return failures;
 }
@@ -541,15 +528,12 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
 }
 
 /**
- * Check 12: Exactly one pair of shoes and (usually) one bag per look.
- * Soft check — shoes become hard for all non-Lounge occasions. Bag
- * enforcement depends on the occasion slots (some let it be optional).
+ * Check 12a (HARD): every non-Lounge look needs shoes. A bare-footed Work look
+ * really is incomplete, so this stays a hard requirement.
  */
-function checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots) {
+function checkShoes(response, idMap, allItems, occasion) {
   const failures = [];
   const lounge = occasion === "Lounge";
-  const bagRequired = !!occasionSlots?.required?.bag;
-
   response.looks.forEach((look, i) => {
     const cats = (look.items || []).map(item => {
       const id = typeof item === "string" ? item : item.id;
@@ -557,16 +541,30 @@ function checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots) {
       const realId = idMap[cleanId] || cleanId;
       return allItems.find(it => it.id === realId)?.category;
     }).filter(Boolean);
-
-    const shoes = cats.filter(c => c === "Shoes").length;
-    const bags = cats.filter(c => c === "Bags").length;
-
-    if (!lounge && shoes === 0) {
+    if (!lounge && cats.filter(c => c === "Shoes").length === 0) {
       failures.push(`Look ${i + 1} has no shoes. Every non-lounge look needs exactly 1 pair.`);
     }
-    if (bagRequired && bags === 0) {
-      failures.push(`Look ${i + 1} has no bag — ${occasion} requires one.`);
-    }
+  });
+  return failures;
+}
+
+/**
+ * Check 12b (SOFT): a bag is a finishing touch, not a make-or-break. A missing
+ * bag used to hard-fail a whole generation (and the user would then see the
+ * validator's rulebook). It's a soft nudge now — the look still ships and she
+ * can add a bag herself; the retry prompt still asks for one.
+ */
+function checkBag(response, idMap, allItems, occasion, occasionSlots) {
+  if (!occasionSlots?.required?.bag) return [];
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const bags = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId)?.category;
+    }).filter(Boolean).filter(c => c === "Bags").length;
+    if (bags === 0) failures.push(`Look ${i + 1} could use a bag — ${occasion} usually calls for one.`);
   });
   return failures;
 }
@@ -837,7 +835,8 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds).map(f => ({ type: "occasion", message: f, hard: true })));
   allFailures.push(...checkCategoryBalance(response, idMap, allItems).map(f => ({ type: "category_balance", message: f, hard: true })));
   allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
-  allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
+  allFailures.push(...checkShoes(response, idMap, allItems, occasion).map(f => ({ type: "shoes", message: f, hard: true })));
+  allFailures.push(...checkBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "bag", message: f, hard: false })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkDressStyling(response, idMap, allItems).map(f => ({ type: "dress_styling", message: f, hard: true })));
   allFailures.push(...checkCompleteSets(response, idMap, allItems).map(f => ({ type: "complete_sets", message: f, hard: true })));

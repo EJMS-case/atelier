@@ -353,6 +353,20 @@ const positives = [
     { looks: [buildLook({ vibe: "easy", items: [reverseMap["set-complete"], reverseMap["heels"], reverseMap["bag"]] })] },
     { slots: slotsFor("Dinner", "Mild (55-69°F)"), occasion: "Dinner", weather: "Mild (55-69°F)" }
   ),
+  // Shirt-under-sweater: a Top + a Knit pullover together is a valid layer, not
+  // "two tops" — must pass (the exact combo that used to hard-fail).
+  expectAccepted(
+    "Top + knit pullover layered (shirt under a sweater)",
+    { looks: [buildLook({ vibe: "quiet luxury", items: [reverseMap["blouse"], reverseMap["knit-summer"], reverseMap["trousers-wool"], reverseMap["loafers"], reverseMap["bag"]] })] },
+    { slots: slotsFor("Work", "Mild (55-69°F)"), occasion: "Work", weather: "Mild (55-69°F)" }
+  ),
+  // A missing bag is now a soft nudge, not a fatal error — a Work Dinner look
+  // with no bag must still be accepted (bag enforcement moved to soft).
+  expectAccepted(
+    "Work Dinner with no bag (soft, not fatal)",
+    { looks: [buildLook({ vibe: "polished", items: [reverseMap["blouse"], reverseMap["trousers-light"], reverseMap["loafers"]] })] },
+    { slots: slotsFor("Work Dinner", "Warm (70-84°F)"), occasion: "Work Dinner", weather: "Warm (70-84°F)" }
+  ),
 ];
 
 const negatives = [

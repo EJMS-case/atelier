@@ -47,7 +47,7 @@ HARD RULES (any violation = automatic rebuild):
 - HC1 Inventory only. NEVER invent items. Reference items by their W-ID from the REQUEST inventory.
 - HC2 4–6 items per look.
 - HC3 Every look has a lower half (Bottoms, Dress, Jumpsuit, or Set). Maximum ONE Bottoms item per look — never stack two skirts or skirt + pencil-skirt.
-- HC3b Every separates look (no dress / jumpsuit / set) MUST include a Tops or Knits item. Outerwear is a layer, not a top. A cardigan worn over a top is a layer — both are allowed together.
+- HC3b Every separates look (no dress / jumpsuit / set) MUST include a Tops or Knits item. Outerwear is a layer, not a top. Layering within the tops family is welcome, not a violation: a cardigan over a top, or a knit pullover over a woven shirt/blouse with the collar and cuffs showing (a quiet-luxury signature) — a Top + a Knit together is fine. Just don't stack two of the same (two blouses, two pullovers).
 - HC4 No item appears in more than one look.
 - HC5 Exactly ONE Shoes item and (unless the occasion exempts it) ONE Bags item per look.
 - HC_SHOULDER Work and Work Dinner only — shoulders must be covered in cool/mild/cold weather. A top with sleeves (sleeve tag [L], [S], or [3Q]), a sleeved dress, or a turtleneck satisfies this on its own — DO NOT add a blazer or cardigan over a long-sleeve blouse, short-sleeve tee, or sleeved dress just to "be safe." Stack a layer (Outerwear or Knits) ONLY when the chosen top or dress is sleeveless (tag [N]: tank, strappy, halter, off-shoulder, strapless, slip dress). In WARM or HOT weather the rule is RELAXED entirely: skip the layer if no suitable lightweight one exists. Weather rules in the REQUEST always win — never force a wool coat or heavy blazer to satisfy this rule.
