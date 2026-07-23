@@ -149,25 +149,34 @@ export async function invokeToolStream({
   let buffer = "";
   let inputJson = "";
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      try {
-        const evt = JSON.parse(payload);
-        if (evt.type === "content_block_delta" && evt.delta?.type === "input_json_delta") {
-          inputJson += evt.delta.partial_json || "";
-          onDelta?.(inputJson);
-        }
-      } catch { /* ignore malformed SSE lines */ }
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const evt = JSON.parse(payload);
+          if (evt.type === "content_block_delta" && evt.delta?.type === "input_json_delta") {
+            inputJson += evt.delta.partial_json || "";
+            onDelta?.(inputJson);
+          }
+        } catch { /* ignore malformed SSE lines */ }
+      }
     }
+  } catch (e) {
+    // The connection dropped mid-stream (Safari surfaces this as "Load failed").
+    // Don't bubble a raw network error to the user — return null so the caller
+    // falls through to its non-streaming retry attempt, which will re-request
+    // (with backoff) and usually succeed. A real user cancel still propagates.
+    if (signal?.aborted) throw e;
+    return { toolBlock: null, raw: null };
   }
 
   let input;
