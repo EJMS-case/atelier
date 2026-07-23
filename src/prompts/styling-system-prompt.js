@@ -143,7 +143,7 @@ export function buildStylingPrompt({
   // Variety nudge — complements the sampler's cross-generation rotation. Pushes
   // the model to spread across the inventory instead of anchoring on the same
   // handful of salient pieces tap after tap (the "same few tops" complaint).
-  const varietyNote = `\n🎲 VARIETY: Range widely across the inventory shown. When several pieces would work equally well for a slot, favor one you haven't already leaned on — don't rebuild around the same few hero pieces every time. Each pull should feel like a fresh look into her closet.\n`;
+  const varietyNote = `\n🎲 VARIETY: Range widely across the inventory shown. When several pieces would work equally well for a slot, favor one you haven't already leaned on — don't rebuild around the same few hero pieces every time. Each pull should feel like a fresh look into her closet.\n\n♻️ REDISCOVER: Some pieces are marked \`[RESTING: …]\` — she owns and has worn them before but hasn't reached for them in a while, and she loves being reminded of forgotten favorites. When a resting piece genuinely fits the occasion, weather, and the look's story, prefer it over an obvious recent go-to. Never force one in just to use it, and never build a whole look from resting pieces alone — one well-placed rediscovery per pull is plenty.\n`;
 
   const weatherBlock = formatWeather(weather);
 
