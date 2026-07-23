@@ -3,7 +3,7 @@
 // tips to elevate it. Rates what's already there rather than proposing new
 // purchases.
 
-const API_URL = "https://api.anthropic.com/v1/messages";
+import { anthropicFetch } from "../../lib/ai/toolUse.js";
 
 const EVAL_PROMPT = `You are Elyce's personal stylist with a sharp, senior creative-director eye. She built this outfit from her own wardrobe and wants your honest read.
 
@@ -34,30 +34,15 @@ export async function evaluateLook(items, apiKey, opts = {}) {
     return parts.join(" | ");
   }).join("\n");
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    signal: opts.signal,
-    body: JSON.stringify({
-      model: opts.model || "claude-haiku-4-5-20251001",
-      max_tokens: 400,
-      temperature: 0.6,
-      messages: [{
-        role: "user",
-        content: `${EVAL_PROMPT}\n\nITEMS:\n${inventory}`,
-      }],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Evaluate failed ${res.status}`);
-  }
+  const res = await anthropicFetch({
+    model: opts.model || "claude-haiku-4-5-20251001",
+    max_tokens: 400,
+    temperature: 0.6,
+    messages: [{
+      role: "user",
+      content: `${EVAL_PROMPT}\n\nITEMS:\n${inventory}`,
+    }],
+  }, { apiKey, signal: opts.signal });
 
   const body = await res.json();
   const text = body.content?.map(b => b.text || "").join("") || "";

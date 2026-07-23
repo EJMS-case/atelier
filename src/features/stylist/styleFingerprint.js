@@ -11,7 +11,7 @@
 //
 // Output: a plain-text block of 4–8 short bullet observations.
 
-const API_URL = "https://api.anthropic.com/v1/messages";
+import { anthropicFetch } from "../../lib/ai/toolUse.js";
 
 // Compact one-line representation of an outfit. Resolves garment_ids to the
 // minimum metadata Claude needs to spot patterns: category, color, brand,
@@ -103,21 +103,11 @@ Do NOT:
 Outfits (${lines.length} total — date | occasion | weather — pieces):
 ${lines.join("\n")}`;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 600,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Fingerprint generation failed: ${res.status}`);
+  const res = await anthropicFetch({
+    model: "claude-sonnet-4-6",
+    max_tokens: 600,
+    messages: [{ role: "user", content: prompt }],
+  }, { apiKey });
   const data = await res.json();
   const text = (data.content || []).map(b => b.text || "").join("").trim();
   if (!text) throw new Error("Empty fingerprint");

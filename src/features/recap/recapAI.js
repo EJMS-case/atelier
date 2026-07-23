@@ -3,7 +3,7 @@
 // the most stylish, with a one-line reason each. Hearted looks are flagged so
 // the model can boost them, per the user's choice ("AI-judged, hearts boosted").
 
-const API_URL = "https://api.anthropic.com/v1/messages";
+import { anthropicFetch } from "../../lib/ai/toolUse.js";
 
 function pieceLabel(it) {
   if (!it) return null;
@@ -62,21 +62,11 @@ Return ONLY a JSON array, no prose, highest first:
 Outfits (# — date · occasion · weather · where · flags — pieces):
 ${lines}`;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 700,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Most-stylish judge failed: ${res.status}`);
+  const res = await anthropicFetch({
+    model: "claude-sonnet-4-6",
+    max_tokens: 700,
+    messages: [{ role: "user", content: prompt }],
+  }, { apiKey });
   const data = await res.json();
   const text = (data.content || []).map(b => b.text || "").join("").trim();
 

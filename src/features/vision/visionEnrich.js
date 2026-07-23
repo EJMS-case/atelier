@@ -7,9 +7,8 @@
 
 import { familyForColorString, effectiveColorFamily } from "../../constants/color.js";
 import { buildImgSource } from "../../lib/ai/stylist.js";
+import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { sb } from "../../lib/supabase.js";
-
-const API_URL = "https://api.anthropic.com/v1/messages";
 
 // Compact, styling-useful subset of a vision read, persisted on the item as
 // `vision_data`. Deliberately excludes anything the stylist doesn't use, to
@@ -70,15 +69,9 @@ export async function enrichItemVision({ item, apiKey }) {
 
   const owner = `The owner tagged this piece — colour: ${item.color || "(none)"}; category: ${item.category}${item.subcategory ? " > " + item.subcategory : ""}; notes: ${item.notes || "(none)"}.`;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
+  let res;
+  try {
+    res = await anthropicFetch({
       model: "claude-sonnet-4-6",
       max_tokens: 500,
       messages: [{
@@ -88,8 +81,10 @@ export async function enrichItemVision({ item, apiKey }) {
           { type: "text", text: `${PROMPT}\n\n(For your reference only — do NOT let it bias what you actually see: ${owner})` },
         ],
       }],
-    }),
-  });
+    }, { apiKey });
+  } catch (e) {
+    throw new Error(e.message || "Vision read failed");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message || `Vision read failed (${res.status})`);
