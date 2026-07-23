@@ -8,6 +8,7 @@ import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../uti
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { generateStyleFingerprint } from "../features/stylist/styleFingerprint.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
+import { anthropicFetch } from "../lib/ai/toolUse.js";
 
 export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, styleFingerprint, setStyleFingerprint, onNavigate }) {
   const [key,          setKey]          = useState(apiKey);
@@ -115,26 +116,17 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           });
         } catch { /* skip if image can't be fetched */ }
         if (!base64) continue;
-        const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": key,
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true",
-          },
-          body: JSON.stringify({
-            model: "claude-opus-4-8",
-            max_tokens: 256,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-                { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: Tops/Knits/Bottoms/Dresses/Sets/Jumpsuits/Loungewear/Athleisure/Outerwear/Occasionwear/Shoes/Accessories), subcategory (specific type), color_family (main color). Return only valid JSON.` },
-              ],
-            }],
-          }),
-        });
+        const aiRes = await anthropicFetch({
+          model: "claude-opus-4-8",
+          max_tokens: 256,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
+              { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: Tops/Knits/Bottoms/Dresses/Sets/Jumpsuits/Loungewear/Athleisure/Outerwear/Occasionwear/Shoes/Accessories), subcategory (specific type), color_family (main color). Return only valid JSON.` },
+            ],
+          }],
+        }, { apiKey: key });
         if (aiRes.ok) {
           const aiData = await aiRes.json();
           const text = aiData.content?.[0]?.text || "";

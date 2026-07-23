@@ -6,7 +6,7 @@
 // exactly. Keep the text reference-only so the stylist treats it as a mood,
 // not a shopping list.
 
-const API_URL = "https://api.anthropic.com/v1/messages";
+import { anthropicFetch } from "../../lib/ai/toolUse.js";
 
 export async function summarizeInspiration(base64DataUrl, apiKey, { occasion, weather } = {}) {
   if (!base64DataUrl || !apiKey) throw new Error("Image and API key required");
@@ -28,27 +28,17 @@ Do NOT:
 
 Context (use lightly, don't restate): occasion = ${occasion || "any"}, weather = ${weather || "any"}.`;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 220,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
-          { type: "text", text: prompt },
-        ],
-      }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Vibe summary failed: ${res.status}`);
+  const res = await anthropicFetch({
+    model: "claude-sonnet-4-6",
+    max_tokens: 220,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
+        { type: "text", text: prompt },
+      ],
+    }],
+  }, { apiKey });
   const data = await res.json();
   const text = (data.content || []).map(b => b.text || "").join("").trim();
   if (!text) throw new Error("Empty summary");

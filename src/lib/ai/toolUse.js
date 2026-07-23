@@ -37,7 +37,7 @@ export function friendlyApiError(status, rawMsg) {
 // POST to the Messages API with retry + exponential-ish backoff on transient /
 // overload errors. Returns the Response (still stream-readable) on success, or
 // throws an Error whose message is already user-friendly.
-async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = {}) {
+export async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = {}) {
   const delays = [600, 1500, 3200];
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {

@@ -5,7 +5,7 @@
 // NOTE: system param doesn't work with browser-direct access — context is
 // prepended to the first user message instead.
 
-const API_URL = "https://api.anthropic.com/v1/messages";
+import { anthropicFetch } from "../../lib/ai/toolUse.js";
 
 const SLOT_CATEGORIES = {
   shoes:     ["Shoes"],
@@ -95,26 +95,12 @@ export async function sendBuilderMessage({ messages, assembledItems, closetItems
     return { role: m.role, content: m.content };
   });
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 500,
-      temperature: 0.7,
-      messages: apiMessages,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Chat failed ${res.status}`);
-  }
+  const res = await anthropicFetch({
+    model: "claude-sonnet-4-6",
+    max_tokens: 500,
+    temperature: 0.7,
+    messages: apiMessages,
+  }, { apiKey });
 
   const body = await res.json();
   return body.content?.map(b => b.text || "").join("").trim() || "";

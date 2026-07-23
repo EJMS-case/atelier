@@ -13,7 +13,7 @@ import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } fro
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, filterByWeather, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { moodPromptFor } from "../../features/stylist/moods.js";
-import { invokeTool } from "./toolUse.js";
+import { invokeTool, anthropicFetch } from "./toolUse.js";
 import {
   KnitSchema, KnitTool,
   ColorAnalysisSchema, ColorAnalysisTool,
@@ -283,12 +283,11 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
 // StyleInsightsView uses the streaming path below.)
 export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, onDelta) {
   const prompt = buildProfilePrompt(items, outfitLogs, analysis);
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] }),
-  });
-  if (!res.ok || !res.body) throw new Error("Profile generation failed");
+  const res = await anthropicFetch(
+    { model: "claude-sonnet-4-6", max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] },
+    { apiKey },
+  );
+  if (!res.body) throw new Error("Profile generation failed");
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
