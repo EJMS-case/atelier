@@ -40,16 +40,6 @@ export function friendlyDate(iso) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ });
 }
 
-// Compact NYC date+time stamp for "edit history" displays.
-export function nyStamp(d = new Date()) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit",
-    hour12: true,
-  }).format(d) + " ET";
-}
-
 // Add days to an iso "YYYY-MM-DD" while staying timezone-stable.
 export function addDaysIso(iso, n) {
   const d = new Date(iso + "T12:00:00Z"); // noon UTC keeps tz drift away

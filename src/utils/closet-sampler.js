@@ -510,7 +510,7 @@ export function sampleClosetItems({
     : [];
   const forceIds = new Set(forceInclude.map(it => it.id));
 
-  // ── 5. Identify cold items (never suggested or not in last 20 gens) ──
+  // ── 5. Identify cold items (never suggested or not in the last few gens) ──
   const recentSet = new Set(recentlySuggestedItems);
   const coldItems = pool.filter(it => {
     if (forceIds.has(it.id)) return false; // already forced

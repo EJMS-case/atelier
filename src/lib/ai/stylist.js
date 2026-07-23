@@ -1,7 +1,7 @@
 // ── AI STYLING HELPERS ───────────────────────────────────────────────────────
 // All Anthropic API callers for outfit generation, knit classification,
 // color analysis, style profile, and shopping recs live here.
-// Each function returns parsed JSON (or a string for generateStyleProfile).
+// Each function returns parsed JSON (or a string for streamStyleProfile).
 // Callers are responsible for UI state.
 
 import { STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
@@ -277,20 +277,10 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
   return `Write a 2-3 sentence monthly style profile for this wardrobe user. Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
 }
 
-export async function generateStyleProfile(items, outfitLogs, analysis, apiKey) {
-  const prompt = buildProfilePrompt(items, outfitLogs, analysis);
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 300, messages: [{ role: "user", content: prompt }] })
-  });
-  if (!res.ok) throw new Error("Profile generation failed");
-  const data = await res.json();
-  return data.content?.map(b => b.text || "").join("") || "";
-}
-
 // Streaming variant: invokes onDelta(textSoFar) as tokens arrive and returns
 // the final string. Falls back to a thrown error if the API call fails.
+// (A non-streaming generateStyleProfile once lived here but had no callers —
+// StyleInsightsView uses the streaming path below.)
 export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, onDelta) {
   const prompt = buildProfilePrompt(items, outfitLogs, analysis);
   const res = await fetch(API_URL, {
