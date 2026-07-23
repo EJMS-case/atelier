@@ -198,7 +198,14 @@ export function effectiveColorFamily(item) {
     "Metallics": "Gray",     // silver/pewter → Gray; gold resolves to Yellow via the color string
   };
   if (stored && LEGACY[stored]) return LEGACY[stored];
-  return stored;
+  // Last resort: a stored family that matches no chip and no legacy alias (real
+  // examples in the data: "Plaids & Patterns", "Metallics", stray "Cool Blue")
+  // would otherwise leak through raw as an invisible non-chip value — the item
+  // then matches no color filter at all. Run it back through the color-string
+  // parser (so "Cool Blue" → Blue); if even that finds no hue (e.g. a pattern
+  // label with no color), return "" so callers treat the item as uncolored
+  // instead of filing it under a phantom family.
+  return familyForColorString(stored) || "";
 }
 
 // Secondary: sleeve length (for Tops, Knits, Athleisure)

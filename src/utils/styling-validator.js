@@ -8,13 +8,13 @@
 import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
-import { getSleeveType } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isNonHeelShoe } from "./item-helpers.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
-// extra latency once is worth landing a full set of three. The follow-up
-// "fill" call below picks up any slack if the third attempt still salvages
-// to fewer than three.
+// extra latency once is worth landing a full set of three. If all attempts
+// still fail, the salvage block at the end drops only the individual looks
+// that failed a per-look check and returns whatever survives.
 const MAX_RETRIES = 2;
 
 // ── Validation Error ─────────────────────────────────────────────────────────
@@ -41,14 +41,16 @@ const EXCLUSION_CHECKS = {
   "no-dresses": (item) =>
     item.category === "Dresses" || item.category === "Occasionwear",
 
+  // Keep this allow-list identical to the closet-sampler's matchesExclusion —
+  // if the sampler lets "Pants"/"Wide Leg"/"Straight" through but the validator
+  // rejects them, every trousers-only look fails and burns retries.
   "trousers-only": (item) =>
     item.category === "Bottoms" &&
-    !["Trousers", "Satin/Silk", "Ponte"].includes(item.subcategory),
+    !["Trousers", "Pants", "Wide Leg", "Straight", "Satin/Silk", "Ponte"].includes(item.subcategory),
 
-  "no-boots": (item) => item.subcategory === "Boots",
+  "no-boots": (item) => isBootItem(item),
 
-  "heels-only": (item) =>
-    item.category === "Shoes" && item.subcategory !== "Heels",
+  "heels-only": (item) => isNonHeelShoe(item),
 
   "no-knits": (item) => item.category === "Knits",
 };
@@ -302,7 +304,9 @@ function checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds
 }
 
 /**
- * Check 7: Item count per look (4-6 items).
+ * Check 7: Item count per look. Minimum 3 (a top + bottom + shoes is a
+ * complete look) is hard; over 6 is a soft warning. A "look" of only
+ * accessories/shoes/outerwear with no clothing is invalid.
  */
 function checkItemCount(response) {
   const failures = [];
@@ -430,7 +434,11 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
       const sw = (resolved.season_weight || "").toLowerCase();
       const heavy = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i.test(text);
       const winterOnly = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(text);
-      const lightOnly = /tank|sleeveless|sandal|bikini|swim|shorts/i.test(text) || resolved.subcategory === "Sandals" || resolved.subcategory === "Tanks";
+      // For cool/cold: reject pieces that genuinely can't be worn into warmth.
+      // Tanks/sleeveless tops are intentionally NOT here — the user layers them
+      // under blazers and knits, so a tank as a cold-weather base is fine. Only
+      // sandals/swim/shorts (which can't be layered warm) get flagged.
+      const lightOnly = /sandal|bikini|swim|shorts/i.test(text) || resolved.subcategory === "Sandals";
 
       if (isHot || isWarm) {
         if (resolved.category === "Knits") {

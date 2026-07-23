@@ -6,7 +6,7 @@
 // pieces sort first within each bucket).
 
 import { normalizeOccasion } from "../constants/taxonomy.js";
-import { slotForItem } from "./item-helpers.js";
+import { slotForItem, isBootItem, isNonHeelShoe } from "./item-helpers.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -190,9 +190,9 @@ function matchesExclusion(item, exclusionKey) {
     case "trousers-only":
       return item.category === "Bottoms" && !["Trousers", "Pants", "Wide Leg", "Straight", "Satin/Silk", "Ponte"].includes(item.subcategory);
     case "no-boots":
-      return item.subcategory === "Boots";
+      return isBootItem(item);
     case "heels-only":
-      return item.category === "Shoes" && item.subcategory !== "Heels";
+      return isNonHeelShoe(item);
     case "no-knits":
       return item.category === "Knits";
     default:

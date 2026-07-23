@@ -50,6 +50,28 @@ export function slotForItem(item) {
   return "accessory";
 }
 
+// ── SHOE-TYPE HELPERS ────────────────────────────────────────────────────────
+// The wardrobe splits heels and boots across several L3 subcategories, so a
+// bare `subcategory === "Heels"` / `=== "Boots"` test both under- and
+// over-matches. These are the single source of truth for the "Heels Only" and
+// "No Boots" exclusion filters — imported by BOTH the closet-sampler (which
+// pre-filters the pool) and the styling-validator (which re-checks the result),
+// so the two never disagree and waste a retry.
+//   Heels live under: Heels, Stiletto, Kitten (+ Pumps/Mules/Slingback/Wedges
+//   if they appear). Boots live under: Boots and Ankle (ankle boots), plus
+//   anything whose name reads boot/bootie.
+export const HEEL_SUBS = new Set(["Heels", "Stiletto", "Kitten", "Pumps", "Mules", "Slingback", "Slingbacks", "Wedges"]);
+export function isBootItem(item) {
+  if (!item) return false;
+  return item.subcategory === "Boots" || item.subcategory === "Ankle" ||
+    /\bboot(s|ie|ies)?\b/i.test(item.name || "");
+}
+// True when a Shoes item is NOT a heel — i.e. it should be excluded under
+// "Heels Only". Non-shoe items return false (the filter only touches footwear).
+export function isNonHeelShoe(item) {
+  return item?.category === "Shoes" && !HEEL_SUBS.has(item?.subcategory);
+}
+
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
 export function filterByWeather(items, weather) {
   const raw = (weather || "").toLowerCase();
@@ -70,7 +92,11 @@ export function filterByWeather(items, weather) {
     const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
     const seasonTag = (it.season_weight || "").toLowerCase();
 
-    if (it.category === "Swim") return false;
+    // Swim only makes sense when it's genuinely warm out. The occasion sampler
+    // already limits swimwear to Vacation/pool contexts, so here we just keep a
+    // cold/cool/mild forecast from surfacing a bikini. Previously this stripped
+    // swim UNCONDITIONALLY, so a Vacation + Hot request lost every swim piece.
+    if (it.category === "Swim") return isHot || isWarm;
 
     if (isHot) {
       if (it.category === "Knits") return false;
