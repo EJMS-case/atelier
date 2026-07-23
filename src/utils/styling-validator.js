@@ -988,6 +988,29 @@ function extractCompleteLooks(partialJson) {
   return looks;
 }
 
+// Some models occasionally emit the tool input DOUBLE-ENCODED: `looks` arrives
+// as a stringified JSON value — a "[{…}]" array, or even a nested
+// {"looks":[…]} wrapper — instead of a real array. That trips the schema check
+// and kills an otherwise-perfect generation (observed on both Opus and Sonnet).
+// Unwrap it before validating so the looks are recovered rather than discarded.
+export function coerceLooksShape(input) {
+  if (!input || typeof input !== "object") return input;
+  let out = input;
+  if (typeof out.looks === "string") {
+    try {
+      let parsed = JSON.parse(out.looks);
+      // The string is sometimes the whole {"looks":[…]} wrapper again.
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.looks)) parsed = parsed.looks;
+      if (Array.isArray(parsed)) out = { ...out, looks: parsed };
+    } catch { /* leave as-is — the schema check will reject and trigger a retry */ }
+  }
+  // A single look spread at the top level (no `looks` array, but it has items[]).
+  if (!Array.isArray(out.looks) && Array.isArray(out.items)) {
+    out = { looks: [out] };
+  }
+  return out;
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────────
 
 /**
@@ -1161,7 +1184,7 @@ export async function generateValidatedLooks({
       continue;
     }
 
-    const shapeCheck = LooksResponseSchema.safeParse(toolBlock.input);
+    const shapeCheck = LooksResponseSchema.safeParse(coerceLooksShape(toolBlock.input));
     if (!shapeCheck.success) {
       const issueList = shapeCheck.error.issues.slice(0, 5).map(i =>
         `${i.path.join(".") || "(root)"}: ${i.message}`
