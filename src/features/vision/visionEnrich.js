@@ -7,8 +7,41 @@
 
 import { familyForColorString, effectiveColorFamily } from "../../constants/color.js";
 import { buildImgSource } from "../../lib/ai/stylist.js";
+import { sb } from "../../lib/supabase.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
+
+// Compact, styling-useful subset of a vision read, persisted on the item as
+// `vision_data`. Deliberately excludes anything the stylist doesn't use, to
+// keep the row (and later the inventory line) small. Her tags stay the source
+// of truth for colour; these fields ADD the fabric/drape/formality/vibe signal
+// her tags rarely capture.
+export function visionDescriptor({ vision, colorAgrees }) {
+  return {
+    v: 1,
+    color: vision.color || "",
+    color_secondary: vision.color_secondary || "",
+    pattern: vision.pattern || "",
+    fabric: vision.fabric || "",
+    formality: vision.formality || "",
+    sleeve: vision.sleeve || "",
+    vibe: vision.vibe || "",
+    confidence: vision.confidence || "",
+    color_agrees: !!colorAgrees,
+  };
+}
+
+/**
+ * Enrich ONE item and persist the descriptor to the closet. Returns the stored
+ * descriptor (also handy for updating in-session state). Throws on failure so
+ * the batch runner can record it and move on.
+ */
+export async function enrichAndPersistItem({ item, apiKey }) {
+  const result = await enrichItemVision({ item, apiKey });
+  const descriptor = visionDescriptor(result);
+  await sb.saveItemVision(item.id, descriptor);
+  return descriptor;
+}
 
 const PROMPT = `You are a meticulous fashion cataloguer. Describe ONLY the garment you can actually see in the photo — do not guess beyond what's visible.
 

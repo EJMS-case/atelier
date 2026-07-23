@@ -1771,7 +1771,12 @@ export default function App() {
       )}
 
       {view === "visionpilot" && (
-        <VisionPilotView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <VisionPilotView
+          items={items}
+          apiKey={apiKey}
+          onBack={() => setView("settings")}
+          onEnriched={(id, vd) => setItems(prev => prev.map(it => it.id === id ? { ...it, vision_data: vd } : it))}
+        />
       )}
       </ErrorBoundary>
       </Suspense>
