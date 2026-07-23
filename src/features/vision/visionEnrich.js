@@ -6,19 +6,9 @@
 // CONFIRMS or FLAGS, especially for colour (cross-checked against tag + notes).
 
 import { familyForColorString, effectiveColorFamily } from "../../constants/color.js";
+import { buildImgSource } from "../../lib/ai/stylist.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-
-// Image source shape for the vision API — accepts a data URL or an https URL.
-function imgSource(imgStr) {
-  if (!imgStr) return null;
-  if (imgStr.startsWith("data:")) {
-    const [hdr, data] = imgStr.split(",");
-    const mediaType = hdr.match(/data:([^;]+)/)?.[1] || "image/jpeg";
-    return { type: "base64", media_type: mediaType, data };
-  }
-  return { type: "url", url: imgStr };
-}
 
 const PROMPT = `You are a meticulous fashion cataloguer. Describe ONLY the garment you can actually see in the photo — do not guess beyond what's visible.
 
@@ -42,7 +32,7 @@ Return STRICT JSON, no prose, no code fences:
  */
 export async function enrichItemVision({ item, apiKey }) {
   if (!apiKey) throw new Error("Anthropic API key required");
-  const source = imgSource(item?.image);
+  const source = buildImgSource(item?.image);
   if (!source) throw new Error("This item has no photo to read.");
 
   const owner = `The owner tagged this piece — colour: ${item.color || "(none)"}; category: ${item.category}${item.subcategory ? " > " + item.subcategory : ""}; notes: ${item.notes || "(none)"}.`;
