@@ -759,8 +759,19 @@ export default function App() {
       });
       setAllLooks(prev => [...prev, ...normalizedLooks].slice(-30));
     } catch(e) {
-      setStyleErr(e.message || "Styling failed — check your API key.");
       console.error("Generation error:", e);
+      if (streamedAny) {
+        // Some looks already surfaced and are valid — a stricter final pass just
+        // couldn't land the *rest*. Keep what's shown; never replace real looks
+        // with an error wall.
+        setStyleErr("");
+      } else if (e.name === "ValidationError") {
+        // Never show the validator's rulebook to the user — that's debug text.
+        setStyleErr("Couldn't quite land a full set this time — tap Style Me to try again.");
+      } else {
+        // API/network errors already carry a friendly message from the AI layer.
+        setStyleErr(e.message || "Styling failed — try again in a moment.");
+      }
     }
   };
 
