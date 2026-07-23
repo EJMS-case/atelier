@@ -237,6 +237,16 @@ export const sb = {
     });
     if (!res.ok) throw new Error("Bulk last_worn update failed");
   },
+  // Persist the one-time Visual-AI descriptor for a single item. Best-effort
+  // per item so a batch enrichment can continue past one failure.
+  async saveItemVision(id, visionData) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+      body: JSON.stringify({ vision_data: visionData }),
+    });
+    if (!res.ok) throw new Error(`Save vision failed (${res.status})`);
+  },
   async listStorageImages() {
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/wardrobe-images`, {
       method: "POST",

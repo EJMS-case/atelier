@@ -683,6 +683,15 @@ export function formatInventory(sampled, getSleeveType) {
     if (it.brand && !nameLower.includes(it.brand.toLowerCase())) parts.push(it.brand);
     // Notes are the primary description — pass in full, no truncation.
     if (it.notes) parts.push(it.notes);
+    // Visual-AI read (when the closet has been enriched): a compact fabric /
+    // drape / formality / vibe signal the model reads straight off the garment's
+    // photo. Supplements her notes — never overrides her colour. Kept short so
+    // it doesn't balloon the per-item token cost across a full closet.
+    const vd = it.vision_data;
+    if (vd && (vd.fabric || vd.formality || vd.vibe)) {
+      const seen = [vd.fabric, vd.formality, vd.vibe].map(x => (x || "").trim()).filter(Boolean).join("; ");
+      if (seen) parts.push(`seen: ${seen}`);
+    }
     return parts.join(" | ");
   }).join("\n");
 }
