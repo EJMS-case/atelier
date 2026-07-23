@@ -17,6 +17,16 @@ import { getSleeveType, isBootItem, isNonHeelShoe, isCompleteSetItem } from "./i
 // that failed a per-look check and returns whatever survives.
 const MAX_RETRIES = 2;
 
+// The styling brain runs on Opus 4.8 for the strongest outfit judgment, but Opus
+// is also the most in-demand model and 529s ("Overloaded") during peak hours.
+// When a whole attempt fails on a transient/overload error, the next attempt
+// drops to Sonnet 5 — far less contended and still excellent for styling — so a
+// generation succeeds instead of surfacing an error. Opus stays primary; the
+// fallback only kicks in when Opus can't be reached.
+const PRIMARY_MODEL = "claude-opus-4-8";
+const FALLBACK_MODEL = "claude-sonnet-5";
+const TRANSIENT_STATUS = new Set([408, 409, 429, 500, 502, 503, 529]);
+
 // ── Validation Error ─────────────────────────────────────────────────────────
 export class ValidationError extends Error {
   constructor(message, failures = []) {
@@ -1073,11 +1083,11 @@ export async function generateValidatedLooks({
         ({ toolBlock, raw } = await invokeToolStream(
           {
             apiKey,
-            // Styling brain runs on Opus 4.8 for stronger outfit judgment.
-            // Opus 4.8 removed the sampling params — passing `temperature`
-            // now 400s. Look-to-look variety still comes from the per-look
-            // creative briefs and the random Seed line in the dynamic body.
-            model: "claude-opus-4-8",
+            // Opus 4.8 for stronger outfit judgment. (Opus 4.8 removed the
+            // sampling params — passing `temperature` now 400s. Look-to-look
+            // variety comes from the per-look creative briefs and the random
+            // Seed line in the dynamic body.)
+            model: PRIMARY_MODEL,
             maxTokens: 5000,
             content: messageContent,
             tool: LooksTool,
@@ -1115,15 +1125,27 @@ export async function generateValidatedLooks({
         // which caused retries to truncate mid-response.
         ({ toolBlock, raw } = await invokeToolRaw({
           apiKey,
-          // Match the streaming path: Opus 4.8, no sampling params.
-          model: "claude-opus-4-8",
+          // Attempt 0 (single-look, no streaming) stays on Opus; any RETRY runs
+          // on the fallback model, which also covers the "Opus overloaded" case.
+          model: attempt === 0 ? PRIMARY_MODEL : FALLBACK_MODEL,
           maxTokens: 5000,
           content: messageContent,
           tool: LooksTool,
         }));
       }
     } catch (e) {
-      logAiError("stylist_outfit:http", { attempt }, e);
+      logAiError("stylist_outfit:http", { attempt, status: e.status }, e);
+      // A transient/overload failure (or a network blip) shouldn't kill the whole
+      // generation: fall through to the next attempt, which runs on the fallback
+      // model. Only a non-retryable error (bad key, 400) or the final attempt
+      // surfaces to the user.
+      const transient = !e.status || TRANSIENT_STATUS.has(e.status);
+      if (transient && attempt < MAX_RETRIES) {
+        // Clean re-request on the next attempt (fallback model) — this wasn't a
+        // bad look to correct, so don't append it to the retry prompt.
+        lastFailures = [];
+        continue;
+      }
       throw e;
     }
 
