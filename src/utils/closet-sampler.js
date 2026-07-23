@@ -230,7 +230,12 @@ const BUCKET_TARGETS = {
 
 const TOTAL_TARGET = Object.values(BUCKET_TARGETS).reduce((a, b) => a + b, 0);
 
-// Cold boost disabled until 60+ saved/planned outfits exist.
+// Cold-boost forced-inclusion is disabled (0): the pool is now uncapped, so
+// every eligible piece already reaches the model — there's nothing to "boost
+// into" a narrow sample. Rediscovery of under-worn pieces is instead handled
+// where it belongs, by tagging genuinely rested items ([RESTING: …]) in
+// formatInventory so the stylist can prefer them when they fit. (The cold-item
+// sort below is retained only for its ordering bias.)
 const COLD_BOOST_SIZE = 0;
 
 /**
@@ -653,12 +658,26 @@ export function formatInventory(sampled, getSleeveType) {
     }
     const colorInfo = colorParts.length ? `[${colorParts.join(", ")}]` : "[?]";
 
+    // Resting signal — surface pieces she's owned and worn before but hasn't
+    // reached for lately, so the stylist can help her rediscover them (her
+    // standing ask). Deliberately keyed on ACTUAL wear (last_worn), and only
+    // for pieces with a real prior wear date: a never-worn item is usually just
+    // NEW, and boosting new items is exactly the behavior she complained about.
+    let restTag = "";
+    if (it.last_worn) {
+      const days = Math.floor((Date.now() - new Date(it.last_worn).getTime()) / 86400000);
+      if (days >= 45) {
+        const mo = Math.floor(days / 30);
+        restTag = ` [RESTING: ${mo >= 2 ? `${mo}mo` : `${days}d`}]`;
+      }
+    }
+
     const name = it.name || "";
     const nameLower = name.toLowerCase();
     const parts = [
       `${short} ${colorInfo}`,
       `${it.category}${it.subcategory ? `>${it.subcategory}` : ""}`,
-      `${name}${knitTag}${sleeveTag}${setTag}`,
+      `${name}${knitTag}${sleeveTag}${setTag}${restTag}`,
     ];
     // Brand only if it's not already in the item name (common pattern).
     if (it.brand && !nameLower.includes(it.brand.toLowerCase())) parts.push(it.brand);

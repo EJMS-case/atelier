@@ -7,7 +7,7 @@ import { MOODS } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import { generateStyleFingerprint } from "./features/stylist/styleFingerprint.js";
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
-import { bumpWearCounts, unbumpWearCounts } from "./features/wear/wearApi.js";
+import { bumpWearCounts, unbumpWearCounts, deriveWearStats, applyWearStats } from "./features/wear/wearApi.js";
 import HomeView from "./features/home/HomeView.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, si, ss } from "./ui/styles.js";
@@ -222,6 +222,11 @@ export default function App() {
   const [setsSort,       setSetsSort]       = useState("recent"); // recent | alpha | count
   const [editingSet,     setEditingSet]     = useState(null); // null or set_id for modal
   const syncTimer = useRef(null);
+  // True calendar-derived wear stats (plans + logs), computed on mount. Used to
+  // overlay accurate last_worn onto items before the stylist samples, so the
+  // "[RESTING]" rediscovery tag reflects real wear — the stored last_worn column
+  // went stale once wear moved to the calendar.
+  const wearStatsRef = useRef({});
 
   // ── Persist allLooks to localStorage so anti-repeat history survives reloads
   useEffect(() => {
@@ -332,6 +337,13 @@ export default function App() {
         }
       });
       setRecentlyWornItems([...wornIds]);
+
+      // Derive true wear stats (calendar + logs) for the stylist's RESTING tag.
+      // Best-effort and non-blocking — if plans fail to load, the tag simply
+      // doesn't fire rather than misfiring on stale stored last_worn.
+      sb.fetchAllPlans()
+        .then(plans => { wearStatsRef.current = deriveWearStats(plans || [], logs || []); })
+        .catch(() => {});
 
       // Loved looks = hearted outfit_logs (newest first, capped).
       const lovedIds = new Set((favs || []).filter(f => f.type === "outfit").map(f => f.reference_id));
@@ -718,8 +730,12 @@ export default function App() {
         .map(r => r.vibe_text)
         .filter(Boolean);
       const fingerprintText = styleFingerprint?.text || "";
+      // Overlay calendar-derived wear so the stylist sees accurate last_worn
+      // (drives the [RESTING] rediscovery tag). Falls back to the item as-is
+      // when there's no wear record.
+      const itemsForStyling = applyWearStats(items, wearStatsRef.current);
       const result = await generateOutfit(
-        items, occasion, weatherLabel, request, apiKey, allLooks,
+        itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
         { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, count }
       );
