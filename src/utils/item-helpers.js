@@ -50,6 +50,25 @@ export function slotForItem(item) {
   return "accessory";
 }
 
+// ── COMPLETE-SET CLASSIFIER ──────────────────────────────────────────────────
+// A "Sets" item is one of two very different things, and the styling engine has
+// to tell them apart:
+//   · a COMPLETE two-piece stored as ONE item (top + bottom together, e.g.
+//     "Ponte Knit Set", "CozyChic Cardigan & Pants") — a full outfit base, like
+//     a dress. Nothing else (no extra top, no extra bottom) belongs in the look.
+//   · a HALF of a set (e.g. "Fast Break Zip-Up", "Go with the Flow Pant") — a
+//     single garment that still needs its counterpart.
+// Distinguished by name signal first (a whole-set name / "&" beats a half word),
+// then falling back to the stored flags (no linked partner + explicitly
+// non-separable = the user stored it as one indivisible piece).
+export function isCompleteSetItem(item) {
+  if (!item || item.category !== "Sets") return false;
+  const name = (item.name || "").toLowerCase();
+  if (/\bset\b/.test(name) || /&| and /.test(name)) return true;   // whole-set signal
+  if (/\b(top|tank|tee|shirt|blouse|hoodie|sweatshirt|zip|bra|crop|cami|pant|pants|trouser|short|shorts|skirt|skort|legging|jogger|bottom)\b/.test(name)) return false; // half signal
+  return !item.set_id && item.is_separable === false;             // stored as one indivisible piece
+}
+
 // ── SHOE-TYPE HELPERS ────────────────────────────────────────────────────────
 // The wardrobe splits heels and boots across several L3 subcategories, so a
 // bare `subcategory === "Heels"` / `=== "Boots"` test both under- and

@@ -18,6 +18,53 @@ function headers(apiKey) {
   };
 }
 
+// Transient statuses worth retrying — 529 (Overloaded) is the big one during
+// peak hours, plus rate-limit and gateway blips.
+const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 529]);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Turn a raw API error into something the user can act on instead of a bare
+// "Overloaded". The stylist UI shows this string directly.
+export function friendlyApiError(status, rawMsg) {
+  const m = (rawMsg || "").toLowerCase();
+  if (status === 529 || m.includes("overloaded")) return "The stylist is in high demand right now — give it a few seconds and tap Style Me again.";
+  if (status === 429) return "That was a lot of requests in a row — wait a moment, then try again.";
+  if (status === 401 || status === 403) return "Your Anthropic API key was rejected — double-check it in Settings.";
+  if (status === 400 && rawMsg) return rawMsg; // usually a real, actionable problem
+  return rawMsg || `The stylist hit an error (${status}) — try again in a moment.`;
+}
+
+// POST to the Messages API with retry + exponential-ish backoff on transient /
+// overload errors. Returns the Response (still stream-readable) on success, or
+// throws an Error whose message is already user-friendly.
+async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = {}) {
+  const delays = [600, 1500, 3200];
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    let res;
+    try {
+      res = await fetch(API_URL, { method: "POST", headers: headers(apiKey), body: JSON.stringify(body), signal });
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      lastErr = e;
+      if (attempt < maxRetries) { await sleep(delays[attempt] || 3200); continue; }
+      throw new Error("Couldn't reach the stylist — check your connection and try again.");
+    }
+    if (res.ok) return res;
+    if (RETRYABLE_STATUS.has(res.status) && attempt < maxRetries) {
+      await sleep(delays[attempt] || 3200);
+      continue;
+    }
+    const err = await res.json().catch(() => ({}));
+    const raw = err?.error?.message || `API error ${res.status}`;
+    const e = new Error(friendlyApiError(res.status, raw));
+    e.status = res.status;
+    e.rawMessage = raw;
+    throw e;
+  }
+  throw lastErr || new Error("Request failed after retries");
+}
+
 /**
  * Invoke the Anthropic API with forced tool use and Zod validation.
  *
@@ -55,18 +102,12 @@ export async function invokeTool({
   };
   if (typeof temperature === "number") body.temperature = temperature;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify(body),
-    signal,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const msg = err?.error?.message || `API error ${res.status}`;
-    logAiError(`${kind}:http`, { status: res.status, err }, msg);
-    throw new Error(msg);
+  let res;
+  try {
+    res = await anthropicFetch(body, { apiKey, signal });
+  } catch (e) {
+    logAiError(`${kind}:http`, { status: e.status, raw: e.rawMessage }, e.message);
+    throw e;
   }
 
   const data = await res.json();
@@ -93,25 +134,15 @@ export async function invokeTool({
 export async function invokeToolStream({
   apiKey, model, maxTokens, temperature, content, tool, signal,
 }, onDelta) {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      ...(typeof temperature === "number" ? { temperature } : {}),
-      stream: true,
-      messages: [{ role: "user", content }],
-      tools: [tool],
-      tool_choice: { type: "tool", name: tool.name },
-    }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
-  }
+  const res = await anthropicFetch({
+    model,
+    max_tokens: maxTokens,
+    ...(typeof temperature === "number" ? { temperature } : {}),
+    stream: true,
+    messages: [{ role: "user", content }],
+    tools: [tool],
+    tool_choice: { type: "tool", name: tool.name },
+  }, { apiKey, signal });
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -155,24 +186,14 @@ export async function invokeToolStream({
 export async function invokeToolRaw({
   apiKey, model, maxTokens, temperature, content, tool, signal,
 }) {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: headers(apiKey),
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      ...(typeof temperature === "number" ? { temperature } : {}),
-      messages: [{ role: "user", content }],
-      tools: [tool],
-      tool_choice: { type: "tool", name: tool.name },
-    }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
-  }
+  const res = await anthropicFetch({
+    model,
+    max_tokens: maxTokens,
+    ...(typeof temperature === "number" ? { temperature } : {}),
+    messages: [{ role: "user", content }],
+    tools: [tool],
+    tool_choice: { type: "tool", name: tool.name },
+  }, { apiKey, signal });
 
   const data = await res.json();
   const toolBlock = (data.content || []).find(b => b.type === "tool_use" && b.name === tool.name);

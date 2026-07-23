@@ -6,7 +6,7 @@
 // pieces sort first within each bucket).
 
 import { normalizeOccasion } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isNonHeelShoe } from "./item-helpers.js";
+import { slotForItem, isBootItem, isNonHeelShoe, isCompleteSetItem } from "./item-helpers.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -649,6 +649,9 @@ export function formatInventory(sampled, getSleeveType) {
       const partners = setIndex[it.set_id].filter(p => p.short !== short).map(p => p.short).join(",");
       const mode = it.is_separable ? "SEPARABLE" : "LOCKED";
       setTag = ` [SET:${mode} partners:${partners}]`;
+    } else if (isCompleteSetItem(it)) {
+      // A complete two-piece stored as one item — a full look base like a dress.
+      setTag = " [COMPLETE SET — full two-piece look; add NO other top or bottom, only outerwear/knit over it]";
     }
     // Color: use what the user entered; fall back to normalized family name.
     const colorName = it.color || it.color_family || "";

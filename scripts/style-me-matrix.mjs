@@ -87,6 +87,9 @@ const CLOSET = [
   item({ id: "athl-bottom",   category: "Athleisure", subcategory: "Leggings",       name: "Compression leggings",  material: "nylon" }),
   item({ id: "athl-zip",      category: "Athleisure", subcategory: "Zip-Ups",        name: "Light training zip-up", material: "jersey", notes: "light layer" }),
 
+  // Complete two-piece set (top + bottom stored as one item) — a full base.
+  item({ id: "set-complete",  category: "Sets",       subcategory: "Day Sets",     name: "Ponte Knit Set",     material: "ponte" }),
+
   // Dresses / Jumpsuits
   item({ id: "dress",         category: "Dresses",    subcategory: "Day Dresses",  name: "Cotton midi dress",  material: "cotton" }),
   item({ id: "jumpsuit",      category: "Jumpsuits",  subcategory: "Day Jumpsuits",name: "Linen jumpsuit",     material: "linen" }),
@@ -343,6 +346,13 @@ const positives = [
     { looks: [buildLook({ vibe: "polished", items: [reverseMap["blouse"], reverseMap["trousers-light"], reverseMap["loafers"], reverseMap["bag"], reverseMap["blazer"]] })] },
     { slots: slotsFor("Work", "Warm (70-84°F)"), occasion: "Work", weather: "Warm (70-84°F)" }
   ),
+  // A complete two-piece set stands alone as a full base — set + shoes + bag,
+  // no separate top or bottom, must pass (satisfies both halves like a dress).
+  expectAccepted(
+    "Complete set alone (no extra top/bottom)",
+    { looks: [buildLook({ vibe: "easy", items: [reverseMap["set-complete"], reverseMap["heels"], reverseMap["bag"]] })] },
+    { slots: slotsFor("Dinner", "Mild (55-69°F)"), occasion: "Dinner", weather: "Mild (55-69°F)" }
+  ),
 ];
 
 const negatives = [
@@ -371,6 +381,13 @@ const negatives = [
     "Separates look with no top",
     { looks: [buildLook({ vibe: "polished", items: [reverseMap["trousers-wool"], reverseMap["loafers"], reverseMap["bag"], reverseMap["blazer"]] })] },
     { slots: slotsFor("Work", "Mild (55-69°F)"), occasion: "Work", weather: "Mild (55-69°F)" }
+  ),
+  // A complete two-piece set with a SEPARATE skirt bolted on must fail (HC7b) —
+  // the "peachy set + a second brown skirt" bug.
+  expectRejected(
+    "Complete set + a separate skirt",
+    { looks: [buildLook({ vibe: "easy", items: [reverseMap["set-complete"], reverseMap["skirt"], reverseMap["heels"], reverseMap["bag"]] })] },
+    { slots: slotsFor("Dinner", "Mild (55-69°F)"), occasion: "Dinner", weather: "Mild (55-69°F)" }
   ),
 ];
 

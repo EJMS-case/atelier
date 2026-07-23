@@ -8,7 +8,7 @@
 import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
-import { getSleeveType, isBootItem, isNonHeelShoe } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isNonHeelShoe, isCompleteSetItem } from "./item-helpers.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
@@ -73,6 +73,10 @@ const ATHL_SUB_DRESS = /dress|gown/i;
 // `dress` makes checkLowerHalf pass for a Lounge look that's literally a
 // zip-up + sandals + bag (no bottom). Infer from name + subcategory instead.
 function getSetsRole(item) {
+  // A complete two-piece is a full base — count it as a dress so it satisfies
+  // BOTH upper- and lower-half coverage on its own (and the stylist is never
+  // forced to bolt on a redundant second top or bottom).
+  if (isCompleteSetItem(item)) return "dress";
   const sub = (item.subcategory || "").toLowerCase();
   const name = (item.name || "").toLowerCase();
   if (ATHL_SUB_DRESS.test(sub) || ATHL_SUB_DRESS.test(name)) return "dress";
@@ -656,6 +660,43 @@ function checkDressStyling(response, idMap, allItems) {
 }
 
 /**
+ * Check (HC7b): A COMPLETE two-piece set (top + bottom stored as one item) is a
+ * full outfit base, exactly like a dress. The look must not also carry a
+ * separate bottom, a separate top, or another full base — that's the "peachy
+ * set + a second brown skirt" mistake. Outerwear / knit layered OVER the set is
+ * fine (same as over a dress).
+ */
+function checkCompleteSets(response, idMap, allItems) {
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const resolved = (look.items || []).map(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap[cleanId] || cleanId;
+      return allItems.find(it => it.id === realId);
+    }).filter(Boolean);
+
+    const set = resolved.find(isCompleteSetItem);
+    if (!set) return;
+
+    const extraBottom = resolved.find(it => it.category === "Bottoms");
+    if (extraBottom) {
+      failures.push(`Look ${i + 1} pairs complete set "${set.name}" with a separate bottom "${extraBottom.name}" — a two-piece set already includes its bottom. Drop the extra bottom (or drop the set and build from separates).`);
+    }
+    const extraTop = resolved.find(it => it.category === "Tops");
+    if (extraTop) {
+      failures.push(`Look ${i + 1} adds top "${extraTop.name}" to complete set "${set.name}" — the set already includes its top. Remove it; only outerwear/knit may layer over a set.`);
+    }
+    const otherBase = resolved.find(it => it !== set &&
+      (it.category === "Dresses" || it.category === "Jumpsuits" || it.category === "Occasionwear" || isCompleteSetItem(it)));
+    if (otherBase) {
+      failures.push(`Look ${i + 1} combines complete set "${set.name}" with another full base "${otherBase.name}" — use only one complete base per look.`);
+    }
+  });
+  return failures;
+}
+
+/**
  * Check 13: One statement piece per look. The styling-system rule already
  * says "one focal point" but the AI doesn't always honor it; this enforces
  * it. A statement = a non-solid pattern OR explicit heavy embellishment
@@ -782,6 +823,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   allFailures.push(...checkShoesAndBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "shoes_bag", message: f, hard: true })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkDressStyling(response, idMap, allItems).map(f => ({ type: "dress_styling", message: f, hard: true })));
+  allFailures.push(...checkCompleteSets(response, idMap, allItems).map(f => ({ type: "complete_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
   allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: true })));
   allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion, weather).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
