@@ -100,7 +100,11 @@ export const sb = {
           headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
           body: blob,
         });
-        if (res.ok) return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${itemId}`;
+        // Cache-buster: the storage path is stable (same itemId), so without a
+        // version query the browser/CDN keeps serving the OLD image after a
+        // re-upload (e.g. re-cropping a cutout). A ?v= stamp forces a fresh
+        // fetch of the new bytes.
+        if (res.ok) return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${itemId}?v=${Date.now()}`;
         lastErr = new Error(`Image upload failed (HTTP ${res.status}): ${await res.text()}`);
       } catch (e) { lastErr = e; }
     }

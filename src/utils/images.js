@@ -90,6 +90,10 @@ export async function trimTransparentBorders(dataUrl) {
   if (!dataUrl) return dataUrl;
   return new Promise((resolve) => {
     const img = new Image();
+    // Enable pixel reads when handed a same-CORS URL directly (callers usually
+    // pass a data: URL, for which this is a harmless no-op). Without it, a
+    // cross-origin URL taints the canvas and the crop is silently skipped.
+    img.crossOrigin = "anonymous";
     img.onload = () => {
       const bbox = getAlphaBbox(img);
       if (!bbox) { resolve(dataUrl); return; }

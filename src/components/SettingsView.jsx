@@ -182,13 +182,13 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const itemsNeedingBg   = items.filter(it => it.image && it.has_bg === true);
   const itemsUnknownBg   = items.filter(it => it.image && (it.has_bg === null || it.has_bg === undefined));
 
-  const handleBatchTrim = async () => {
-    // Only items that have a transparent background AND haven't been trimmed
-    // yet. The is_trimmed flag is set after a successful pass (whether the
-    // image actually had borders to trim or was already tight) so re-running
-    // the batch on the same closet is a no-op instead of grinding through
-    // every photo again.
-    const toTrim = itemsNeedingTrim;
+  const handleBatchTrim = async (force = false) => {
+    // Normal mode: only transparent items not yet trimmed. Force mode: re-cut
+    // EVERY item with a photo, ignoring is_trimmed — needed because a bulk
+    // import marked all items is_trimmed:true without ever running the crop, so
+    // photoroom exports with transparent padding slipped through and render with
+    // an oversized resize box in the builder.
+    const toTrim = force ? items.filter(it => it.image) : itemsNeedingTrim;
     if (!toTrim.length) return;
     trimStop.current = false;
     setTrimRunning(true); setTrimDone(false);
@@ -563,13 +563,21 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
             successful pass so re-running this is a no-op when there's
             nothing new to do. */}
         {itemsNeedingTrim.length > 0 && !trimRunning && !trimDone && (
-          <button style={{...s.btnSecondary, width:"100%"}} onClick={handleBatchTrim}>
+          <button style={{...s.btnSecondary, width:"100%"}} onClick={() => handleBatchTrim(false)}>
             Trim White Space ({itemsNeedingTrim.length} new / untrimmed item{itemsNeedingTrim.length===1?"":"s"})
           </button>
         )}
         {itemsClean.length > 0 && itemsNeedingTrim.length === 0 && !trimRunning && !trimDone && (
-          <div style={{fontSize:11, color:"var(--color-text-muted)", padding:"6px 0"}}>
-            ✓ All {itemsClean.length} transparent item{itemsClean.length===1?"":"s"} already trimmed.
+          <div style={{padding:"6px 0"}}>
+            <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:6}}>
+              ✓ All {itemsClean.length} transparent item{itemsClean.length===1?"":"s"} marked trimmed.
+            </div>
+            {/* Force re-cut — for cutouts that render with an oversized outline
+                (padding the import never actually cropped). Re-crops every photo
+                tight to the item. */}
+            <button style={{...s.btnSecondary, width:"100%"}} onClick={() => handleBatchTrim(true)}>
+              Re-cut all cutouts (fixes oversized outlines in collages)
+            </button>
           </div>
         )}
         {trimRunning && (
