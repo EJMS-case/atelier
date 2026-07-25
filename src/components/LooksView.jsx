@@ -5,6 +5,12 @@ import { sb } from "../lib/supabase.js";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
+import { fetchAllPlans } from "../features/planner/plannerApi.js";
+import { outfitsOf } from "../features/planner/outfits.js";
+
+// A stable signature for a set of garments (order-independent, de-duped) — lets
+// us match a saved look against what's pinned on the planner.
+const sigOf = (ids) => [...new Set((ids || []).map(String))].sort().join("|");
 
 export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
   const [logs,      setLogs]      = useState([]);
@@ -13,15 +19,35 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
   const [deleteId,  setDeleteId]  = useState(null);
   const [dateById,  setDateById]  = useState({});
   const [showBuilder, setShowBuilder] = useState(false);
+  // Garment-set signatures for every outfit currently pinned on the planner —
+  // used to hide saved looks that have already been scheduled.
+  const [schedSigs, setSchedSigs] = useState(() => new Set());
   // Look currently being edited (null = building a new one).
   const [editingLook, setEditingLook] = useState(null);
 
   const loadLogs = () => {
+    // Saved = "save for later": only looks not yet worn. Worn looks already drop
+    // out here (date_worn set); scheduled looks are filtered below against the
+    // planner, so a look leaves Saved once it's on the calendar — and returns if
+    // it's unscheduled. Nothing is deleted.
     sb.fetchOutfitLogs()
       .then(data => { setLogs(data.filter(l => !l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
+    fetchAllPlans()
+      .then(plans => {
+        const sset = new Set();
+        (plans || []).forEach(p => outfitsOf(p).forEach(o => {
+          const s = sigOf(o.items);
+          if (s) sset.add(s);
+        }));
+        setSchedSigs(sset);
+      })
+      .catch(() => { /* non-fatal — worst case a scheduled look lingers in Saved */ });
   };
   useEffect(() => { loadLogs(); }, []);
+
+  // Saved-for-later view: drop anything already scheduled on the planner.
+  const visibleLogs = logs.filter(l => !schedSigs.has(sigOf(l.garment_ids)));
 
   const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
   const today = new Date().toISOString().slice(0, 10);
@@ -51,8 +77,18 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           return saved;
         }}
         onFavoriteLook={onFavoriteLook}
-        onSchedule={onSchedule}
-        onClose={() => { setShowBuilder(false); setEditingLook(null); }}
+        onSchedule={async (plan) => {
+          const res = await onSchedule(plan);
+          // Optimistically drop the just-scheduled look from Saved (it's now on
+          // the calendar, so no longer "for later").
+          setSchedSigs(prev => {
+            const next = new Set(prev);
+            outfitsOf(plan).forEach(o => { const sg = sigOf(o.items); if (sg) next.add(sg); });
+            return next;
+          });
+          return res;
+        }}
+        onClose={() => { setShowBuilder(false); setEditingLook(null); loadLogs(); }}
       />
     );
   }
@@ -68,10 +104,14 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
         </button>
       )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading your looks…</p></div>}
-      {!loading && logs.length === 0 && (
-        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No looks saved yet. Build one manually or generate an outfit in Style Me.</p></div>
+      {!loading && visibleLogs.length === 0 && (
+        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
+          {logs.length === 0
+            ? "No looks saved yet. Build one manually or generate an outfit in Style Me."
+            : "Every saved look is scheduled or worn — nothing left for later. Save a new one, and it'll wait here until you wear it."}
+        </p></div>
       )}
-      {!loading && logs.map(log => {
+      {!loading && visibleLogs.map(log => {
         const meta = parseMeta(log.collage_url);
         const pickedDate = dateById[log.id] || today;
         const occLabel = joinTags(tagsFor(log, "occasions", "occasion"));
