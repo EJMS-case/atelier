@@ -8,6 +8,7 @@ import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/
 import { generateStyleFingerprint } from "./features/stylist/styleFingerprint.js";
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
 import { bumpWearCounts, unbumpWearCounts, deriveWearStats, applyWearStats } from "./features/wear/wearApi.js";
+import { runRecutDrip } from "./features/images/recutDrip.js";
 import HomeView from "./features/home/HomeView.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, si, ss } from "./ui/styles.js";
@@ -222,6 +223,7 @@ export default function App() {
   const [setsSort,       setSetsSort]       = useState("recent"); // recent | alpha | count
   const [editingSet,     setEditingSet]     = useState(null); // null or set_id for modal
   const syncTimer = useRef(null);
+  const recutRan = useRef(false);
   // True calendar-derived wear stats (plans + logs), computed on mount. Used to
   // overlay accurate last_worn onto items before the stylist samples, so the
   // "[RESTING]" rediscovery tag reflects real wear — the stored last_worn column
@@ -529,6 +531,21 @@ export default function App() {
       return { ok: false, error: e.message || "Couldn't save to cloud — your edit is kept locally and will retry on next reload." };
     }
   }, [items, persistItems]);
+
+  // Background cutout re-cut: once per session, a few seconds after the closet
+  // has settled, quietly re-crop a handful of items whose transparent padding
+  // was never actually trimmed. Pure image cropping (no AI, no cost); converges
+  // over sessions via the is_recut flag so it never redoes work. Guarded to run
+  // a single time per mount so item-state updates don't retrigger it.
+  useEffect(() => {
+    if (recutRan.current || !items?.length) return;
+    if (!items.some(it => it.image && it.is_recut !== true)) return;
+    recutRan.current = true;
+    const t = setTimeout(() => {
+      runRecutDrip({ items, updateItem, limit: 12 }).catch(() => {});
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [items, updateItem]);
 
   // Force-sync ALL items currently in React state to Supabase — used after bulk upload failures
   // Reads from live state (has base64 images), uploads them, saves URLs back
