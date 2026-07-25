@@ -5,9 +5,14 @@ import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import { tagsFor, joinTags, rowMatchesTag } from "../lib/multitag.js";
+import { fetchAllPlans } from "../features/planner/plannerApi.js";
+import { outfitsOf } from "../features/planner/outfits.js";
+
+const sigOf = (ids) => [...new Set((ids || []).map(String))].sort().join("|");
 
 export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
+  const [plans,      setPlans]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filterOcc,  setFilterOcc]  = useState("All");
   const [wearingId,  setWearingId]  = useState(null);
@@ -21,12 +26,44 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     sb.fetchOutfitLogs()
       .then(data => { setLogs(data.filter(l => l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
+    // Also pull the planner: most looks get worn by pinning them to a calendar
+    // day, not by tapping "Log as worn" — so without this, History showed only
+    // the handful of hand-logged looks and missed everything worn on the planner.
+    fetchAllPlans().then(setPlans).catch(() => {});
   };
   useEffect(() => { loadLogs(); }, []);
 
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Merge real wear logs with past/today planner outfits into one history. A log
+  // and a planner pin for the same day + same pieces are the same wear, so we
+  // dedupe (keeping the richer log). Planner-only entries render read-only —
+  // they're managed on the calendar, so they don't carry the log-only actions.
+  const logSigs = new Set(logs.map(l => `${l.date_worn}|${sigOf(l.garment_ids)}`));
+  const plannerEntries = [];
+  (plans || []).forEach(p => {
+    const date = (p.date || "").slice(0, 10);
+    if (!date || date > today) return; // future plans aren't worn yet
+    outfitsOf(p).forEach((o, idx) => {
+      const ids = o.items || [];
+      if (!ids.length) return;
+      if (logSigs.has(`${date}|${sigOf(ids)}`)) return; // already a real log
+      plannerEntries.push({
+        id: `plan:${p.id || date}:${idx}`,
+        garment_ids: ids,
+        date_worn: date,
+        occasion: o.occasion || p.occasion || null,
+        notes: p.notes || null,
+        collage_url: null,
+        __planner: true,
+      });
+    });
+  });
+  const allWorn = [...logs, ...plannerEntries];
+
   const filtered = filterOcc === "All"
-    ? logs
-    : logs.filter(l => rowMatchesTag(l, "occasions", "occasion", filterOcc));
+    ? allWorn
+    : allWorn.filter(l => rowMatchesTag(l, "occasions", "occasion", filterOcc));
   const grouped = {};
   filtered.forEach(log => {
     const d = log.date_worn || log.created_at?.slice(0, 10) || "Unknown";
@@ -65,7 +102,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   // Flatten multi-tagged occasions so the filter chip row shows every value
   // that appears anywhere across logs (a look tagged [Work, Casual] surfaces
   // under both filters).
-  const occasions = ["All", ...new Set(logs.flatMap(l => tagsFor(l, "occasions", "occasion")))];
+  const occasions = ["All", ...new Set(allWorn.flatMap(l => tagsFor(l, "occasions", "occasion")))];
   const wrapStyle = nested ? {} : s.page;
 
   // Editing a logged outfit replaces it via the parent's onSaveLook path
@@ -92,7 +129,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   return (
     <div style={wrapStyle}>
       {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>}
-      {logs.length > 0 && occasions.length > 1 && (
+      {allWorn.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
           {occasions.map(o => (
             <button key={o} onClick={() => setFilterOcc(o)}
@@ -101,8 +138,8 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
         </div>
       )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading outfit history…</p></div>}
-      {!loading && logs.length === 0 && (
-        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No outfits logged yet. Save a look to start your history.</p></div>
+      {!loading && allWorn.length === 0 && (
+        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No outfits worn yet. Pin a look to a day on the Planner, or tap “Log as worn,” and it'll appear here.</p></div>
       )}
       {!loading && Object.keys(grouped).map(month => (
         <div key={month} style={{ marginBottom:28 }}>
@@ -115,11 +152,17 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
                 {formatDate(log.date_worn)}
                 {occLabel && <span style={s.histOcc}> · {occLabel}</span>}
                 {meta.mood && <span style={s.histMood}> · {meta.mood}</span>}
+                {log.__planner && <span style={s.histMood}> · from your calendar</span>}
               </>
             );
             return (
               <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
-                actions={
+                actions={log.__planner ? (
+                  // Planner-worn entry: it's managed on the calendar (edit/remove
+                  // it there), so History shows it read-only rather than exposing
+                  // log-only actions that have no outfit_log to act on.
+                  <div style={{ fontSize:11, color:"var(--color-text-muted)" }}>Worn — pinned on the Planner</div>
+                ) : (
                   <>
                     <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                       <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
@@ -150,7 +193,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
                       </div>
                     )}
                   </>
-                }
+                )}
               />
             );
           })}
