@@ -97,6 +97,23 @@ export function normalizeOccasion(o) {
   return OCCASION_ALIASES[o] || o;
 }
 
+// Canonical weather buckets — same temperature tiers Style Me offers ("Hot
+// (85°F+)" … "Cold (below 40°F)"). `short` is the chip label; `match` maps any
+// stored weather string (which may be "Hot (85°F+) + Rainy", a bare "Hot", etc.)
+// back to its bucket so filters group them the same way the stylist does.
+export const WEATHER_BUCKETS = [
+  { short: "Hot",  match: /hot|85/i },
+  { short: "Warm", match: /warm|70-84/i },
+  { short: "Mild", match: /mild|55-69/i },
+  { short: "Cool", match: /cool|40-54/i },
+  { short: "Cold", match: /cold|below 40/i },
+];
+
+export function weatherBucketOf(w) {
+  if (!w) return null;
+  return (WEATHER_BUCKETS.find(b => b.match.test(w)) || {}).short || null;
+}
+
 // Given a category + subcategory value (may be L2 or L3), find the L2 parent.
 export function getSubcatL2(category, subcategory) {
   if (!subcategory) return "";
