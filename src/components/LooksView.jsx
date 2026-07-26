@@ -4,7 +4,7 @@ import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
-import { tagsFor, joinTags } from "../lib/multitag.js";
+import { tagsFor, joinTags, rowMatchesTag } from "../lib/multitag.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
@@ -14,6 +14,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
   const [loggingId, setLoggingId] = useState(null);
   const [deleteId,  setDeleteId]  = useState(null);
   const [dateById,  setDateById]  = useState({});
+  const [filterOcc, setFilterOcc] = useState("All");
   const [showBuilder, setShowBuilder] = useState(false);
   // Garment-set signatures for every outfit currently pinned on the planner —
   // used to hide saved looks that have already been scheduled.
@@ -44,8 +45,14 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
 
   // Saved-for-later view: drop anything already scheduled on the planner.
   const visibleLogs = logs.filter(l => !schedSigs.has(sigOf(l.garment_ids)));
+  // Occasion filter chips (same idea as History) — an activity filter on the
+  // saved looks so she can jump to "Work" or "Dinner" saves.
+  const occasions = ["All", ...new Set(visibleLogs.flatMap(l => tagsFor(l, "occasions", "occasion")))];
+  const displayed = filterOcc === "All"
+    ? visibleLogs
+    : visibleLogs.filter(l => rowMatchesTag(l, "occasions", "occasion", filterOcc));
 
-  const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
+  const parseMeta = (url) => { try { return JSON.parse(url) || {}; } catch { return {}; } };
   const today = new Date().toISOString().slice(0, 10);
 
   const handleLog = async (log) => {
@@ -99,6 +106,14 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           Build a Look
         </button>
       )}
+      {!loading && visibleLogs.length > 0 && occasions.length > 1 && (
+        <div style={s.filterRow}>
+          {occasions.map(o => (
+            <button key={o} onClick={() => setFilterOcc(o)}
+              style={{...s.chip, ...(filterOcc === o ? s.chipActive : {})}}>{o}</button>
+          ))}
+        </div>
+      )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading your looks…</p></div>}
       {!loading && visibleLogs.length === 0 && (
         <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
@@ -107,7 +122,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
             : "Every saved look is scheduled or worn — nothing left for later. Save a new one, and it'll wait here until you wear it."}
         </p></div>
       )}
-      {!loading && visibleLogs.map(log => {
+      {!loading && displayed.map(log => {
         const meta = parseMeta(log.collage_url);
         const pickedDate = dateById[log.id] || today;
         const occLabel = joinTags(tagsFor(log, "occasions", "occasion"));
