@@ -4,7 +4,8 @@ import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
-import { tagsFor, joinTags, rowMatchesTag } from "../lib/multitag.js";
+import { tagsFor, joinTags } from "../lib/multitag.js";
+import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
@@ -13,6 +14,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   const [plans,      setPlans]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filterOcc,  setFilterOcc]  = useState("All");
+  const [filterWx,   setFilterWx]   = useState("All");
   const [wearingId,  setWearingId]  = useState(null);
   const [deleteId,   setDeleteId]   = useState(null);
   const [unloggingId, setUnloggingId] = useState(null);
@@ -59,9 +61,8 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   });
   const allWorn = [...logs, ...plannerEntries];
 
-  const filtered = filterOcc === "All"
-    ? allWorn
-    : allWorn.filter(l => rowMatchesTag(l, "occasions", "occasion", filterOcc));
+  const filtered = allWorn
+    .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx));
   const grouped = {};
   filtered.forEach(log => {
     const d = log.date_worn || log.created_at?.slice(0, 10) || "Unknown";
@@ -103,7 +104,8 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   // Flatten multi-tagged occasions so the filter chip row shows every value
   // that appears anywhere across logs (a look tagged [Work, Casual] surfaces
   // under both filters).
-  const occasions = ["All", ...new Set(allWorn.flatMap(l => tagsFor(l, "occasions", "occasion")))];
+  const occasions = occasionChipsFor(allWorn);
+  const weathers  = weatherChipsFor(allWorn);
   const wrapStyle = nested ? {} : s.page;
 
   // Editing a logged outfit replaces it via the parent's onSaveLook path
@@ -135,6 +137,14 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
           {occasions.map(o => (
             <button key={o} onClick={() => setFilterOcc(o)}
               style={{...s.chip, ...(filterOcc === o ? s.chipActive : {})}}>{o}</button>
+          ))}
+        </div>
+      )}
+      {allWorn.length > 0 && weathers.length > 1 && (
+        <div style={s.filterRow}>
+          {weathers.map(w => (
+            <button key={w} onClick={() => setFilterWx(w)}
+              style={{...s.chip, ...(filterWx === w ? s.chipActive : {})}}>{w}</button>
           ))}
         </div>
       )}

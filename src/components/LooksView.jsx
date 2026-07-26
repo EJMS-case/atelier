@@ -4,7 +4,8 @@ import { icons } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
-import { tagsFor, joinTags, rowMatchesTag } from "../lib/multitag.js";
+import { tagsFor, joinTags } from "../lib/multitag.js";
+import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
@@ -15,6 +16,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
   const [deleteId,  setDeleteId]  = useState(null);
   const [dateById,  setDateById]  = useState({});
   const [filterOcc, setFilterOcc] = useState("All");
+  const [filterWx,  setFilterWx]  = useState("All");
   const [showBuilder, setShowBuilder] = useState(false);
   // Garment-set signatures for every outfit currently pinned on the planner —
   // used to hide saved looks that have already been scheduled.
@@ -45,12 +47,12 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
 
   // Saved-for-later view: drop anything already scheduled on the planner.
   const visibleLogs = logs.filter(l => !schedSigs.has(sigOf(l.garment_ids)));
-  // Occasion filter chips (same idea as History) — an activity filter on the
-  // saved looks so she can jump to "Work" or "Dinner" saves.
-  const occasions = ["All", ...new Set(visibleLogs.flatMap(l => tagsFor(l, "occasions", "occasion")))];
-  const displayed = filterOcc === "All"
-    ? visibleLogs
-    : visibleLogs.filter(l => rowMatchesTag(l, "occasions", "occasion", filterOcc));
+  // Occasion + weather filter chips, normalized to the same vocabulary Style Me
+  // uses (canonical occasion buckets; Hot…Cold weather tiers).
+  const occasions = occasionChipsFor(visibleLogs);
+  const weathers  = weatherChipsFor(visibleLogs);
+  const displayed = visibleLogs
+    .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx));
 
   const parseMeta = (url) => { try { return JSON.parse(url) || {}; } catch { return {}; } };
   const today = new Date().toISOString().slice(0, 10);
@@ -111,6 +113,14 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           {occasions.map(o => (
             <button key={o} onClick={() => setFilterOcc(o)}
               style={{...s.chip, ...(filterOcc === o ? s.chipActive : {})}}>{o}</button>
+          ))}
+        </div>
+      )}
+      {!loading && visibleLogs.length > 0 && weathers.length > 1 && (
+        <div style={s.filterRow}>
+          {weathers.map(w => (
+            <button key={w} onClick={() => setFilterWx(w)}
+              style={{...s.chip, ...(filterWx === w ? s.chipActive : {})}}>{w}</button>
           ))}
         </div>
       )}
