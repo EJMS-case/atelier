@@ -12,8 +12,6 @@ import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { LooksTool } from "./schemas.js";
 import { filterByWeather, shuffle } from "../../utils/item-helpers.js";
 
-const API_URL = "https://api.anthropic.com/v1/messages";
-
 // ── Destination brief ─────────────────────────────────────────────────────────
 
 const BriefSchema = z.object({

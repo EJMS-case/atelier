@@ -6,11 +6,7 @@ import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
-import { outfitsOf } from "../features/planner/outfits.js";
-
-// A stable signature for a set of garments (order-independent, de-duped) — lets
-// us match a saved look against what's pinned on the planner.
-const sigOf = (ids) => [...new Set((ids || []).map(String))].sort().join("|");
+import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
 export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
   const [logs,      setLogs]      = useState([]);

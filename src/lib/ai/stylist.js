@@ -21,17 +21,6 @@ import {
   CompletionsSchema, CompletionsTool,
 } from "./schemas.js";
 
-const API_URL = "https://api.anthropic.com/v1/messages";
-
-function headers(apiKey) {
-  return {
-    "Content-Type": "application/json",
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-    "anthropic-dangerous-direct-browser-access": "true",
-  };
-}
-
 // Image source shape used by vision calls. Accepts either data URL or https URL.
 export function buildImgSource(imgStr) {
   if (!imgStr) return null;

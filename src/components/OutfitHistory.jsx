@@ -6,9 +6,7 @@ import SavedLookCard from "./SavedLookCard.jsx";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import { tagsFor, joinTags, rowMatchesTag } from "../lib/multitag.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
-import { outfitsOf } from "../features/planner/outfits.js";
-
-const sigOf = (ids) => [...new Set((ids || []).map(String))].sort().join("|");
+import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
 export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
