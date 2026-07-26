@@ -18,6 +18,10 @@ export function newOutfitId() {
   return `o_${Date.now()}_${++_outfitCounter}`;
 }
 
+// Order-independent, de-duped signature for a set of garment IDs. Lets callers
+// match "the same outfit" across saved looks, wear logs, and planner pins.
+export const sigOf = (ids) => [...new Set((ids || []).map(String))].sort().join("|");
+
 export function outfitsOf(plan) {
   if (Array.isArray(plan?.outfits) && plan.outfits.length > 0) {
     return plan.outfits.map(o => ({

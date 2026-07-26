@@ -73,11 +73,3 @@ export function loadSuggestionCounts() {
     return {};
   }
 }
-
-/**
- * Clear all rotation tracking data (for debugging / reset).
- */
-export function clearRotationData() {
-  localStorage.removeItem(RECENT_ITEMS_KEY);
-  localStorage.removeItem(SUGGESTION_COUNTS_KEY);
-}
