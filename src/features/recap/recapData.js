@@ -9,12 +9,16 @@
 
 import { outfitsOf } from "../planner/outfits.js";
 import { asArray } from "../../lib/multitag.js";
+import { filterByWeather } from "../../utils/item-helpers.js";
 
 // Categories that don't count as "leaned-on" garments — belts, jewelry and
 // other accessories, shoes, and bags repeat freely by design.
 export const OVERWEAR_EXCLUDE = new Set(["Belts", "Accessories", "Shoes", "Bags"]);
 
-// Garment categories eligible for the forward-looking nudges.
+// Garment categories eligible for the forward-looking nudges (rediscover /
+// challenge / swap alternatives). Deliberately EXCLUDES accessories, belts,
+// shoes, bags, AND Swim / Loungewear / Athleisure — the user doesn't want those
+// surfaced as "neglected pieces to rediscover" (belts were crowding it out).
 const GARMENT_CATS = new Set([
   "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
 ]);
@@ -82,6 +86,10 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   };
   const occasions = tally(looks, "occasion");
   const weathers = tally(looks, "weather");
+  // The season the recap covers — used to keep forward suggestions weather-
+  // appropriate (no chunky wool "rediscover" in a Hot month). Null → no filter.
+  const seasonWeather = weathers[0]?.key || null;
+  const forSeason = (list) => (seasonWeather ? filterByWeather(list, seasonWeather) : list);
 
   // "Where" highlights — dated notes, newest first, one per note text.
   const seenWhere = new Set();
@@ -110,19 +118,27 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     .sort((a, b) => b.wears - a.wears || (b.item.name || "").localeCompare(a.item.name || ""));
 
   // "Try instead" — for each overworn piece, a same-category piece she owns but
-  // hasn't worn this month, favoring hearted then longest-rested.
+  // hasn't worn this month, favoring hearted then longest-rested. Suggestions
+  // are (a) weather-appropriate for the season and (b) NOT reused across pieces,
+  // so three overworn tops don't all show the identical three swaps.
+  const usedAltIds = new Set();
   const alternativesFor = (target) => {
-    return (items || [])
-      .filter(it => it.category === target.category && it.id !== target.id && it.image && !wornThisMonth.has(it.id))
+    const picks = forSeason((items || [])
+      .filter(it => it.category === target.category && it.id !== target.id
+        && it.image && !wornThisMonth.has(it.id) && !usedAltIds.has(it.id)))
       .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
         || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))
       .slice(0, 3);
+    picks.forEach(p => usedAltIds.add(p.id));
+    return picks;
   };
   const leanedOn = overworn.map(o => ({ ...o, alternatives: alternativesFor(o.item) }));
 
-  // ── Rediscover — resting pieces worth resurfacing (60+ days or never) ──
-  const rediscover = (items || [])
-    .filter(it => it.image && !wornThisMonth.has(it.id) && daysAgo(it.last_worn, endIso) >= 60)
+  // ── Rediscover — resting garments worth resurfacing (60+ days or never).
+  // Garments only (no accessories/belts/shoes/bags/swim/lounge/athleisure) and
+  // season-appropriate, so it stops surfacing a wall of resting belts. ──
+  const rediscover = forSeason((items || [])
+    .filter(it => it.image && GARMENT_CATS.has(it.category) && !wornThisMonth.has(it.id) && daysAgo(it.last_worn, endIso) >= 60))
     .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
       || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))
     .slice(0, 8);
@@ -130,8 +146,8 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   // ── Challenge — 3 skipped garments across different categories ──
   const challenge = [];
   const usedCats = new Set();
-  for (const it of (items || [])
-    .filter(it => it.image && GARMENT_CATS.has(it.category) && !wornThisMonth.has(it.id))
+  for (const it of forSeason((items || [])
+    .filter(it => it.image && GARMENT_CATS.has(it.category) && !wornThisMonth.has(it.id)))
     .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
       || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))) {
     if (usedCats.has(it.category)) continue;
