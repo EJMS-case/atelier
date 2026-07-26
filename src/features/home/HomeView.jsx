@@ -11,6 +11,12 @@ import { sb } from "../../lib/supabase.js";
 import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
 
+// Categories the "Neglected" list surfaces — real garments only (no
+// accessories/belts/shoes/bags, no swim/lounge/athleisure).
+const NEGLECT_CATS = new Set([
+  "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
+]);
+
 const PALETTE = {
   ink:    "var(--color-ink)",
   soft:   "var(--color-text)",
@@ -59,7 +65,13 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
   const wearItems = useMemo(() => applyWearStats(items, wearStats || {}), [items, wearStats]);
 
   const topWorn   = useMemo(() => mostWornItems(wearItems, 5), [wearItems]);
-  const neglected = useMemo(() => neglectedItems(wearItems, 60), [wearItems]);
+  // Neglected = real garments only. Accessories, belts, shoes, bags repeat by
+  // design, and swim / lounge / athleisure aren't "rediscover" pieces — she
+  // doesn't want any of those cluttering the list (belts were dominating it).
+  const neglected = useMemo(
+    () => neglectedItems(wearItems, 60).filter(it => NEGLECT_CATS.has(it.category)),
+    [wearItems],
+  );
 
   const itemsWithPrice = useMemo(() => wearItems.filter(it => Number(it.price_paid) > 0), [wearItems]);
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
@@ -101,17 +113,10 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
         </button>
       )}
 
-      {/* Monthly look-back — recap of the last 30 days (worn diary + AI picks
-          + leaned-on pieces + forward nudges). Self-contained; fetches its own
-          calendar window. */}
-      {items.length > 0 && (
-        <LookBackCard items={wearItems} favorites={favorites || []} apiKey={apiKey}
-          onEditItem={onEditItem} onStyleItem={onStyleItem}/>
-      )}
-
-      {/* Coming Up — next planned days within the 2-week horizon. Tap to jump
-          straight into the planner on that date. Hidden when nothing's planned
-          to avoid an empty section. */}
+      {/* Coming Up — next planned days within the 2-week horizon. Pinned near
+          the top (above the recap) since it's the most forward-looking, act-on-
+          it-now section. Tap to jump straight into the planner on that date.
+          Hidden when nothing's planned to avoid an empty section. */}
       {upcomingPlans.length > 0 && (
         <section style={sectionStyle}>
           <div style={sectionHeader}>COMING UP</div>
@@ -140,6 +145,14 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
             })}
           </div>
         </section>
+      )}
+
+      {/* Monthly look-back — recap of the last 30 days (worn diary + AI picks
+          + leaned-on pieces + forward nudges). Self-contained; fetches its own
+          calendar window. */}
+      {items.length > 0 && (
+        <LookBackCard items={wearItems} favorites={favorites || []} apiKey={apiKey}
+          onEditItem={onEditItem} onStyleItem={onStyleItem}/>
       )}
 
       {/* Most-worn metric */}
