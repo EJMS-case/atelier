@@ -75,6 +75,69 @@ export const sb = {
     if (!res.ok) throw new Error("Delete failed");
   },
 
+  // Cascade cleanup after item delete. Best-effort (never throws) — a partial
+  // cleanup is better than blocking the delete. Removes the deleted item ID from
+  // every array it appears in across the three tables that reference garment IDs.
+  async cascadeItemDelete(id) {
+    try {
+      // ── outfit_logs.garment_ids ───────────────────────────────────────────
+      const logsRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/outfit_logs?select=id,garment_ids&garment_ids=cs.{${id}}`,
+        { headers: SB_HEADERS },
+      );
+      if (logsRes.ok) {
+        const logs = await logsRes.json().catch(() => []);
+        await Promise.all((logs || []).map(log =>
+          fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${log.id}`, {
+            method: "PATCH",
+            headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+            body: JSON.stringify({ garment_ids: (log.garment_ids || []).filter(g => g !== id) }),
+          }).catch(() => {}),
+        ));
+      }
+    } catch { /* best-effort */ }
+
+    try {
+      // ── planned_outfits.items + outfits jsonb ─────────────────────────────
+      const plansRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/planned_outfits?select=id,items,outfits&items=cs.{${id}}`,
+        { headers: SB_HEADERS },
+      );
+      if (plansRes.ok) {
+        const plans = await plansRes.json().catch(() => []);
+        await Promise.all((plans || []).map(plan => {
+          const newItems = (plan.items || []).filter(i => i !== id);
+          const newOutfits = Array.isArray(plan.outfits)
+            ? plan.outfits.map(o => ({ ...o, items: (o.items || []).filter(i => i !== id) }))
+            : plan.outfits;
+          return fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?id=eq.${plan.id}`, {
+            method: "PATCH",
+            headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+            body: JSON.stringify({ items: newItems, outfits: newOutfits }),
+          }).catch(() => {});
+        }));
+      }
+    } catch { /* best-effort */ }
+
+    try {
+      // ── look_feedback.item_ids ────────────────────────────────────────────
+      const fbRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/look_feedback?select=id,item_ids&item_ids=cs.{${id}}`,
+        { headers: SB_HEADERS },
+      );
+      if (fbRes.ok) {
+        const feedbacks = await fbRes.json().catch(() => []);
+        await Promise.all((feedbacks || []).map(fb =>
+          fetch(`${SUPABASE_URL}/rest/v1/look_feedback?id=eq.${fb.id}`, {
+            method: "PATCH",
+            headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+            body: JSON.stringify({ item_ids: (fb.item_ids || []).filter(i => i !== id) }),
+          }).catch(() => {}),
+        ));
+      }
+    } catch { /* best-effort */ }
+  },
+
   async ensureBucket() {
     await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
       method: "POST",
@@ -461,9 +524,13 @@ export const sb = {
     }
     return res.json();
   },
+  // Returns { itemId: signedSum } across all look_feedback rows. Positive sums
+  // promote items in the cold-item sort; negative sums penalize them so disliked
+  // items surface less frequently. Previously fetched only rating > 0 so thumbs-
+  // down had no effect — now all ratings contribute.
   async fetchItemFeedbackScores() {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating&rating=gt.0`,
+      `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating`,
       { headers: SB_HEADERS },
     );
     if (!res.ok) return {};
@@ -471,12 +538,26 @@ export const sb = {
     const scores = {};
     for (const row of rows) {
       const rating = Number(row.rating) || 0;
-      if (rating <= 0) continue;
+      if (rating === 0) continue;
       for (const id of row.item_ids || []) {
         scores[id] = (scores[id] || 0) + rating;
       }
     }
     return scores;
+  },
+
+  // Recent looks she rated with a thumbs down — { item_ids, occasion }. Used to
+  // warn the stylist about combinations / items she actively disliked. Capped at
+  // 10 most-recent rows so the prompt block stays compact.
+  async fetchDislikedLooks() {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,occasion&rating=eq.-1&order=created_at.desc&limit=10`,
+        { headers: SB_HEADERS },
+      );
+      if (!res.ok) return [];
+      return (await res.json().catch(() => [])) || [];
+    } catch { return []; }
   },
 
   // ── Sets ──

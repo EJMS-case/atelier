@@ -34,7 +34,7 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
-  const { mood = "", feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], count = 3 } = extras;
+  const { mood = "", feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], count = 3 } = extras;
   // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
   // classic 3-up generation. Values outside this range fall back to 3.
   const lookCount = (count >= 1 && count <= 3) ? count : 3;
@@ -84,7 +84,9 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     freeTextRequest: request,
     occasionSlots: slots,
     weather,
-    filterByWeather,
+    // filterByWeather intentionally omitted — weather is context for the stylist
+    // to reason with, not a gate that removes items from the pool. The validator's
+    // checkWeatherCompliance catches clear mismatches and retries if needed.
     itemSuggestionCounts,
     recentlySuggestedItems,
     recentlyWornItems,
@@ -144,6 +146,22 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     })
     .filter(Boolean);
 
+  // Disliked looks: same text-only format as loved looks — item descriptions
+  // only, no W-IDs, so they can't interfere with item selection.
+  const dislikedLookLines = (dislikedLooks || [])
+    .slice(0, 5)
+    .map(ll => {
+      const pieces = (ll.item_ids || ll.garment_ids || ll.items || [])
+        .map(id => items.find(it => it.id === id))
+        .filter(Boolean)
+        .slice(0, 8)
+        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
+      if (pieces.length < 2) return null;
+      const occ = ll.occasion ? `[${ll.occasion}] ` : "";
+      return `${occ}${pieces.join(" + ")}`;
+    })
+    .filter(Boolean);
+
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
     weather,
@@ -162,6 +180,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     inspirationVibes,
     styleFingerprint,
     lovedLooks: lovedLookLines,
+    dislikedLooks: dislikedLookLines,
     comfortMode,
   });
 
@@ -306,6 +325,24 @@ export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, on
   return text;
 }
 
+// Normalize malformed gaps output before Zod validation — mirrors the look
+// coercion in styling-validator. Handles stringified arrays, double-wrapped
+// objects, and the observed `gaps: {}` failure where Zod expects an array.
+function coerceGapsShape(input) {
+  if (!input || typeof input !== "object") return input;
+  let out = input;
+  if (typeof out.gaps === "string") {
+    try {
+      let parsed = JSON.parse(out.gaps);
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.gaps)) parsed = parsed.gaps;
+      if (Array.isArray(parsed)) out = { ...out, gaps: parsed };
+    } catch { /* leave as-is — schema check will reject */ }
+  }
+  // {} or missing → default to empty array so Zod gets a valid (if empty) input
+  if (!Array.isArray(out.gaps)) out = { ...out, gaps: [] };
+  return out;
+}
+
 // ── SHOPPING RECS (gap analysis or outfit-completion) ───────────────────────
 export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []) {
   const inventory = items.map(it =>
@@ -345,6 +382,7 @@ For each gap, suggest ONE specific product to buy. Be specific: brand, color, fa
       ],
       tool: GapsTool,
       schema: GapsSchema,
+      coerce: coerceGapsShape,
       kind: "shopping_gaps",
     });
   }

@@ -122,6 +122,7 @@ export function buildStylingPrompt({
   inspirationVibes = [],
   styleFingerprint = "",
   lovedLooks = [],
+  dislikedLooks = [],
   comfortMode = false,
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
@@ -193,6 +194,17 @@ Weather still governs fabric weight and coverage.\n`
     ? `\n✨ LOOKS SHE LOVED — outfits she rated highly. This is the BAR: the level of polish, proportion, and finish she considers elevated. Build NEW looks from the inventory below — do NOT copy these verbatim — but match this intention and ambition. Notice what they have in common.\n${lovedLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
     : "";
 
+  // Disliked looks — combinations she explicitly rated down. Signal to AVOID
+  // these patterns. Text-only like lovedLooks — no W-IDs, so no inventory pollution.
+  const dislikedLooksBlock = (dislikedLooks && dislikedLooks.length > 0)
+    ? `\n👎 COMBINATIONS SHE DISLIKED — these are anti-patterns to actively avoid. Don't recreate these pairings or aesthetics.\n${dislikedLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
+    : "";
+
+  // Honesty clause — the stylist can say "nothing works" if the inventory is
+  // genuinely insufficient. This is a last resort; a weak-but-real outfit is
+  // always better than a fabricated one.
+  const honestyBlock = `\n🚫 HONESTY CLAUSE: If the inventory shown genuinely cannot produce even one appropriate look for this occasion, weather, and request — for instance, the closet has only heavy winter coats and it's 90°F, or every piece violates an active exclusion — you MAY set no_viable_looks: true and explain honestly in stylist_note. This is a LAST RESORT. A look that's not perfect is almost always better than no look. Make your best attempt first. The explanation must be warm, specific, and constructive: name what's missing, and suggest what would fill the gap.\n`;
+
   // Inspiration vibe notes — TEXT-ONLY style direction tied to this occasion +
   // weather. These are NOT inventory. The block hard-asserts that twice:
   // the items array still comes only from the wardrobe inventory below.
@@ -229,7 +241,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${honestyBlock}
 ${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
