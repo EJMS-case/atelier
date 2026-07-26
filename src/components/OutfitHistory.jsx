@@ -78,7 +78,10 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     try { return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }); }
     catch { return d; }
   };
-  const parseMeta = (url) => { try { return JSON.parse(url); } catch { return {}; } };
+  // `|| {}` guards the planner-merged entries whose collage_url is null:
+  // JSON.parse(null) returns null (not a throw), and reading meta.mood off null
+  // crashed the whole History screen.
+  const parseMeta = (url) => { try { return JSON.parse(url) || {}; } catch { return {}; } };
 
   const handleWearAgain = async (log) => {
     setWearingId(log.id);
