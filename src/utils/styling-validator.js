@@ -1035,6 +1035,23 @@ export function coerceLooksShape(input) {
     }
   }
 
+  // Field alias: model occasionally returns 'hero' where schema expects 'focal_point'.
+  // Zod silently drops the value (focal_point has .default("")) — remap before the check.
+  if (Array.isArray(out.looks)) {
+    let needsRemap = false;
+    const remapped = out.looks.map(look => {
+      if (!look.focal_point && look.hero !== undefined) {
+        needsRemap = true;
+        return { ...look, focal_point: look.hero };
+      }
+      return look;
+    });
+    if (needsRemap) {
+      out = { ...out, looks: remapped };
+      recovered = true;
+    }
+  }
+
   if (recovered) {
     logAiError("stylist_outfit:recovered", { original: input, coerced: out }, "coerceLooksShape recovered malformed tool output");
   }

@@ -179,14 +179,16 @@ export async function invokeToolStream({
     // falls through to its non-streaming retry attempt, which will re-request
     // (with backoff) and usually succeed. A real user cancel still propagates.
     if (signal?.aborted) throw e;
-    return { toolBlock: null, raw: null };
+    // Preserve whatever partial JSON accumulated so ai_errors captures real payload.
+    return { toolBlock: null, raw: inputJson || null };
   }
 
   let input;
   try {
     input = JSON.parse(inputJson);
   } catch {
-    return { toolBlock: null, raw: null };
+    // JSON parse failed — return the raw string so the no_tool_use log has context.
+    return { toolBlock: null, raw: inputJson || null };
   }
   return { toolBlock: { type: "tool_use", name: tool.name, input }, raw: null };
 }
