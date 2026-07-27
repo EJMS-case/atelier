@@ -26,6 +26,8 @@ import {
 } from "./utils/storage.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
+import { fetchNycForecast, bucketFromHigh } from "./lib/weather.js";
+import { nyToday } from "./lib/time.js";
 import {
   generateOutfit, classifyKnitAI, analyzeColorAI,
 } from "./lib/ai/stylist.js";
@@ -205,6 +207,7 @@ export default function App() {
   // Hearted outfits, resolved to {garment_ids, occasion} — fed to the stylist
   // as elevated exemplars ("the bar"). Text-only in the prompt, so no W-IDs.
   const [lovedLooks, setLovedLooks] = useState([]);
+  const [dislikedLooks, setDislikedLooks] = useState([]);
   const [inspirations, setInspirations] = useState([]);
   // { text, source_count, generated_at } | null — loaded from user_settings
   // and refreshed via the Settings → Update Style Fingerprint button.
@@ -229,6 +232,27 @@ export default function App() {
   // "[RESTING]" rediscovery tag reflects real wear — the stored last_worn column
   // went stale once wear moved to the calendar.
   const wearStatsRef = useRef({});
+
+  // ── Auto-populate today's weather from the NYC forecast on first mount.
+  // Weather stays editable — the user can override any chip at any time.
+  // Only fires when the Set is empty (fresh load or after user clears to "Any").
+  useEffect(() => {
+    fetchNycForecast().then(forecast => {
+      if (!forecast) return;
+      const today = nyToday();
+      const bucket = forecast[today]?.bucket;
+      const BUCKET_TO_CHIP = {
+        "Hot":  "Hot (85°F+)",
+        "Warm": "Warm (70-84°F)",
+        "Mild": "Mild (55-69°F)",
+        "Cool": "Cool (40-54°F)",
+        "Cold": "Cold (below 40°F)",
+      };
+      const chip = BUCKET_TO_CHIP[bucket];
+      if (chip) setWeather(prev => prev.size === 0 ? new Set([chip]) : prev);
+    }).catch(() => { /* best-effort; weather stays "Any" on failure */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Persist allLooks to localStorage so anti-repeat history survives reloads
   useEffect(() => {
@@ -355,6 +379,9 @@ export default function App() {
           .slice(0, 6)
           .map(l => ({ garment_ids: l.garment_ids, occasion: l.occasion }))
       );
+
+      // Disliked looks = thumbs-down look_feedback rows (newest first, capped).
+      sb.fetchDislikedLooks().then(rows => setDislikedLooks(rows || [])).catch(() => {});
 
       maybeRefreshFingerprint(logs || []);
     }).catch(() => {});
@@ -607,6 +634,10 @@ export default function App() {
     flashSync("syncing");
     try {
       await sb.remove(id);
+      // Cascade cleanup: remove the deleted item from garment_ids / items /
+      // item_ids arrays across outfit_logs, planned_outfits, and look_feedback.
+      // Fire-and-forget — partial cleanup is fine; never block the delete UX.
+      sb.cascadeItemDelete(id).catch(() => {});
       sb.removeImage(id).catch(() => {}); // best-effort Storage cleanup
       flashSync("synced");
     } catch { flashSync("error"); }
@@ -754,8 +785,11 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
-        { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, count }
+        { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, count }
       );
+      if (result?.no_viable_looks) {
+        throw new Error(result.stylist_note || "The stylist couldn't build a suitable look from your current wardrobe for this combination.");
+      }
       const looks = result?.looks;
       if (!looks || !Array.isArray(looks) || looks.length === 0) {
         throw new Error("AI returned no looks — try again.");
@@ -1754,7 +1788,28 @@ export default function App() {
             setFavorites(prev => [...(Array.isArray(result) ? result : [result]), ...prev]);
           }}
           onSchedule={async (plan) => {
-            await savePlan(plan);
+            // Always reconcile against the existing row so scheduling a saved
+            // look onto an already-planned day appends an outfit rather than
+            // clobbering the existing one.
+            try {
+              const rows = await fetchPlansBetween(plan.date, plan.date);
+              const existing = (Array.isArray(rows) && rows[0]) || null;
+              const current = outfitsOf(existing);
+              const newOutfit = { id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] };
+              const outfits = current.length === 0 ? [newOutfit] : [...current, newOutfit];
+              const merged = buildPlanPayload({
+                date: plan.date, outfits,
+                source: existing?.source || plan.source || "saved",
+                notes: existing?.notes ?? plan.notes ?? null,
+                weather: existing?.weather ?? plan.weather ?? null,
+                activity: existing?.activity ?? null,
+                day_label: existing?.day_label ?? null,
+              });
+              if (existing?.layout_data) merged.layout_data = existing.layout_data;
+              await savePlan(merged);
+            } catch {
+              await savePlan(plan); // last-resort fallback
+            }
           }}
           onStyleItem={(it) => {
             setRequest(`use my ${it.color ? it.color + " " : ""}${it.subcategory || it.category} "${it.name}"`);

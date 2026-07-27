@@ -500,9 +500,9 @@ export function sampleClosetItems({
     pool = rotated;
   }
 
-  // Down-vote drop removed — feedbackScores now only contains positive ratings
-  // (see feedback.js). Items with no positive signal stay in the pool; loved
-  // items still get boosted in the cold-item sort below.
+  // feedbackScores is now a signed sum — positive from thumbs-up, negative from
+  // thumbs-down. Items stay in the pool regardless; scores only affect the cold-
+  // item sort order below (loved items surface more, disliked items surface less).
 
   // ── 4. Identify force-include items (free-text match) ──
   const forceInclude = freeTextRequest

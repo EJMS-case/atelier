@@ -78,6 +78,7 @@ export async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = 
  * @param {import("zod").ZodTypeAny} opts.schema - runtime validator for tool input
  * @param {string}   opts.kind          - tag used when logging failures
  * @param {AbortSignal} [opts.signal]
+ * @param {Function} [opts.coerce]      - optional pre-parse normalization: (input) => input
  * @returns {Promise<any>} validated tool input
  */
 export async function invokeTool({
@@ -90,6 +91,7 @@ export async function invokeTool({
   schema,
   kind,
   signal,
+  coerce,
 }) {
   if (!apiKey) throw new Error("Missing API key");
 
@@ -117,7 +119,8 @@ export async function invokeTool({
     throw new Error(`AI did not return structured ${tool.name} output`);
   }
 
-  const parsed = schema.safeParse(toolBlock.input);
+  const rawInput = coerce ? coerce(toolBlock.input) : toolBlock.input;
+  const parsed = schema.safeParse(rawInput);
   if (!parsed.success) {
     logAiError(`${kind}:schema`, { input: toolBlock.input, issues: parsed.error.issues }, parsed.error);
     throw new Error(`AI response failed schema validation for ${tool.name}`);

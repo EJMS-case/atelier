@@ -82,17 +82,19 @@ const LookSchema = z.object({
 export const LooksResponseSchema = z.object({
   looks: z.array(LookSchema),
   notes: z.string().optional(),
+  no_viable_looks: z.boolean().optional(),
+  stylist_note: z.string().optional(),
 });
 
 export const LooksTool = {
   name: "return_looks",
-  description: "Return the 3 styled outfit looks pulled from the client's closet.",
+  description: "Return the styled outfit looks pulled from the client's closet. If you genuinely cannot build even one appropriate look from the available inventory, set no_viable_looks: true and explain why in stylist_note — use an empty array for looks.",
   input_schema: {
     type: "object",
     properties: {
       looks: {
         type: "array",
-        minItems: 1,
+        minItems: 0,
         items: {
           type: "object",
           properties: {
@@ -123,6 +125,8 @@ export const LooksTool = {
         },
       },
       notes: { type: "string" },
+      no_viable_looks: { type: "boolean", description: "Set true ONLY when the inventory genuinely cannot produce a suitable look. Use sparingly — make your best attempt first." },
+      stylist_note: { type: "string", description: "Required when no_viable_looks is true. Honest, warm explanation of what's missing and what would help." },
     },
     required: ["looks"],
   },

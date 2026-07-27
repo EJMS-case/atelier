@@ -988,25 +988,55 @@ function extractCompleteLooks(partialJson) {
   return looks;
 }
 
-// Some models occasionally emit the tool input DOUBLE-ENCODED: `looks` arrives
-// as a stringified JSON value — a "[{…}]" array, or even a nested
-// {"looks":[…]} wrapper — instead of a real array. That trips the schema check
-// and kills an otherwise-perfect generation (observed on both Opus and Sonnet).
-// Unwrap it before validating so the looks are recovered rather than discarded.
+// Some models occasionally emit the tool input DOUBLE-ENCODED or FLATTENED —
+// `looks` arrives as a stringified value, or per-look style fields (vibe,
+// rationale, etc.) are hoisted to the top level instead of living inside each
+// look object. Recover all three shapes before the Zod check so an otherwise
+// correct generation isn't discarded.
+//
+// Cases handled (idempotent — already-correct input passes through unchanged):
+//   1. looks is a string containing "[{…}]"            → parse, use as array
+//   2. looks is a string containing {"looks":[…]}      → parse, unwrap, use
+//   3. looks is an array of item-only objects AND
+//      vibe/rationale/etc. are top-level siblings      → inject into each look
+//   4. No looks array but a single look spread flat    → wrap in array
 export function coerceLooksShape(input) {
   if (!input || typeof input !== "object") return input;
   let out = input;
+  let recovered = false;
+
+  // Cases 1 + 2: looks is a stringified value
   if (typeof out.looks === "string") {
     try {
       let parsed = JSON.parse(out.looks);
-      // The string is sometimes the whole {"looks":[…]} wrapper again.
       if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.looks)) parsed = parsed.looks;
-      if (Array.isArray(parsed)) out = { ...out, looks: parsed };
-    } catch { /* leave as-is — the schema check will reject and trigger a retry */ }
+      if (Array.isArray(parsed)) { out = { ...out, looks: parsed }; recovered = true; }
+    } catch { /* leave as-is — schema check will reject and trigger retry */ }
   }
-  // A single look spread at the top level (no `looks` array, but it has items[]).
+
+  // Case 4: single look spread at the top level (no `looks` array, has items[])
   if (!Array.isArray(out.looks) && Array.isArray(out.items)) {
     out = { looks: [out] };
+    recovered = true;
+  }
+
+  // Case 3: looks is an array but look objects are missing per-look style fields
+  // because the model hoisted them as top-level siblings. Inject them into each
+  // look so Zod can find the required `vibe`. Look-level values win if present.
+  const LOOK_FIELDS = ["vibe", "rationale", "silhouette", "focal_point", "texture_story", "color_strategy"];
+  if (Array.isArray(out.looks) && out.looks.length > 0) {
+    const hoisted = {};
+    for (const k of LOOK_FIELDS) {
+      if (out[k] !== undefined) hoisted[k] = out[k];
+    }
+    if (Object.keys(hoisted).length > 0) {
+      out = { ...out, looks: out.looks.map(look => ({ ...hoisted, ...look })) };
+      recovered = true;
+    }
+  }
+
+  if (recovered) {
+    logAiError("stylist_outfit:recovered", { original: input, coerced: out }, "coerceLooksShape recovered malformed tool output");
   }
   return out;
 }
@@ -1179,12 +1209,27 @@ export async function generateValidatedLooks({
     }
 
     if (!toolBlock) {
-      lastFailures = [{ type: "parse", message: "Model did not call the return_looks tool.", hard: true }];
+      // tool_choice is already forced — no need to echo an error on retry.
+      // Clean attempt on the next round avoids confusing the model with a
+      // "you didn't call the tool" message when it already has to call it.
+      lastFailures = [];
       logAiError("stylist_outfit:no_tool_use", raw, "missing tool_use block");
       continue;
     }
 
-    const shapeCheck = LooksResponseSchema.safeParse(coerceLooksShape(toolBlock.input));
+    const coerced = coerceLooksShape(toolBlock.input);
+
+    // Stylist honesty clause: if the model genuinely can't build a look,
+    // surface the explanation rather than retrying into something forced.
+    if (coerced?.no_viable_looks === true) {
+      return {
+        looks: [],
+        no_viable_looks: true,
+        stylist_note: coerced.stylist_note || "The stylist couldn't build a suitable look from the current wardrobe for this combination of occasion, weather, and filters.",
+      };
+    }
+
+    const shapeCheck = LooksResponseSchema.safeParse(coerced);
     if (!shapeCheck.success) {
       const issueList = shapeCheck.error.issues.slice(0, 5).map(i =>
         `${i.path.join(".") || "(root)"}: ${i.message}`

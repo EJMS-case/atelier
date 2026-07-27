@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:matrix": "node scripts/style-me-matrix.mjs",
     "test:matrix-live": "node scripts/style-me-matrix-live.mjs",
-    "smoke": "npm run build && node scripts/smoke.mjs"
+    "smoke": "npm run build && node scripts/smoke.mjs",
+    "test:coerce": "node scripts/coerce-looks-shapes.test.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.5.5",
