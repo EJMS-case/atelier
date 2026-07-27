@@ -136,15 +136,22 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
   async function handleAssignSaved(iso, log, overrides = {}) {
     const logOcc = tagsFor(log, "occasions", "occasion");
     const logWx  = tagsFor(log, "weathers",  "weather");
+    const planOccasion = overrides.occasion || logOcc[0] || null;
     const plan = {
       date: iso,
       items: log.garment_ids || [],
       outfit_log_id: log.id,
       source: "saved",
-      occasion: overrides.occasion || logOcc[0] || null,
+      occasion: planOccasion,
       weather:  overrides.weather  || logWx[0]  || null,
       occasions: overrides.occasion ? [overrides.occasion] : logOcc,
       weathers:  overrides.weather  ? [overrides.weather]  : logWx,
+      outfits: [{
+        id: newOutfitId(),
+        label: "",
+        occasion: planOccasion,
+        items: log.garment_ids || [],
+      }],
     };
     try {
       const saved = await savePlan(plan);
@@ -173,6 +180,12 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       occasions: [occasion],
       weather: wxBucket || null,
       weathers: wxBucket ? [wxBucket] : [],
+      outfits: [{
+        id: newOutfitId(),
+        label: "",
+        occasion,
+        items: look.items || [],
+      }],
     };
     const saved = await savePlan(plan);
     setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));

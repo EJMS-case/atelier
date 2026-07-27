@@ -1493,6 +1493,7 @@ export default function App() {
               ? await sb.updateOutfitLog(editing_log_id, patch)
               : await sb.saveOutfitLog(patch);
             if (log.date_worn) {
+              await sb.setLastWornBulk(log.garment_ids || [], log.date_worn);
               bumpWearCounts(log.garment_ids || []);
               pinWornToDate({ date: log.date_worn, itemIds: log.garment_ids || [], occasion: log.occasion }).catch(() => {});
             }
@@ -1777,6 +1778,7 @@ export default function App() {
             const result = await sb.saveOutfitLog(log);
             // F6 — if the save included date_worn, bump counts too
             if (log.date_worn) {
+              await sb.setLastWornBulk(log.garment_ids || [], log.date_worn);
               bumpWearCounts(log.garment_ids || []);
               // Pin to the planner on the date worn.
               pinWornToDate({ date: log.date_worn, itemIds: log.garment_ids || [], occasion: log.occasion }).catch(() => {});
