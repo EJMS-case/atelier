@@ -706,6 +706,7 @@ export function formatInventory(sampled, getSleeveType) {
     if (it.formality) attrs.push(`formality=${it.formality} ${FORMALITY_LABEL[it.formality]}`);
     if (it.layer) attrs.push(`layer=${it.layer}`);
     if (it.fit) attrs.push(`fit=${it.fit}`);
+    if (it.length) attrs.push(`length=${it.length}`);
     if (it.heel_height) attrs.push(`heel=${it.heel_height}`);
     if (attrs.length) parts.push(attrs.join("; "));
     return parts.join(" | ");
