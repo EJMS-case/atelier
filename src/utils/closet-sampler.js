@@ -6,7 +6,8 @@
 // pieces sort first within each bucket).
 
 import { normalizeOccasion, getSubcatL2 } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isNonHeelShoe, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
+import { buildFilterPredicate, matchesActiveOnly } from "./style-filters.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -174,38 +175,6 @@ function tooDressyForComfort(item, occasion) {
   if (DRESSY_COMFORT_SUBS.has(item.subcategory)) return true;
   const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
   return DRESSY_COMFORT_MATERIAL.test(text);
-}
-
-// ── Exclusion filter → item test mapping ─────────────────────────────────────
-function matchesExclusion(item, exclusionKey) {
-  const name = (item.name || "").toLowerCase();
-  const notes = (item.notes || "").toLowerCase();
-  const text = name + " " + notes;
-
-  switch (exclusionKey) {
-    case "no-jeans":
-      return item.subcategory === "Jeans" || /\b(jeans|denim|jean)\b/i.test(text);
-    case "no-skirts":
-      // L3-aware — skirt rows store "Mini"/"Midi"/"Maxi" in `subcategory`.
-      // Keep EXACTLY in sync with styling-validator's EXCLUSION_CHECKS
-      // "no-skirts" (drift = the validator rejects what the sampler offered
-      // and every retry burns).
-      return item.subcategory === "Skirts" ||
-        (item.category === "Bottoms" &&
-          (getSubcatL2("Bottoms", item.subcategory) === "Skirts" || /skirt/i.test(name)));
-    case "no-dresses":
-      return item.category === "Dresses" || item.category === "Occasionwear";
-    case "trousers-only":
-      return item.category === "Bottoms" && !["Trousers", "Pants", "Wide Leg", "Straight", "Satin/Silk", "Ponte"].includes(item.subcategory);
-    case "no-boots":
-      return isBootItem(item);
-    case "heels-only":
-      return isNonHeelShoe(item);
-    case "no-knits":
-      return item.category === "Knits";
-    default:
-      return false;
-  }
 }
 
 // ── Category bucketing ───────────────────────────────────────────────────────
@@ -392,6 +361,17 @@ export function sampleClosetItems({
   );
   const catRescued = (it) => freeTextOverrideIds.has(it.id) || occasionNoteIds.has(it.id);
 
+  // "Only …" rescue set: an active "Only Jeans"/"Only Heels"/… toggle is a
+  // direct instruction to build around that garment type, so matching items
+  // get rescued past occasion SUBCATEGORY bans below (Work Dinner bans Jeans,
+  // but her explicit toggle wins — same principle as the free-text override).
+  // Category-level bans and taste keywords still hold ("Only Dresses" on Work
+  // Dinner must not resurrect Occasionwear gowns), and the step-2 filter
+  // still applies, so a rescued item can't dodge a co-active "No …" toggle.
+  const onlyRescueIds = new Set(
+    excludeSet.size > 0 ? items.filter(it => matchesActiveOnly(it, excludeSet)).map(it => it.id) : []
+  );
+
   // ── 1. Pre-filter by occasion bans (from OCCASION_SLOTS) ──
   const slots = occasionSlots || {};
   const bannedCats = new Set(slots.banned?.categories || []);
@@ -409,8 +389,8 @@ export function sampleClosetItems({
     // clears a category ban here; free-text can still rescue items past the
     // softer prefilters in step 1b below.
     if (bannedCats.has(it.category) && !occasionNoteIds.has(it.id)) return false;
-    if (bannedSubs.has(it.subcategory)) return false;
-    if (bannedSubs.has("Jeans") && isDenim(it)) return false;
+    if (bannedSubs.has(it.subcategory) && !onlyRescueIds.has(it.id)) return false;
+    if (bannedSubs.has("Jeans") && isDenim(it) && !onlyRescueIds.has(it.id)) return false;
     if (bannedKeywords.length > 0) {
       const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
       if (bannedKeywords.some(kw => text.includes(kw.toLowerCase()))) return false;
@@ -429,7 +409,7 @@ export function sampleClosetItems({
       // of the AI's view. A note-rescued piece bypasses the category gates.
       if (preFilter.keepCategories && !preFilter.keepCategories.has(it.category) && !catRescued(it)) return false;
       if (preFilter.removeCategories.has(it.category) && !catRescued(it)) return false;
-      if (preFilter.removeSubcategories.has(it.subcategory)) return false;
+      if (preFilter.removeSubcategories.has(it.subcategory) && !onlyRescueIds.has(it.id)) return false;
       if (preFilter.removeKeywords.length > 0) {
         const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
         if (preFilter.removeKeywords.some(kw => text.includes(kw))) return false;
@@ -448,14 +428,12 @@ export function sampleClosetItems({
     pool = pool.filter(it => freeTextOverrideIds.has(it.id) || !tooDressyForComfort(it, occasion));
   }
 
-  // ── 2. Pre-filter by active exclusions ──
+  // ── 2. Pre-filter by active filters (No … / Only …) ──
+  // buildFilterPredicate handles both directions: "no-X" drops matches,
+  // "only-X" drops everything in X's structural group that isn't X.
   if (excludeSet.size > 0) {
-    pool = pool.filter(it => {
-      for (const key of excludeSet) {
-        if (matchesExclusion(it, key)) return false;
-      }
-      return true;
-    });
+    const isExcluded = buildFilterPredicate(excludeSet);
+    pool = pool.filter(it => !isExcluded(it));
   }
 
   // ── 3. Weather filter ──
@@ -651,7 +629,10 @@ export function sampleClosetItems({
   // forceIncludeIds = the items we believe she actually asked for in the
   // free-text request. Surface them so the validator can require ≥1 in the
   // generated looks (otherwise the AI tends to ignore "include my red blazer").
-  return { sampled, idMap, reverseMap, forceIncludeIds: [...forceIds] };
+  // onlyRescueIds = items rescued past occasion subcategory bans by an "Only"
+  // toggle — the validator's occasion check must exempt them too, or every
+  // rescued look burns a retry.
+  return { sampled, idMap, reverseMap, forceIncludeIds: [...forceIds], onlyRescueIds: [...onlyRescueIds] };
 }
 
 /**

@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed 2026-08-01 at the end of the "shopping/gap analysis rebuild" session (PR #128, merged to `main`, deployed). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
+Refreshed 2026-08-01 during the "tri-state Style Me filters" session (branch `claude/atelier-dont-include-filter-ppls0g`). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
 
 ## Owner preferences (standing, do not re-ask)
 
@@ -15,6 +15,7 @@ Refreshed 2026-08-01 at the end of the "shopping/gap analysis rebuild" session (
 
 - React 18 + Vite, JS only, no TS. Deploys from `main` on Vercel (project `atelier`, team `elycemurillo-8399s-projects`). Anthropic API called **directly from the browser** with the owner's key (Settings → localStorage + `user_settings.api_keys`). Supabase project `ljcwsrfmojbjdveefoqa` (REST, no SDK — `src/lib/supabase.js`).
 - Stylist pipeline: `src/lib/ai/stylist.js` `generateOutfit` → `closet-sampler.js` → `prompts/styling-system-prompt.js` → `utils/styling-validator.js` (`generateValidatedLooks`: streaming attempt 0 on Opus 4.8 `PRIMARY_MODEL`, retries on Sonnet 5 `FALLBACK_MODEL`, Zod + semantic checks, salvage).
+- Style Me filters: tri-state chips (off → No → Only) per garment type; ALL matcher logic lives in `src/utils/style-filters.js`, shared by sampler + validator (never re-duplicate it). "Only" toggles rescue their type past occasion subcategory bans. Tests: `npm run test:filters`.
 - Shopping recs: `generateShoppingRecs` (same file) — rebuilt this session, both modes on `claude-sonnet-5` with a compact grouped inventory (`summarizeInventory`) and a retry-on-empty wrapper. Coercions live in `src/utils/coerce-shapes.js` (`coerceRecsShape`, shared with the test).
 - AI failures log to the Supabase `ai_errors` table — **check it first** when debugging generation issues. All `:schema`/`:no_tool_use` rows now record `stop_reason`, so token-exhaustion truncations are visible directly.
 - Style fingerprint: generated + stored in `user_settings` (key `style_fingerprint`), auto-refreshes on app load whenever outfit history has grown by 10+ since last generation, feeds the PERSONAL PATTERNS prompt block. Working — do not rebuild.
@@ -53,5 +54,5 @@ Refreshed 2026-08-01 at the end of the "shopping/gap analysis rebuild" session (
 
 - Feature branch → PR → merge `main` (auto-deploy). Squash-merge with `(#NN)` in the title, matching history.
 - Update `CHANGELOG.md` per feature (house style: Why / Added / Changed / Fixed).
-- Never break: `scripts/coerce-looks-shapes.test.mjs` (32 tests), `scripts/style-me-matrix.mjs`, `npm run build`. Run `npm ci` first in a fresh container.
+- Never break: `scripts/coerce-looks-shapes.test.mjs` (32 tests), `scripts/style-filters.test.mjs` (17 tests), `scripts/style-me-matrix.mjs`, `npm run build`. Run `npm ci` first in a fresh container.
 - Keep this HANDOFF.md current: when a session resolves or discovers items, rewrite the doc before ending — a stale handoff sends the next session chasing closed issues.

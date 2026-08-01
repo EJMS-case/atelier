@@ -9,8 +9,8 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore } from "./coerce-shapes.js";
-import { getSubcatL2 } from "../constants/taxonomy.js";
-import { getSleeveType, isBootItem, isNonHeelShoe, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
+import { explainFilterViolation } from "./style-filters.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
@@ -37,40 +37,6 @@ export class ValidationError extends Error {
     this.failures = failures;
   }
 }
-
-// ── Exclusion check regexes ──────────────────────────────────────────────────
-// Maps exclusion filter keys to tests against item fields.
-// Updated to match the actual subcategory vocabulary in the wardrobe.
-const EXCLUSION_CHECKS = {
-  "no-jeans": (item) =>
-    item.subcategory === "Jeans" ||
-    /\b(jeans|denim|jean)\b/i.test((item.name || "") + " " + (item.notes || "")),
-
-  // L3-aware: skirt rows store their L3 length label ("Mini"/"Midi"/"Maxi")
-  // directly in `subcategory`, so a bare === "Skirts" test misses them.
-  // getSubcatL2 maps those L3 labels back to the "Skirts" parent. Keep this
-  // EXACTLY in sync with closet-sampler's matchesExclusion "no-skirts".
-  "no-skirts": (item) =>
-    item.subcategory === "Skirts" ||
-    (item.category === "Bottoms" &&
-      (getSubcatL2("Bottoms", item.subcategory) === "Skirts" || /skirt/i.test(item.name || ""))),
-
-  "no-dresses": (item) =>
-    item.category === "Dresses" || item.category === "Occasionwear",
-
-  // Keep this allow-list identical to the closet-sampler's matchesExclusion —
-  // if the sampler lets "Pants"/"Wide Leg"/"Straight" through but the validator
-  // rejects them, every trousers-only look fails and burns retries.
-  "trousers-only": (item) =>
-    item.category === "Bottoms" &&
-    !["Trousers", "Pants", "Wide Leg", "Straight", "Satin/Silk", "Ponte"].includes(item.subcategory),
-
-  "no-boots": (item) => isBootItem(item),
-
-  "heels-only": (item) => isNonHeelShoe(item),
-
-  "no-knits": (item) => item.category === "Knits",
-};
 
 // ── Garment role classifier ──────────────────────────────────────────────────
 // Maps an item to its structural role — upper-half, lower-half, dress, outer,
@@ -257,20 +223,11 @@ function checkUpperHalf(response, idMap, allItems) {
 function checkExclusions(response, idMap, allItems, activeExclusions) {
   if (!activeExclusions || activeExclusions.length === 0) return [];
 
+  // activeExclusions carries the raw filter keys ("no-jeans"/"only-heels").
+  // Matching logic is shared with the closet-sampler via style-filters.js so
+  // the two can never disagree; legacy keys and display labels are normalized
+  // inside explainFilterViolation.
   const failures = [];
-  // Map exclusion labels back to filter keys
-  const LABEL_TO_KEY = {
-    "No Jeans": "no-jeans",
-    "No Skirts": "no-skirts",
-    "No Dresses": "no-dresses",
-    "Trousers Only": "trousers-only",
-    "No Boots": "no-boots",
-    "Heels Only": "heels-only",
-    "No Knits": "no-knits",
-  };
-
-  const activeKeys = activeExclusions.map(label => LABEL_TO_KEY[label] || label).filter(k => EXCLUSION_CHECKS[k]);
-
   response.looks.forEach((look, i) => {
     (look.items || []).forEach((item) => {
       const id = typeof item === "string" ? item : item.id;
@@ -279,10 +236,9 @@ function checkExclusions(response, idMap, allItems, activeExclusions) {
       const resolved = allItems.find(it => it.id === realId);
       if (!resolved) return;
 
-      for (const key of activeKeys) {
-        if (EXCLUSION_CHECKS[key](resolved)) {
-          failures.push(`Look ${i + 1} contains '${resolved.name}' which violates exclusion '${key}'.`);
-        }
+      const violation = explainFilterViolation(resolved, activeExclusions);
+      if (violation) {
+        failures.push(`Look ${i + 1} contains '${resolved.name}' which ${violation}.`);
       }
     });
   });
@@ -848,7 +804,7 @@ function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
 // burning real API tokens.
 
 
-export function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds = []) {
+export function runAllChecks(response, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds = [], onlyRescueIds = []) {
   const allFailures = [];
 
   // Hard checks (must pass)
@@ -860,7 +816,10 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   allFailures.push(...checkLowerHalf(response, idMap, allItems).map(f => ({ type: "lower_half", message: f, hard: true })));
   allFailures.push(...checkUpperHalf(response, idMap, allItems).map(f => ({ type: "upper_half", message: f, hard: true })));
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
-  allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds).map(f => ({ type: "occasion", message: f, hard: true })));
+  // Occasion check exempts both free-text-requested items AND items an "Only"
+  // toggle rescued past the occasion's subcategory bans in the sampler —
+  // re-rejecting either here would undo the override and burn every retry.
+  allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots, [...forceIncludeIds, ...onlyRescueIds]).map(f => ({ type: "occasion", message: f, hard: true })));
   // Category balance: only physically-unwearable stacking stays hard — two
   // pairs of Shoes or two Bottoms in one look can't be worn together and must
   // be rebuilt. Everything else the caps catch (an extra accessory, a second
@@ -1055,9 +1014,10 @@ export function coerceLooksShape(input) {
  * @param {string}    [params.prompt]       - legacy fallback: full combined prompt
  * @param {Object}    params.idMap          - short ID → real ID
  * @param {Object[]}  params.allItems       - full closet for resolution
- * @param {string[]}  params.activeExclusions
+ * @param {string[]}  params.activeExclusions - raw filter keys ("no-jeans"/"only-heels")
  * @param {Object}    params.occasionSlots
  * @param {string}    params.occasion
+ * @param {string[]}  [params.onlyRescueIds] - items an "Only" toggle rescued past occasion bans
  * @returns {Promise<Object>} - validated response with resolved item IDs
  */
 export async function generateValidatedLooks({
@@ -1073,6 +1033,7 @@ export async function generateValidatedLooks({
   weather = "",
   contactSheets = [],
   forceIncludeIds = [],
+  onlyRescueIds = [],
   onLook,
 }) {
   // Back-compat: callers may still pass a single `prompt` string.
@@ -1248,7 +1209,7 @@ export async function generateValidatedLooks({
     lastStrippedCount = parsed.__strippedInvalidIds || 0;
 
     // Run all validation checks
-    const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds);
+    const failures = runAllChecks(parsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
     const hardFailures = failures.filter(f => f.hard);
 
     if (hardFailures.length === 0) {
@@ -1285,7 +1246,7 @@ export async function generateValidatedLooks({
       });
       // Re-run the full check suite against the deduped looks so the salvage
       // logic below operates on an accurate failure list.
-      lastFailures = runAllChecks(lastParsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds);
+      lastFailures = runAllChecks(lastParsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
       console.warn("[Atelier Validator] Cross-look duplicates auto-deduplicated; re-validated.");
     }
   }
