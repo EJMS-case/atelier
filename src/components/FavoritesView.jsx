@@ -6,13 +6,28 @@ import { OCCASIONS, OCCASION_ALIASES } from "../constants/taxonomy.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import Thumb from "./Thumb.jsx";
 
+// The Outfits tab merges TWO favorite signals into one occasion-grouped list:
+//   1. hearted outfit logs (the `favorites` table — heart buttons in History)
+//   2. loved looks — thumbs-ups given in Style Me (`look_feedback`, rating=1)
+// The thumbs-up is where her actual taste lives (the heart went unused for
+// weeks while loves accumulated), so the tab surfaces both automatically.
+// A loved look whose item set matches a hearted log is shown once, as the log
+// (it carries date/notes/layout; the feedback row doesn't).
 export default function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
   const [tab, setTab] = useState("outfits");
   const [logs, setLogs] = useState([]);
+  const [loved, setLoved] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    sb.fetchOutfitLogs().then(data => { setLogs(data); setLoading(false); }).catch(() => setLoading(false));
+    Promise.all([
+      sb.fetchOutfitLogs().catch(() => []),
+      sb.fetchLovedLooks().catch(() => []),
+    ]).then(([logData, lovedData]) => {
+      setLogs(logData);
+      setLoved(lovedData);
+      setLoading(false);
+    });
   }, []);
 
   const favOutfitIds = new Set(favorites.filter(f => f.type === "outfit").map(f => f.reference_id));
@@ -20,40 +35,88 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
   const favOutfits = logs.filter(l => favOutfitIds.has(l.id));
   const favPieces  = items.filter(i => favPieceIds.has(i.id));
 
-  const formatDate = (d) => {
-    try { return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }); }
-    catch { return d; }
-  };
-  const tabs = [["outfits","Outfits",favOutfits.length],["pieces","Pieces",favPieces.length],["shopping","Shopping",0]];
+  // Dedupe key: the sorted item set. Hearted logs win over loved feedback rows.
+  const itemSetKey = (ids) => (ids || []).map(String).sort().join("|");
+  const heartedKeys = new Set(favOutfits.map(l => itemSetKey(l.garment_ids)));
+  const lovedUnique = loved.filter(fb => !heartedKeys.has(itemSetKey(fb.item_ids)));
 
-  // Group saved outfits by occasion so the page is scannable instead of one long
-  // date-sorted list. Weather isn't stored on logs, so occasion (normalized to
-  // its current bucket via aliases) is the primary axis; within each group the
-  // fetch order (date_worn desc) already keeps newest first. Groups follow the
-  // taxonomy order, with anything unrecognized falling to the end.
+  // Normalize both sources into one entry shape for grouping/sorting.
+  const entries = [
+    ...favOutfits.map(log => ({
+      kind: "log", id: `log-${log.id}`, log,
+      occasion: log.occasion, sortDate: log.date_worn || log.created_at || "",
+    })),
+    ...lovedUnique.map(fb => ({
+      kind: "loved", id: `loved-${fb.id}`, fb,
+      occasion: fb.occasion, sortDate: fb.created_at || "",
+    })),
+  ];
+
+  const formatDate = (d) => {
+    try {
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T12:00:00") : new Date(d);
+      return date.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
+    } catch { return d; }
+  };
+  const tabs = [["outfits","Outfits",entries.length],["pieces","Pieces",favPieces.length],["shopping","Shopping",0]];
+
+  // Group by occasion so the page is scannable instead of one long date-sorted
+  // list. Occasions are normalized to their current bucket via aliases; groups
+  // follow the taxonomy order with anything unrecognized falling to the end;
+  // within each group newest first.
   const occRank = (occ) => { const i = OCCASIONS.indexOf(occ); return i === -1 ? OCCASIONS.length : i; };
-  const groupedOutfits = (() => {
+  const groupedEntries = (() => {
     const map = new Map();
-    favOutfits.forEach(log => {
-      const occ = OCCASION_ALIASES[log.occasion] || log.occasion || "Other";
+    entries.forEach(entry => {
+      const occ = OCCASION_ALIASES[entry.occasion] || entry.occasion || "Other";
       if (!map.has(occ)) map.set(occ, []);
-      map.get(occ).push(log);
+      map.get(occ).push(entry);
     });
+    for (const group of map.values()) {
+      group.sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)));
+    }
     return [...map.entries()].sort((a, b) => occRank(a[0]) - occRank(b[0]) || a[0].localeCompare(b[0]));
   })();
 
-  const renderSavedOutfit = (log) => {
+  const unlove = async (fb) => {
+    setLoved(prev => prev.filter(x => x.id !== fb.id));
+    try { await sb.deleteLookFeedback(fb.id); } catch { /* optimistic — refetch next mount */ }
+  };
+
+  const heartSvg = (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
+      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+  );
+
+  const renderEntry = (entry) => {
+    if (entry.kind === "log") {
+      const log = entry.log;
+      const subtitle = (
+        <>
+          {formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+        </>
+      );
+      return (
+        <SavedLookCard key={entry.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
+          headerRight={
+            <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)} title="Remove from favorites">
+              {heartSvg}
+            </button>
+          }
+        />
+      );
+    }
+    const fb = entry.fb;
     const subtitle = (
       <>
-        {formatDate(log.date_worn)}{log.occasion && <span style={s.histOcc}> · {log.occasion}</span>}
+        Loved {formatDate(fb.created_at)}{fb.occasion && <span style={s.histOcc}> · {fb.occasion}</span>}
       </>
     );
     return (
-      <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
+      <SavedLookCard key={entry.id} log={{ garment_ids: fb.item_ids }} items={items} subtitle={subtitle} onEditItem={onEditItem}
         headerRight={
-          <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
-              strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+          <button style={s.heartBtn} onClick={() => unlove(fb)} title="Remove — also forgets this thumbs-up">
+            {heartSvg}
           </button>
         }
       />
@@ -73,14 +136,14 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
       </div>
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading favorites…</p></div>}
       {!loading && tab === "outfits" && (
-        favOutfits.length === 0
-          ? <div style={s.empty}><p style={s.emptyText}>No favorite outfits yet. Tap the heart on any outfit in History.</p></div>
-          : groupedOutfits.map(([occ, group]) => (
+        entries.length === 0
+          ? <div style={s.empty}><p style={s.emptyText}>Nothing here yet. Thumbs-up a look in Style Me or tap the heart on any outfit in History and it will appear here.</p></div>
+          : groupedEntries.map(([occ, group]) => (
               <div key={occ}>
                 <div style={{ ...s.sectionLabel, textTransform:"uppercase", marginTop:8 }}>
                   {occ}<span style={{ marginLeft:8, opacity:0.6 }}>{group.length}</span>
                 </div>
-                {group.map(renderSavedOutfit)}
+                {group.map(renderEntry)}
               </div>
             ))
       )}

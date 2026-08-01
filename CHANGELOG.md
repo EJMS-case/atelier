@@ -2,6 +2,23 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Favorites tab now surfaces loved Style Me looks — 2026-08-01
+
+### Why
+The Saved > Favorites sub-tab has shown an empty state since launch: it only read the heart-driven `favorites` table (0 rows ever) while her actual "I love this" signal — the thumbs-up on generated looks — accumulated 22 loves in `look_feedback`. `outfit_logs.is_favorite` was confirmed a dead column (no reads or writes anywhere in `src/`). Handoff open item #1.
+
+### Changed — `src/components/FavoritesView.jsx`
+- The Outfits tab merges two sources into one occasion-grouped, newest-first list: hearted outfit logs (unchanged behavior) and loved looks (`look_feedback` rating=1), rendered through the same `SavedLookCard` collage via their `item_ids`. All 22 current loved looks resolve 100% of their items against the live closet.
+- Dedupe by sorted item set — a loved look that was also hearted as a log shows once, as the log (it carries date/notes/layout).
+- Loved cards read "Loved <date> · <occasion>"; the filled heart removes them (deletes the feedback row — the thumbs-up IS the favorite, so un-loving also removes its decayed influence on stylist scores; button title says so).
+- Empty state now points at both affordances: thumbs-up in Style Me or heart in History.
+
+### Added — `src/lib/supabase.js`
+- `fetchLovedLooks()` (rating=1, newest first) and `deleteLookFeedback(id)`.
+
+### Not consolidated (deliberately)
+- The `favorites` table and hearts stay: pieces favorites have no feedback equivalent, and hearting a specific worn log (with its date/notes) is a distinct, still-useful gesture. `outfit_logs.is_favorite` left in place as an inert column — dropping it is a migration with zero user-facing payoff.
+
 ## [Unreleased] — Stylist recovery: stringified-items repair + compact recovery logs — 2026-08-01
 
 ### Why
