@@ -30,20 +30,30 @@ const HEADERS = {
   Authorization: `Bearer ${SUPABASE_KEY}`,
 };
 
-// Noosh shade → wardrobe colorway mapping. The first three come from the
-// order #457985 receipt ("Noir" = black, "Dulce" = the tan/nude shade, i.e.
-// our skin-tone colorway). The opaque colorways use Noosh's own product
-// photos for the matching shades: Midnight = navy, Berry = burgundy,
-// Brew = brew, Espresso = brown. Colored tights only exist as opaque at
-// Noosh, so the sheer/semi-opaque rows of those colorways keep placeholders.
+// Noosh shade → wardrobe colorway mapping, per the per-variant image data in
+// the store's product JSON (Noir = black, Dulce = skin-tone, Midnight = navy,
+// Berry = burgundy, Brew = brew, Espresso = brown). Receipt-sourced shots
+// (order #457985) cover black sheer/semi-opaque and skin-tone sheer; the rest
+// are the product galleries' own variant images. Noosh makes no semi-opaque
+// Espresso and no opaque Brew/Espresso product — those rows use the closest
+// real espresso/brew gallery shot. Skin-tone semi/opaque and the micro
+// fishnet rows keep generated SVG placeholders.
 const PHOTOS = [
-  { file: "hosiery-black-semi-opaque.png", name: "Noosh semi-opaque stockings — black" },
-  { file: "hosiery-black-sheer.png",       name: "Noosh sheer stockings — black" },
-  { file: "hosiery-skin-tone-sheer.png",   name: "Noosh sheer stockings — skin-tone" },
-  { file: "hosiery-navy-opaque.png",       name: "Noosh opaque tights — navy" },
-  { file: "hosiery-burgundy-opaque.png",   name: "Noosh opaque tights — burgundy" },
-  { file: "hosiery-brew-opaque.png",       name: "Noosh opaque tights — brew" },
-  { file: "hosiery-brown-opaque.png",      name: "Noosh opaque tights — brown" },
+  { file: "hosiery-black-sheer.png",          name: "Noosh sheer stockings — black" },
+  { file: "hosiery-black-semi-opaque.png",    name: "Noosh semi-opaque stockings — black" },
+  { file: "hosiery-black-opaque.png",         name: "Noosh opaque tights — black" },
+  { file: "hosiery-skin-tone-sheer.png",      name: "Noosh sheer stockings — skin-tone" },
+  { file: "hosiery-navy-sheer.png",           name: "Noosh sheer stockings — navy" },
+  { file: "hosiery-navy-semi-opaque.png",     name: "Noosh semi-opaque stockings — navy" },
+  { file: "hosiery-navy-opaque.png",          name: "Noosh opaque tights — navy" },
+  { file: "hosiery-burgundy-sheer.png",       name: "Noosh sheer stockings — burgundy" },
+  { file: "hosiery-burgundy-semi-opaque.png", name: "Noosh semi-opaque stockings — burgundy" },
+  { file: "hosiery-burgundy-opaque.png",      name: "Noosh opaque tights — burgundy" },
+  { file: "hosiery-brew-sheer.png",           name: "Noosh sheer stockings — brew" },
+  { file: "hosiery-brew-semi-opaque.png",     name: "Noosh semi-opaque stockings — brew" },
+  { file: "hosiery-brew-opaque.png",          name: "Noosh opaque tights — brew" },
+  { file: "hosiery-brown-sheer.png",          name: "Noosh sheer stockings — brown" },
+  { file: "hosiery-brown-opaque.png",         name: "Noosh opaque tights — brown" },
 ];
 
 async function uploadPng(path, bytes) {
