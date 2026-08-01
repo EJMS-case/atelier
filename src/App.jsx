@@ -17,6 +17,7 @@ import { COLOR_FAMILY_RANGES, effectiveColorFamily } from "./constants/color.js"
 import {
   colorSortIdx, defaultSortComparator, mergeItems,
 } from "./utils/item-helpers.js";
+import { STYLE_FILTER_CHIPS } from "./utils/style-filters.js";
 import {
   THEME_KEY, RECENT_LOOKS_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
@@ -1049,33 +1050,38 @@ export default function App() {
             })()}
           </div>
 
-          {/* DON'T INCLUDE — user exclusion toggles */}
-          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>DON'T INCLUDE</div>
+          {/* FILTERS — tri-state garment-type chips. Each cycles
+              off → NO (never use it, red) → ONLY (build around it, green) → off.
+              "Only" within a group is a union (Only Jeans + Only Skirts = the
+              lower half must be jeans OR a skirt); per-type tri-state makes a
+              No/Only contradiction on the same type impossible. Matching logic
+              lives in utils/style-filters.js, shared with sampler + validator. */}
+          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:3}}>FILTERS</div>
+          <div style={{fontSize:9, color:"var(--color-text-muted)", marginBottom:6, fontStyle:"italic"}}>
+            tap once = never &nbsp;·&nbsp; tap twice = only &nbsp;·&nbsp; tap again = off
+          </div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-            {[
-              ["no-jeans","No Jeans"],
-              ["no-skirts","No Skirts"],
-              ["no-dresses","No Dresses"],
-              ["trousers-only","Trousers Only"],
-              ["no-boots","No Boots"],
-              ["heels-only","Heels Only"],
-              ["no-knits","No Knits"],
-            ].map(([key,label]) => (
-              <button key={key}
-                style={styleExcludes.has(key)
-                  ? {...s.chip, background:"var(--color-danger)", borderColor:"var(--color-danger)", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
-                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                onClick={() => setStyleExcludes(prev => {
-                  const next = new Set(prev);
-                  // Handle mutual exclusivity
-                  if (key === "trousers-only" && !next.has(key)) { next.delete("no-skirts"); }
-                  if (key === "heels-only" && !next.has(key)) { next.delete("no-boots"); }
-                  next.has(key) ? next.delete(key) : next.add(key);
-                  return next;
-                })}>
-                {label}
-              </button>
-            ))}
+            {STYLE_FILTER_CHIPS.map(({key, label}) => {
+              const noKey = `no-${key}`, onlyKey = `only-${key}`;
+              const state = styleExcludes.has(noKey) ? "no" : styleExcludes.has(onlyKey) ? "only" : "off";
+              const chipStyle = state === "no"
+                ? {...s.chip, background:"var(--color-danger)", borderColor:"var(--color-danger)", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
+                : state === "only"
+                  ? {...s.chip, background:"var(--color-success)", borderColor:"var(--color-success)", color:"#fff", fontSize:11, padding:"5px 11px", fontWeight:500}
+                  : {...s.chip, fontSize:11, padding:"5px 11px"};
+              return (
+                <button key={key} style={chipStyle}
+                  onClick={() => setStyleExcludes(prev => {
+                    const next = new Set(prev);
+                    if (next.has(noKey)) { next.delete(noKey); next.add(onlyKey); }
+                    else if (next.has(onlyKey)) { next.delete(onlyKey); }
+                    else { next.add(noKey); }
+                    return next;
+                  })}>
+                  {state === "no" ? `✕ No ${label}` : state === "only" ? `✓ Only ${label}` : label}
+                </button>
+              );
+            })}
           </div>
 
           {/* ANYTHING SPECIFIC? */}

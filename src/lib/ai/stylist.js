@@ -8,6 +8,7 @@ import { STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS }
 import { TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory } from "../../utils/closet-sampler.js";
+import { describeStyleFilters } from "../../utils/style-filters.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
 import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
@@ -63,21 +64,15 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   })();
 
 
-  const EXCLUDE_LABELS = {
-    "no-jeans": "No Jeans",
-    "no-skirts": "No Skirts",
-    "no-dresses": "No Dresses",
-    "trousers-only": "Trousers Only",
-    "no-boots": "No Boots",
-    "heels-only": "Heels Only",
-    "no-knits": "No Knits",
-  };
-  const activeExclusions = [...(styleExcludes || [])].map(k => EXCLUDE_LABELS[k] || k);
+  // Prompt gets human-readable lines ("No Jeans — none, anywhere…", "Jeans
+  // ONLY for the lower half — …"); the validator gets the raw keys so its
+  // checks share the exact matchers the sampler filtered with.
+  const activeExclusions = describeStyleFilters(styleExcludes);
 
   const recentlySuggestedItems = getRecentlySuggestedItems();
   const itemSuggestionCounts = loadSuggestionCounts();
 
-  const { sampled, idMap, reverseMap, forceIncludeIds = [] } = sampleClosetItems({
+  const { sampled, idMap, reverseMap, forceIncludeIds = [], onlyRescueIds = [] } = sampleClosetItems({
     items,
     occasion,
     styleExcludes,
@@ -210,12 +205,13 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     dynamicBody,
     idMap,
     allItems: items,
-    activeExclusions,
+    activeExclusions: [...(styleExcludes || [])],
     occasionSlots: slots,
     occasion,
     weather,
     contactSheets,
     forceIncludeIds,
+    onlyRescueIds,
     onLook,
   });
 

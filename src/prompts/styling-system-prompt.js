@@ -130,7 +130,7 @@ export function buildStylingPrompt({
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
   const exclusionBlock = activeExclusions.length > 0
-    ? `\n⛔ ACTIVE EXCLUSIONS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\nDo NOT include ANY item that matches these exclusions. Not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you. Any look containing an excluded item type is an AUTOMATIC FAILURE and must be rebuilt from scratch.\n`
+    ? `\n⛔ ACTIVE FILTERS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\n"No X" means NO item of that type appears anywhere in ANY look — not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you.\n"X ONLY" means EVERY look must be built that way: if the lower half must be jeans, a look with trousers, a skirt, or a dress is wrong. Any look violating a filter is an AUTOMATIC FAILURE and must be rebuilt from scratch.\n`
     : "";
 
   // NOTE: Don't dump the raw recently-suggested IDs into the prompt — they're
