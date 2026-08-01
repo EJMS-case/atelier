@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Tri-state Style Me filters: "No X" and "Only X" for every garment type — 2026-08-01
+
+### Why
+Owner: "I'd also like to fix the 'don't include' area — what if I WANT to only have jeans?" The old section was exclusion-only with two hardcoded inversions (Trousers Only, Heels Only); there was no way to say "build every look around jeans" (or skirts, dresses, boots, flats…).
+
+### Added — `src/utils/style-filters.js` (new shared module)
+- Nine garment types (Jeans, Trousers, Skirts, Dresses / Heels, Boots, Flats, Sneakers / Knits), each toggleable to `no-<type>` (never) or `only-<type>` (within its structural group — lower half, shoes, tops — everything that ISN'T that type is banned). Multiple "only" toggles in one group are a union: Only Jeans + Only Skirts = lower half must be jeans OR a skirt.
+- One matcher per type consumed by BOTH the sampler and the validator (previously duplicated as `matchesExclusion` / `EXCLUSION_CHECKS` with "keep exactly in sync" comments — the drift risk is now structural, not disciplinary). Legacy keys (`trousers-only`, `heels-only`) and old display labels still normalize.
+- "Only" toggles rescue matching items past occasion SUBCATEGORY bans (Work Dinner bans Jeans, but "Only Jeans" is a direct instruction — same user-intent-wins principle as the free-text override). Category-level bans and taste keywords still hold, and the validator's occasion check exempts rescued items so they never burn retries.
+- `scripts/style-filters.test.mjs` (17 tests, `npm run test:filters`) locks the semantics: union groups, set top-half sparing, sneakers-under-Flats carve-out, legacy keys, No-beats-Only on the same item.
+
+### Changed — Style Me panel (`src/App.jsx`)
+- "DON'T INCLUDE" section replaced with "FILTERS": one chip per garment type cycling off → ✕ No (red) → ✓ Only (green) → off, with a one-line hint. Per-type tri-state makes a No/Only contradiction impossible; the old mutual-exclusivity special-casing is gone.
+- New chips vs before: Trousers, Flats, and Sneakers get both directions; Jeans, Skirts, Dresses, Boots, and Knits gain an "Only" mode.
+
+### Changed — Prompt + validator plumbing
+- Prompt block renamed ACTIVE EXCLUSIONS → ACTIVE FILTERS (dynamic body only — static preamble untouched, cache stays warm) and now teaches both directions; same-group "only"s merge into one line ("Jeans or Skirts ONLY for the lower half…") so the model never reads two onlys as a contradiction.
+- `generateValidatedLooks` now receives raw filter keys (not display labels) plus `onlyRescueIds`; `runAllChecks` gained a trailing optional `onlyRescueIds` param (existing positional callers unaffected). Retry messages name the specific violated filter.
+- Behavior note: "Only Trousers" (né Trousers Only) now also bans dresses/jumpsuits/sets — an "only" means the lower half really is that type. Previously dresses slipped through.
+
 ## [Unreleased] — Shopping/gap analysis rebuild + backup-table lockdown — 2026-08-01
 
 ### Why
