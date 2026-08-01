@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Me anti-repeat: look-deep rotation memory, freshest-first inventory, cross-device sync — 2026-08-01
+
+### Why
+The owner's top complaint: Style Me "continuously gives the same pieces over and over." Three compounding causes found. (1) Rotation memory was counted in *generations* (8) — tuned when every generation returned 3 looks (~24 looks of memory), but the single-look fast path quietly shrank that to ~8 looks, so in a reroll session (five generations in 90 seconds on 2026-08-01 per `ai_errors` timestamps) hero pieces legally cycled back mid-session. (2) A generation whose final validation threw never recorded anything — yet its streamed look stayed on screen, so the very pieces just shown were re-offered on the next tap. (3) The "cold-item ordering bias" the sampler comments promised no longer existed: buckets were pure-shuffled and the cold-boost slice was 0, so a piece suggested 12 times sat as prominently in the prompt as one never suggested.
+
+### Changed — `src/utils/rotation-tracker.js`
+- Memory is now counted in LOOKS (window: 24), stored as `{ids, at}` entries — one per look — so depth no longer depends on how many looks a generation returns. Legacy plain-array entries still parse and age out naturally.
+- New `getRecencyRank()` (how many looks ago each item was last suggested) and `recordSuggestedLooks(lookIdArrays)` replace `recordGeneration`.
+- New `exportRotationState()` / `mergeRemoteRotationState()` for cross-device sync: looks union by timestamp, counts merge by per-id max (idempotent, junk-tolerant).
+
+### Changed — `src/lib/ai/stylist.js`
+- Rotation now records what the user actually SAW: streamed looks are recorded even when the final validation pass throws (previously those pieces vanished from memory while staying on screen), and a streamed look replaced by a validated retry is recorded alongside the final set.
+
+### Changed — `src/utils/closet-sampler.js`
+- Per-bucket floor backfill now keeps the LEAST-recently-suggested repeats (recency-rank LRU, lifetime count as tiebreak) instead of lowest-lifetime-count — a small pool can no longer resurrect the piece from the tap before last when an older repeat exists.
+- After the variety shuffle, each bucket is stable-sorted freshest-first by a coarse suggestion-count band (0 / 1-2 / 3-6 / 7+); a positive feedback score lifts a piece one band, a negative one sinks it. Lifetime heroes now trail the inventory the model reads. Dead cold-boost machinery (slice of size 0) removed.
+- The prompt's VARIETY note (dynamic body — no cache impact) now tells the model the inventory is ordered freshest-first and to prefer earlier pieces on ties.
+
+### Added — cross-device rotation sync (`src/lib/supabase.js`, `src/App.jsx`)
+- `user_settings` key `rotation_state` mirrors the anti-repeat memory. App boot pulls + merges the remote copy and pushes the union back; every generation ends with a fire-and-forget push. Styling on the phone now rotates around what the laptop suggested this morning, and vice versa.
+
+### Tests
+- New `scripts/rotation.test.mjs` (13 tests, `npm run test:rotation`): per-look recording, 24-look window, legacy-shape parsing, recency ranks, merge union/idempotency/junk-tolerance, sampler drop + LRU floor backfill + freshest-first ordering + feedback lift.
+
 ## [Unreleased] — Favorites tab now surfaces loved Style Me looks — 2026-08-01
 
 ### Why

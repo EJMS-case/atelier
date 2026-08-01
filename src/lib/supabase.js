@@ -369,6 +369,30 @@ export const sb = {
     } catch { /* swallow — non-fatal, regenerate on demand */ }
   },
 
+  // ── Rotation state (key='rotation_state') ──
+  // The stylist's anti-repeat memory ({ looks, counts } — see
+  // rotation-tracker.js). localStorage is per-device; syncing through
+  // user_settings lets the phone see what the laptop already suggested.
+  async getRotationState() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.rotation_state&select=value`, {
+        headers: SB_HEADERS,
+      });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+    } catch { return null; }
+  },
+  async saveRotationState(state) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "rotation_state", value: JSON.stringify(state) }),
+      });
+    } catch { /* swallow — local rotation still works on this device */ }
+  },
+
   // ── Inspiration images ──
   // Style references the AI uses ONLY as a vibe guide (see prompt wiring).
   // The image bytes live in the same `wardrobe-images` bucket under an

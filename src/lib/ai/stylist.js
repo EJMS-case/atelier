@@ -10,7 +10,7 @@ import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory } from "../../utils/closet-sampler.js";
 import { describeStyleFilters } from "../../utils/style-filters.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
-import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
+import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, filterByWeather, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
@@ -71,6 +71,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
 
   const recentlySuggestedItems = getRecentlySuggestedItems();
   const itemSuggestionCounts = loadSuggestionCounts();
+  const recencyRank = getRecencyRank();
 
   const { sampled, idMap, reverseMap, forceIncludeIds = [], onlyRescueIds = [] } = sampleClosetItems({
     items,
@@ -84,6 +85,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     // checkWeatherCompliance catches clear mismatches and retries if needed.
     itemSuggestionCounts,
     recentlySuggestedItems,
+    recencyRank,
     recentlyWornItems,
     feedbackScores,
     userId: apiKey ? apiKey.slice(-8) : "default",
@@ -199,27 +201,49 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     console.warn("[Atelier] Contact sheet generation failed, falling back to text-only:", e.message);
   }
 
-  const result = await generateValidatedLooks({
-    apiKey,
-    staticPreamble,
-    dynamicBody,
-    idMap,
-    allItems: items,
-    activeExclusions: [...(styleExcludes || [])],
-    occasionSlots: slots,
-    occasion,
-    weather,
-    contactSheets,
-    forceIncludeIds,
-    onlyRescueIds,
-    onLook,
-  });
+  // Rotation memory must reflect what the user actually SAW. Streamed looks
+  // stay on screen even when the final validation pass throws (App keeps
+  // them rather than replacing real looks with an error wall) — if they were
+  // only recorded on success, a failed generation re-offered its own pieces
+  // on the very next tap. Collect streamed looks here; on success record the
+  // final set plus any streamed look it replaced, on failure record whatever
+  // streamed before rethrowing.
+  const lookIds = (look) =>
+    (look?.items || []).map(item => (typeof item === "object" ? item.id : item)).filter(Boolean);
+  const streamedLooks = [];
+  const wrappedOnLook = onLook
+    ? (look) => { streamedLooks.push(lookIds(look)); onLook(look); }
+    : undefined;
+
+  let result;
+  try {
+    result = await generateValidatedLooks({
+      apiKey,
+      staticPreamble,
+      dynamicBody,
+      idMap,
+      allItems: items,
+      activeExclusions: [...(styleExcludes || [])],
+      occasionSlots: slots,
+      occasion,
+      weather,
+      contactSheets,
+      forceIncludeIds,
+      onlyRescueIds,
+      onLook: wrappedOnLook,
+    });
+  } catch (e) {
+    if (streamedLooks.length > 0) recordSuggestedLooks(streamedLooks);
+    throw e;
+  }
 
   if (result.looks) {
-    const allSuggestedIds = result.looks.flatMap(look =>
-      (look.items || []).map(item => typeof item === "object" ? item.id : item)
-    );
-    recordGeneration(allSuggestedIds);
+    const finalLooks = result.looks.map(lookIds);
+    const finalKeys = new Set(finalLooks.map(ids => [...ids].sort().join(",")));
+    const replacedStreams = streamedLooks.filter(ids => !finalKeys.has([...ids].sort().join(",")));
+    recordSuggestedLooks([...finalLooks, ...replacedStreams]);
+  } else if (streamedLooks.length > 0) {
+    recordSuggestedLooks(streamedLooks);
   }
 
   return result;
