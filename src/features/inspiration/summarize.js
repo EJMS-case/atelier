@@ -19,7 +19,7 @@ Focus on:
 - Silhouette and proportion (oversized × fitted, column, voluminous bottom, etc.)
 - Color story (palette, contrast, tonal vs. blocked)
 - Texture and material story (silk against wool, leather, matte vs. sheen)
-- Mood (quiet luxury, edgy, romantic, sporty, effortless)
+- Mood (quiet luxury, edgy, romantic, effortless)
 
 Do NOT:
 - Name specific brands.

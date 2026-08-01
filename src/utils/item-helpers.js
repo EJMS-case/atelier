@@ -76,19 +76,37 @@ export function isCompleteSetItem(item) {
 // "No Boots" exclusion filters — imported by BOTH the closet-sampler (which
 // pre-filters the pool) and the styling-validator (which re-checks the result),
 // so the two never disagree and waste a retry.
-//   Heels live under: Heels, Stiletto, Kitten (+ Pumps/Mules/Slingback/Wedges
-//   if they appear). Boots live under: Boots and Ankle (ankle boots), plus
-//   anything whose name reads boot/bootie.
-export const HEEL_SUBS = new Set(["Heels", "Stiletto", "Kitten", "Pumps", "Mules", "Slingback", "Slingbacks", "Wedges"]);
+//   Heels live under: Heels (L2) + Block/Kitten/Stiletto (L3), plus
+//   Pumps/Mules/Slingback/Wedges if they appear. Boots live under: Boots (L2)
+//   + Ankle/Knee-High/Over-the-Knee (L3), plus anything whose name reads
+//   boot/bootie.
+export const HEEL_SUBS = new Set(["Heels", "Block", "Kitten", "Stiletto", "Pumps", "Mules", "Slingback", "Slingbacks", "Wedges"]);
+export const BOOT_SUBS = new Set(["Boots", "Ankle", "Knee-High", "Over-the-Knee"]);
 export function isBootItem(item) {
   if (!item) return false;
-  return item.subcategory === "Boots" || item.subcategory === "Ankle" ||
+  return BOOT_SUBS.has(item.subcategory) ||
     /\bboot(s|ie|ies)?\b/i.test(item.name || "");
 }
 // True when a Shoes item is NOT a heel — i.e. it should be excluded under
 // "Heels Only". Non-shoe items return false (the filter only touches footwear).
 export function isNonHeelShoe(item) {
   return item?.category === "Shoes" && !HEEL_SUBS.has(item?.subcategory);
+}
+
+// ── HOSIERY ─────────────────────────────────────────────────────────────────
+// Tights/stockings live under Accessories > Hosiery (L3: Sheer / Semi-Opaque /
+// Opaque / Fishnet). Single source of truth for "is this a legwear layer" —
+// used by the closet-sampler (weather gating + cool/cold boost), the
+// styling-validator (statement / item-count exemptions), and filterByWeather
+// below. Category-gated to Accessories so a fishnet top or "tight" fit note
+// on a garment never matches.
+export const HOSIERY_SUBS = new Set(["Hosiery", "Sheer", "Semi-Opaque", "Opaque", "Fishnet"]);
+export function isHosieryItem(item) {
+  if (!item || item.category !== "Accessories") return false;
+  if (HOSIERY_SUBS.has(item.subcategory)) return true;
+  return /\b(hosiery|stockings?|tights|fishnets?)\b/i.test(
+    (item.subcategory || "") + " " + (item.name || "")
+  );
 }
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
@@ -117,11 +135,18 @@ export function filterByWeather(items, weather) {
     // swim UNCONDITIONALLY, so a Vacation + Hot request lost every swim piece.
     if (it.category === "Swim") return isHot || isWarm;
 
+    // Hosiery is a cool-weather legwear layer: OUT in Hot/Warm regardless of
+    // its season_weight tag, IN for Mild/Cool/Cold. The early return also
+    // exempts hosiery from the generic `seasonTag === "winter"` removal in the
+    // Mild block below — winter-tagged sheer hosiery is still fine at 55-69°F
+    // when a skirt look wants it.
+    if (isHosieryItem(it)) return !(isHot || isWarm);
+
     if (isHot) {
       if (it.category === "Knits") return false;
       if (isKnitDress) return false;
       if (it.subcategory === "Sweater Dress") return false;
-      if (it.subcategory === "Boots") return false;
+      if (isBootItem(it)) return false; // L3-aware: Boots/Ankle/Knee-High/Over-the-Knee
       // Hot = LIGHT outerwear only. Not a blanket ban: a linen blazer / unlined
       // cardigan is exactly the shoulder-covering layer she wants for AC,
       // evening, or an indoor lunch when it's 90° outside. Heavy layers still go.
@@ -137,7 +162,7 @@ export function filterByWeather(items, weather) {
       if (isKnitDress) return false;
       if (it.subcategory === "Sweater Dress") return false;
       if (it.subcategory === "Coats") return false;
-      if (it.subcategory === "Boots") return false;
+      if (isBootItem(it)) return false; // L3-aware: Boots/Ankle/Knee-High/Over-the-Knee
       if (isHeavyFabric) return false;
       if (seasonTag === "winter") return false;
       // No sleeve-based top exclusion in warm — she layers, so any sleeve works;

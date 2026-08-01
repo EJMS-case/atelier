@@ -5,8 +5,8 @@
 // uncapped. Cold-item logic kept around for ordering bias (under-rotated
 // pieces sort first within each bucket).
 
-import { normalizeOccasion } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isNonHeelShoe, isCompleteSetItem } from "./item-helpers.js";
+import { normalizeOccasion, getSubcatL2 } from "../constants/taxonomy.js";
+import { slotForItem, isBootItem, isNonHeelShoe, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -50,7 +50,9 @@ const OCCASION_PREFILTERS = {
     // formal/dressy. Heels, blazers, cocktail and gown subcategories all go.
     // Athleisure category is intentionally NOT removed (it's the backbone).
     removeCategories: new Set(["Outerwear", "Occasionwear"]),
-    removeSubcategories: new Set(["Blazers", "Heels", "Cocktail Dresses", "Gowns", "Formal Separates", "Stiletto"]),
+    // Heel labels cover L2 ("Heels") and L3 ("Stiletto"/"Kitten"/"Block") —
+    // shoe rows store both after the taxonomy cleanup.
+    removeSubcategories: new Set(["Blazers", "Heels", "Cocktail Dresses", "Gowns", "Formal Separates", "Stiletto", "Kitten", "Block"]),
     removeKeywords: ["structured", "tailored", "suit", "cocktail", "formal", "evening"],
   },
   Casual: {
@@ -71,7 +73,7 @@ const OCCASION_PREFILTERS = {
     // dress sandals or evening clutches.
     keepCategories: new Set(["Athleisure", "Shoes", "Accessories", "Belts"]),
     removeCategories: new Set(),
-    removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Mules", "Loafers"]),
+    removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Kitten", "Block", "Mules", "Loafers"]),
     removeKeywords: [],
   },
   "Travel Day": {
@@ -79,7 +81,7 @@ const OCCASION_PREFILTERS = {
     // Athleisure and Loungewear lead, no heels. Lighter category bans than
     // the old "Travel" bucket because comfort genuinely outranks polish here.
     removeCategories: new Set(["Occasionwear"]),
-    removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Cocktail Dresses", "Gowns", "Formal Separates"]),
+    removeSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Kitten", "Block", "Cocktail Dresses", "Gowns", "Formal Separates"]),
     removeKeywords: ["boardroom only", "office only", "evening only"],
   },
   Vacation: {
@@ -164,7 +166,7 @@ export function noteSaysOccasion(item, occasion) {
 // Garments (not shoes/bags/accessories — a leather sneaker is fine for Lounge)
 // that are too dressy for a comfort occasion, unless she noted otherwise.
 const DRESSY_COMFORT_CATS = new Set(["Tops", "Knits", "Bottoms", "Dresses", "Jumpsuits", "Sets", "Outerwear", "Occasionwear"]);
-const DRESSY_COMFORT_SUBS = new Set(["Satin/Silk", "Blazers", "Cocktail Dresses", "Gowns", "Formal Separates", "Heels", "Pumps", "Stiletto", "Mules"]);
+const DRESSY_COMFORT_SUBS = new Set(["Satin/Silk", "Blazers", "Cocktail Dresses", "Gowns", "Formal Separates", "Heels", "Pumps", "Stiletto", "Kitten", "Block", "Mules"]);
 const DRESSY_COMFORT_MATERIAL = /\b(silk|satin|charmeuse|leather|suede|lace|sequin|velvet|chiffon|organza|brocade|taffeta|tweed)\b/i;
 function tooDressyForComfort(item, occasion) {
   if (!DRESSY_COMFORT_CATS.has(item.category)) return false;
@@ -184,7 +186,13 @@ function matchesExclusion(item, exclusionKey) {
     case "no-jeans":
       return item.subcategory === "Jeans" || /\b(jeans|denim|jean)\b/i.test(text);
     case "no-skirts":
-      return item.subcategory === "Skirts" || (item.category === "Bottoms" && /skirt/i.test(name));
+      // L3-aware — skirt rows store "Mini"/"Midi"/"Maxi" in `subcategory`.
+      // Keep EXACTLY in sync with styling-validator's EXCLUSION_CHECKS
+      // "no-skirts" (drift = the validator rejects what the sampler offered
+      // and every retry burns).
+      return item.subcategory === "Skirts" ||
+        (item.category === "Bottoms" &&
+          (getSubcatL2("Bottoms", item.subcategory) === "Skirts" || /skirt/i.test(name)));
     case "no-dresses":
       return item.category === "Dresses" || item.category === "Occasionwear";
     case "trousers-only":
@@ -455,6 +463,25 @@ export function sampleClosetItems({
     pool = filterByWeather(pool, weather);
   }
 
+  // ── 3a. Hosiery weather gate + cool/cold boost flag ──
+  // Tights/stockings are what make skirts and minis winter-viable, so in
+  // Cool/Cold they must reliably reach the model; in Hot/Warm they never
+  // belong (explicit here, independent of the filterByWeather param being
+  // passed). Mild keeps them available for sheer-hosiery looks.
+  const wRaw = (weather || "").toLowerCase();
+  const hotOrWarm = /hot|warm|85|70-84/.test(wRaw);
+  const coolOrCold = /cool|cold|40-54|below 40/.test(wRaw);
+  if (hotOrWarm) pool = pool.filter(it => !isHosieryItem(it));
+  // Boost applies only when the pool can actually use legwear (a skirt or
+  // dress survived the filters): hosiery is exempted from the repeat-rotation
+  // drop in 3b and sorted to the front of the accessories bucket in 6 so the
+  // stylist always sees it next to the skirts it enables.
+  const boostHosiery = coolOrCold && pool.some(it =>
+    it.category === "Dresses" || it.subcategory === "Skirts" ||
+    (it.category === "Bottoms" &&
+      (getSubcatL2("Bottoms", it.subcategory) === "Skirts" || /skirt/i.test(it.name || "")))
+  );
+
   // ── 3b. Rotate out recently-worn / recently-suggested pieces so the same
   // items don't surface tap after tap. The old rule was all-or-nothing: drop
   // every repeat, but ONLY if ≥30 items survived — otherwise keep the full
@@ -488,7 +515,10 @@ export function sampleClosetItems({
       for (const it of group) {
         // Spare freshly-eligible pieces AND anything the user explicitly asked
         // for (freeTextOverrideIds was matched against the unfiltered closet).
-        if (!norepeatBlocked.has(it.id) || freeTextOverrideIds.has(it.id)) fresh.push(it);
+        // Hosiery is also spared in cool/cold skirt pools (see 3a) — rotating
+        // the tights out is what used to make winter skirts unstyleable.
+        if (!norepeatBlocked.has(it.id) || freeTextOverrideIds.has(it.id) ||
+            (boostHosiery && isHosieryItem(it))) fresh.push(it);
         else stale.push(it);
       }
       // Drop the MOST-repeated stale items first; keep the least-used ones to
@@ -545,6 +575,13 @@ export function sampleClosetItems({
   // Shuffle each bucket
   for (const key of Object.keys(buckets)) {
     buckets[key] = seededShuffle(buckets[key], rng);
+  }
+
+  // Cool/cold skirt pools: hosiery leads the accessories bucket so it survives
+  // any future cap and sits early in the prompt inventory. Stable sort keeps
+  // the shuffled order within each group.
+  if (boostHosiery && buckets.accessories) {
+    buckets.accessories.sort((a, b) => (isHosieryItem(b) ? 1 : 0) - (isHosieryItem(a) ? 1 : 0));
   }
 
   // ── 7. Calculate per-bucket targets ──

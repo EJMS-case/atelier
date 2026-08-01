@@ -67,6 +67,8 @@ STYLING METHOD (every look):
 5. Focal point — one clear point of interest.
 6. Finishing — one or two intentional notes (jewelry, the right bag, an architectural belt on separates), never a stack. Pick the actual piece from the inventory — a specific chain, cuff, or bag line — not a generic "add jewelry". Belt rule per HC9.
 
+HOSIERY: Accessories>Hosiery items are legwear layered under skirts/dresses — never the look's statement, never a shoe substitute; pair color/opacity deliberately (tonal with the shoe or hem lengthens the leg, opaque black grounds a winter mini, sheer reads evening polish). When a skirt or dress look runs Cool or Cold, include ONE hosiery item and name it in the rationale.
+
 VIBE: pick ONE per look from this list, matching what the look actually feels like — ${VIBE_VOCABULARY.join(" | ")}.
 
 VISUAL REFERENCE: contact-sheet images (W001, W002…) are attached when available. Trust photos over text when they conflict.
@@ -118,7 +120,6 @@ export function buildStylingPrompt({
   availabilityNote,
   stylingDirections = [],
   lookCount = 3,
-  moodPrompt = "",
   requestedShortIds = [],
   inspirationVibes = [],
   styleFingerprint = "",
@@ -220,10 +221,6 @@ Weather still governs fabric weight and coverage.\n`
     ? `\n🎨 INSPIRATION VIBES — TEXT REFERENCE ONLY (NOT inventory):\nShe saved these style notes for ${occasion} / ${weather || "any weather"}. Use them to bias mood, silhouette, color story, and texture direction. Do NOT try to find or reproduce any item described below — those pieces are NOT in her closet. Build looks from the wardrobe inventory only; if the inspo describes a color or piece she doesn't own, pick the nearest equivalent from her actual closet and move on. Never throw an error because an inspo color/piece is missing.\n\n${inspirationVibes.map((v, i) => `• ${v}`).join("\n")}\n`
     : "";
 
-  const moodBlock = moodPrompt
-    ? `\n✦ ${moodPrompt}\nEvery look must reflect this mood in silhouette, palette, and finishing choices. It changes how you interpret the occasion — not what's allowed, but what feels right.\n`
-    : "";
-
   // Strategy strings start with ALL-CAPS labels ("TONAL:", "VOLUME BELOW:",
   // "TEXTURE HERO:") that the model used to parrot verbatim into the rationale.
   // Strip the label prefix so only the descriptive prose reaches the AI.
@@ -249,7 +246,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${honestyBlock}
 ${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
@@ -299,9 +296,9 @@ function formatWeather(weather) {
   const parts = [];
   if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. The Outerwear category does not exist for you in this generation. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Sandals, open shoes, or light flats. Any look containing a coat, blazer, or jacket is an automatic failure.");
   if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers ONLY. NO heavy knits, NO coats (incl. wool/cashmere/trench/floral wool), NO wool outerwear of any kind, NO boots. Short sleeves, sleeveless, or very light long sleeves only. The ONLY allowed outerwear is an explicitly unstructured linen or cotton blazer; if no such item exists in the inventory, skip the layer entirely.");
-  if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — HARD CONSTRAINT. Spring/fall layering. Light outerwear welcome (trench, blazer, leather jacket, denim jacket, lightweight wool blazer). NO parkas, NO puffers, NO sherpa, NO shearling, NO fleece, NO chunky/cable knits, NO heavy floor-length wool coats — those belong to Cool/Cold. Both short and long sleeves acceptable.");
-  if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes.");
-  if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected.");
+  if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — HARD CONSTRAINT. Spring/fall layering. Light outerwear welcome (trench, blazer, leather jacket, denim jacket, lightweight wool blazer). NO parkas, NO puffers, NO sherpa, NO shearling, NO fleece, NO chunky/cable knits, NO heavy floor-length wool coats — those belong to Cool/Cold. Both short and long sleeves acceptable; sheer hosiery is available if a skirt or dress look wants it.");
+  if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes. Skirts, minis, and dresses ARE cool-weather-viable — she wears them with tights/stockings (opaque for daytime cold, sheer/semi for evening). Never reject a skirt for bare legs; add hosiery from the inventory instead.");
+  if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected. Skirts, minis, and dresses ARE winter-viable — she wears them with tights/stockings (opaque grounds a daytime mini, sheer/semi for evening). Never reject a skirt for bare legs; add hosiery from the inventory instead.");
   if (parts.length === 0) return `⚠️ WEATHER: ${weather}. Dress appropriately — this is a hard constraint.`;
   return parts.join("\n\n");
 }

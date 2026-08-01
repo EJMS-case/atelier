@@ -103,6 +103,12 @@ const VIBE_SYNONYMS = [
   ["downtown", "Downtown Cool"],
   ["luxury", "Quiet Luxury"],
   ["chic", "Effortless"],
+  // "Sporty" was removed from VIBE_VOCABULARY by owner request ("I'll never
+  // want to dress sporty"). Legacy saved looks and stray model output that
+  // still say sporty/athletic degrade to the closest surviving vibe instead
+  // of failing the Zod enum.
+  ["sporty", "Effortless"],
+  ["athletic", "Effortless"],
 ];
 
 // Map any string onto a member of VIBE_VOCABULARY. Vibe is a display label —

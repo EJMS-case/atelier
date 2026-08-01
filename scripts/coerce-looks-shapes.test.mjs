@@ -262,12 +262,14 @@ test("vibe normalization: non-canonical look vibes mapped onto vocabulary", () =
   const result = coerceLooksShape({
     looks: [
       { vibe: "minimal", items: ITEMS_3 },
+      // "Sporty" was removed from VIBE_VOCABULARY (owner request) — legacy
+      // sporty values must degrade to Effortless, not survive as canonical.
       { vibe: "sporty", items: ITEMS_3 },
       { vibe: "???", items: ITEMS_3 },
     ],
   });
   assert.strictEqual(result.looks[0].vibe, "Modern Minimal");
-  assert.strictEqual(result.looks[1].vibe, "Sporty");
+  assert.strictEqual(result.looks[1].vibe, "Effortless");
   assert.strictEqual(result.looks[2].vibe, "Effortless");
 });
 

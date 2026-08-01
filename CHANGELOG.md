@@ -2,6 +2,36 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Winter hosiery, smarter filters, simpler Style Me, softer rules — 2026-08-01
+
+### Why
+Owner direction: "make the app smarter… more stylish without enforcing hard rules that force errors. My biggest concerns are work, work dinner, dinner, and casual… I don't think 'mood' works and I'll never want to dress sporty anyway." Also: after the taxonomy cleanup, live rows store L3 labels (`Mini`/`Midi`/`Maxi` skirts, `Stiletto`/`Kitten`/`Ankle` shoes) directly in `subcategory`, which several exact-match filters predated — e.g. "No Skirts" silently missed all 25 skirts.
+
+### Added — Winter/transitional hosiery
+- Accessories > Hosiery taxonomy branch (L3: Sheer / Semi-Opaque / Opaque / Fishnet) + `isHosieryItem` single source of truth (`src/utils/item-helpers.js`).
+- Prompt: hosiery styling guidance in the static preamble; Cool/Cold weather blocks now insist skirts/minis/dresses ARE winter-viable with tights instead of being rejected for bare legs.
+- Sampler: hosiery weather gate (out in Hot/Warm, in for Mild/Cool/Cold) + a Cool/Cold boost that exempts tights from repeat-rotation and sorts them to the front of the accessories bucket whenever a skirt or dress survived the filters.
+- Validator: hosiery never counts as the look's statement (fishnet pattern) nor against the accessory cap / 6-item max; a legwear layer is a freebie, not clothing coverage.
+- Seeded 21 Noosh pairs (3 opacities × 7 colorways, `scripts/seed-hosiery.mjs`, idempotent) with season-smart metadata (`season_weight: winter`, opacity-specific notes, generated product-style images).
+
+### Fixed — Category-aware filter hardening (L3 labels)
+- "No Skirts" exclusion is L3-aware in BOTH the validator (`EXCLUSION_CHECKS`) and the sampler (`matchesExclusion`), via `getSubcatL2("Bottoms", subcategory) === "Skirts"` — the two are kept exactly in sync so a sampler-offered skirt never burns validator retries. Same fix for the sampler's hosiery-boost skirt detection.
+- `HEEL_SUBS` now covers the L3 heel labels ("Block", "Kitten" alongside "Heels"/"Stiletto"); `isBootItem` covers "Knee-High"/"Over-the-Knee" alongside "Boots"/"Ankle" (+ name regex). "Heels Only" / "No Boots" now behave on rows stored under either L2 or L3.
+- Weather checks that tested `subcategory === "Boots"` literally (validator hot/warm block, `filterByWeather`) now use `isBootItem`, so L3-labeled boots no longer leak into hot-weather looks.
+- Heel bans in Lounge/Active/Travel Day prefilters and OCCASION_SLOTS banned lists extended with "Kitten"/"Block" (Vacation intentionally untouched — block heels are explicitly welcome there). Verified: "Trousers Only" correctly excludes `Jeans` (not in the allow-list) while allowing Trousers/Satin\/Silk/Ponte; "No Jeans" still catches `subcategory === "Jeans"` + denim name regex.
+
+### Changed — Style Me simplification
+- New `STYLE_ME_OCCASIONS` (Work / Work Dinner / Casual / Dinner / Occasion / Lounge) drives the Style Me chip picker; Active, Travel Day, and Vacation disappear from Style Me only. The full `OCCASIONS` list, aliases, `normalizeOccasion`, planner, history, and SaveLookModal are untouched.
+- Mood feature removed end-to-end: chip row + `mood` state (App.jsx), `moodPromptFor` wiring (stylist.js), `moodPrompt`/moodBlock (styling-system-prompt.js), and the MOODS array itself (moods.js — `VIBE_VOCABULARY` remains). Legacy saved data stays readable: history still displays a stored `meta.mood`, `lookHash` treats missing mood as `""` so new hashes are stable, and `saveLookFeedback` writes `mood: null`.
+- "Sporty" dropped from `VIBE_VOCABULARY` (Zod enum + JSON schema + prompt's canonical vibe line all derive from it, so they auto-update). `normalizeVibe` maps legacy "sporty"/"athletic" → "Effortless" so old saves and stray model output degrade gracefully; test fixture updated accordingly. "sporty" also removed from the inspiration-summary mood descriptors.
+- Restrained polish pass on the four priority occasion prompt notes (Work, Work Dinner, Dinner, Casual) — sharper, more current phrasing; no new constraints, no material prompt growth.
+
+### Changed — Softer validator (show a look instead of an error)
+- `checkStatementCount` (HC8 one-statement rule) demoted to soft — pattern-stacking is taste, and the metadata-driven detector has false positives. The prompt still teaches it; soft failures never trigger retries or drop looks.
+- `checkCategoryBalance` split: two Shoes or two Bottoms in one look stays HARD (physically unwearable); extra accessories / doubled outerwear / a second knit demote to soft.
+- Unchanged and still hard: inventory-only IDs, lower/upper-half coverage, exclusions, occasion bans, weather compliance, shoes, coord-set integrity, dress/complete-set styling, must-include items, shoulder coverage.
+- Verified `node scripts/style-me-matrix.mjs`: all occasion × weather cells satisfiable, all positive/negative probes pass; `scripts/coerce-looks-shapes.test.mjs` 31/31.
+
 ## [Unreleased] — Saved tab restoration + smarter search/filters — 2026-08-01
 
 ### Why
