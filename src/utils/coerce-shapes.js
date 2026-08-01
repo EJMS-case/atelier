@@ -144,15 +144,20 @@ export function normalizeVibe(v, fallback = "Effortless") {
 //   5. looks is an unparseable `<parameter name="X">…` fragment while the real
 //      look fields sit as top-level siblings           → recover the trapped
 //      fields, drop the dead string, let case 4 wrap the flat look
+//   6. items is a stringified array (often a `<parameter name="items">[…]`
+//      fragment — parseLooseJson skips the prefix)     → parse so case 4 can
+//      wrap the flat look
 // Finally every look's vibe is normalized onto VIBE_VOCABULARY (untouched
 // when already canonical).
 //
-// `onRecover(original, coerced)` fires only when something actually changed —
-// the caller wires it to logging so this module stays pure.
+// `onRecover(original, coerced, cases)` fires only when something actually
+// changed — `cases` names the repairs applied (e.g. ["looks_fragments",
+// "items_string_parsed", "flat_look_wrapped"]) so the caller can log a compact
+// summary instead of full payloads. This module stays pure.
 export function coerceLooksShape(input, { onRecover } = {}) {
   if (!input || typeof input !== "object") return input;
   let out = input;
-  let recovered = false;
+  const cases = [];
 
   // Cases 1 + 2: looks is a stringified value
   if (typeof out.looks === "string") {
@@ -160,7 +165,7 @@ export function coerceLooksShape(input, { onRecover } = {}) {
     if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.looks)) parsed = parsed.looks;
     if (Array.isArray(parsed)) {
       out = { ...out, looks: parsed };
-      recovered = true;
+      cases.push("looks_string_parsed");
     } else if (parsed === null) {
       // Case 5: not JSON at all — mine `<parameter>` fragments for the trapped
       // fields (e.g. vibe) and drop the dead string so case 4 can wrap the
@@ -169,15 +174,29 @@ export function coerceLooksShape(input, { onRecover } = {}) {
       if (Object.keys(fragments).length > 0) {
         const { looks: _dead, ...rest } = out;
         out = { ...fragments, ...rest };
-        recovered = true;
+        cases.push("looks_fragments");
       }
+    }
+  }
+
+  // Case 6: items is a stringified array — seen in production as a raw
+  // `<parameter name="items">[{"id":"W099",…}]` fragment sitting where the
+  // array should be. parseLooseJson scans to the first bracket, so the XML-ish
+  // prefix is skipped naturally. Only accept an array result; anything else
+  // (e.g. a fragment holding a lone id — the item data is simply gone) is
+  // left for the retry path.
+  if (typeof out.items === "string") {
+    const parsedItems = parseLooseJson(out.items);
+    if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+      out = { ...out, items: parsedItems };
+      cases.push("items_string_parsed");
     }
   }
 
   // Case 4: single look spread at the top level (no `looks` array, has items[])
   if (!Array.isArray(out.looks) && Array.isArray(out.items)) {
     out = { looks: [out] };
-    recovered = true;
+    cases.push("flat_look_wrapped");
   }
 
   // Case 3: looks is an array but look objects are missing per-look style fields
@@ -191,7 +210,7 @@ export function coerceLooksShape(input, { onRecover } = {}) {
     }
     if (Object.keys(hoisted).length > 0) {
       out = { ...out, looks: out.looks.map(look => ({ ...hoisted, ...look })) };
-      recovered = true;
+      cases.push("hoisted_fields_injected");
     }
   }
 
@@ -208,7 +227,7 @@ export function coerceLooksShape(input, { onRecover } = {}) {
     });
     if (needsRemap) {
       out = { ...out, looks: remapped };
-      recovered = true;
+      cases.push("hero_alias_remapped");
     }
   }
 
@@ -225,12 +244,12 @@ export function coerceLooksShape(input, { onRecover } = {}) {
     });
     if (needsVibeFix) {
       out = { ...out, looks: normalized };
-      recovered = true;
+      cases.push("vibe_normalized");
     }
   }
 
-  if (recovered) {
-    onRecover?.(input, out);
+  if (cases.length > 0) {
+    onRecover?.(input, out, cases);
   }
   return out;
 }

@@ -2,6 +2,22 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Stylist recovery: stringified-items repair + compact recovery logs — 2026-08-01
+
+### Why
+`ai_errors` still shows regular `stylist_outfit:schema` failures. Replaying every post-#127 failing payload through the current `coerceLooksShape` narrowed the live gap to one shape: `items` arriving as a string — a raw `<parameter name="items">[{"id":"W099",…}]` fragment holding a perfectly good JSON array. Coercion recovered the sibling fields but never parsed the items string, so Zod rejected the look and a full retry (Opus call + 5–8s) was burned on a generation that was actually complete. Separately, every recovery wrote both the original AND coerced payloads (~1.3 kB/row, 41 rows this week) even though the `:schema` log already captures the full input whenever coercion falls short.
+
+### Fixed — `src/utils/coerce-shapes.js`
+- New coercion case 6: a stringified `items` field is parsed with `parseLooseJson` (which skips the XML-ish fragment prefix naturally) and accepted only when it yields a non-empty array — the trapped-array production payload from 2026-08-01 14:51 UTC now fully recovers instead of failing schema validation. A fragment holding only a lone id (item data genuinely lost, 08:29 UTC shape) still passes through to the retry path rather than fabricating a one-item look.
+- Replayed all 8 distinct `stylist_outfit:schema` payload shapes from `ai_errors` against the module: 7 recover, 1 (the lost-data shape) correctly retries. The pre-#127 morning-burst shapes were already handled by the deployed code.
+
+### Changed — recovery logging (`src/utils/styling-validator.js`, `coerce-shapes.js`)
+- `coerceLooksShape` now reports which repairs fired via `onRecover(original, coerced, cases)` — e.g. `["looks_fragments", "items_string_parsed", "flat_look_wrapped"]`.
+- The `stylist_outfit:recovered` log writes only that compact case list instead of full original+coerced payloads (~90% write-volume cut). Forensics are preserved exactly when needed: any input coercion can't fix still lands in `:schema` with the complete payload.
+
+### Tests
+- `scripts/coerce-looks-shapes.test.mjs`: 36/36 (was 32) — added the two production `items`-fragment shapes, a plain stringified-items case, and case-tag ordering assertions.
+
 ## [Unreleased] — Shopping/gap analysis rebuild + backup-table lockdown — 2026-08-01
 
 ### Why
