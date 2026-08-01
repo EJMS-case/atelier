@@ -944,12 +944,19 @@ export default function App() {
         base = base.filter(it => !it.last_worn || new Date(it.last_worn) < cutoff);
       }
     }
-    // Global search filter — matches name, brand, color, subcategory, notes
+    // Global search filter — matches name, brand, color, subcategory, notes,
+    // tags, material, pattern, category. Multi-word queries are AND'd: every
+    // whitespace-separated term must match somewhere ("black silk blouse"
+    // finds items matching all three terms, not any one of them).
     if (deferredSearch.trim()) {
-      const q = deferredSearch.toLowerCase().trim();
+      const terms = deferredSearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
       base = base.filter(it => {
-        const fields = [it.name, it.brand, it.color, it.color_family, it.subcategory, it.category, it.notes, it.pattern].filter(Boolean);
-        return fields.some(f => f.toLowerCase().includes(q));
+        const haystack = [
+          it.name, it.brand, it.color, it.color_family, it.subcategory,
+          it.category, it.notes, it.pattern, it.material,
+          Array.isArray(it.tags) ? it.tags.join(" ") : it.tags,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return terms.every(t => haystack.includes(t));
       });
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
@@ -1238,7 +1245,7 @@ export default function App() {
           <div style={{ position:"relative", marginBottom: 12 }}>
             <input
               type="text"
-              placeholder="Search by brand, color, item type..."
+              placeholder="Search name, brand, color, notes…"
               value={closetSearch}
               onChange={e => setClosetSearch(e.target.value)}
               style={{

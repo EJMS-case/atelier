@@ -9,6 +9,14 @@ import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeathe
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
+// Status chip shown in the card header for worn/scheduled looks — muted,
+// letter-spaced small caps, matching the app's chip design language.
+const badgeStyle = {
+  fontSize: 9.5, letterSpacing: "0.09em", textTransform: "uppercase",
+  color: "var(--color-text-muted)", border: "1px solid var(--color-border-muted)",
+  borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap",
+};
+
 export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -17,20 +25,23 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
   const [dateById,  setDateById]  = useState({});
   const [filterOcc, setFilterOcc] = useState("All");
   const [filterWx,  setFilterWx]  = useState("All");
+  // Worn-status chip: "Ready to wear" restores the old save-for-later view
+  // (unworn + unscheduled) with one tap; "Worn" shows only worn looks.
+  const [filterStatus, setFilterStatus] = useState("All");
   const [showBuilder, setShowBuilder] = useState(false);
   // Garment-set signatures for every outfit currently pinned on the planner —
-  // used to hide saved looks that have already been scheduled.
+  // used to badge saved looks that have already been scheduled.
   const [schedSigs, setSchedSigs] = useState(() => new Set());
   // Look currently being edited (null = building a new one).
   const [editingLook, setEditingLook] = useState(null);
 
   const loadLogs = () => {
-    // Saved = "save for later": only looks not yet worn. Worn looks already drop
-    // out here (date_worn set); scheduled looks are filtered below against the
-    // planner, so a look leaves Saved once it's on the calendar — and returns if
-    // it's unscheduled. Nothing is deleted.
+    // "All" shows EVERY saved look — worn and scheduled ones included. Nothing
+    // is hidden: worn/scheduled looks are badged instead (the old behavior of
+    // filtering them out made saved outfits look lost). The planner signatures
+    // below drive the "Scheduled" badge and the "Ready to wear" filter chip.
     sb.fetchOutfitLogs()
-      .then(data => { setLogs(data.filter(l => !l.date_worn)); setLoading(false); })
+      .then(data => { setLogs(data); setLoading(false); })
       .catch(() => setLoading(false));
     fetchAllPlans()
       .then(plans => {
@@ -41,26 +52,50 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
         }));
         setSchedSigs(sset);
       })
-      .catch(() => { /* non-fatal — worst case a scheduled look lingers in Saved */ });
+      .catch(() => { /* non-fatal — worst case a scheduled look misses its badge */ });
   };
   useEffect(() => { loadLogs(); }, []);
 
-  // Saved-for-later view: drop anything already scheduled on the planner.
-  const visibleLogs = logs.filter(l => !schedSigs.has(sigOf(l.garment_ids)));
+  const isScheduled = (l) => schedSigs.has(sigOf(l.garment_ids));
+  // Unworn ("ready to wear") first — newest saved on top — then worn looks,
+  // most recently worn first.
+  const visibleLogs = [...logs].sort((a, b) => {
+    const aw = a.date_worn ? 1 : 0, bw = b.date_worn ? 1 : 0;
+    if (aw !== bw) return aw - bw;
+    if (aw) return String(b.date_worn).localeCompare(String(a.date_worn));
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
   // Occasion + weather filter chips, normalized to the same vocabulary Style Me
   // uses (canonical occasion buckets; Hot…Cold weather tiers).
   const occasions = occasionChipsFor(visibleLogs);
   const weathers  = weatherChipsFor(visibleLogs);
+  const matchesStatus = (l) => {
+    if (filterStatus === "Ready to wear") return !l.date_worn && !isScheduled(l);
+    if (filterStatus === "Worn") return !!l.date_worn;
+    return true;
+  };
   const displayed = visibleLogs
-    .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx));
+    .filter(l => matchesStatus(l) && rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx));
+  // Only offer the status chips when they'd actually split the list.
+  const hasWornOrScheduled = logs.some(l => l.date_worn || isScheduled(l));
 
   const parseMeta = (url) => { try { return JSON.parse(url) || {}; } catch { return {}; } };
   const today = new Date().toISOString().slice(0, 10);
+  // "Worn Mar 4" (year appended only when it isn't the current one).
+  const formatWornDate = (d) => {
+    try {
+      const dt = new Date(d + "T12:00:00");
+      const opts = { month: "short", day: "numeric" };
+      if (dt.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+      return dt.toLocaleDateString("en-US", opts);
+    } catch { return d; }
+  };
 
   const handleLog = async (log) => {
     const date = dateById[log.id] || today;
     setLoggingId(log.id);
-    try { await onLogAsWorn(log, date); setLogs(prev => prev.filter(l => l.id !== log.id)); }
+    // The look stays in the list — it just picks up its "Worn" badge.
+    try { await onLogAsWorn(log, date); setLogs(prev => prev.map(l => l.id === log.id ? { ...l, date_worn: date } : l)); }
     catch (e) { console.error(e); }
     finally { setLoggingId(null); }
   };
@@ -84,8 +119,8 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
         onFavoriteLook={onFavoriteLook}
         onSchedule={async (plan) => {
           const res = await onSchedule(plan);
-          // Optimistically drop the just-scheduled look from Saved (it's now on
-          // the calendar, so no longer "for later").
+          // Optimistically badge the just-scheduled look as "Scheduled" (it
+          // stays in Saved — it's just marked as being on the calendar).
           setSchedSigs(prev => {
             const next = new Set(prev);
             outfitsOf(plan).forEach(o => { const sg = sigOf(o.items); if (sg) next.add(sg); });
@@ -108,7 +143,15 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           Build a Look
         </button>
       )}
-      {!loading && visibleLogs.length > 0 && occasions.length > 1 && (
+      {!loading && logs.length > 0 && hasWornOrScheduled && (
+        <div style={{...s.filterRow, marginBottom: 8}}>
+          {["All", "Ready to wear", "Worn"].map(st => (
+            <button key={st} onClick={() => setFilterStatus(st)}
+              style={{...s.chip, ...(filterStatus === st ? s.chipActive : {})}}>{st}</button>
+          ))}
+        </div>
+      )}
+      {!loading && logs.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
           {occasions.map(o => (
             <button key={o} onClick={() => setFilterOcc(o)}
@@ -116,7 +159,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           ))}
         </div>
       )}
-      {!loading && visibleLogs.length > 0 && weathers.length > 1 && (
+      {!loading && logs.length > 0 && weathers.length > 1 && (
         <div style={s.filterRow}>
           {weathers.map(w => (
             <button key={w} onClick={() => setFilterWx(w)}
@@ -125,11 +168,16 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
         </div>
       )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading your looks…</p></div>}
-      {!loading && visibleLogs.length === 0 && (
+      {!loading && logs.length === 0 && (
         <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
-          {logs.length === 0
-            ? "No looks saved yet. Build one manually or generate an outfit in Style Me."
-            : "Every saved look is scheduled or worn — nothing left for later. Save a new one, and it'll wait here until you wear it."}
+          No looks saved yet. Build one manually or generate an outfit in Style Me.
+        </p></div>
+      )}
+      {!loading && logs.length > 0 && displayed.length === 0 && (
+        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
+          {filterStatus === "Ready to wear" && filterOcc === "All" && filterWx === "All"
+            ? "Nothing waiting to be worn — every saved look is already worn or scheduled. Save a new one and it'll show up here."
+            : "No saved looks match these filters."}
         </p></div>
       )}
       {!loading && displayed.map(log => {
@@ -137,6 +185,15 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
         const pickedDate = dateById[log.id] || today;
         const occLabel = joinTags(tagsFor(log, "occasions", "occasion"));
         const wxLabel  = joinTags(tagsFor(log, "weathers",  "weather"));
+        // Status badges: worn and/or scheduled looks stay in the list, marked
+        // with a muted, letter-spaced chip in the card header.
+        const scheduled = isScheduled(log);
+        const statusBadge = (log.date_worn || scheduled) ? (
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"flex-end" }}>
+            {log.date_worn && <span style={badgeStyle}>Worn {formatWornDate(log.date_worn)}</span>}
+            {scheduled && <span style={badgeStyle}>Scheduled</span>}
+          </div>
+        ) : null;
         const subtitle = (
           <>
             {occLabel && <span>{occLabel}</span>}
@@ -145,7 +202,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           </>
         );
         return (
-          <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
+          <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} headerRight={statusBadge} notes={log.notes} onEditItem={onEditItem}
             actions={
               <>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>

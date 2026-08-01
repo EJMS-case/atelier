@@ -2,6 +2,36 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Saved tab restoration + smarter search/filters — 2026-08-01
+
+### Why
+"All of my saved outfits have been lost." They weren't — PR #117's "save for later" redesign filtered the Saved "All" list to never-worn looks and hid anything pinned on the planner. With 70 of 76 logs carrying a `date_worn` and 67 planner pins, the tab rendered near-empty and read as data loss. One log row genuinely deleted at some point was restored in-place from its planner copy (garment list, date, occasion, weather all recoverable from the pin).
+
+### Changed — Saved (`src/components/LooksView.jsx`)
+- "All" shows every saved look again: unworn first (newest saved on top), then worn (most recent first). Worn/scheduled looks get small "WORN <date>" / "SCHEDULED" header chips instead of being hidden.
+- New status chip row — All / Ready to wear / Worn. "Ready to wear" (unworn + unscheduled) is the old save-for-later view, one tap away. The row only renders when it would actually split the list.
+- "Log as worn" updates the card in place (badge appears) instead of removing it; scheduling badges rather than hides.
+- Occasion + weather chips (canonical Style Me vocabulary) now compute over the full restored list. History sub-tab unchanged (#123 already gave it matching filters).
+
+### Changed — Closet search (`src/App.jsx`)
+- Search matcher upgraded: whitespace-split terms with AND semantics ("black silk blouse" works), coverage widened to name, brand, color, color_family, category, subcategory, notes, pattern, material, and tags.
+
+### Data (Supabase, no migration)
+- Restored outfit_log `64c4792e…` from its planner pin.
+- Category cleanup on live rows so everything matches the taxonomy: `Lightweight Knits` → `Light Knit Tops`, Bottoms L2 `Pants` stragglers → `Trousers`, untagged cardigan → `Cardigans`, Loungewear `Pants`/untagged joggers → `Bottoms`, untagged Sets pieces → `Day Sets`.
+
+## [Unreleased] — Stylist output recovery + season/recency-aware styling — 2026-08-01
+
+### Why
+The `ai_errors` table showed 28 hard `stylist_outfit:schema` failures (still firing Aug 1): the model returns `looks` as a JSON-encoded string — often malformed with trailing `]}` garbage or a leaked `<parameter name="vibe">` XML fragment — and the old recovery only handled cleanly-parseable strings, so generations burned every retry and died. Also: whole generations failed over a vibe label; auto-detect died when the model omitted `brand`; error rows stored minified stack traces.
+
+### Changed
+- New pure module `src/utils/coerce-shapes.js`: `parseLooseJson` (balanced-value extraction + truncated-stream repair), `extractParameterFragments`, `normalizeVibe` (synonym mapping with safe fallback), and the upgraded `coerceLooksShape` (dependency-injected logging, node-testable). `styling-validator` delegates to it; `invokeToolStream` and `coerceGapsShape` use the loose parser before giving up.
+- `AutoDetectSchema` tolerates omitted `brand`/`material`/`pattern`/`confidence`; out-of-range confidence degrades to null.
+- `logAiError` flattens Zod issues into readable `path: message` pairs; guards undefined.
+- Season/date context ("early August — high summer in NYC") injected beside the weather block; loved-looks labeled newest-first and weighted toward current taste; item feedback decays with a 45-day half-life; finishing-touch guidance asks for the specific inventory piece.
+- Test suite imports the real implementation with fixtures for every observed production malformation — 31/31.
+
 ## [Unreleased] — Builder stylist chat sees the whole closet — 2026-06-02
 
 ### Why
