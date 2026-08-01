@@ -46,7 +46,7 @@ export const OCCASION_SLOTS = {
     required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Jeans","Trousers","Ponte","Satin/Silk","Skirts","Pants"], layer: ["Blazers","Coats","Jackets","Cardigans"], shoes: ["Heels","Loafers","Flats","Boots"], bag: true },
     optional: { belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories"], keywords: ["evening","cocktail","gown","formal","ripped","distressed"] },
-    promptNote: "WORK: Polished professional — covers everyday office, executive meetings, and interviews. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind.",
+    promptNote: "WORK: Polished and current, never stiff or corporate — everyday office through executive meetings and interviews. She should read powerful and effortless: sharp tailoring, considered layering, one quiet point of interest. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind.",
   },
   "Work Dinner": {
     // No Occasionwear pulled here per the user — Work Dinner stays this side
@@ -55,7 +55,7 @@ export const OCCASION_SLOTS = {
     required: { top: ["Blouses","Shirts","Tops","Bodysuits","Light Knit Tops"], bottom: ["Trousers","Ponte","Satin/Silk","Skirts","Pants"], shoes: ["Heels","Loafers","Boots"], bag: true },
     optional: { dress: ["Midi","Mini"], layer: ["Blazers","Coats","Jackets"], belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Tanks","Shorts","Sandals","Gowns","Formal Separates","Cocktail Dresses","Evening Accessories"], keywords: ["gown","formal","cocktail"] },
-    promptNote: "WORK DINNER: Polished but elevated — client dinners, after-work events, evening meetings. Tailored separates or a midi dress that still reads professional. Mix fabrics for texture (wool, leather, silk, satin, fine knit, structured cotton). Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO occasionwear (this is still work-adjacent, not a party).",
+    promptNote: "WORK DINNER: Desk to restaurant without changing — client dinners, after-work events, evening meetings. Tailored separates or a midi dress that still reads professional, sharpened with ONE evening cue: satin sheen, leather, a finer heel, a stronger earring. Mix fabric weights (wool, leather, silk, satin, fine knit, structured cotton). Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO occasionwear (this is still work-adjacent, not a party).",
   },
   Casual: {
     // Athleisure + Loungewear are explicitly allowed per the user. Denim
@@ -65,7 +65,7 @@ export const OCCASION_SLOTS = {
     required: { top: true, bottom: true, shoes: true },
     optional: { dress: true, layer: true, bag: true, belt: true, accessory: true },
     banned: { categories: ["Occasionwear","Swim"], subcategories: ["Cocktail Dresses","Gowns","Formal Separates","Stiletto"], keywords: ["cocktail only","evening only","boardroom only"] },
-    promptNote: "CASUAL: Daytime out — brunch, lunch, hanging with friends, errands, weekend wandering. Every look needs a top + bottom (or a dress). Polished but not trying. Denim — pants AND shorts — fully welcome. Skirts and shorts surface naturally in warm weather. Athleisure and lounge pieces (hoodies, joggers, sport tops paired with denim) work great here. Loafers, flats, low boots, sneakers, sandals when warm. The vibe is real life, not a costume.",
+    promptNote: "CASUAL: Daytime out — brunch, lunch, hanging with friends, errands, weekend wandering. Every look needs a top + bottom (or a dress). Polished but never trying: the thrown-on look where one piece is a little elevated (a great knit, a sharp flat, one real accessory) and the rest stays easy. Denim — pants AND shorts — fully welcome. Skirts and shorts surface naturally in warm weather. Athleisure and lounge pieces (hoodies, joggers, sport tops paired with denim) work great here. Loafers, flats, low boots, sneakers, sandals when warm. The vibe is real life, not a costume.",
   },
   Active: {
     // Athleisure + sneakers only. The OCCASION_PREFILTERS.Active keepCategories
@@ -73,7 +73,7 @@ export const OCCASION_SLOTS = {
     // "active" outfit looks like to the validator.
     required: { top: true, bottom: true, shoes: ["Flats"] },
     optional: { layer: true, accessory: true },
-    banned: { categories: ["Tops","Knits","Bottoms","Dresses","Sets","Jumpsuits","Outerwear","Occasionwear","Bags","Belts"], subcategories: ["Heels","Pumps","Stiletto","Mules","Loafers"], keywords: ["formal","cocktail","evening","tailored","structured"] },
+    banned: { categories: ["Tops","Knits","Bottoms","Dresses","Sets","Jumpsuits","Outerwear","Occasionwear","Bags","Belts"], subcategories: ["Heels","Pumps","Stiletto","Kitten","Block","Mules","Loafers"], keywords: ["formal","cocktail","evening","tailored","structured"] },
     promptNote: "ACTIVE: Gym, hike, pilates, run, yoga, biking. ONLY pull from Athleisure pieces (leggings, sports bras, performance tops, athletic shorts, technical tanks) and sneakers/trainers. NEVER a heeled shoe, NEVER a structured top or tailored bottom. Build a performance-functional silhouette: supportive bra, technical top, leggings or athletic shorts, training shoes. Layer a light zip-up or hoodie if cool.",
   },
   Dinner: {
@@ -84,7 +84,7 @@ export const OCCASION_SLOTS = {
     required: { top: true, bottom: true, shoes: ["Heels","Loafers","Boots"], bag: true },
     optional: { dress: true, layer: true, belt: true, accessory: true },
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals"], keywords: [] },
-    promptNote: "DINNER: Evening out — dinner parties, dinners with friends, date night, drinks. Elevated and feminine. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Lean into texture variety: silk, satin, leather, fine knit, lace, structured wool. At least one of the 3 looks should be a dress when the closet allows. Heels, refined boots, or a polished loafer. A real bag.",
+    promptNote: "DINNER: Evening out — dinner parties, dinners with friends, date night, drinks. Elevated and feminine with a little sharpness: show silhouette, let one texture do the talking. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Lean into texture variety: silk, satin, leather, fine knit, lace, structured wool. At least one of the 3 looks should be a dress when the closet allows. Heels, refined boots, or a polished loafer. A real bag.",
   },
   Occasion: {
     // Cocktail parties, weddings, galas, black-tie events. The sampler's
@@ -104,7 +104,7 @@ export const OCCASION_SLOTS = {
     // sandals don't survive long flights or rental-car ankles, so they're out.
     required: { top: true, bottom: true, shoes: ["Flats"] },
     optional: { dress: true, layer: true, bag: true, accessory: true },
-    banned: { categories: ["Occasionwear"], subcategories: ["Heels","Pumps","Stiletto","Cocktail Dresses","Gowns","Formal Separates"], keywords: ["boardroom only","office only","evening only","cocktail"] },
+    banned: { categories: ["Occasionwear"], subcategories: ["Heels","Pumps","Stiletto","Kitten","Block","Cocktail Dresses","Gowns","Formal Separates"], keywords: ["boardroom only","office only","evening only","cocktail"] },
     promptNote: "TRAVEL DAY: Airports, road trips, long-haul transit. Comfort wins. Lean into Athleisure + Loungewear — joggers, soft leggings, oversized sweatshirts, knit sets, soft cardigans. Slip-on sneakers, low boots, or comfortable flats. A roomy tote. NO heels (the user explicitly excluded these). One layer for plane temperatures. This is the comfortable-but-presentable bucket — not a costume, not pajamas.",
   },
   Vacation: {
@@ -123,7 +123,7 @@ export const OCCASION_SLOTS = {
     // an edge case.
     required: { top: true, bottom: true },
     optional: { layer: true, shoes: true },
-    banned: { categories: ["Occasionwear","Swim"], subcategories: ["Heels","Cocktail Dresses","Gowns","Formal Separates"], keywords: ["structured","tailored","suit","cocktail","formal"] },
+    banned: { categories: ["Occasionwear","Swim"], subcategories: ["Heels","Stiletto","Kitten","Block","Cocktail Dresses","Gowns","Formal Separates"], keywords: ["structured","tailored","suit","cocktail","formal"] },
     promptNote: "LOUNGE: Athleisure and casual chilling — at home, dog walk, coffee run, low-stakes errands. Heavily favor Athleisure items (matching sets, leggings, joggers, sweatshirts, hoodies, soft tees). Soft knits, oversized cardigans, slip dresses, joggers, pajama-set separates all welcome. Sneakers, slides, or barefoot-equivalent flats. Nothing structured, nothing tailored, no heels, no statement bags.",
   },
 };

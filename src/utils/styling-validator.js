@@ -8,7 +8,9 @@
 import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
-import { getSleeveType, isBootItem, isNonHeelShoe, isCompleteSetItem } from "./item-helpers.js";
+import { coerceLooksShape as coerceLooksShapeCore } from "./coerce-shapes.js";
+import { getSubcatL2 } from "../constants/taxonomy.js";
+import { getSleeveType, isBootItem, isNonHeelShoe, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
@@ -44,9 +46,14 @@ const EXCLUSION_CHECKS = {
     item.subcategory === "Jeans" ||
     /\b(jeans|denim|jean)\b/i.test((item.name || "") + " " + (item.notes || "")),
 
+  // L3-aware: skirt rows store their L3 length label ("Mini"/"Midi"/"Maxi")
+  // directly in `subcategory`, so a bare === "Skirts" test misses them.
+  // getSubcatL2 maps those L3 labels back to the "Skirts" parent. Keep this
+  // EXACTLY in sync with closet-sampler's matchesExclusion "no-skirts".
   "no-skirts": (item) =>
     item.subcategory === "Skirts" ||
-    (item.category === "Bottoms" && /skirt/i.test(item.name || "")),
+    (item.category === "Bottoms" &&
+      (getSubcatL2("Bottoms", item.subcategory) === "Skirts" || /skirt/i.test(item.name || ""))),
 
   "no-dresses": (item) =>
     item.category === "Dresses" || item.category === "Occasionwear",
@@ -321,16 +328,28 @@ function checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds
  * Check 7: Item count per look. Minimum 3 (a top + bottom + shoes is a
  * complete look) is hard; over 6 is a soft warning. A "look" of only
  * accessories/shoes/outerwear with no clothing is invalid.
+ *
+ * Hosiery is a legwear freebie for the MAX side: a full 4-6 item winter look
+ * + tights is still a valid look, and flagging it (even softly — soft
+ * failures burn a retry) would teach the model to drop the tights, undoing
+ * the whole "skirts are winter-viable" push. Hosiery still counts toward the
+ * minimum — it's not clothing coverage.
  */
-function checkItemCount(response) {
+function checkItemCount(response, idMap, allItems) {
   const failures = [];
   response.looks.forEach((look, i) => {
     const count = (look.items || []).length;
     if (count < 3) {
       failures.push(`Look ${i + 1} has only ${count} items — minimum 3 required. Looks with only accessories/shoes/outerwear and no clothing are not valid.`);
     }
-    if (count > 6) {
-      failures.push(`Look ${i + 1} has ${count} items (maximum 6 allowed).`);
+    const nonHosiery = (look.items || []).filter(item => {
+      const id = typeof item === "string" ? item : item.id;
+      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const realId = idMap?.[cleanId] || cleanId;
+      return !isHosieryItem(allItems?.find(it => it.id === realId));
+    }).length;
+    if (nonHosiery > 6) {
+      failures.push(`Look ${i + 1} has ${nonHosiery} items (maximum 6 allowed).`);
     }
   });
   return failures;
@@ -386,6 +405,9 @@ function checkCategoryBalance(response, idMap, allItems) {
       const realId = idMap[cleanId] || cleanId;
       const resolved = allItems.find(it => it.id === realId);
       if (!resolved) return;
+      // Hosiery is a legwear layer, not a "real" accessory — it must not
+      // consume the Accessories cap (earrings + necklace + tights is fine).
+      if (isHosieryItem(resolved)) return;
       catCounts[resolved.category] = (catCounts[resolved.category] || 0) + 1;
     });
 
@@ -466,10 +488,13 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
         if (heavy && resolved.category !== "Outerwear") {
           failures.push(`Look ${i + 1}: "${resolved.name}" uses a heavy fabric (wool/cashmere/heavy) — wrong for ${weather}.`);
         }
-        // Boots are always wrong in hot/warm. Coats are wrong in hot, and
-        // wrong in warm only when they're actually heavy (a "trench" or
-        // "duster" can read fine on a 75°F day; a long wool coat doesn't).
-        if (resolved.subcategory === "Boots") {
+        // Boots are always wrong in hot/warm. isBootItem is L3-aware (Boots,
+        // Ankle, Knee-High, Over-the-Knee + name regex) — a bare
+        // subcategory === "Boots" test missed boots stored under L3 labels.
+        // Coats are wrong in hot, and wrong in warm only when they're
+        // actually heavy (a "trench" or "duster" can read fine on a 75°F
+        // day; a long wool coat doesn't).
+        if (isBootItem(resolved)) {
           failures.push(`Look ${i + 1}: "${resolved.name}" (Boots) is wrong for ${weather} — pick lighter.`);
         }
         if (resolved.subcategory === "Coats") {
@@ -763,7 +788,10 @@ function checkStatementCount(response, idMap, allItems) {
       return allItems.find(it => it.id === realId);
     }).filter(Boolean);
 
-    const statements = resolved.filter(isStatementPiece);
+    // Hosiery never counts as the look's statement — micro-fishnet tights
+    // carry pattern "fishnet", but legwear is a supporting layer by
+    // definition; counting it would block a printed skirt + fishnets pairing.
+    const statements = resolved.filter(it => isStatementPiece(it) && !isHosieryItem(it));
     if (statements.length > 1) {
       const names = statements.map(s => `"${s.name}"`).join(", ");
       failures.push(`Look ${i + 1} has ${statements.length} statement pieces (${names}) — only ONE per look. Pair the most important one with quiet neutrals; swap the rest for solids.`);
@@ -833,7 +861,17 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   allFailures.push(...checkUpperHalf(response, idMap, allItems).map(f => ({ type: "upper_half", message: f, hard: true })));
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
   allFailures.push(...checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds).map(f => ({ type: "occasion", message: f, hard: true })));
-  allFailures.push(...checkCategoryBalance(response, idMap, allItems).map(f => ({ type: "category_balance", message: f, hard: true })));
+  // Category balance: only physically-unwearable stacking stays hard — two
+  // pairs of Shoes or two Bottoms in one look can't be worn together and must
+  // be rebuilt. Everything else the caps catch (an extra accessory, a second
+  // knit layer, doubled outerwear) is a taste-level nit: a shown look beats an
+  // error, so those demote to soft (owner request — stop forcing errors over
+  // aesthetics). Soft failures never trigger retries; they only inform the
+  // corrective prompt when a retry happens for a hard reason.
+  checkCategoryBalance(response, idMap, allItems).forEach(f => {
+    const structural = /\d+ (Shoes|Bottoms) items/.test(f);
+    allFailures.push({ type: "category_balance", message: f, hard: structural });
+  });
   allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
   allFailures.push(...checkShoes(response, idMap, allItems, occasion).map(f => ({ type: "shoes", message: f, hard: true })));
   allFailures.push(...checkBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "bag", message: f, hard: false })));
@@ -841,12 +879,18 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   allFailures.push(...checkDressStyling(response, idMap, allItems).map(f => ({ type: "dress_styling", message: f, hard: true })));
   allFailures.push(...checkCompleteSets(response, idMap, allItems).map(f => ({ type: "complete_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
-  allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: true })));
+  // Statement count (HC8) is now SOFT: pattern-stacking is a taste call, and
+  // the metadata-driven statement detector has false positives (auto-detected
+  // patterns, embellishment keywords in notes). Killing a whole generation —
+  // or silently dropping a look in salvage — over "two prints" was worse than
+  // showing the look. The prompt still teaches one-statement; a soft failure
+  // still steers any retry triggered by a real (hard) problem.
+  allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: false })));
   allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion, weather).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
 
   // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
   // Over-maximum is soft — acceptable to show, just noisy.
-  checkItemCount(response).forEach(f => {
+  checkItemCount(response, idMap, allItems).forEach(f => {
     const isUnder = f.includes("minimum");
     allFailures.push({ type: "item_count", message: f, hard: isUnder });
   });
@@ -988,74 +1032,15 @@ function extractCompleteLooks(partialJson) {
   return looks;
 }
 
-// Some models occasionally emit the tool input DOUBLE-ENCODED or FLATTENED —
-// `looks` arrives as a stringified value, or per-look style fields (vibe,
-// rationale, etc.) are hoisted to the top level instead of living inside each
-// look object. Recover all three shapes before the Zod check so an otherwise
-// correct generation isn't discarded.
-//
-// Cases handled (idempotent — already-correct input passes through unchanged):
-//   1. looks is a string containing "[{…}]"            → parse, use as array
-//   2. looks is a string containing {"looks":[…]}      → parse, unwrap, use
-//   3. looks is an array of item-only objects AND
-//      vibe/rationale/etc. are top-level siblings      → inject into each look
-//   4. No looks array but a single look spread flat    → wrap in array
+// Shape recovery for malformed tool output lives in coerce-shapes.js (pure,
+// node-testable — see scripts/coerce-looks-shapes.test.mjs). This wrapper
+// injects the ai_errors logging via onRecover so callers keep the old
+// zero-config signature and logging behavior is unchanged.
 export function coerceLooksShape(input) {
-  if (!input || typeof input !== "object") return input;
-  let out = input;
-  let recovered = false;
-
-  // Cases 1 + 2: looks is a stringified value
-  if (typeof out.looks === "string") {
-    try {
-      let parsed = JSON.parse(out.looks);
-      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.looks)) parsed = parsed.looks;
-      if (Array.isArray(parsed)) { out = { ...out, looks: parsed }; recovered = true; }
-    } catch { /* leave as-is — schema check will reject and trigger retry */ }
-  }
-
-  // Case 4: single look spread at the top level (no `looks` array, has items[])
-  if (!Array.isArray(out.looks) && Array.isArray(out.items)) {
-    out = { looks: [out] };
-    recovered = true;
-  }
-
-  // Case 3: looks is an array but look objects are missing per-look style fields
-  // because the model hoisted them as top-level siblings. Inject them into each
-  // look so Zod can find the required `vibe`. Look-level values win if present.
-  const LOOK_FIELDS = ["vibe", "rationale", "silhouette", "focal_point", "texture_story", "color_strategy"];
-  if (Array.isArray(out.looks) && out.looks.length > 0) {
-    const hoisted = {};
-    for (const k of LOOK_FIELDS) {
-      if (out[k] !== undefined) hoisted[k] = out[k];
-    }
-    if (Object.keys(hoisted).length > 0) {
-      out = { ...out, looks: out.looks.map(look => ({ ...hoisted, ...look })) };
-      recovered = true;
-    }
-  }
-
-  // Field alias: model occasionally returns 'hero' where schema expects 'focal_point'.
-  // Zod silently drops the value (focal_point has .default("")) — remap before the check.
-  if (Array.isArray(out.looks)) {
-    let needsRemap = false;
-    const remapped = out.looks.map(look => {
-      if (!look.focal_point && look.hero !== undefined) {
-        needsRemap = true;
-        return { ...look, focal_point: look.hero };
-      }
-      return look;
-    });
-    if (needsRemap) {
-      out = { ...out, looks: remapped };
-      recovered = true;
-    }
-  }
-
-  if (recovered) {
-    logAiError("stylist_outfit:recovered", { original: input, coerced: out }, "coerceLooksShape recovered malformed tool output");
-  }
-  return out;
+  return coerceLooksShapeCore(input, {
+    onRecover: (original, coerced) =>
+      logAiError("stylist_outfit:recovered", { original, coerced }, "coerceLooksShape recovered malformed tool output"),
+  });
 }
 
 // ── Main entry point ─────────────────────────────────────────────────────────

@@ -524,23 +524,31 @@ export const sb = {
     }
     return res.json();
   },
-  // Returns { itemId: signedSum } across all look_feedback rows. Positive sums
+  // Returns { itemId: weightedSum } across all look_feedback rows. Positive sums
   // promote items in the cold-item sort; negative sums penalize them so disliked
   // items surface less frequently. Previously fetched only rating > 0 so thumbs-
-  // down had no effect — now all ratings contribute.
+  // down had no effect — now all ratings contribute. Each rating decays with a
+  // 45-day half-life so her CURRENT taste outweighs months-old votes — a ✕ from
+  // yesterday matters, a ✕ from last season barely registers.
   async fetchItemFeedbackScores() {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating`,
+      `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating,created_at`,
       { headers: SB_HEADERS },
     );
     if (!res.ok) return {};
     const rows = await res.json().catch(() => []);
+    const HALF_LIFE_DAYS = 45;
+    const now = Date.now();
     const scores = {};
     for (const row of rows) {
       const rating = Number(row.rating) || 0;
       if (rating === 0) continue;
+      const ageDays = row.created_at
+        ? Math.max(0, (now - new Date(row.created_at).getTime()) / 86400000)
+        : 0;
+      const weighted = rating * Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
       for (const id of row.item_ids || []) {
-        scores[id] = (scores[id] || 0) + rating;
+        scores[id] = (scores[id] || 0) + weighted;
       }
     }
     return scores;

@@ -21,7 +21,7 @@ export const TAXONOMY = {
   Shoes:        ["Boots","Flats","Heels","Loafers","Sandals"],
   Bags:         ["Clutch","Crossbody","Shoulder","Tote"],
   Belts:        [],
-  Accessories:  ["Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
+  Accessories:  ["Hosiery","Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
 };
 
 export const SUBCATEGORY_L3 = {
@@ -29,6 +29,7 @@ export const SUBCATEGORY_L3 = {
   "Skirts":             ["Mini","Midi","Maxi"],
   "Boots":              ["Ankle","Knee-High","Over-the-Knee"],
   "Heels":              ["Block","Kitten","Stiletto"],
+  "Hosiery":            ["Sheer","Semi-Opaque","Opaque","Fishnet"],
   "Jewelry":            ["Bracelets","Earrings","Necklaces","Rings"],
   "Earrings":           ["Drop","Stud"],
   "Necklaces":          ["Layering","Statement"],
@@ -61,6 +62,13 @@ export const OCCASIONS = [
   "Work", "Work Dinner", "Casual", "Active", "Dinner", "Occasion",
   "Travel Day", "Vacation", "Lounge",
 ];
+
+// The trimmed set offered by the Style Me chip picker — per the owner: her
+// life is Work / Work Dinner / Dinner / Casual (plus Occasion and Lounge);
+// "Active" isn't needed in Style Me and vacation days are covered by these
+// occasions + weather. The FULL list above stays intact for the planner,
+// history filters, aliases, and SaveLookModal — this only narrows the picker.
+export const STYLE_ME_OCCASIONS = ["Work", "Work Dinner", "Casual", "Dinner", "Occasion", "Lounge"];
 
 // Map deprecated occasion labels → the bucket they now live in. Used by any
 // code reading historical outfit_logs / planner entries / favorites.

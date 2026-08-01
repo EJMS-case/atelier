@@ -11,9 +11,14 @@ import { SUPABASE_URL, SB_HEADERS } from "../supabase.js";
  * @param {unknown} error   - Error instance or string
  */
 export function logAiError(kind, payload, error) {
-  const errorText = error instanceof Error
-    ? (error.stack || error.message || String(error))
-    : typeof error === "string" ? error : JSON.stringify(error);
+  // ZodErrors first: their .stack is a minified-bundle trace that tells you
+  // nothing in the table. Flatten the issue list into readable "path: message"
+  // pairs instead. Plain Errors keep the stack.
+  const errorText = error && Array.isArray(error.issues)
+    ? error.issues.map(i => `${(i.path || []).join(".") || "(root)"}: ${i.message}`).join("; ")
+    : error instanceof Error
+      ? (error.stack || error.message || String(error))
+      : typeof error === "string" ? error : (JSON.stringify(error) ?? "unknown");
 
   const body = JSON.stringify({
     kind: String(kind).slice(0, 100),

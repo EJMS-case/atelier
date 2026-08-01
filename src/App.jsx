@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef, la
 // the AI layer from App.jsx. The lower-level helpers (sampler / validator /
 // prompt builder / rotation tracker) live behind generateOutfit and don't
 // need to be re-imported here.
-import { MOODS } from "./features/stylist/moods.js";
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import { generateStyleFingerprint } from "./features/stylist/styleFingerprint.js";
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
@@ -13,7 +12,7 @@ import HomeView from "./features/home/HomeView.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, si, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
-import { SET_TAGS, OCCASIONS } from "./constants/taxonomy.js";
+import { SET_TAGS, STYLE_ME_OCCASIONS } from "./constants/taxonomy.js";
 import { COLOR_FAMILY_RANGES, effectiveColorFamily } from "./constants/color.js";
 import {
   colorSortIdx, defaultSortComparator, mergeItems,
@@ -177,7 +176,6 @@ export default function App() {
   // Weather is a Set (one temp chip at a time). Empty Set === "Any". Stored
   // as Set in state, joined to a string when passed downstream.
   const [weather,    setWeather]    = useState(() => new Set());
-  const [mood,       setMood]       = useState(""); // F2 — mood tag key
   const [request,    setRequest]    = useState("");
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
@@ -653,7 +651,7 @@ export default function App() {
   }, [setView]);
 
   // "Build a similar look" from a saved log. Seeds Style Me with the original
-  // look's silhouette description + its occasion / weather / mood, then opens
+  // look's silhouette description + its occasion / weather, then opens
   // the panel. The free-text prompt nudges the AI to keep the silhouette shape
   // (e.g. midi-skirt + silk-blouse + heels) while varying colors and specific
   // pieces — not regenerate the same outfit.
@@ -672,17 +670,15 @@ export default function App() {
     } else {
       setRequest("");
     }
-    // Pre-fill occasion / weather / mood from the original look so the user
-    // doesn't have to re-set them. Multi-tag aware (legacy logs use the
-    // singular field, newer ones use the plural array).
+    // Pre-fill occasion / weather from the original look so the user doesn't
+    // have to re-set them. Multi-tag aware (legacy logs use the singular
+    // field, newer ones use the plural array). Saved logs may still carry a
+    // legacy meta.mood in collage_url — the mood feature was removed by owner
+    // request, so it's displayed in history but no longer pre-filled here.
     const occ = (Array.isArray(log?.occasions) ? log.occasions[0] : null) || log?.occasion;
     if (occ) setOccasion(occ);
     const wx = (Array.isArray(log?.weathers) ? log.weathers[0] : null) || log?.weather;
     if (wx) setWeather(new Set([wx]));
-    try {
-      const meta = log?.collage_url ? JSON.parse(log.collage_url) : null;
-      if (meta?.mood) setMood(meta.mood);
-    } catch { /* meta not JSON — ignore */ }
     setView("style");
     setStylePanelOpen(true);
   }, [items, setView]);
@@ -785,7 +781,7 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
-        { mood, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, count }
+        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, count }
       );
       if (result?.no_viable_looks) {
         throw new Error(result.stylist_note || "The stylist couldn't build a suitable look from your current wardrobe for this combination.");
@@ -944,12 +940,19 @@ export default function App() {
         base = base.filter(it => !it.last_worn || new Date(it.last_worn) < cutoff);
       }
     }
-    // Global search filter — matches name, brand, color, subcategory, notes
+    // Global search filter — matches name, brand, color, subcategory, notes,
+    // tags, material, pattern, category. Multi-word queries are AND'd: every
+    // whitespace-separated term must match somewhere ("black silk blouse"
+    // finds items matching all three terms, not any one of them).
     if (deferredSearch.trim()) {
-      const q = deferredSearch.toLowerCase().trim();
+      const terms = deferredSearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
       base = base.filter(it => {
-        const fields = [it.name, it.brand, it.color, it.color_family, it.subcategory, it.category, it.notes, it.pattern].filter(Boolean);
-        return fields.some(f => f.toLowerCase().includes(q));
+        const haystack = [
+          it.name, it.brand, it.color, it.color_family, it.subcategory,
+          it.category, it.notes, it.pattern, it.material,
+          Array.isArray(it.tags) ? it.tags.join(" ") : it.tags,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return terms.every(t => haystack.includes(t));
       });
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
@@ -987,10 +990,13 @@ export default function App() {
           {/* WHERE ARE YOU GOING? — occasion pills.
               No auto-override of styleExcludes anymore — clicking an occasion
               changes the occasion only. Her exclusion toggles below are HER
-              decision and stay sticky across occasion changes. */}
+              decision and stay sticky across occasion changes.
+              STYLE_ME_OCCASIONS is the trimmed six-chip set — Active / Travel
+              Day / Vacation still exist app-wide (planner, history) but are
+              intentionally absent from this picker per the owner. */}
           <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>WHERE ARE YOU GOING?</div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-            {OCCASIONS.map(o => (
+            {STYLE_ME_OCCASIONS.map(o => (
               <button key={o}
                 style={occasion === o
                   ? {...s.chip, ...s.chipActive, fontSize:11, padding:"6px 12px"}
@@ -1041,27 +1047,6 @@ export default function App() {
                 </>
               );
             })()}
-          </div>
-
-          {/* MOOD — F2 */}
-          <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6}}>MOOD (OPTIONAL)</div>
-          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-            <button
-              style={mood === ""
-                ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                : {...s.chip, fontSize:11, padding:"5px 11px"}}
-              onClick={() => setMood("")}>
-              None
-            </button>
-            {MOODS.map(m => (
-              <button key={m.key}
-                style={mood === m.key
-                  ? {...s.chip, ...s.chipActive, fontSize:11, padding:"5px 11px"}
-                  : {...s.chip, fontSize:11, padding:"5px 11px"}}
-                onClick={() => setMood(m.key)}>
-                {m.label}
-              </button>
-            ))}
           </div>
 
           {/* DON'T INCLUDE — user exclusion toggles */}
@@ -1238,7 +1223,7 @@ export default function App() {
           <div style={{ position:"relative", marginBottom: 12 }}>
             <input
               type="text"
-              placeholder="Search by brand, color, item type..."
+              placeholder="Search name, brand, color, notes…"
               value={closetSearch}
               onChange={e => setClosetSearch(e.target.value)}
               style={{
@@ -1589,12 +1574,14 @@ export default function App() {
               onRate={async (lk, rating) => {
                 try {
                   const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
+                  // Mood feature removed — lookHash treats a missing mood as ""
+                  // so new hashes stay stable, and legacy hashes (which baked a
+                  // mood in) simply never collide with new ones.
                   await saveLookFeedback({
-                    lookHash: lookHash({ occasion: lk.occasion || occasion, itemIds, mood }),
+                    lookHash: lookHash({ occasion: lk.occasion || occasion, itemIds }),
                     rating,
                     itemIds,
                     occasion: lk.occasion || occasion,
-                    mood: mood || null,
                   });
                   // refresh aggregate scores so next generation reflects the new rating
                   const scores = await fetchItemFeedbackScores().catch(() => null);

@@ -6,6 +6,7 @@
 // `ai_errors` via logAiError so they can be inspected later.
 
 import { logAiError } from "./logError.js";
+import { parseLooseJson } from "../../utils/coerce-shapes.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 
@@ -187,8 +188,14 @@ export async function invokeToolStream({
   try {
     input = JSON.parse(inputJson);
   } catch {
-    // JSON parse failed — return the raw string so the no_tool_use log has context.
-    return { toolBlock: null, raw: inputJson || null };
+    // Strict parse failed — often the JSON is trivially repairable (trailing
+    // garbage after a balanced value, or a truncated tail). Salvage with the
+    // tolerant parser before burning the attempt as no_tool_use.
+    input = parseLooseJson(inputJson);
+    if (input === null) {
+      // Truly unrecoverable — return the raw string so the no_tool_use log has context.
+      return { toolBlock: null, raw: inputJson || null };
+    }
   }
   return { toolBlock: { type: "tool_use", name: tool.name, input }, raw: null };
 }
