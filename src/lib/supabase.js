@@ -554,6 +554,32 @@ export const sb = {
     return scores;
   },
 
+  // Loved looks — every thumbs-up she's given in Style Me, newest first. The
+  // Favorites tab renders these directly: the thumbs-up IS her favorite signal
+  // (the heart-driven `favorites` table went untouched for weeks while
+  // look_feedback accumulated 20+ loves).
+  async fetchLovedLooks() {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/look_feedback?select=id,item_ids,occasion,created_at&rating=eq.1&order=created_at.desc`,
+        { headers: SB_HEADERS },
+      );
+      if (!res.ok) return [];
+      return (await res.json().catch(() => [])) || [];
+    } catch { return []; }
+  },
+
+  // Un-love from the Favorites tab. Deletes the feedback row outright, which
+  // also removes its (decayed) influence on stylist item scores — coherent:
+  // the thumbs-up is the favorite, so removing one removes the other.
+  async deleteLookFeedback(id) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/look_feedback?id=eq.${id}`, {
+      method: "DELETE",
+      headers: SB_HEADERS,
+    });
+    if (!res.ok) throw new Error("Remove loved look failed");
+  },
+
   // Recent looks she rated with a thumbs down — { item_ids, occasion }. Used to
   // warn the stylist about combinations / items she actively disliked. Capped at
   // 10 most-recent rows so the prompt block stays compact.
