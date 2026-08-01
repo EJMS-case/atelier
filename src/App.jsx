@@ -31,6 +31,9 @@ import { nyToday } from "./lib/time.js";
 import {
   generateOutfit, classifyKnitAI, analyzeColorAI,
 } from "./lib/ai/stylist.js";
+// Rotation memory sync: generation-time reads/writes stay inside generateOutfit;
+// App only bridges the localStorage state to user_settings for cross-device use.
+import { exportRotationState, mergeRemoteRotationState } from "./utils/rotation-tracker.js";
 // Inline imports — these render on the default Home/Closet view and would
 // trigger a Suspense flash on first paint if lazy.
 import FilterBar from "./components/FilterBar.jsx";
@@ -217,6 +220,13 @@ export default function App() {
   useEffect(() => {
     listInspirations().then(setInspirations).catch(() => setInspirations([]));
     sb.getStyleFingerprint().then(setStyleFingerprint).catch(() => setStyleFingerprint(null));
+    // Pull the other devices' anti-repeat memory so this one doesn't re-suggest
+    // pieces the stylist just offered elsewhere, then push the merged union
+    // back so the remote copy is the superset (cheap single-row write).
+    sb.getRotationState().then(remote => {
+      mergeRemoteRotationState(remote);
+      sb.saveRotationState(exportRotationState());
+    }).catch(() => {});
   }, []);
   // ── Sets metadata ──
   const [setsMeta,       setSetsMeta]       = useState(() => loadSetsMeta());
@@ -820,6 +830,10 @@ export default function App() {
         // API/network errors already carry a friendly message from the AI layer.
         setStyleErr(e.message || "Styling failed — try again in a moment.");
       }
+    } finally {
+      // Fire-and-forget: mirror this device's updated anti-repeat memory to
+      // user_settings so her other devices rotate around these looks too.
+      sb.saveRotationState(exportRotationState());
     }
   };
 

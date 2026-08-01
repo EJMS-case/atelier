@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed 2026-08-01 at the end of the "stylist recovery + favorites" session (PRs #131, #132, both merged to `main` and deployed; #130 tri-state filters shipped in parallel the same day). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
+Refreshed 2026-08-01 at the end of the "anti-repeat rotation" session (follows #131/#132/#133 the same day). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
 
 ## Owner preferences (standing, do not re-ask)
 
@@ -29,14 +29,16 @@ Refreshed 2026-08-01 at the end of the "stylist recovery + favorites" session (P
 - **`wardrobe_items_backup_20260728` RLS** enabled via migration (service-role-only). Remaining advisor warnings ("allow all" policies, public bucket listing) are the app's intentional single-user design.
 - **Style fingerprint** exists and self-maintains (see above).
 - **`OutfitBuilder` dead code** already removed; an unused-export scan across `src/` found nothing.
+- **"Same pieces over and over" (this session)**: root causes were (1) rotation memory measured in generations — the single-look fast path silently shrank ~24 looks of memory to ~8; (2) generations whose final validation threw left their streamed (still-displayed) look unrecorded; (3) the sampler's claimed "cold-item ordering bias" no longer existed (pure shuffle, cold-boost slice of 0). Fixed: look-based 24-deep memory with timestamps, streamed looks always recorded, LRU floor backfill, freshest-first bucket ordering (feedback-aware bands), cross-device sync via `user_settings.rotation_state`. Tests: `npm run test:rotation`. Post-#131 recovery confirmed working live: the 18:13 UTC `:recovered` row carries the compact `{cases}` payload, and the last `:schema` row (14:51 UTC) is the exact stringified-items shape case 6 now repairs.
 
 ## Known open items (start here)
 
-1. **Watch `ai_errors` post-#131**: `stylist_outfit:schema` should now be rare (only genuinely-lost-data shapes) and `:recovered` payloads compact. If `:schema` persists at the old rate, pull the payloads and replay them through `coerce-shapes.js` in node (import the real module, feed the exact `payload->'input'` values) before changing anything.
-2. **Legacy dual-labeling**: rows store both L2 and L3 subcategory labels ("Heels" vs "Stiletto"). Matchers accept both, but a real normalization (one convention, enforced on write) would simplify everything.
-3. **Trip planner**: naive seasonal weather estimate (PLAN.md F3) — real per-destination forecast fetch still open (Open-Meteo is keyless and browser-callable); drag-and-drop between days never landed.
-4. **Favorites follow-ups (optional)**: Shopping sub-tab is still "coming soon"; piece-favorites could inform the sampler (currently only `look_feedback` scores do).
-5. **Hosiery images** are inline SVG data-URIs — replacing with real bg-removed product photos of her Noosh pairs is an open nicety (`scripts/seed-hosiery.mjs --sql` is idempotent).
+1. **Ask the owner how repetition feels after a few days** of the anti-repeat changes (this session). If pieces still feel samey, the next lever is the LOOK-COMBINATION level (the `previousLooks` param App passes to `generateOutfit` is currently unused — could feed recent silhouette recipes to the prompt as "don't repeat these combos"), not the item level. Also watch that a 24-look window doesn't over-starve narrow pools (Occasion, small-weather Work) — the per-bucket floors should prevent it; `no_viable_looks` rows or complaints about thin variety on narrow occasions are the symptom to watch for.
+2. **Watch `ai_errors` post-#131**: `stylist_outfit:schema` should now be rare (only genuinely-lost-data shapes) and `:recovered` payloads compact (confirmed once live at 18:13 UTC 2026-08-01). If `:schema` persists at the old rate, pull the payloads and replay them through `coerce-shapes.js` in node (import the real module, feed the exact `payload->'input'` values) before changing anything.
+3. **Legacy dual-labeling**: rows store both L2 and L3 subcategory labels ("Heels" vs "Stiletto"). Matchers accept both, but a real normalization (one convention, enforced on write) would simplify everything.
+4. **Trip planner**: naive seasonal weather estimate (PLAN.md F3) — real per-destination forecast fetch still open (Open-Meteo is keyless and browser-callable); drag-and-drop between days never landed.
+5. **Favorites follow-ups (optional)**: Shopping sub-tab is still "coming soon"; piece-favorites could inform the sampler (currently only `look_feedback` scores do).
+6. **Hosiery images** are inline SVG data-URIs — replacing with real bg-removed product photos of her Noosh pairs is an open nicety (`scripts/seed-hosiery.mjs --sql` is idempotent).
 
 ## Efficiency / token-cost targets (owner explicitly wants this)
 
@@ -56,5 +58,5 @@ Refreshed 2026-08-01 at the end of the "stylist recovery + favorites" session (P
 
 - Feature branch → PR → merge `main` (auto-deploy). Squash-merge with `(#NN)` in the title, matching history. **Parallel sessions ship to `main`** (this session raced #130): always `git fetch origin main` and merge/rebase before pushing, and expect CHANGELOG conflicts at the top of the file.
 - Update `CHANGELOG.md` per feature (house style: Why / Added / Changed / Fixed).
-- Never break: `scripts/coerce-looks-shapes.test.mjs` (36 tests), `scripts/style-filters.test.mjs` (17 tests), `scripts/style-me-matrix.mjs`, `npm run build`. Run `npm ci` first in a fresh container.
+- Never break: `scripts/coerce-looks-shapes.test.mjs` (36 tests), `scripts/style-filters.test.mjs` (17 tests), `scripts/rotation.test.mjs` (13 tests), `scripts/style-me-matrix.mjs`, `npm run build`. Run `npm ci` first in a fresh container.
 - Keep this HANDOFF.md current: when a session resolves or discovers items, rewrite the doc before ending — a stale handoff sends the next session chasing closed issues.

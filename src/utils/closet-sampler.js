@@ -2,8 +2,9 @@
 // Filters the closet by occasion + weather + exclusions, then passes the FULL
 // surviving pool to the AI. Was a strict ~92-item sample, but the user wanted
 // every eligible piece in play — so the bucket targets below are effectively
-// uncapped. Cold-item logic kept around for ordering bias (under-rotated
-// pieces sort first within each bucket).
+// uncapped. Freshness lives in two places: the recent-look window drops
+// repeats from the pool outright (step 3b), and each bucket is ordered
+// rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, getSubcatL2 } from "../constants/taxonomy.js";
 import { slotForItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
@@ -207,13 +208,13 @@ const BUCKET_TARGETS = {
 
 const TOTAL_TARGET = Object.values(BUCKET_TARGETS).reduce((a, b) => a + b, 0);
 
-// Cold-boost forced-inclusion is disabled (0): the pool is now uncapped, so
-// every eligible piece already reaches the model — there's nothing to "boost
-// into" a narrow sample. Rediscovery of under-worn pieces is instead handled
-// where it belongs, by tagging genuinely rested items ([RESTING: …]) in
-// formatInventory so the stylist can prefer them when they fit. (The cold-item
-// sort below is retained only for its ordering bias.)
-const COLD_BOOST_SIZE = 0;
+// Freshness ordering band. Buckets are shuffled for variety, then stable-
+// sorted by this coarse band of the item's lifetime suggestion count, so
+// never/rarely-suggested pieces lead each bucket in the prompt inventory and
+// the model's go-to heroes trail it. Bands (0, 1-2, 3-6, 7+) rather than raw
+// counts keep the shuffle meaningful within each tier — total determinism
+// would freeze the inventory order between taps.
+const freshnessBand = (count) => count <= 0 ? 0 : count <= 2 ? 1 : count <= 6 ? 2 : 3;
 
 /**
  * Fuzzy-match the free-text request against item fields to find force-include items.
@@ -312,8 +313,9 @@ function matchesFreeText(item, freeText) {
  * @param {Object}    params.occasionSlots        - the OCCASION_SLOTS entry
  * @param {string}    params.weather              - selected weather
  * @param {function}  params.filterByWeather      - weather filter function from App
- * @param {Object}    params.itemSuggestionCounts - { itemId: count }
- * @param {string[]}  params.recentlySuggestedItems - item IDs from last 3 gens
+ * @param {Object}    params.itemSuggestionCounts - { itemId: lifetime count }
+ * @param {string[]}  params.recentlySuggestedItems - item IDs in the recent-look window
+ * @param {Object}    params.recencyRank          - { itemId: looksAgo } (0 = newest)
  * @param {string}    params.userId               - for seeding randomizer
  * @returns {{ sampled: Object[], idMap: Object, reverseMap: Object }}
  */
@@ -327,6 +329,7 @@ export function sampleClosetItems({
   filterByWeather,
   itemSuggestionCounts = {},
   recentlySuggestedItems = [],
+  recencyRank = {},             // { itemId: looksAgo } — LRU backfill ordering
   recentlyWornItems = [],       // F2 — items from outfit_logs in last 3 days
   feedbackScores = {},          // F2 — { itemId: signedSum } from look_feedback
   userId = "default",
@@ -499,18 +502,18 @@ export function sampleClosetItems({
             (boostHosiery && isHosieryItem(it))) fresh.push(it);
         else stale.push(it);
       }
-      // Drop the MOST-repeated stale items first; keep the least-used ones to
-      // backfill up to the floor when there aren't enough fresh pieces.
-      stale.sort((a, b) => (itemSuggestionCounts[a.id] || 0) - (itemSuggestionCounts[b.id] || 0));
+      // Backfill with the LEAST-RECENTLY-suggested repeats first (highest
+      // looksAgo), so a floor never resurrects the piece from the tap before
+      // last when an older repeat exists. Lifetime count breaks ties.
+      stale.sort((a, b) =>
+        ((recencyRank[b.id] ?? Infinity) - (recencyRank[a.id] ?? Infinity)) ||
+        ((itemSuggestionCounts[a.id] || 0) - (itemSuggestionCounts[b.id] || 0))
+      );
       const need = Math.max(0, floor - fresh.length);
       rotated.push(...fresh, ...stale.slice(0, need));
     }
     pool = rotated;
   }
-
-  // feedbackScores is now a signed sum — positive from thumbs-up, negative from
-  // thumbs-down. Items stay in the pool regardless; scores only affect the cold-
-  // item sort order below (loved items surface more, disliked items surface less).
 
   // ── 4. Identify force-include items (free-text match) ──
   const forceInclude = freeTextRequest
@@ -518,30 +521,11 @@ export function sampleClosetItems({
     : [];
   const forceIds = new Set(forceInclude.map(it => it.id));
 
-  // ── 5. Identify cold items (never suggested or not in the last few gens) ──
-  const recentSet = new Set(recentlySuggestedItems);
-  const coldItems = pool.filter(it => {
-    if (forceIds.has(it.id)) return false; // already forced
-    const count = itemSuggestionCounts[it.id] || 0;
-    return count === 0 || !recentSet.has(it.id);
-  });
-
-  // Sort coldest first (lowest suggestion count). Up-voted items are promoted
-  // — one positive rating cancels one prior suggestion for ranking purposes.
-  coldItems.sort((a, b) => {
-    const aScore = (itemSuggestionCounts[a.id] || 0) - (feedbackScores[a.id] || 0);
-    const bScore = (itemSuggestionCounts[b.id] || 0) - (feedbackScores[b.id] || 0);
-    return aScore - bScore;
-  });
-  const coldBoost = coldItems.slice(0, COLD_BOOST_SIZE);
-  const coldIds = new Set(coldBoost.map(it => it.id));
-
-  // ── 6. Bucket remaining pool ──
+  // ── 5. Bucket remaining pool ──
   const seed = hashString(userId + Date.now().toString());
   const rng = seededRng(seed);
 
-  // Remove force-include and cold-boost from the general pool
-  const generalPool = pool.filter(it => !forceIds.has(it.id) && !coldIds.has(it.id));
+  const generalPool = pool.filter(it => !forceIds.has(it.id));
 
   const buckets = {};
   for (const key of Object.keys(BUCKET_TARGETS)) buckets[key] = [];
@@ -550,9 +534,19 @@ export function sampleClosetItems({
     if (buckets[bucket]) buckets[bucket].push(it);
   });
 
-  // Shuffle each bucket
+  // Shuffle each bucket for tap-to-tap variety, then stable-sort by freshness
+  // band so rarely-suggested pieces lead the inventory and lifetime heroes
+  // trail it — lasting anti-repetition pressure that outlives the recent-look
+  // window (the model reads list order as salience). Up-voted items get a
+  // band's worth of credit: one loved rating offsets a tier of familiarity;
+  // down-votes push a piece back. feedbackScores is a signed sum — items stay
+  // in the pool regardless, scores only shift ordering.
   for (const key of Object.keys(buckets)) {
     buckets[key] = seededShuffle(buckets[key], rng);
+    buckets[key].sort((a, b) => {
+      const bandOf = (it) => Math.max(0, freshnessBand(itemSuggestionCounts[it.id] || 0) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0));
+      return bandOf(a) - bandOf(b);
+    });
   }
 
   // Cool/cold skirt pools: hosiery leads the accessories bucket so it survives
@@ -562,30 +556,23 @@ export function sampleClosetItems({
     buckets.accessories.sort((a, b) => (isHosieryItem(b) ? 1 : 0) - (isHosieryItem(a) ? 1 : 0));
   }
 
-  // ── 7. Calculate per-bucket targets ──
-  // Account for force-include and cold-boost items already counted
+  // ── 6. Calculate per-bucket targets ──
+  // Account for force-include items already counted
   const forceBucketCounts = {};
-  const coldBucketCounts = {};
   for (const key of Object.keys(BUCKET_TARGETS)) {
     forceBucketCounts[key] = 0;
-    coldBucketCounts[key] = 0;
   }
   forceInclude.forEach(it => {
     const b = getBucket(it);
     if (forceBucketCounts[b] !== undefined) forceBucketCounts[b]++;
   });
-  coldBoost.forEach(it => {
-    const b = getBucket(it);
-    if (coldBucketCounts[b] !== undefined) coldBucketCounts[b]++;
-  });
 
   // Sample from each bucket up to the adjusted target
-  const sampled = [...forceInclude, ...coldBoost];
+  const sampled = [...forceInclude];
   const sampledIds = new Set(sampled.map(it => it.id));
 
   for (const [bucketKey, target] of Object.entries(BUCKET_TARGETS)) {
-    const alreadyCounted = (forceBucketCounts[bucketKey] || 0) + (coldBucketCounts[bucketKey] || 0);
-    const remaining = Math.max(0, target - alreadyCounted);
+    const remaining = Math.max(0, target - (forceBucketCounts[bucketKey] || 0));
     const available = buckets[bucketKey].filter(it => !sampledIds.has(it.id));
     const toTake = available.slice(0, remaining);
     toTake.forEach(it => {
@@ -594,7 +581,7 @@ export function sampleClosetItems({
     });
   }
 
-  // ── 7b. Coord-set cohesion: whenever a sampled item belongs to a set, pull
+  // ── 7. Coord-set cohesion: whenever a sampled item belongs to a set, pull
   //        in its partners from the original pool so the AI can see the full
   //        coord group. Without this a LOCKED piece may arrive in the prompt
   //        without its partner, forcing the stylist to either drop it or
