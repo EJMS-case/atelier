@@ -77,6 +77,20 @@ const CASE_TRUNCATED = {
   looks: '[{"vibe":"Edgy","items":[{"id":"W001"},{"id":"W002"},{"id":"W003"}]},{"vibe":"Rom',
 };
 
+// Case D (production, ai_errors 2026-08-01): BOTH looks and items arrived as
+// raw `<parameter>` fragments — looks trapping the vibe, items trapping the
+// real JSON array — while the remaining look fields sat as proper top-level
+// siblings.
+const CASE_D = {
+  items: '\n<parameter name="items">[{"id":"W099","role":"hero"},{"id":"W046","role":"supporting"},{"id":"W197","role":"supporting"}]',
+  looks: '\n<parameter name="vibe">Downtown Cool',
+  rationale: "Sapphire skort, cropped leather jacket.",
+  silhouette: "Fitted mini against a boxier crop.",
+  focal_point: "The sapphire skort.",
+  texture_story: "Ponte, leather, suede.",
+  color_strategy: "Jewel tone anchored in black.",
+};
+
 const CORRECT = {
   looks: [{ vibe: "Effortless", items: ITEMS_3, rationale: "..." }],
 };
@@ -236,6 +250,43 @@ test("case C: <parameter> fragment — vibe recovered, flat look wrapped", () =>
   assert.strictEqual(look.color_strategy, "Tonal neutrals");
 });
 
+test("case D: items fragment holding a JSON array — parsed, flat look wrapped", () => {
+  const result = coerceLooksShape(CASE_D);
+  assert.ok(Array.isArray(result.looks));
+  assert.strictEqual(result.looks.length, 1);
+  const look = result.looks[0];
+  assert.strictEqual(look.vibe, "Downtown Cool");
+  assert.deepStrictEqual(look.items, [
+    { id: "W099", role: "hero" },
+    { id: "W046", role: "supporting" },
+    { id: "W197", role: "supporting" },
+  ]);
+  assert.strictEqual(look.rationale, "Sapphire skort, cropped leather jacket.");
+});
+
+test("case D: items fragment holding only a lone id stays a string (retry path)", () => {
+  // Production 2026-08-01 08:29 — the item array was genuinely lost; only
+  // `<parameter name="id">W244` survived. There is nothing to recover, so the
+  // string must pass through and fail Zod rather than fabricate a look.
+  const result = coerceLooksShape({
+    items: '\n<parameter name="id">W244',
+    looks: '\n<parameter name="vibe">Romantic',
+    rationale: "r",
+  });
+  assert.strictEqual(Array.isArray(result.looks), false);
+});
+
+test("case 6: plain stringified items array also parses", () => {
+  const result = coerceLooksShape({
+    items: JSON.stringify(ITEMS_3),
+    vibe: "Quiet Luxury",
+    rationale: "r",
+  });
+  assert.ok(Array.isArray(result.looks));
+  assert.deepStrictEqual(result.looks[0].items, ITEMS_3);
+  assert.strictEqual(result.looks[0].vibe, "Quiet Luxury");
+});
+
 test("truncated stream: repaired to the last complete look", () => {
   const result = coerceLooksShape(CASE_TRUNCATED);
   assert.ok(Array.isArray(result.looks));
@@ -259,17 +310,24 @@ test("vibe normalization: non-canonical look vibes mapped onto vocabulary", () =
   assert.strictEqual(result.looks[2].vibe, "Effortless");
 });
 
-test("onRecover: fires with (original, coerced) only when something changed", () => {
+test("onRecover: fires with (original, coerced, cases) only when something changed", () => {
   const calls = [];
-  const onRecover = (original, coerced) => calls.push({ original, coerced });
+  const onRecover = (original, coerced, cases) => calls.push({ original, coerced, cases });
 
   const coerced = coerceLooksShape(CASE_B, { onRecover });
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].original, CASE_B);
   assert.strictEqual(calls[0].coerced, coerced);
+  assert.deepStrictEqual(calls[0].cases, ["looks_string_parsed"]);
 
   coerceLooksShape(CORRECT, { onRecover });
   assert.strictEqual(calls.length, 1, "pass-through must not report a recovery");
+});
+
+test("onRecover: case D reports every repair applied, in order", () => {
+  const calls = [];
+  coerceLooksShape(CASE_D, { onRecover: (_o, _c, cases) => calls.push(cases) });
+  assert.deepStrictEqual(calls, [["looks_fragments", "items_string_parsed", "flat_look_wrapped"]]);
 });
 
 test("pass-through: already-correct input is returned unchanged", () => {

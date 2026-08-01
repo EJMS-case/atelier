@@ -994,11 +994,14 @@ function extractCompleteLooks(partialJson) {
 // Shape recovery for malformed tool output lives in coerce-shapes.js (pure,
 // node-testable — see scripts/coerce-looks-shapes.test.mjs). This wrapper
 // injects the ai_errors logging via onRecover so callers keep the old
-// zero-config signature and logging behavior is unchanged.
+// zero-config signature. Only the case tags are logged — full payloads used
+// to be written on every recovery, but when coercion falls short the
+// :schema log right after already captures the whole input, so the payload
+// here was pure write volume.
 export function coerceLooksShape(input) {
   return coerceLooksShapeCore(input, {
-    onRecover: (original, coerced) =>
-      logAiError("stylist_outfit:recovered", { original, coerced }, "coerceLooksShape recovered malformed tool output"),
+    onRecover: (_original, _coerced, cases) =>
+      logAiError("stylist_outfit:recovered", { cases }, "coerceLooksShape recovered malformed tool output"),
   });
 }
 
