@@ -30,12 +30,20 @@ const HEADERS = {
   Authorization: `Bearer ${SUPABASE_KEY}`,
 };
 
-// Receipt line items → wardrobe item names (Noosh "Noir" = black, "Dulce" =
-// the tan/nude shade, i.e. our skin-tone colorway).
+// Noosh shade → wardrobe colorway mapping. The first three come from the
+// order #457985 receipt ("Noir" = black, "Dulce" = the tan/nude shade, i.e.
+// our skin-tone colorway). The opaque colorways use Noosh's own product
+// photos for the matching shades: Midnight = navy, Berry = burgundy,
+// Brew = brew, Espresso = brown. Colored tights only exist as opaque at
+// Noosh, so the sheer/semi-opaque rows of those colorways keep placeholders.
 const PHOTOS = [
   { file: "hosiery-black-semi-opaque.png", name: "Noosh semi-opaque stockings — black" },
   { file: "hosiery-black-sheer.png",       name: "Noosh sheer stockings — black" },
   { file: "hosiery-skin-tone-sheer.png",   name: "Noosh sheer stockings — skin-tone" },
+  { file: "hosiery-navy-opaque.png",       name: "Noosh opaque tights — navy" },
+  { file: "hosiery-burgundy-opaque.png",   name: "Noosh opaque tights — burgundy" },
+  { file: "hosiery-brew-opaque.png",       name: "Noosh opaque tights — brew" },
+  { file: "hosiery-brown-opaque.png",      name: "Noosh opaque tights — brown" },
 ];
 
 async function uploadPng(path, bytes) {
@@ -62,8 +70,9 @@ async function main() {
     if (!rowRes.ok) throw new Error(`Row lookup failed (${rowRes.status})`);
     const [row] = await rowRes.json();
     if (!row) { console.warn(`  no row named "${name}" — run seed-hosiery.mjs first`); continue; }
-    if (row.image?.endsWith(`/${file}`)) { console.log(`  skip (already applied): ${name}`); skipped++; continue; }
 
+    // Upload first (x-upsert), so re-running refreshes the stored bytes even
+    // when the row already points at the file.
     let image;
     try {
       image = await uploadPng(file, bytes);
@@ -71,6 +80,7 @@ async function main() {
       console.warn(`  storage upload failed for ${file} (${e.message}) — falling back to data: URI`);
       image = `data:image/png;base64,${bytes.toString("base64")}`;
     }
+    if (row.image === image) { console.log(`  refreshed bytes, row unchanged: ${name}`); skipped++; continue; }
 
     const upd = await fetch(`${REST}?id=eq.${encodeURIComponent(row.id)}`, {
       method: "PATCH",
