@@ -8,6 +8,7 @@
 import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
+import { coerceLooksShape as coerceLooksShapeCore } from "./coerce-shapes.js";
 import { getSleeveType, isBootItem, isNonHeelShoe, isCompleteSetItem } from "./item-helpers.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
@@ -988,74 +989,15 @@ function extractCompleteLooks(partialJson) {
   return looks;
 }
 
-// Some models occasionally emit the tool input DOUBLE-ENCODED or FLATTENED —
-// `looks` arrives as a stringified value, or per-look style fields (vibe,
-// rationale, etc.) are hoisted to the top level instead of living inside each
-// look object. Recover all three shapes before the Zod check so an otherwise
-// correct generation isn't discarded.
-//
-// Cases handled (idempotent — already-correct input passes through unchanged):
-//   1. looks is a string containing "[{…}]"            → parse, use as array
-//   2. looks is a string containing {"looks":[…]}      → parse, unwrap, use
-//   3. looks is an array of item-only objects AND
-//      vibe/rationale/etc. are top-level siblings      → inject into each look
-//   4. No looks array but a single look spread flat    → wrap in array
+// Shape recovery for malformed tool output lives in coerce-shapes.js (pure,
+// node-testable — see scripts/coerce-looks-shapes.test.mjs). This wrapper
+// injects the ai_errors logging via onRecover so callers keep the old
+// zero-config signature and logging behavior is unchanged.
 export function coerceLooksShape(input) {
-  if (!input || typeof input !== "object") return input;
-  let out = input;
-  let recovered = false;
-
-  // Cases 1 + 2: looks is a stringified value
-  if (typeof out.looks === "string") {
-    try {
-      let parsed = JSON.parse(out.looks);
-      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.looks)) parsed = parsed.looks;
-      if (Array.isArray(parsed)) { out = { ...out, looks: parsed }; recovered = true; }
-    } catch { /* leave as-is — schema check will reject and trigger retry */ }
-  }
-
-  // Case 4: single look spread at the top level (no `looks` array, has items[])
-  if (!Array.isArray(out.looks) && Array.isArray(out.items)) {
-    out = { looks: [out] };
-    recovered = true;
-  }
-
-  // Case 3: looks is an array but look objects are missing per-look style fields
-  // because the model hoisted them as top-level siblings. Inject them into each
-  // look so Zod can find the required `vibe`. Look-level values win if present.
-  const LOOK_FIELDS = ["vibe", "rationale", "silhouette", "focal_point", "texture_story", "color_strategy"];
-  if (Array.isArray(out.looks) && out.looks.length > 0) {
-    const hoisted = {};
-    for (const k of LOOK_FIELDS) {
-      if (out[k] !== undefined) hoisted[k] = out[k];
-    }
-    if (Object.keys(hoisted).length > 0) {
-      out = { ...out, looks: out.looks.map(look => ({ ...hoisted, ...look })) };
-      recovered = true;
-    }
-  }
-
-  // Field alias: model occasionally returns 'hero' where schema expects 'focal_point'.
-  // Zod silently drops the value (focal_point has .default("")) — remap before the check.
-  if (Array.isArray(out.looks)) {
-    let needsRemap = false;
-    const remapped = out.looks.map(look => {
-      if (!look.focal_point && look.hero !== undefined) {
-        needsRemap = true;
-        return { ...look, focal_point: look.hero };
-      }
-      return look;
-    });
-    if (needsRemap) {
-      out = { ...out, looks: remapped };
-      recovered = true;
-    }
-  }
-
-  if (recovered) {
-    logAiError("stylist_outfit:recovered", { original: input, coerced: out }, "coerceLooksShape recovered malformed tool output");
-  }
-  return out;
+  return coerceLooksShapeCore(input, {
+    onRecover: (original, coerced) =>
+      logAiError("stylist_outfit:recovered", { original, coerced }, "coerceLooksShape recovered malformed tool output"),
+  });
 }
 
 // ── Main entry point ─────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } fro
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, filterByWeather, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { moodPromptFor } from "../../features/stylist/moods.js";
+import { parseLooseJson } from "../../utils/coerce-shapes.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import {
   KnitSchema, KnitTool,
@@ -162,9 +163,23 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     })
     .filter(Boolean);
 
+  // Season/date context — the weather bands say how hot it is, not WHEN it is.
+  // July and October can share a "Warm" band yet call for different fabrics
+  // (linen and raffia vs suede and light wool), so the prompt gets one line of
+  // calendar truth to reason with.
+  const now = new Date();
+  const SEASON_BY_MONTH = [
+    "deep winter", "late winter", "early spring", "mid spring", "late spring",
+    "early summer", "high summer", "high summer", "early fall", "mid fall",
+    "late fall", "early winter",
+  ];
+  const monthPhase = now.getDate() <= 10 ? "early" : now.getDate() <= 20 ? "mid" : "late";
+  const dateContext = `${monthPhase} ${now.toLocaleDateString("en-US", { month: "long" })} — ${SEASON_BY_MONTH[now.getMonth()]} in NYC`;
+
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
     weather,
+    dateContext,
     freeTextRequest: request || null,
     activeExclusions,
     recentlySuggestedItems,
@@ -332,11 +347,11 @@ function coerceGapsShape(input) {
   if (!input || typeof input !== "object") return input;
   let out = input;
   if (typeof out.gaps === "string") {
-    try {
-      let parsed = JSON.parse(out.gaps);
-      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.gaps)) parsed = parsed.gaps;
-      if (Array.isArray(parsed)) out = { ...out, gaps: parsed };
-    } catch { /* leave as-is — schema check will reject */ }
+    // parseLooseJson tolerates the trailing-garbage malformations seen on the
+    // looks path (extra `]}` after a valid value) instead of giving up.
+    let parsed = parseLooseJson(out.gaps);
+    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.gaps)) parsed = parsed.gaps;
+    if (Array.isArray(parsed)) out = { ...out, gaps: parsed };
   }
   // {} or missing → default to empty array so Zod gets a valid (if empty) input
   if (!Array.isArray(out.gaps)) out = { ...out, gaps: [] };

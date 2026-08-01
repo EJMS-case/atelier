@@ -3,7 +3,10 @@
 // validation) and JSON schema (sent as `input_schema` in the tool definition).
 // They are handwritten side-by-side — the surface is small enough that a
 // duplication check is cheaper than dragging in zod-to-json-schema conversion
-// quirks. If you change one, change the other.
+// quirks. If you change one, change the other. The Zod side may be strictly
+// MORE tolerant than the JSON schema (defaults for omitted fields, .catch for
+// out-of-range values) — models sometimes drop fields the input_schema marks
+// required, and a missing metadata field shouldn't kill a whole response.
 
 import { z } from "zod";
 import { VIBE_VOCABULARY } from "../../features/stylist/moods.js";
@@ -17,14 +20,19 @@ const VibeEnum = z.enum(VIBE_VOCABULARY);
 // 1. autoDetectItem — per-photo garment tagger (src/lib/anthropic.js)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// category/primary_color stay required-but-nullable — a detection without them
+// is useless. The optional metadata fields (brand, material, pattern) default
+// to null when the model omits them entirely (observed in ai_errors:
+// autodetect_item:schema), and an out-of-range confidence degrades to null via
+// .catch instead of killing the whole detection.
 export const AutoDetectSchema = z.object({
   category: z.string().nullable(),
   subcategory: z.string().default(""),
   primary_color: z.string().nullable(),
-  brand: z.string().nullable(),
-  material: z.string().nullable(),
-  pattern: z.string().nullable(),
-  confidence: z.number().min(0).max(1).nullable(),
+  brand: z.string().nullable().default(null),
+  material: z.string().nullable().default(null),
+  pattern: z.string().nullable().default(null),
+  confidence: z.number().min(0).max(1).nullable().default(null).catch(null),
 });
 
 export const AutoDetectTool = {

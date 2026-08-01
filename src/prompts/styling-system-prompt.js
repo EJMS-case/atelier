@@ -65,7 +65,7 @@ STYLING METHOD (every look):
 3. Silhouette — fitted × relaxed tension; never all-fitted, never all-oversized.
 4. Texture — ≥2 fabric weights per look (silk × wool, leather × cashmere, matte × sheen).
 5. Focal point — one clear point of interest.
-6. Finishing — one or two intentional notes (jewelry, the right bag, an architectural belt on separates), never a stack. Belt rule per HC9.
+6. Finishing — one or two intentional notes (jewelry, the right bag, an architectural belt on separates), never a stack. Pick the actual piece from the inventory — a specific chain, cuff, or bag line — not a generic "add jewelry". Belt rule per HC9.
 
 VIBE: pick ONE per look from this list, matching what the look actually feels like — ${VIBE_VOCABULARY.join(" | ")}.
 
@@ -107,6 +107,7 @@ Return via the return_looks tool. Each item gets \`role\`: "hero" (exactly one p
 export function buildStylingPrompt({
   occasion,
   weather,
+  dateContext = "",
   freeTextRequest,
   activeExclusions = [],
   recentlySuggestedItems = [],
@@ -149,6 +150,13 @@ export function buildStylingPrompt({
 
   const weatherBlock = formatWeather(weather);
 
+  // One line of calendar truth alongside the temperature band — high summer and
+  // mid fall can share "Warm" yet want different fabrics. Deliberately does NOT
+  // restate the weather rules; it only shifts what reads seasonally current.
+  const dateBlock = dateContext
+    ? `\nDATE CONTEXT: ${dateContext}. Beyond raw temperature, fabrics and styling should read seasonally right for this moment of the year.\n`
+    : "";
+
   const countWord = lookCount === 1 ? "ONE" : lookCount === 2 ? "BOTH" : "ALL THREE";
   const countNoun = lookCount === 1 ? "the look" : `${lookCount === 2 ? "both" : "the three"} looks`;
   const requestBlock = freeTextRequest
@@ -183,7 +191,7 @@ Weather still governs fabric weight and coverage.\n`
   // prompt explicitly tells the AI not to error or refuse if a generation
   // departs from a pattern; the closet, occasion, and weather still rule.
   const fingerprintBlock = (styleFingerprint && styleFingerprint.trim().length > 0)
-    ? `\n👤 PERSONAL PATTERNS — soft preferences from her actual worn + planned outfit history (use as gentle bias, NOT hard rule):\n${styleFingerprint.trim()}\n\nHonor these patterns when they fit naturally; depart freely when the closet, occasion, or weather call for something different. NEVER error or refuse a look just because it departs from a pattern — the patterns describe taste, not constraints.\n`
+    ? `\n👤 PERSONAL PATTERNS — her current styling choices, distilled from her actual worn + planned outfit history (use as gentle bias, NOT hard rule):\n${styleFingerprint.trim()}\n\nTogether with LOOKS SHE LOVED below, this is the freshest read on her taste. Honor these patterns when they fit naturally; depart freely when the closet, occasion, or weather call for something different. NEVER error or refuse a look just because it departs from a pattern — the patterns describe taste, not constraints.\n`
     : "";
 
   // Loved looks — outfits she explicitly hearted. TEXT-ONLY exemplars of the
@@ -191,7 +199,7 @@ Weather still governs fabric weight and coverage.\n`
   // these are NOT inventory and carry no W-IDs, so they can't pollute the
   // model's item selection — they only raise the bar.
   const lovedLooksBlock = (lovedLooks && lovedLooks.length > 0)
-    ? `\n✨ LOOKS SHE LOVED — outfits she rated highly. This is the BAR: the level of polish, proportion, and finish she considers elevated. Build NEW looks from the inventory below — do NOT copy these verbatim — but match this intention and ambition. Notice what they have in common.\n${lovedLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
+    ? `\n✨ LOOKS SHE LOVED — outfits she rated highly, newest first (the top entries are her most current taste; weight them accordingly). This is the BAR: the level of polish, proportion, and finish she considers elevated. Build NEW looks from the inventory below — do NOT copy these verbatim — but match this intention and ambition. Notice what they have in common.\n${lovedLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
     : "";
 
   // Disliked looks — combinations she explicitly rated down. Signal to AVOID
@@ -241,7 +249,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${moodBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${honestyBlock}
 ${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
