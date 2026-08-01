@@ -2,6 +2,28 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Shopping/gap analysis rebuild + backup-table lockdown — 2026-08-01
+
+### Why
+Owner: shopping and gap analysis "do not work as they stand." Root cause found in `ai_errors` (`shopping_gaps:schema`, empty `{}` tool input): the prompt dumped the full 428-item inventory while the tool response was capped at `max_tokens: 2000`, so the model's forced tool call got truncated mid-input — and a coercion added later masked that as a successful run with zero gaps ("0 GAPS FOUND"). Separately, the `wardrobe_items_backup_20260728` table still had RLS disabled (critical Supabase advisory).
+
+### Changed — Shopping recs (`src/lib/ai/stylist.js`)
+- Both modes now send a compact wardrobe summary (`summarizeInventory`: one line per category > subcategory with count, color roll-up, and up to 4 example pieces) instead of the 400+-line full-inventory dump — roughly a 60-line prompt, dramatically cheaper and no longer starves the response budget.
+- Gap analysis asks for the 5–8 highest-impact gaps, explicitly weighted toward her four priority occasions (Work, Work Dinner, Dinner, Casual) and the season ahead (a `TODAY:` date line was added to both modes); the model must return at least one gap.
+- Model moved from `claude-sonnet-4-6` to `claude-sonnet-5` for both modes (better + currently cheaper at intro pricing); `maxTokens` raised to 3000 (gaps) / 2500 (completions).
+- Empty or malformed output now retries once and then throws a friendly error instead of rendering an empty result — `coerceRecsShape` (moved to `src/utils/coerce-shapes.js`, shared by gaps and completions) no longer defaults a missing array to `[]`, so schema validation fails loudly and the retry fires. Test copies replaced with imports of the real implementation; 32/32 green.
+- `invokeTool` (`src/lib/ai/toolUse.js`) records `stop_reason` in every `:schema` / `:no_tool_use` error log and reports token-exhaustion ("ran out of tokens before completing") distinctly, so the next truncation is diagnosable from `ai_errors` directly.
+
+### Changed — Shopping UI (`src/components/ShoppingView.jsx`)
+- "Complete a Look" picker previously showed only the first 30 items with no way to reach the rest of the closet. Now: search box (name / brand / category / subcategory / color), cap raised to 60 with a "showing X of Y" note, and selected items always stay visible even when the filter would hide them.
+
+### Fixed — Supabase security
+- `wardrobe_items_backup_20260728` had RLS disabled (anyone with the anon key could read/write it). Enabled RLS with no policies via migration `enable_rls_wardrobe_items_backup_20260728` — table is now service-role-only; no app code references it. The critical advisory is resolved.
+
+### Verified stale (no code change needed)
+- Style fingerprint: `user_settings` now has a `style_fingerprint` row (generated 2026-07-26 from 124 outfits) — the PR #90 mount-time auto-refresh fired in production, it re-generates whenever history grows by 10+ logs, and it is loaded on mount and injected into the styling prompt. The handoff's "never generated" item is resolved.
+- Dead code: `OutfitBuilder` is already gone and App.jsx is down to ~1,860 lines (from the ~4,200 the handoff cites); an unused-export scan across `src/` found nothing.
+
 ## [Unreleased] — Winter hosiery, smarter filters, simpler Style Me, softer rules — 2026-08-01
 
 ### Why

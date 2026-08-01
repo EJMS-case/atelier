@@ -18,25 +18,11 @@ import {
   parseLooseJson,
   extractParameterFragments,
   normalizeVibe,
+  coerceRecsShape,
 } from "../src/utils/coerce-shapes.js";
 
-// ── Inline gaps implementation ────────────────────────────────────────────────
-// Copied from src/lib/ai/stylist.js (coerceGapsShape stays private there; here
-// we verify the shape manipulation in isolation).
-
-function coerceGapsShape(input) {
-  if (!input || typeof input !== "object") return input;
-  let out = input;
-  if (typeof out.gaps === "string") {
-    try {
-      let parsed = JSON.parse(out.gaps);
-      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.gaps)) parsed = parsed.gaps;
-      if (Array.isArray(parsed)) out = { ...out, gaps: parsed };
-    } catch { /* leave as-is */ }
-  }
-  if (!Array.isArray(out.gaps)) out = { ...out, gaps: [] };
-  return out;
-}
+// Shopping-recs coercion, shared by gaps and completions (curried by key).
+const coerceGapsShape = coerceRecsShape("gaps");
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -315,16 +301,23 @@ test("gaps: stringified array → parse", () => {
   assert.strictEqual(result.gaps[0].category, "Bags");
 });
 
-test("gaps: {} (empty object) → empty array", () => {
+// Empty/missing gaps must NOT be masked as [] — schema validation has to fail
+// so the caller's retry fires instead of the UI showing "0 GAPS FOUND".
+test("gaps: {} (empty object) passes through un-defaulted", () => {
   const result = coerceGapsShape({ gaps: {} });
-  assert.ok(Array.isArray(result.gaps));
-  assert.strictEqual(result.gaps.length, 0);
+  assert.strictEqual(Array.isArray(result.gaps), false);
 });
 
-test("gaps: missing → empty array", () => {
+test("gaps: missing stays missing", () => {
   const result = coerceGapsShape({});
-  assert.ok(Array.isArray(result.gaps));
-  assert.strictEqual(result.gaps.length, 0);
+  assert.strictEqual("gaps" in result, false);
+});
+
+test("completions: double-wrapped string → unwrap via the same curried coercer", () => {
+  const input = { completions: JSON.stringify({ completions: [{ type: "essential", category: "Shoes" }] }) };
+  const result = coerceRecsShape("completions")(input);
+  assert.ok(Array.isArray(result.completions));
+  assert.strictEqual(result.completions[0].category, "Shoes");
 });
 
 test("gaps: already-correct array passes through", () => {

@@ -12,7 +12,7 @@ import { generateValidatedLooks } from "../../utils/styling-validator.js";
 import { getRecentlySuggestedItems, recordGeneration, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, filterByWeather, shuffle, slotForItem } from "../../utils/item-helpers.js";
-import { parseLooseJson } from "../../utils/coerce-shapes.js";
+import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import {
   KnitSchema, KnitTool,
@@ -338,71 +338,103 @@ export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, on
   return text;
 }
 
-// Normalize malformed gaps output before Zod validation — mirrors the look
-// coercion in styling-validator. Handles stringified arrays, double-wrapped
-// objects, and the observed `gaps: {}` failure where Zod expects an array.
-function coerceGapsShape(input) {
-  if (!input || typeof input !== "object") return input;
-  let out = input;
-  if (typeof out.gaps === "string") {
-    // parseLooseJson tolerates the trailing-garbage malformations seen on the
-    // looks path (extra `]}` after a valid value) instead of giving up.
-    let parsed = parseLooseJson(out.gaps);
-    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.gaps)) parsed = parsed.gaps;
-    if (Array.isArray(parsed)) out = { ...out, gaps: parsed };
+// Compact wardrobe summary: one line per category > subcategory with a count,
+// a color roll-up, and a few example pieces. Replaces the full 400+-line
+// inventory dump that blew the token budget and starved the tool response.
+export function summarizeInventory(items, { examplesPer = 4 } = {}) {
+  const groups = new Map();
+  for (const it of items) {
+    const key = `${it.category || "Uncategorized"}${it.subcategory ? ` > ${it.subcategory}` : ""}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(it);
   }
-  // {} or missing → default to empty array so Zod gets a valid (if empty) input
-  if (!Array.isArray(out.gaps)) out = { ...out, gaps: [] };
-  return out;
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, group]) => {
+      const colors = {};
+      group.forEach(it => {
+        const c = (it.color || it.color_family || "unknown").toLowerCase();
+        colors[c] = (colors[c] || 0) + 1;
+      });
+      const colorStr = Object.entries(colors)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([c, n]) => (n > 1 ? `${c}×${n}` : c))
+        .join(", ");
+      const examples = group
+        .slice(0, examplesPer)
+        .map(it => `"${[it.brand, it.name].filter(Boolean).join(" ").slice(0, 60)}"`)
+        .join(", ");
+      const more = group.length > examplesPer ? `, +${group.length - examplesPer} more` : "";
+      return `${key} (${group.length}): ${colorStr} — ${examples}${more}`;
+    })
+    .join("\n");
+}
+
+// One retry on empty/malformed output before surfacing a friendly error.
+// invokeTool already retries transient HTTP errors internally; this layer
+// covers the model returning an empty or truncated tool input.
+async function invokeShoppingTool(opts, key) {
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await invokeTool(opts);
+      if (Array.isArray(result?.[key]) && result[key].length > 0) return result;
+      lastErr = new Error("the analysis came back empty");
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Couldn't finish the analysis (${lastErr.message}). Give it a moment and try again.`);
 }
 
 // ── SHOPPING RECS (gap analysis or outfit-completion) ───────────────────────
 export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []) {
-  const inventory = items.map(it =>
-    `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`
-  ).join("\n");
-
-  const catCounts = {};
-  items.forEach(it => { catCounts[it.category] = (catCounts[it.category] || 0) + 1; });
+  const wardrobeSummary = summarizeInventory(items);
+  const now = new Date();
+  const dateContext = `${now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}, NYC`;
 
   if (mode === "gap") {
     const taxStr = Object.entries(TAXONOMY).map(([cat, subs]) =>
-      `${cat}: ${subs.length ? subs.join(", ") : "(no subcategories)"} — owned: ${catCounts[cat] || 0}`
+      `${cat}: ${subs.length ? subs.join(", ") : "(no subcategories)"}`
     ).join("\n");
 
     const dynamic = `You are a wardrobe strategist analyzing gaps in this client's wardrobe. Return your findings through the return_gaps tool.
 
-FULL TAXONOMY (category: subcategories — item count):
+TODAY: ${dateContext}
+
+FULL TAXONOMY (category: subcategories):
 ${taxStr}
 
-CURRENT WARDROBE:
-${inventory}
+WARDROBE SUMMARY (${items.length} pieces — count, colors, examples per group):
+${wardrobeSummary}
 
-Analyze the wardrobe against the full taxonomy. Identify:
-1. MISSING categories/subcategories (0 items)
-2. THIN subcategories (<2 items that should have more for a complete wardrobe)
-3. Strategic gaps (missing versatile pieces that would unlock more outfits)
+Identify the 5-8 HIGHEST-IMPACT gaps, weighing:
+1. MISSING or THIN subcategories that a complete wardrobe needs
+2. Strategic gaps — versatile pieces that would unlock the most new outfits
+3. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't
+4. The season ahead (next 3 months from today's date)
 
-For each gap, suggest ONE specific product to buy. Be specific: brand, color, fabric, silhouette. Use brands she loves: The Row, Totême, Loro Piana, Khaite, Max Mara, Theory, COS, Vince.`;
+For each gap suggest ONE specific product to buy. Be specific: brand, color, fabric, silhouette. Use brands she loves: The Row, Totême, Loro Piana, Khaite, Max Mara, Theory, COS, Vince. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
 
-    return invokeTool({
+    return invokeShoppingTool({
       apiKey,
-      model: "claude-sonnet-4-6",
-      maxTokens: 2000,
+      model: "claude-sonnet-5",
+      maxTokens: 3000,
       content: [
         { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
         { type: "text", text: dynamic },
       ],
       tool: GapsTool,
       schema: GapsSchema,
-      coerce: coerceGapsShape,
+      coerce: coerceRecsShape("gaps"),
       kind: "shopping_gaps",
-    });
+    }, "gaps");
   }
 
   const selectedItems = selectedIds.map(id => items.find(i => i.id === id)).filter(Boolean);
   const outfitStr = selectedItems.map(it =>
-    `${it.category}: ${it.name}${it.color ? ` (${it.color})` : ""}`
+    `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`
   ).join("\n");
 
   const dynamic = `You are completing an outfit. The client has selected these pieces:
@@ -410,28 +442,31 @@ For each gap, suggest ONE specific product to buy. Be specific: brand, color, fa
 SELECTED OUTFIT:
 ${outfitStr}
 
-FULL WARDROBE (for context):
-${inventory}
+TODAY: ${dateContext}
+
+WARDROBE SUMMARY (what she already owns — don't suggest buying duplicates):
+${wardrobeSummary}
 
 Analyze what's missing from this outfit to make it complete and elevated, then return suggestions via the return_completions tool. Consider:
 - Does it need shoes? A bag? Outerwear?
 - Could a specific accessory elevate it?
 - Is there a texture or color gap?
 
-Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific with brands, colors, fabrics.`;
+Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific with brands, colors, fabrics. Keep description and why to one tight sentence each.`;
 
-  return invokeTool({
+  return invokeShoppingTool({
     apiKey,
-    model: "claude-sonnet-4-6",
-    maxTokens: 2000,
+    model: "claude-sonnet-5",
+    maxTokens: 2500,
     content: [
       { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
       { type: "text", text: dynamic },
     ],
     tool: CompletionsTool,
     schema: CompletionsSchema,
+    coerce: coerceRecsShape("completions"),
     kind: "shopping_completions",
-  });
+  }, "completions");
 }
 
 // ── COLOR NAME → HEX (small helper used by insights) ────────────────────────
