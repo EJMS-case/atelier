@@ -234,3 +234,21 @@ export function coerceLooksShape(input, { onRecover } = {}) {
   }
   return out;
 }
+
+// Normalize malformed shopping-recs output (gaps / completions) before Zod
+// validation. Handles stringified arrays and double-wrapped objects via
+// parseLooseJson. Deliberately does NOT default a missing array to [] — an
+// empty result must fail schema validation so the caller's retry path fires
+// instead of the UI rendering "0 GAPS FOUND".
+export function coerceRecsShape(key) {
+  return (input) => {
+    if (!input || typeof input !== "object") return input;
+    let out = input;
+    if (typeof out[key] === "string") {
+      let parsed = parseLooseJson(out[key]);
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed[key])) parsed = parsed[key];
+      if (Array.isArray(parsed)) out = { ...out, [key]: parsed };
+    }
+    return out;
+  };
+}

@@ -114,17 +114,24 @@ export async function invokeTool({
   }
 
   const data = await res.json();
+  // A max_tokens stop mid-tool-input is the classic cause of empty/truncated
+  // tool inputs ({} in ai_errors) — record it so failures are diagnosable.
+  const truncated = data.stop_reason === "max_tokens";
   const toolBlock = (data.content || []).find(b => b.type === "tool_use" && b.name === tool.name);
   if (!toolBlock) {
-    logAiError(`${kind}:no_tool_use`, data, "Model did not invoke the required tool");
-    throw new Error(`AI did not return structured ${tool.name} output`);
+    logAiError(`${kind}:no_tool_use`, { stop_reason: data.stop_reason, data }, "Model did not invoke the required tool");
+    throw new Error(truncated
+      ? `The ${tool.name} response ran out of tokens before completing`
+      : `AI did not return structured ${tool.name} output`);
   }
 
   const rawInput = coerce ? coerce(toolBlock.input) : toolBlock.input;
   const parsed = schema.safeParse(rawInput);
   if (!parsed.success) {
-    logAiError(`${kind}:schema`, { input: toolBlock.input, issues: parsed.error.issues }, parsed.error);
-    throw new Error(`AI response failed schema validation for ${tool.name}`);
+    logAiError(`${kind}:schema`, { stop_reason: data.stop_reason, input: toolBlock.input, issues: parsed.error.issues }, parsed.error);
+    throw new Error(truncated
+      ? `The ${tool.name} response ran out of tokens before completing`
+      : `AI response failed schema validation for ${tool.name}`);
   }
   return parsed.data;
 }

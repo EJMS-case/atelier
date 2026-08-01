@@ -9,6 +9,19 @@ export default function ShoppingView({ items, apiKey, onBack }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [err, setErr] = useState("");
+  const [pickerQuery, setPickerQuery] = useState("");
+
+  const PICKER_CAP = 60;
+  const q = pickerQuery.trim().toLowerCase();
+  const pickable = items.filter(it => it.image).filter(it =>
+    !q || [it.name, it.brand, it.category, it.subcategory, it.color]
+      .some(f => (f || "").toLowerCase().includes(q))
+  );
+  // Selected items always render, even when the search filter would hide them.
+  const shown = [
+    ...pickable.filter(it => selectedIds.includes(it.id)),
+    ...pickable.filter(it => !selectedIds.includes(it.id)).slice(0, PICKER_CAP),
+  ];
 
   const toggleItem = (id) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -48,8 +61,20 @@ export default function ShoppingView({ items, apiKey, onBack }) {
       {mode === "complete" && (
         <>
           <div style={s.advisorNote}>Select pieces from your wardrobe, and AI will suggest what to buy to complete or elevate the outfit.</div>
+          <input
+            type="text"
+            value={pickerQuery}
+            onChange={e => setPickerQuery(e.target.value)}
+            placeholder="Search your closet — name, brand, category, color…"
+            style={{width:"100%", padding:"10px 12px", marginBottom:12, fontSize:13, border:"1px solid var(--color-border)", borderRadius:6, background:"var(--color-surface)", color:"var(--color-text)"}}
+          />
+          {pickable.length > shown.length && (
+            <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:8}}>
+              Showing {shown.length} of {pickable.length} — search to narrow down.
+            </div>
+          )}
           <div style={{...s.grid, marginBottom:20}}>
-            {items.filter(it => it.image).slice(0, 30).map(item => (
+            {shown.map(item => (
               <div key={item.id} style={{...s.card, border: selectedIds.includes(item.id) ? "2px solid var(--color-ink)" : "1px solid var(--color-border)", cursor:"pointer"}}
                 onClick={() => toggleItem(item.id)}>
                 <div style={{...s.cardImg, height:120}}>
