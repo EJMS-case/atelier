@@ -637,6 +637,10 @@ export function sampleClosetItems({
  */
 export function formatInventory(sampled, getSleeveType) {
   const SLEEVE_SHORT = { long: "L", short: "S", sleeveless: "N", threeQuarter: "3Q", unknown: "?" };
+  const FORMALITY_LABEL = {
+    1: "Active", 2: "Lounge", 3: "Casual", 4: "Smart Casual",
+    5: "Business Casual", 6: "Business Professional", 7: "Cocktail", 8: "Black Tie",
+  };
 
   const shortById = {};
   sampled.forEach((it, i) => { shortById[it.id] = `W${String(i + 1).padStart(3, "0")}`; });
@@ -707,6 +711,16 @@ export function formatInventory(sampled, getSleeveType) {
       const seen = [vd.fabric, vd.formality, vd.vibe].map(x => (x || "").trim()).filter(Boolean).join("; ");
       if (seen) parts.push(`seen: ${seen}`);
     }
+    // Structured styling context — formality/layer/fit/heel are context for the
+    // stylist to reason with alongside notes. Notes take precedence where they
+    // disagree (see Phase 2b brief).
+    const attrs = [];
+    if (it.formality) attrs.push(`formality=${it.formality} ${FORMALITY_LABEL[it.formality]}`);
+    if (it.layer) attrs.push(`layer=${it.layer}`);
+    if (it.fit) attrs.push(`fit=${it.fit}`);
+    if (it.length) attrs.push(`length=${it.length}`);
+    if (it.heel_height) attrs.push(`heel=${it.heel_height}`);
+    if (attrs.length) parts.push(attrs.join("; "));
     return parts.join(" | ");
   }).join("\n");
 }

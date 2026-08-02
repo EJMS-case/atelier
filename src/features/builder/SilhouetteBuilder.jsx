@@ -290,7 +290,7 @@ export default function SilhouetteBuilder({
       groups.get(it.set_id).push(it);
     });
     return [...groups.entries()]
-      .filter(([, members]) => members.length >= 2)
+      .filter(([, members]) => members.length >= 1)
       .map(([setId, members]) => ({
         kind: "coord",
         key: setId,
@@ -301,19 +301,10 @@ export default function SilhouetteBuilder({
       }));
   }, [items, setsMeta]);
 
-  // category="Sets" one-piece items that aren't part of a coordinated group —
-  // still individually pickable (a co-ord photographed as a single garment).
-  const singleSetItems = useMemo(
-    () => (items || []).filter(it => it.category === "Sets" && !it.set_id),
-    [items]
-  );
-
   const setEntries = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const singles = singleSetItems.map(it => ({ kind: "single", key: it.id, image: it.image, label: pickerLabel(it), item: it }));
-    const all = [...coordSets, ...singles];
-    return q ? all.filter(e => (e.label || "").toLowerCase().includes(q)) : all;
-  }, [coordSets, singleSetItems, search]);
+    return q ? coordSets.filter(e => (e.label || "").toLowerCase().includes(q)) : coordSets;
+  }, [coordSets, search]);
 
   // How many of a set's members are currently on the canvas: none / partial / full.
   const setSelectionState = (entry) => {
