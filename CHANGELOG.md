@@ -2,6 +2,28 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Planner and Saved previews show the layout she actually arranged — 2026-08-02
+
+### Why
+Owner: "When I click on an outfit from the planner, it has a layout that isn't the layout I made. When I edit it, it's the layout I made." Screenshots: the Aug 13 planned look renders as a generic flat-lay in the day modal, but opening Edit shows her real arrangement.
+
+`EditorialCollage` was discarding `layoutOverride` outright on mobile:
+
+```js
+const slots = !isMobile && Array.isArray(layoutOverride) && layoutOverride.length > 0
+```
+
+The stated reason — "override coords were authored against the desktop landscape canvas" — is only true of the *stylist's* guessed coords (`normalizeLooks`' `aiLayout`). It is not true of a layout she dragged out herself in `SilhouetteBuilder`, which is a portrait **3:4** canvas, near enough to this collage's **4:5** that her composition transfers intact. On her phone every consumer of a saved layout — the planner day modal, Saved look cards, Style Me cards — silently fell back to an auto-recipe. `SilhouetteBuilder` reads `layout_data` directly, which is why Edit looked right.
+
+The two sources are distinguishable in already-stored rows: `buildLayoutData` stamps a `z` on every entry, `aiLayout` emits none. In her data that separates cleanly — all 12 planner rows with a layout are `source: "manual"` with `z` on every entry, and 12 of 13 saved looks likewise; the one AI-authored row has no `z` anywhere.
+
+### Fixed — `src/components/EditorialCollage.jsx`
+- A hand-arranged layout (every entry carries a numeric `z`) is now honoured on mobile as well as desktop. The stylist's `z`-less coords keep deferring to the mobile recipes, so the reason the guard existed is preserved.
+- Fixes the planner day modal, Saved look cards and Style Me cards in one place — they all render through this component.
+
+### Verified
+Replayed her real Aug 13 plan through the running app at a 430px viewport (the mobile branch is active) with the network stubbed. Before: the boxes matched `MOBILE_RECIPES.layerTopBottom` exactly — the generic layout in her screenshot. After: every box matches her saved `layout_data` to the decimal (blazer `0,0,53.2,65.9`; bodysuit `28.9,0,60.6,58.7`; pant `60.3,19.4,39.7,80.6`; stiletto `13.5,68.8,43.2,29.9`; bag `0,65.5,28,17.5`), z-order included. `npm test` and `npm run build` green.
+
 ## [Unreleased] — Linking two garments as a coord set works again — 2026-08-02
 
 ### Why
