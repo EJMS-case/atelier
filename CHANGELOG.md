@@ -7,9 +7,10 @@ Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 ### Why
 The #145 audit verified these findings but deferred them; this phase works through that backlog. Model IDs were scattered as 17 magic strings across 11 files, and the service worker's constant cache name (`atelier-v2`) meant every deploy's hashed assets accumulated in Cache Storage forever.
 
-### Changed — `src/constants/models.js` (new), 11 call-site files, `public/sw.js`, `vite.config.js`
+### Changed — `src/constants/models.js` (new), 11 call-site files, `public/sw.js`, `scripts/stamp-sw.mjs` (new), `package.json`
 - One tier table (`MODEL_TOP`/`MODEL_STRONG`/`MODEL_STANDARD`/`MODEL_FAST`) now feeds every Anthropic call site — upgrading a tier is a one-line change. No model assignments changed.
-- sw.js cache name is stamped per production build (`stampServiceWorker` Vite plugin rewrites `__BUILD_ID__` in `dist/sw.js`), so the existing activate handler prunes the previous deploy's cache. Running tabs are unaffected — hashed assets also sit in the HTTP cache with immutable max-age. If stamping ever failed, the literal placeholder reproduces the old constant-name behavior rather than breaking.
+- sw.js cache name is now stamped per build, so the existing activate handler prunes the previous deploy's cache instead of letting old hashed assets accumulate in Cache Storage forever. Running tabs are unaffected — hashed assets also sit in the HTTP cache with immutable max-age.
+- The stamp runs as a build STEP (`vite build && node scripts/stamp-sw.mjs`), not a Vite plugin: Vite copies `publicDir` into `dist` *after* `closeBundle`, so a plugin's stamp gets overwritten by the pristine `public/sw.js`. The stamp is a hash of the emitted asset filenames rather than a timestamp, so an unchanged build keeps its cache name and doesn't purge caches needlessly. Missing placeholder throws and fails the build — a silent no-op here would regress to one constant cache name and nobody would notice for months.
 
 ## [Unreleased] — Dark mode removed + full cleanup audit — 2026-08-02
 
