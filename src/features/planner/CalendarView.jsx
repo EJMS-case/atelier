@@ -5,8 +5,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
-import { newOutfitId, buildPlanPayload } from "./outfits.js";
-import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
+import { newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps } from "./outfits.js";
+import { nyToday, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { fetchNycForecast, fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
@@ -133,29 +133,52 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
   const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
+  // Resolve the freshest known plan row for a day. The component's `plans`
+  // map covers the visible month; the 42-cell grid can also show adjacent-
+  // month days, so fall back to a single-day fetch when the map misses.
+  async function existingPlanFor(iso) {
+    if (plans[iso]) return plans[iso];
+    const rows = await fetchPlansBetween(iso, iso).catch(() => []);
+    return (Array.isArray(rows) && rows[0]) || null;
+  }
+
   async function handleAssignSaved(iso, log, overrides = {}) {
     const logOcc = tagsFor(log, "occasions", "occasion");
     const logWx  = tagsFor(log, "weathers",  "weather");
     const planOccasion = overrides.occasion || logOcc[0] || null;
-    const plan = {
-      date: iso,
-      items: log.garment_ids || [],
-      outfit_log_id: log.id,
-      source: "saved",
-      occasion: planOccasion,
-      weather:  overrides.weather  || logWx[0]  || null,
-      occasions: overrides.occasion ? [overrides.occasion] : logOcc,
-      weathers:  overrides.weather  ? [overrides.weather]  : logWx,
-      outfits: [{
+    const pickedWx = overrides.weather || logWx[0] || null;
+    try {
+      // Reconcile against whatever the day already holds — savePlan upserts
+      // the whole row, so writing a fresh single-outfit payload here used to
+      // clobber a multi-outfit day (trip daytime + dinner). Append instead,
+      // preserving the row's source / activity / day_label, same as the
+      // saved-look onSchedule path in App.jsx.
+      const existing = await existingPlanFor(iso);
+      const current = outfitsOf(existing);
+      const outfits = [...current, {
         id: newOutfitId(),
         label: "",
         occasion: planOccasion,
         items: log.garment_ids || [],
-      }],
-    };
-    try {
-      const saved = await savePlan(plan);
-      setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));
+      }];
+      const merged = buildPlanPayload({
+        date: iso,
+        outfits,
+        source: existing?.source || "saved",
+        notes: existing?.notes ?? null,
+        weather: existing?.weather ?? pickedWx,
+        activity: existing?.activity ?? null,
+        day_label: existing?.day_label ?? null,
+        occasions: overrides.occasion ? [overrides.occasion] : logOcc,
+        weathers:  overrides.weather  ? [overrides.weather]  : logWx,
+      });
+      // Only link the saved look's layout when it becomes the day's primary
+      // outfit — the linked-log layout only round-trips for outfit #0.
+      if (current.length === 0) merged.outfit_log_id = log.id;
+      else if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
+      if (existing?.layout_data) merged.layout_data = existing.layout_data;
+      const saved = await savePlan(merged);
+      setPlans(p => ({ ...p, [iso]: { ...merged, id: saved[0]?.id ?? existing?.id } }));
       setSyncError("");
     } catch (e) {
       setSyncError(`Couldn't save the ${iso} plan to the cloud — local only. Tap Refresh to retry, or try again.`);
@@ -172,23 +195,29 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
     const wxBucket = forecast?.[iso]?.bucket || "";
     const look = await generateTripDayLook(items, occasion, wxBucket, null, apiKey, {});
     if (!look) throw new Error("Couldn't generate a look — try again.");
-    const plan = {
-      date: iso,
-      items: look.items || [],
-      source: "generated",
+    // Same reconcile-and-append as handleAssignSaved — never overwrite a
+    // multi-outfit day with a fresh single-outfit row.
+    const existing = await existingPlanFor(iso);
+    const current = outfitsOf(existing);
+    const outfits = [...current, {
+      id: newOutfitId(),
+      label: "",
       occasion,
-      occasions: [occasion],
-      weather: wxBucket || null,
-      weathers: wxBucket ? [wxBucket] : [],
-      outfits: [{
-        id: newOutfitId(),
-        label: "",
-        occasion,
-        items: look.items || [],
-      }],
-    };
-    const saved = await savePlan(plan);
-    setPlans(p => ({ ...p, [iso]: { ...plan, id: saved[0]?.id } }));
+      items: look.items || [],
+    }];
+    const merged = buildPlanPayload({
+      date: iso,
+      outfits,
+      source: existing?.source || "generated",
+      notes: existing?.notes ?? null,
+      weather: existing?.weather ?? (wxBucket || null),
+      activity: existing?.activity ?? null,
+      day_label: existing?.day_label ?? null,
+    });
+    if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
+    if (existing?.layout_data) merged.layout_data = existing.layout_data;
+    const saved = await savePlan(merged);
+    setPlans(p => ({ ...p, [iso]: { ...merged, id: saved[0]?.id ?? existing?.id } }));
     setSyncError("");
     setActiveDay(null);
   }
@@ -291,12 +320,6 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
           const planItems = plan?.items
             ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
             : [];
-          // Prefer the layout saved on the plan itself; fall back to the
-          // linked outfit_log's layout for plans created by pinning a saved
-          // look. Either way the user sees the arrangement they chose.
-          const layoutOverride = plan?.layout_data
-            || (plan?.outfit_log_id && (outfitLogs || []).find(l => l.id === plan.outfit_log_id)?.layout_data)
-            || null;
           const isToday = iso === todayIso;
           return (
             <button key={iso}
@@ -625,7 +648,6 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
 // All edits stay local until "Pin to calendar".
 const WEATHER_BUCKETS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
 const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
-const SEASONAL = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
 
 function TripModal({ items, apiKey, onClose, onAssign }) {
   const [start, setStart] = useState(isoDate(new Date()));
@@ -698,7 +720,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     if (weather !== "auto") return weather;
     if (brief?.tempHighF != null) return tempToBucket(brief.tempHighF);
     const month = new Date(start).getMonth();
-    return tempToBucket(SEASONAL[month]);
+    return tempToBucket(SEASONAL_HIGHS[month]);
   }
   function effectiveHigh() {
     const w = effectiveWeather();
@@ -755,7 +777,6 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       const occasions = defaultOccasions(dayCount);
       const dayIsos = Array.from({ length: dayCount }, (_, i) => isoDate(addDays(new Date(start), i)));
       const highs = dayIsos.map(iso => perDayHigh(iso));
-      const dayBuckets = dayIsos.map(iso => perDayBucket(iso));
       // Per-day activity defaults to the trip-level activity for every day.
       // The user can override individual days from the preview cards.
       const activities = Array.from({ length: dayCount }, () => activity);
@@ -765,7 +786,6 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         activities,
       });
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
-      console.log("[Trip Preview] dayCount=", dayCount, "buckets=", dayBuckets, "highs=", highs, "activities=", activities, "totalItems=", totalItems, "perDay=", dailyOutfits.map(d => d.length));
       if (totalItems === 0) {
         setPreviewError(`No outfits could be built — your wardrobe has ${items.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
         return;
@@ -862,8 +882,8 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   function removeOutfit(dayIdx, outfitIdx) {
     mutateDay(dayIdx, looks => {
       // Keep at least one outfit per day — clearing the last one would leave
-      // the day with nothing to render. Reshuffle it instead so the user can
-      // still build manually if they want.
+      // the day with nothing to render, so removing it is a no-op. The UI
+      // already hides the ✕ button unless the day has more than one look.
       if (looks.length <= 1) return looks;
       return looks.filter((_, i) => i !== outfitIdx);
     });
@@ -900,19 +920,14 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     return list;
   }, [dayLooks]);
 
-  // Outfits missing core coverage (no shoes / no top+bottom / no dress).
-  // Returns a Set of "dayIdx:outfitIdx" keys.
+  // Outfits missing core coverage (no shoes / no top+bottom / no dress) —
+  // shared slot-based rule (outfits.js). Returns a Set of "dayIdx:outfitIdx".
   const uncoveredOutfits = useMemo(() => {
     const out = new Set();
     if (!dayLooks) return out;
     dayLooks.forEach((day, dayIdx) => {
       day.forEach((outfit, outfitIdx) => {
-        const cats = new Set((outfit.items || []).map(it => it.category));
-        const hasDress = ["Dresses","Jumpsuits","Sets","Occasionwear"].some(c => cats.has(c));
-        const hasTop = cats.has("Tops") || cats.has("Knits");
-        const hasBot = cats.has("Bottoms");
-        const hasShoes = cats.has("Shoes");
-        if ((!hasDress && (!hasTop || !hasBot)) || !hasShoes) {
+        if (outfitCoverageGaps(outfit.items).length > 0) {
           out.add(`${dayIdx}:${outfitIdx}`);
         }
       });
@@ -947,18 +962,24 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         savedTrip = Array.isArray(rows) ? rows[0] : rows;
       } catch { /* non-fatal */ }
 
-      const plans = dayLooks.map((looks, i) => buildPlanPayload({
-        date: isoDate(addDays(new Date(start), i)),
-        outfits: looks.map(o => ({
-          id: o.id,
-          label: o.label,
-          occasion: o.occasion || "Casual",
-          items: (o.items || []).map(it => it.id),
-        })),
-        source: "trip",
-        notes: destination || null,
-        weather: effectiveWeather(),
-      }));
+      const plans = dayLooks.map((looks, i) => {
+        const dayIso = isoDate(addDays(new Date(start), i));
+        return buildPlanPayload({
+          date: dayIso,
+          outfits: looks.map(o => ({
+            id: o.id,
+            label: o.label,
+            occasion: o.occasion || "Casual",
+            items: (o.items || []).map(it => it.id),
+          })),
+          source: "trip",
+          notes: destination || null,
+          // Per-day weather — the preview builds each day against its own
+          // forecast bucket, so the saved rows must match it rather than
+          // stamping one trip-level bucket across the whole range.
+          weather: perDayBucket(dayIso),
+        });
+      });
       onAssign(plans, savedTrip);
     } finally {
       setSaving(false);
@@ -1356,10 +1377,6 @@ function formatTripRange(startIso, endIso) {
   return s === e ? s : `${s} – ${e}`;
 }
 
-function isoDate(d) {
-  const z = new Date(d); z.setHours(0, 0, 0, 0);
-  return z.toISOString().slice(0, 10);
-}
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function endOfMonth(d)   { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
 function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }

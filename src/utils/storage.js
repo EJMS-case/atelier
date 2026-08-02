@@ -16,7 +16,6 @@ export const RMBG_KEY_STORE        = "atelier:rmbg-key";
 export const SETS_META_KEY         = "atelier:sets-meta:v1";
 export const STYLE_PREFS_KEY       = "atelier:style-prefs:v1";
 export const ABOUT_ME_KEY          = "atelier:about-me:v1";
-export const THEME_KEY             = "atelier:theme";
 export const RECENT_LOOKS_KEY      = "atelier:recent-looks";
 export const INSIGHTS_DISMISSED_KEY = "atelier:insights-dismissed";
 export const RECENT_ITEMS_KEY      = "atelier:recently-suggested-items";
@@ -40,6 +39,11 @@ const STORAGE_KEY_MIGRATIONS = {
 const MIGRATION_FLAG = "atelier:migrated:namespace-v1";
 
 export function migrateLocalStorage() {
+  // One-time cleanup of the orphaned theme key (dark mode was removed).
+  // Deliberately OUTSIDE the MIGRATION_FLAG guard — the flag already ran on
+  // her devices before the key was orphaned, so a guarded removal would
+  // never execute. Removing an absent key is a harmless no-op.
+  try { localStorage.removeItem("atelier:theme"); } catch { /* storage unavailable */ }
   try {
     if (localStorage.getItem(MIGRATION_FLAG) === "1") return;
     for (const [oldKey, newKey] of Object.entries(STORAGE_KEY_MIGRATIONS)) {

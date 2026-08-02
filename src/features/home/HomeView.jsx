@@ -6,16 +6,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween, fetchAllPlans } from "../planner/plannerApi.js";
+import { flattenPlanItemIds } from "../planner/outfits.js";
 import { mostWornItems, neglectedItems, costPerWear, deriveWearStats, applyWearStats } from "../wear/wearApi.js";
 import { sb } from "../../lib/supabase.js";
 import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
-
 // Categories the "Neglected" list surfaces — real garments only (no
-// accessories/belts/shoes/bags, no swim/lounge/athleisure).
-const NEGLECT_CATS = new Set([
-  "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
-]);
+// accessories/belts/shoes/bags, no swim/lounge/athleisure). Shared with the
+// recap's rediscover/challenge nudges so the two lists never drift.
+import { GARMENT_CATS as NEGLECT_CATS } from "../recap/recapData.js";
 
 const PALETTE = {
   ink:    "var(--color-ink)",
@@ -44,7 +43,9 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
         setTodayPlan(list.find(r => r.date === todayIso) || null);
         setUpcomingPlans(
           list
-            .filter(r => r.date > todayIso && (r.items?.length || 0) > 0)
+            // flattenPlanItemIds reads every outfit on the day — a multi-
+            // outfit day whose legacy `items` mirror is empty still counts.
+            .filter(r => r.date > todayIso && flattenPlanItemIds(r).length > 0)
             .sort((a, b) => a.date.localeCompare(b.date))
             .slice(0, 5)
         );
@@ -77,7 +78,8 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
   const avgCpw         = cpwValues.length > 0 ? cpwValues.reduce((a, b) => a + b, 0) / cpwValues.length : null;
 
-  const todayPlanItems = (todayPlan?.items || [])
+  // Every outfit on today's plan, not just the legacy `items` mirror of #0.
+  const todayPlanItems = flattenPlanItemIds(todayPlan)
     .map(id => items.find(it => it.id === id))
     .filter(Boolean);
 

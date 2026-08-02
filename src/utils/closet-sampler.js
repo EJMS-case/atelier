@@ -6,9 +6,9 @@
 // repeats from the pool outright (step 3b), and each bucket is ordered
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
-import { normalizeOccasion, getSubcatL2 } from "../constants/taxonomy.js";
+import { normalizeOccasion } from "../constants/taxonomy.js";
 import { slotForItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
-import { buildFilterPredicate, matchesActiveOnly } from "./style-filters.js";
+import { buildFilterPredicate, matchesActiveOnly, FILTER_TYPES } from "./style-filters.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -206,8 +206,6 @@ const BUCKET_TARGETS = {
   accessories: 9999,
 };
 
-const TOTAL_TARGET = Object.values(BUCKET_TARGETS).reduce((a, b) => a + b, 0);
-
 // Freshness ordering band. Buckets are shuffled for variety, then stable-
 // sorted by this coarse band of the item's lifetime suggestion count, so
 // never/rarely-suggested pieces lead each bucket in the prompt inventory and
@@ -343,11 +341,15 @@ export function sampleClosetItems({
   // ── 0. Free-text override set ──
   // Match the user's request against the UNFILTERED closet. Items she
   // explicitly named ("Use Medium wash jeans", "include my red blazer") get
-  // a pass through the occasion-based filters below — otherwise asking for
-  // jeans on Work strips them from the pool, then the AI hallucinates fake
-  // item IDs trying to satisfy the request. User intent overrides defaults.
-  // We do NOT bypass active toggle exclusions (she clicked "No Jeans" on
-  // purpose) or weather filters (jeans in a heatwave is still wrong).
+  // a pass through the SOFTER occasion prefilters below (step 1b's category/
+  // keyword removals and step 1c's dressiness gate) and are never rotation-
+  // dropped in 3b — otherwise asking for a piece strips it from the pool,
+  // then the AI hallucinates fake item IDs trying to satisfy the request.
+  // Free-text does NOT bypass the hard occasion bans in step 1: a banned
+  // CATEGORY yields only to a comfort-occasion note rescue, and a banned
+  // SUBCATEGORY only to an active "Only …" toggle (onlyRescueIds). Nor does
+  // it bypass active toggle exclusions (she clicked "No Jeans" on purpose)
+  // or weather filters (jeans in a heatwave is still wrong).
   const freeTextOverrideIds = new Set(
     freeTextRequest
       ? items.filter(it => matchesFreeText(it, freeTextRequest)).map(it => it.id)
@@ -382,9 +384,9 @@ export function sampleClosetItems({
   const bannedSubs = new Set(slots.banned?.subcategories || []);
   const bannedKeywords = slots.banned?.keywords || [];
 
-  const isDenim = (it) =>
-    it.subcategory === "Jeans" ||
-    /\b(jeans|denim|jean)\b/i.test((it.name || "") + " " + (it.notes || ""));
+  // Shared matcher from style-filters.js — same subcategory + name/notes
+  // denim test the "No/Only Jeans" chips use, so the two can't drift.
+  const isDenim = FILTER_TYPES.jeans.match;
 
   let pool = items.filter(it => {
     // Free-text does NOT bypass the occasion's banned CATEGORIES — a bare color
@@ -458,10 +460,11 @@ export function sampleClosetItems({
   // dress survived the filters): hosiery is exempted from the repeat-rotation
   // drop in 3b and sorted to the front of the accessories bucket in 6 so the
   // stylist always sees it next to the skirts it enables.
+  // Skirt detection delegates to the shared FILTER_TYPES.skirts matcher
+  // (same L3-aware test the "No/Only Skirts" chips use); Dresses OR'd in
+  // because a dress also makes legwear useful.
   const boostHosiery = coolOrCold && pool.some(it =>
-    it.category === "Dresses" || it.subcategory === "Skirts" ||
-    (it.category === "Bottoms" &&
-      (getSubcatL2("Bottoms", it.subcategory) === "Skirts" || /skirt/i.test(it.name || "")))
+    it.category === "Dresses" || FILTER_TYPES.skirts.match(it)
   );
 
   // ── 3b. Rotate out recently-worn / recently-suggested pieces so the same
@@ -548,12 +551,14 @@ export function sampleClosetItems({
   // can, and it never touches the recent-look drop or LRU floors above:
   // favorites must not reintroduce the repetition the rotation work removed.
   const heartedIds = favoriteItemIds instanceof Set ? favoriteItemIds : new Set(favoriteItemIds);
+  const bandOf = (it) =>
+    Math.max(0, freshnessBand(itemSuggestionCounts[it.id] || 0) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0);
   for (const key of Object.keys(buckets)) {
     buckets[key] = seededShuffle(buckets[key], rng);
-    buckets[key].sort((a, b) => {
-      const bandOf = (it) => Math.max(0, freshnessBand(itemSuggestionCounts[it.id] || 0) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0);
-      return bandOf(a) - bandOf(b);
-    });
+    // Precompute each item's band once — recomputing inside the comparator
+    // ran the whole formula O(n log n) times per bucket.
+    const bandById = new Map(buckets[key].map(it => [it.id, bandOf(it)]));
+    buckets[key].sort((a, b) => bandById.get(a.id) - bandById.get(b.id));
   }
 
   // Cool/cold skirt pools: hosiery leads the accessories bucket so it survives
@@ -626,7 +631,9 @@ export function sampleClosetItems({
   // onlyRescueIds = items rescued past occasion subcategory bans by an "Only"
   // toggle — the validator's occasion check must exempt them too, or every
   // rescued look burns a retry.
-  return { sampled, idMap, reverseMap, forceIncludeIds: [...forceIds], onlyRescueIds: [...onlyRescueIds] };
+  // occasionNoteIds = comfort-occasion pieces rescued by the user's own notes
+  // (step 0) — surfaced so the validator can exempt them the same way.
+  return { sampled, idMap, reverseMap, forceIncludeIds: [...forceIds], onlyRescueIds: [...onlyRescueIds], occasionNoteIds: [...occasionNoteIds] };
 }
 
 /**

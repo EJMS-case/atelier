@@ -13,6 +13,8 @@
 // Read path: always use outfitsOf(plan). It returns the new array if present,
 // otherwise synthesises a single-outfit array from the legacy fields.
 
+import { slotForItem } from "../../utils/item-helpers.js";
+
 let _outfitCounter = 0;
 export function newOutfitId() {
   return `o_${Date.now()}_${++_outfitCounter}`;
@@ -53,6 +55,24 @@ export function flattenPlanItemIds(plan) {
     }
   }
   return out;
+}
+
+// ── Coverage check ───────────────────────────────────────────────────────────
+// Single shared rule for "is this outfit missing a core piece" — used by the
+// trip packer, the trip-preview cards, and the trip-detail packing tab
+// (previously three drifting category-list copies). Slot-based via slotForItem
+// so athleisure bottoms, jumpsuits, complete sets, etc. all count correctly.
+// Takes resolved item OBJECTS and returns the missing core slots — any of
+// "top" / "bottom" / "shoes" (empty array = fully covered). A dress-like
+// piece (dress or set) covers both top and bottom.
+export function outfitCoverageGaps(items) {
+  const slots = new Set((items || []).filter(Boolean).map(slotForItem));
+  const hasDress = slots.has("dress") || slots.has("set");
+  const gaps = [];
+  if (!hasDress && !slots.has("top")) gaps.push("top");
+  if (!hasDress && !slots.has("bottom")) gaps.push("bottom");
+  if (!slots.has("shoes")) gaps.push("shoes");
+  return gaps;
 }
 
 // When saving, we serialize the working outfits array AND mirror outfit #0 into

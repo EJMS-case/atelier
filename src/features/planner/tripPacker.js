@@ -3,8 +3,9 @@
 // and a per-day occasion list, produce one outfit per trip day plus the
 // derived packing list (union of items actually used).
 
-import { filterByWeather } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
+import { outfitCoverageGaps } from "./outfits.js";
 
 // ── Default occasion seed ──────────────────────────────────────────────────
 // We used to gate this through a "vibe" concept (Casual / Theme Park / Beach
@@ -81,16 +82,27 @@ function scoreForOccasion(item, occasion) {
 
 // ── Slot classifier ──────────────────────────────────────────────────────────
 
+// Thin adaptor over the shared slotForItem classifier (utils/item-helpers) so
+// the packer stops drifting from the builder/sampler slotting. Trip-packer
+// semantics kept on top of it:
+//   · a COMPLETE set (one indivisible two-piece) packs like a dress — it's a
+//     full outfit base. A HALF of a set is not a base, so it fills no slot.
+//   · swim never fills a packing slot (Beach/Resort re-admit it to the pool,
+//     but it isn't picked as a core piece).
+// This also fixes the old drift where Athleisure/Loungewear returned null and
+// could never pack — slotForItem routes them to top/bottom/dress by sub.
 function itemSlot(it) {
-  const c = it.category;
-  if (c === "Tops" || c === "Knits") return "tops";
-  if (c === "Bottoms") return "bottoms";
-  if (c === "Dresses" || c === "Jumpsuits" || c === "Occasionwear" || c === "Sets") return "dresses";
-  if (c === "Outerwear") return "outerwear";
-  if (c === "Shoes") return "shoes";
-  if (c === "Bags") return "bags";
-  if (c === "Accessories") return "accessories";
-  return null;
+  switch (slotForItem(it)) {
+    case "top":       return "tops";
+    case "bottom":    return "bottoms";
+    case "dress":     return "dresses";
+    case "set":       return isCompleteSetItem(it) ? "dresses" : null;
+    case "outerwear": return "outerwear";
+    case "shoes":     return "shoes";
+    case "bag":       return "bags";
+    case "accessory": return "accessories";
+    default:          return null; // swim
+  }
 }
 
 // ── Per-day outfit composer ──────────────────────────────────────────────────
@@ -114,6 +126,10 @@ function itemSlot(it) {
 // returning heels and silk maxis because nothing was hard-banning them.
 export const TRIP_ACTIVITIES = ["Sightseeing", "Theme Park", "Beach", "Resort", "Active", "City Walking"];
 
+// Heel / boot bans go through the shared HEEL_SUBS / isBootItem helpers
+// (utils/item-helpers) instead of per-activity subcategory lists — the local
+// lists missed the L3 heel labels (Kitten / Block / Slingback / Wedges), so
+// e.g. kitten heels sailed straight into a Theme Park day.
 const ACTIVITY_FILTERS = {
   "Theme Park": {
     // All-day walking. Hard-ban anything you'd regret by lunch, including
@@ -121,28 +137,34 @@ const ACTIVITY_FILTERS = {
     // and dressy fabrics. Sandals stay allowed because chunky sport sandals
     // are fine — strappy/heeled sandals get caught by the regex below.
     bannedCategories: [],
-    bannedSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Cocktail Dresses", "Gowns", "Formal Separates", "Mules", "Skirts"]),
+    banHeels: true,
+    bannedSubcategories: new Set(["Cocktail Dresses", "Gowns", "Formal Separates", "Skirts"]),
     bannedRegex: /\b(stiletto|silk.?gown|sequin|delicate|dry.?clean|ankle.?strap|fringe|argyle|brocade|jacquard|metallic|lace|sheer|leather pant)\b/i,
     allowSwim: false,
   },
   "Beach": {
-    // Swim and Loungewear are first-class here. Heels banned.
+    // Swim and Loungewear are first-class here. Heels + boots banned.
     bannedCategories: [],
-    bannedSubcategories: new Set(["Heels", "Pumps", "Boots", "Stiletto"]),
+    banHeels: true,
+    banBoots: true,
+    bannedSubcategories: new Set(),
     bannedRegex: /\b(wool|cashmere|chunky|knit dress)\b/i,
     allowSwim: true,
   },
   "Resort": {
-    // Spa / pool day plus poolside dinner. Heels-out, swim in, sandals in.
+    // Spa / pool day plus poolside dinner. Boots + stilettos out (a lower
+    // heel is still fine for the poolside dinner), swim in, sandals in.
     bannedCategories: [],
-    bannedSubcategories: new Set(["Boots", "Stiletto"]),
+    banBoots: true,
+    bannedSubcategories: new Set(["Stiletto"]),
     bannedRegex: /\b(wool|cashmere|chunky)\b/i,
     allowSwim: true,
   },
   "Active": {
     // Hiking, sports, gym, anything that demands range of motion.
     bannedCategories: ["Occasionwear"],
-    bannedSubcategories: new Set(["Heels", "Pumps", "Stiletto", "Mules", "Cocktail Dresses", "Gowns", "Formal Separates"]),
+    banHeels: true,
+    bannedSubcategories: new Set(["Cocktail Dresses", "Gowns", "Formal Separates"]),
     bannedRegex: /\b(silk|satin|lace|sequin|stiletto|delicate|dry.?clean)\b/i,
     allowSwim: false,
   },
@@ -150,7 +172,8 @@ const ACTIVITY_FILTERS = {
     // Sightseeing in a city — leans casual but still polished. No heels,
     // jeans allowed, blazers allowed for evening transitions.
     bannedCategories: [],
-    bannedSubcategories: new Set(["Heels", "Stiletto", "Mules"]),
+    banHeels: true,
+    bannedSubcategories: new Set(),
     bannedRegex: /\b(stiletto|ankle.?strap)\b/i,
     allowSwim: false,
   },
@@ -187,10 +210,13 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
       if (!actFilter.allowSwim && (it.category === "Swim" || it.category === "Loungewear")) return false;
       // Hot-weather hard filter on heels regardless of activity — knit and
       // boot bans live in filterByWeather but heels-in-heat sneaks through
-      // because heels are technically light-fabric.
-      if (/^hot$/i.test(wxBucket) && /heel|pump|stiletto/i.test(it.subcategory || "")) return false;
+      // because heels are technically light-fabric. HEEL_SUBS is L3-aware
+      // (Kitten / Block / Slingback / Wedges), unlike the old local regex.
+      if (/^hot$/i.test(wxBucket) && it.category === "Shoes" && HEEL_SUBS.has(it.subcategory)) return false;
       // Activity-specific bans.
       if (actFilter.bannedCategories.includes(it.category)) return false;
+      if (actFilter.banHeels && it.category === "Shoes" && HEEL_SUBS.has(it.subcategory)) return false;
+      if (actFilter.banBoots && isBootItem(it)) return false;
       if (actFilter.bannedSubcategories.has(it.subcategory)) return false;
       if (actFilter.bannedRegex) {
         const text = ((it.name || "") + " " + (it.notes || "") + " " + (it.material || "")).toLowerCase();
@@ -211,6 +237,9 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   // sure each day's outfit has AT MOST ONE statement piece (fringe bag +
   // argyle skirt in the same look was the kind of thing the user flagged
   // as "yikes"). Whitelist of patterns + embellishment keywords.
+  // KEEP IN SYNC with styling-validator.js's isStatementPiece (consolidation
+  // tracked) — in particular its vision_data pattern read and its hosiery
+  // exemption, both mirrored below.
   const STATEMENT_PATTERNS = new Set([
     "striped","stripe","stripes","plaid","tartan","houndstooth","gingham",
     "windowpane","check","checked","chevron","argyle","floral","botanical",
@@ -220,8 +249,15 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   ]);
   const isStatement = (item) => {
     if (!item) return false;
+    // Hosiery is a supporting legwear layer, never the look's statement —
+    // fishnet tights must not block a printed skirt (validator does the same).
+    if (isHosieryItem(item)) return false;
     const pattern = (item.pattern || "").toLowerCase().trim();
     if (STATEMENT_PATTERNS.has(pattern)) return true;
+    // Vision-AI pattern read off the photo (enriched closets) — catches bold
+    // prints the user never tagged in the pattern field.
+    const vpattern = (item.vision_data?.pattern || "").toLowerCase().trim();
+    if (STATEMENT_PATTERNS.has(vpattern)) return true;
     const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
     if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|fringe|lace)\b/.test(text)) return true;
     if (/\b(floral|polka.?dot|leopard|zebra|snake|cheetah|paisley|gingham|houndstooth|chevron|argyle|tartan|tie.?dye|abstract print|graphic print)\b/.test(text)) return true;
@@ -303,14 +339,10 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     }
   }
 
-  // Coverage warnings
+  // Coverage warnings — shared slot-based rule (outfits.js).
   const uncovered = [];
   dailyOutfits.forEach((day, d) => {
-    const hasDress = day.some(it => itemSlot(it) === "dresses");
-    const hasTop   = day.some(it => itemSlot(it) === "tops");
-    const hasBot   = day.some(it => itemSlot(it) === "bottoms");
-    const hasShoes = day.some(it => itemSlot(it) === "shoes");
-    if ((!hasDress && (!hasTop || !hasBot)) || !hasShoes) uncovered.push(d);
+    if (outfitCoverageGaps(day).length > 0) uncovered.push(d);
   });
 
   return { dailyOutfits, packingList, uncovered };

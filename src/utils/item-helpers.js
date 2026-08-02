@@ -1,7 +1,7 @@
 // ── ITEM HELPERS ─────────────────────────────────────────────────────────────
 // Weather filter, sort comparators, sleeve classifier, taxonomy migration.
 
-import { TAXONOMY, SUBCATEGORY_L3, BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
+import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
 import {
   COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT,
   COLOR_FAMILY_RANGES, familyForColorString,
@@ -43,9 +43,13 @@ export function slotForItem(item) {
   if (cat === "Bottoms") return "bottom";
   if (cat === "Tops" || cat === "Knits") return "top";
   if (cat === "Athleisure" || cat === "Loungewear") {
-    if (/legging|jogger|trouser|pant|short|skirt|skort|bottom/.test(sub)) return "bottom";
     if (/dress|romper|jumpsuit/.test(sub)) return "dress";
-    return "top"; // bra/crop/tank/tee/shirt/hoodie/sweatshirt/sleeve/polo/top…
+    // Test TOP signals BEFORE the bottom regex — "Short Sleeve" contains
+    // "short" and would otherwise classify a tee as a bottom (same ordering
+    // fix as styling-validator's getGarmentRole and EditorialCollage).
+    if (/sleeve|bra|crop|hoodie|sweatshirt|tank|top/.test(sub)) return "top";
+    if (/legging|jogger|trouser|pant|short|skirt|skort|bottom/.test(sub)) return "bottom";
+    return "top"; // tee/shirt/polo/zip…
   }
   return "accessory";
 }
@@ -87,12 +91,6 @@ export function isBootItem(item) {
   return BOOT_SUBS.has(item.subcategory) ||
     /\bboot(s|ie|ies)?\b/i.test(item.name || "");
 }
-// True when a Shoes item is NOT a heel — i.e. it should be excluded under
-// "Heels Only". Non-shoe items return false (the filter only touches footwear).
-export function isNonHeelShoe(item) {
-  return item?.category === "Shoes" && !HEEL_SUBS.has(item?.subcategory);
-}
-
 // ── HOSIERY ─────────────────────────────────────────────────────────────────
 // Tights/stockings live under Accessories > Hosiery (L3: Sheer / Semi-Opaque /
 // Opaque / Fishnet). Single source of truth for "is this a legwear layer" —
@@ -296,6 +294,25 @@ export function mergeItems(sbItems, localItems) {
     if (!sbMap[it.id] && it.pending_sync) merged.push(it);
   });
   return merged.map(normalizeItem);
+}
+
+// ── CATEGORY DISPLAY ORDER ──────────────────────────────────────────────────
+// The order look/outfit cards render their pieces in (outer layers first,
+// grounding pieces last). Single source of truth for LookCard, SavedLookCard,
+// and EditorialCollage — previously each kept its own copy and two of them
+// used a broken `indexOf(x) ?? 99` compare (indexOf returns -1, never null),
+// so unknown categories (including "Knits", missing from those copies)
+// sorted FIRST instead of last.
+export const CATEGORY_DISPLAY_ORDER = ["Outerwear","Dresses","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
+
+// Returns a NEW array sorted by CATEGORY_DISPLAY_ORDER; unknown categories
+// sink to the end. Stable within a category (Array.prototype.sort is stable).
+export function sortByCategoryOrder(items) {
+  const rank = (it) => {
+    const i = CATEGORY_DISPLAY_ORDER.indexOf(it.category);
+    return i === -1 ? 99 : i;
+  };
+  return [...items].sort((a, b) => rank(a) - rank(b));
 }
 
 // ── SHUFFLE ─────────────────────────────────────────────────────────────────

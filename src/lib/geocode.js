@@ -32,7 +32,13 @@ export async function geocodeDestination(query) {
     if (!res.ok) return null;
     const data = await res.json();
     const hit = data?.results?.[0];
-    if (!hit) return null;
+    if (!hit) {
+      // Negative cache — memCache only (session-scoped, no 30-day TTL): a
+      // typo'd destination shouldn't refetch on every planner mount, but a
+      // reload gives the query a fresh chance in case Open-Meteo learns it.
+      memCache.set(qKey, null);
+      return null;
+    }
     const out = {
       name:     hit.name,
       country:  hit.country || "",

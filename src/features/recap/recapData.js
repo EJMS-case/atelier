@@ -19,7 +19,8 @@ export const OVERWEAR_EXCLUDE = new Set(["Belts", "Accessories", "Shoes", "Bags"
 // challenge / swap alternatives). Deliberately EXCLUDES accessories, belts,
 // shoes, bags, AND Swim / Loungewear / Athleisure — the user doesn't want those
 // surfaced as "neglected pieces to rediscover" (belts were crowding it out).
-const GARMENT_CATS = new Set([
+// Exported: HomeView's "Neglected" list applies the same eligibility rule.
+export const GARMENT_CATS = new Set([
   "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
 ]);
 

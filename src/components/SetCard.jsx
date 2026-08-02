@@ -4,7 +4,9 @@ export default function SetCard({ group, index, onEdit }) {
   const thumbItems = group.items.slice(0, 4);
   const name = group.name || `Set ${index + 1}`;
   return (
-    <div style={ss.card} onClick={onEdit}>
+    <div style={ss.card} onClick={onEdit}
+      role="button" tabIndex={0} aria-label={`Edit ${name}`}
+      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(); } }}>
       {/* Mini collage of first 4 items */}
       <div style={ss.collage}>
         {thumbItems.map((it, i) => (

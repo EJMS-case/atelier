@@ -16,6 +16,7 @@ import {
   explainFilterViolation,
   STYLE_FILTER_CHIPS,
 } from "../src/utils/style-filters.js";
+import { slotForItem } from "../src/utils/item-helpers.js";
 
 // ── Fixture items ─────────────────────────────────────────────────────────────
 const jeans        = { id: "jeans",    category: "Bottoms", subcategory: "Jeans",     name: "Medium Wash Jeans" };
@@ -154,6 +155,32 @@ test("explainFilterViolation returns null for allowed items, a reason otherwise"
   assert.equal(explainFilterViolation(jeans, ["only-jeans"]), null);
   assert.match(explainFilterViolation(dress, ["only-jeans"]), /Jeans Only.*lower half/i);
   assert.match(explainFilterViolation(jeans, ["no-jeans"]), /No Jeans/);
+});
+
+// ── The "Short Sleeve" trap ──────────────────────────────────────────────────
+// Athleisure/Loungewear subcategory "Short Sleeve" contains the substring
+// "short" — a naive bottom-first regex classifies the TOP as a lower-half
+// piece, so an "Only Jeans" toggle banned her athleisure tees. Top signals
+// must win before the bottom regex, while real Shorts/Skorts stay bottoms.
+const athShortSleeve = { id: "athss", category: "Athleisure", subcategory: "Short Sleeve", name: "Swiftly Tech Short Sleeve" };
+const athShorts      = { id: "athsh", category: "Athleisure", subcategory: "Shorts",       name: "Hotty Hot Short" };
+const athSkort       = { id: "athsk", category: "Athleisure", subcategory: "Skort",        name: "Tennis Skort" };
+const setShortSleeve = { id: "setss", category: "Sets", subcategory: "", name: "Swiftly Short Sleeve", set_id: "s2" };
+
+test("slotForItem: athleisure 'Short Sleeve' is a top; Shorts/Skort stay bottoms", () => {
+  assert.equal(slotForItem(athShortSleeve), "top");
+  assert.equal(slotForItem(athShorts), "bottom");
+  assert.equal(slotForItem(athSkort), "bottom");
+});
+
+test("only-jeans never bans an athleisure short-sleeve top, still bans athleisure shorts", () => {
+  assert.equal(excluded(["only-jeans"], athShortSleeve), false, "'Short Sleeve' top must not be lower-half");
+  assert.equal(excluded(["only-jeans"], athShorts), true, "real Shorts occupy the lower half");
+  assert.equal(excluded(["only-jeans"], athSkort), true, "Skort occupies the lower half");
+});
+
+test("a set's short-sleeve top half is not lower-half under only-jeans", () => {
+  assert.equal(excluded(["only-jeans"], setShortSleeve), false);
 });
 
 test("chip list exposes every type exactly once with a label", () => {

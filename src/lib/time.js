@@ -30,15 +30,31 @@ export function friendlyDate(iso) {
   if (!iso) return "";
   const today = nyToday();
   if (iso === today) return "Today";
-  // Yesterday / tomorrow checks live in UTC ms; works because the iso strings
-  // are aligned to NYC midnight before comparison.
-  const d   = new Date(iso + "T00:00:00");
-  const now = new Date(today + "T00:00:00");
+  // Anchor both dates at NOON UTC (the addDaysIso trick): a local-midnight
+  // parse rendered the previous calendar day in NY for any browser east of
+  // UTC, exactly when the owner travels.
+  const d   = new Date(iso + "T12:00:00Z");
+  const now = new Date(today + "T12:00:00Z");
   const diff = Math.round((d - now) / 86400000);
   if (diff === 1)  return "Tomorrow";
   if (diff === -1) return "Yesterday";
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ });
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }
+
+// TZ-safe "YYYY-MM-DD" for a Date object — built from LOCAL year/month/day
+// parts. The old pattern (`setHours(0,0,0,0)` + `toISOString()`) converted the
+// local midnight back to UTC, which lands on the *previous* day in UTC+
+// timezones and shifted every derived key/date by one.
+export function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Typical NYC monthly high temps (°F), Jan → Dec. Last-resort seasonal
+// estimate when neither a real forecast nor a destination brief is available.
+export const SEASONAL_HIGHS = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
 
 // Add days to an iso "YYYY-MM-DD" while staying timezone-stable.
 export function addDaysIso(iso, n) {

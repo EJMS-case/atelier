@@ -14,14 +14,14 @@
     "test:validator": "node scripts/styling-validator.test.mjs",
     "test:filters": "node scripts/style-filters.test.mjs",
     "test:rotation": "node scripts/rotation.test.mjs",
-    "test:weather": "node scripts/weather.test.mjs"
+    "test:weather": "node scripts/weather.test.mjs",
+    "test": "npm run test:coerce && npm run test:validator && npm run test:filters && npm run test:rotation && npm run test:weather && npm run test:matrix"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.5.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "zod": "^4.3.6",
-    "zod-to-json-schema": "^3.25.2"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

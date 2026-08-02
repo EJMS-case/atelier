@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { s } from "../ui/styles.js";
-import { icons } from "../ui/icons.jsx";
+import { HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
+import SearchInput from "./SearchInput.jsx";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
-import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather } from "../lib/lookFilters.js";
+import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatDate } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
@@ -77,8 +78,13 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     return hay.includes(q);
   };
 
+  // Sort merged logs + planner entries by wear date DESC before grouping —
+  // the two sources arrive independently ordered, so without this the month
+  // groups (insertion-ordered) rendered out of order.
+  const sortDateOf = (l) => l.date_worn || l.created_at?.slice(0, 10) || "";
   const filtered = allWorn
-    .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx) && matchesSearch(l));
+    .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx) && matchesSearch(l))
+    .sort((a, b) => String(sortDateOf(b)).localeCompare(String(sortDateOf(a))));
   const grouped = {};
   filtered.forEach(log => {
     const d = log.date_worn || log.created_at?.slice(0, 10) || "Unknown";
@@ -91,15 +97,6 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     try { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("en-US", { month:"long", year:"numeric" }); }
     catch { return ym; }
   };
-  const formatDate = (d) => {
-    try { return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }); }
-    catch { return d; }
-  };
-  // `|| {}` guards the planner-merged entries whose collage_url is null:
-  // JSON.parse(null) returns null (not a throw), and reading meta.mood off null
-  // crashed the whole History screen.
-  const parseMeta = (url) => { try { return JSON.parse(url) || {}; } catch { return {}; } };
-
   const handleWearAgain = async (log) => {
     setWearingId(log.id);
     try { await onWearAgain(log); const fresh = await sb.fetchOutfitLogs(); setLogs(fresh); }
@@ -149,32 +146,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     <div style={wrapStyle}>
       {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>}
       {allWorn.length > 0 && (
-        <div style={{ position:"relative", marginBottom: 12 }}>
-          <input
-            type="text"
-            placeholder="Search items, occasion, notes…"
-            value={searchQ}
-            onChange={e => setSearchQ(e.target.value)}
-            style={{
-              width:"100%", padding:"10px 14px 10px 36px", boxSizing:"border-box",
-              border:"1px solid var(--color-border)", borderRadius:8, fontSize:13,
-              fontFamily:"'DM Sans',Inter,system-ui,sans-serif",
-              background:"#FDFBF9", color:"#2C2420", outline:"none",
-            }}
-          />
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none"
-            stroke="var(--color-text-muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-            style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          {searchQ && (
-            <button onClick={() => setSearchQ("")}
-              style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
-                background:"none", border:"none", color:"var(--color-text-muted)", cursor:"pointer", fontSize:16, padding:"0 4px" }}>
-              ✕
-            </button>
-          )}
-        </div>
+        <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Search items, occasion, notes…"/>
       )}
       {allWorn.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
@@ -225,11 +197,8 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
                 ) : (
                   <>
                     <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                      <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                        <svg width={15} height={15} viewBox="0 0 24 24"
-                          fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
-                          stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
-                          strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                      <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)} aria-label="Favorite this outfit">
+                        <HeartIcon filled={isFav("outfit", log.id)} size={15} stroke="var(--color-border-muted)"/>
                       </button>
                       <button style={s.histWearBtn} onClick={() => handleWearAgain(log)} disabled={wearingId === log.id}>
                         {wearingId === log.id ? <><span style={s.spinnerSm}/> Logging…</> : "Wear this again"}

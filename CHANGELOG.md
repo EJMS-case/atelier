@@ -2,6 +2,42 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Dark mode removed + full cleanup audit — 2026-08-02
+
+### Why
+Owner asked to remove the dark mode toggle entirely and run a whole-codebase audit: no duplication, nothing counteractive, no dead code, fix everything found. Four parallel audit sweeps (core utils/libs, App/UI/components, feature views, prompts/constants/scripts) plus a production-incident investigation fed three implementation batches; every finding below was verified against the code before fixing.
+
+### Removed — dark mode
+- Theme toggle (top-right nav), theme state/effect, `THEME_KEY`, the `[data-theme="dark"]` token block, sun/moon icons. A one-time `migrateLocalStorage` cleanup removes the orphaned `atelier:theme` key from her devices.
+
+### Fixed — Work + Hot "no shoes" error wall (today's 15:17–15:18 UTC `ai_errors` cluster)
+- Root cause: Work bans Sandals from the pool while the HOT prompt block declared all other footwear "an automatic failure" — the model obediently omitted shoes, every retry re-sent the same contradiction, and salvage can't drop its way out of a missing slot. Fixes: HOT/WARM footwear+outerwear prompt wording now matches what the validator actually enforces; retries name up to 10 eligible shoe short-IDs; a new `salvageByAddingShoes` step completes a shoe-less look from the pool (logs `stylist_outfit:shoe_salvage`); terminal `:validation` rows carry a `pre_salvage` snapshot so model-omitted vs salvage-removed is distinguishable; the streaming gate now includes `checkShoes` + `checkWeatherCompliance` so incomplete looks no longer stream and get kept by the no-error-wall rule.
+- `LooksTool` now explicitly demands `looks` as a raw JSON array — every production tap was paying the `looks_string_parsed` coercion repair.
+
+### Fixed — real bugs from the audit
+- `slotForItem` classified Athleisure "Short Sleeve" tops as bottoms (`/short/` regex trap the validator and EditorialCollage had each patched locally); top signals now checked first, `coversLowerHalf` same fix — an "Only Jeans" toggle no longer bans an athleisure top. 4 new filter tests.
+- Trip advisor reused `LooksTool`, whose schema forbids the UUIDs its own prompt demands — silent "no outfit for that day". Local `TripLooksTool` fixes it.
+- Timezones: Calendar `isoDate` (local-midnight → `toISOString`) shifted every grid key/fetch range/trip default one day east of UTC — replaced with a TZ-safe helper in `lib/time.js`; SilhouetteBuilder's schedule date used UTC "today" instead of `nyToday()`; `friendlyDate` rendered the previous calendar day in browsers east of UTC.
+- DayModal assign/generate clobbered multi-outfit days (fresh single-outfit row upsert); both now reconcile+append like the saved-look path. Trip save stamps per-day weather buckets instead of one trip-level bucket.
+- InspirationView multi-file upload lost all but the last file (stale closure); builder Schedule multi-tags (occasions/weathers) were silently dropped by App's handlers; `movePicker` now clears on outfit move (index drift).
+- "Style 2 more" splice trimmed by final-count instead of streamed-count, eating prior looks when salvage changed the count; `viewRef` initialized to "closet" while view starts at "home" (bogus first scroll restore); rotation-state push is now merge-then-write instead of last-writer-wins across devices.
+- Validator now exempts note-rescued comfort-occasion pieces (sampler let them in; `checkOccasion` hard-failed them back out — retry burn). Shoulder-coverage check skips empty/"Any" weather, matching the prompt's stated scope.
+- Components: category sort used `indexOf(...) ?? 99` (dead nullish — unknown categories incl. Knits sorted first, now shared `sortByCategoryOrder`); Outfit History months could render out of order; saving a Style Me look dropped `layout_data`; Settings re-detect prompt was missing Swim/Bags/Belts (re-tagged bags as Accessories); phantom `s.settingsBtn`/`s.sectionLabel` style keys; both API-key cards flashed "JUST SAVED" together; Supabase settings writers swallowed 4xx silently.
+
+### Changed — counteractive logic aligned
+- Shopping prompts no longer inherit "ONLY use items from her wardrobe… Never invent items" (they exist to suggest things to buy); new `SHOPPING_STYLE_PROFILE`, palette line now agrees with `analyzeColorAI` on warm browns/reds. No brand lists introduced.
+- Hot-weather outerwear philosophy unified across filter, prompt, and validator: genuinely light/unlined (linen/cotton) layers pass everywhere; heavy layers fail everywhere. Preamble accuracy: HC2 "3–6 items", HC5 shoes scoped non-Lounge, stale "Travel:" tone line relabeled "Vacation:", duplicated occasion-tone prose trimmed (single cache invalidation, byte-stable again after).
+
+### Removed — dead code
+- `OCCASION_SLOTS` unread `required.top/bottom/shoes/dress` + `optional.*` data; phantom Pumps/Mules ban entries; legacy `CATEGORIES` export; `isNonHeelShoe`; `TOTAL_TARGET`; App's legacy `filter` state; dead `onStyleItem` prop; `layoutOverride` per-cell compute; `fetchAllTrips`/`deleteTrip` re-exports; unused icons (`insights`, `shop`) and 13 unused style keys; unused imports across App/stylist/tripAdvisor; `zod-to-json-schema` dependency; obsolete `tokenize-hex.mjs`; vestigial `mood` param in `lookHash`.
+
+### Changed — duplication consolidated
+- tripPacker's `itemSlot` now adapts shared `slotForItem` (athleisure packs again; Sets drift gone), heel/boot bans via `HEEL_SUBS`/`isBootItem`, statement detector aligned with validator; shared `outfitCoverageGaps` replaces three hand-rolled coverage checks; `SEASONAL_HIGHS`, `GARMENT_CATS`, `parseMeta`/`formatDate`, `COMFORT_OCCASIONS`, `FILTER_TYPES` matchers, `colorHex`-from-`COLOR_FAMILIES`, shared `SearchInput` + `HeartIcon` components, single base64→Blob upload helper.
+
+### Changed — performance/UX polish
+- Fonts load via `<link>` in index.html (was `@import` inside a component `<style>`); `classifyKnitAI` dynamic-imported so Add Items no longer pulls the stylist/zod bundle; pre-hydration body bg matches `--color-bg`; PWA icons precached; geocode negative caching; weather memCache eviction; keyboard/a11y semantics for icon-only buttons, set cards, dismissals, collapsible headers.
+- `npm test` now runs the full battery (coerce 42, validator 19, filters 20, rotation 14, weather 65, matrix). PLAN.md marked superseded-historical.
+
 ## [Unreleased] — Look-combination anti-repeat: recent combos in the prompt — 2026-08-02
 
 ### Why

@@ -64,7 +64,10 @@ export default function InspirationView({ apiKey, onBack, items, setItems }) {
           setQueue(q => q.map(i => i.id === tempId ? { ...i, status: "uploading", vibe_text } : i));
           // 2) Persist row + image.
           const saved = await createInspiration({ image: compressed, occasion, weather, vibe_text });
-          setItems([saved, ...items]);
+          // Functional update — concurrent multi-file uploads complete out of
+          // band, so spreading the stale `items` prop here dropped every
+          // upload that finished before this one.
+          setItems(prev => [saved, ...prev]);
           setQueue(q => q.filter(i => i.id !== tempId));
         } catch (err) {
           setQueue(q => q.map(i => i.id === tempId

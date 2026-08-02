@@ -36,3 +36,32 @@ export function rowMatchesWeather(row, short) {
   if (!short || short === "All") return true;
   return tagsFor(row, "weathers", "weather").some(w => weatherBucketOf(w) === short);
 }
+
+// ── Shared row-rendering helpers ─────────────────────────────────────────────
+// One implementation for the Looks / History / Favorites cards (previously
+// copy-pasted in each view).
+
+// Meta blob stashed in `collage_url` as JSON ({ mood, styling }). `|| {}`
+// guards planner-merged entries whose collage_url is null: JSON.parse(null)
+// returns null (not a throw), and reading meta.mood off null crashed the
+// whole History screen.
+export const parseMeta = (url) => { try { return JSON.parse(url) || {}; } catch { return {}; } };
+
+// "Sat, Mar 4" — accepts a date-only string (rendered at local noon so the
+// day never shifts across timezones) or a full timestamp.
+export const formatDate = (d) => {
+  try {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T12:00:00") : new Date(d);
+    return date.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
+  } catch { return d; }
+};
+
+// "Worn Mar 4" (year appended only when it isn't the current one).
+export const formatWornDate = (d) => {
+  try {
+    const dt = new Date(d + "T12:00:00");
+    const opts = { month: "short", day: "numeric" };
+    if (dt.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    return dt.toLocaleDateString("en-US", opts);
+  } catch { return d; }
+};

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { s } from "../ui/styles.js";
-import { icons } from "../ui/icons.jsx";
+import { s, si } from "../ui/styles.js";
+import { HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import { OCCASIONS, OCCASION_ALIASES } from "../constants/taxonomy.js";
+import { formatDate } from "../lib/lookFilters.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import Thumb from "./Thumb.jsx";
 
@@ -52,12 +53,6 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
     })),
   ];
 
-  const formatDate = (d) => {
-    try {
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T12:00:00") : new Date(d);
-      return date.toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
-    } catch { return d; }
-  };
   const tabs = [["outfits","Outfits",entries.length],["pieces","Pieces",favPieces.length],["shopping","Shopping",0]];
 
   // Group by occasion so the page is scannable instead of one long date-sorted
@@ -83,10 +78,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
     try { await sb.deleteLookFeedback(fb.id); } catch { /* optimistic — refetch next mount */ }
   };
 
-  const heartSvg = (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
-      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
-  );
+  const heartSvg = <HeartIcon filled size={16}/>;
 
   const renderEntry = (entry) => {
     if (entry.kind === "log") {
@@ -99,7 +91,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
       return (
         <SavedLookCard key={entry.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
           headerRight={
-            <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)} title="Remove from favorites">
+            <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)} title="Remove from favorites" aria-label="Remove from favorites">
               {heartSvg}
             </button>
           }
@@ -115,7 +107,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
     return (
       <SavedLookCard key={entry.id} log={{ garment_ids: fb.item_ids }} items={items} subtitle={subtitle} onEditItem={onEditItem}
         headerRight={
-          <button style={s.heartBtn} onClick={() => unlove(fb)} title="Remove — also forgets this thumbs-up">
+          <button style={s.heartBtn} onClick={() => unlove(fb)} title="Remove — also forgets this thumbs-up" aria-label="Remove — also forgets this thumbs-up">
             {heartSvg}
           </button>
         }
@@ -140,7 +132,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
           ? <div style={s.empty}><p style={s.emptyText}>Nothing here yet. Thumbs-up a look in Style Me or tap the heart on any outfit in History and it will appear here.</p></div>
           : groupedEntries.map(([occ, group]) => (
               <div key={occ}>
-                <div style={{ ...s.sectionLabel, textTransform:"uppercase", marginTop:8 }}>
+                <div style={{ ...si.sectionLabel, textTransform:"uppercase", marginTop:8 }}>
                   {occ}<span style={{ marginLeft:8, opacity:0.6 }}>{group.length}</span>
                 </div>
                 {group.map(renderEntry)}
@@ -162,9 +154,8 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
                     {item.color && <div style={s.cardColor}>{item.color}</div>}
                   </div>
                   <div style={s.cardActions}>
-                    <button style={s.heartBtn} onClick={() => toggleFav("piece", item.id)}>
-                      <svg width={13} height={13} viewBox="0 0 24 24" fill="var(--color-danger)" stroke="var(--color-danger)"
-                        strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                    <button style={s.heartBtn} onClick={() => toggleFav("piece", item.id)} title="Remove from favorites" aria-label="Remove from favorites">
+                      <HeartIcon filled size={13}/>
                     </button>
                   </div>
                 </div>

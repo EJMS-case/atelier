@@ -39,6 +39,17 @@ export function thumbUrl(itemId, cacheKey) {
   return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/thumbs/${itemId}${v}`;
 }
 
+// Decode a base64 data URL into a Blob + mime for storage uploads. Shared by
+// uploadImage / uploadThumb / uploadInspirationImage (was triplicated inline).
+function dataUrlToBlob(base64DataUrl, fallbackMime) {
+  const [header, base64] = base64DataUrl.split(",");
+  const mime = header.match(/data:([^;]+)/)?.[1] || fallbackMime;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { blob: new Blob([bytes], { type: mime }), mime };
+}
+
 export const sb = {
   async fetchAll() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?select=*&order=created_at.asc`, {
@@ -160,12 +171,7 @@ export const sb = {
   },
 
   async uploadImage(itemId, base64DataUrl) {
-    const [header, base64] = base64DataUrl.split(",");
-    const mime = header.match(/data:([^;]+)/)?.[1] || "image/jpeg";
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: mime });
+    const { blob, mime } = dataUrlToBlob(base64DataUrl, "image/jpeg");
 
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -190,12 +196,7 @@ export const sb = {
   // Upload a small grid thumbnail under `thumbs/<itemId>`. Mirrors uploadImage
   // but to the thumb path. Best-effort: one attempt, returns the public URL.
   async uploadThumb(itemId, base64DataUrl) {
-    const [header, base64] = base64DataUrl.split(",");
-    const mime = header.match(/data:([^;]+)/)?.[1] || "image/png";
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: mime });
+    const { blob, mime } = dataUrlToBlob(base64DataUrl, "image/png");
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/thumbs/${itemId}`, {
       method: "POST",
       headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
@@ -362,11 +363,12 @@ export const sb = {
   },
   async saveSettings(settings) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
         method: "POST",
         headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify({ key: "api_keys", value: JSON.stringify(settings) }),
       });
+      if (!res.ok) console.warn("[sb] saveSettings failed:", res.status);
     } catch { /* fallback to localStorage only */ }
   },
 
@@ -385,11 +387,12 @@ export const sb = {
   },
   async saveStyleFingerprint(fp) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
         method: "POST",
         headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify({ key: "style_fingerprint", value: JSON.stringify(fp) }),
       });
+      if (!res.ok) console.warn("[sb] saveStyleFingerprint failed:", res.status);
     } catch { /* swallow — non-fatal, regenerate on demand */ }
   },
 
@@ -409,11 +412,13 @@ export const sb = {
   },
   async saveRotationState(state) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
         method: "POST",
         headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify({ key: "rotation_state", value: JSON.stringify(state) }),
       });
+      // A silent 4xx here disables cross-device anti-repeat — make it visible.
+      if (!res.ok) console.warn("[sb] saveRotationState failed:", res.status);
     } catch { /* swallow — local rotation still works on this device */ }
   },
 
@@ -449,12 +454,7 @@ export const sb = {
     if (!res.ok) throw new Error("Delete inspiration failed");
   },
   async uploadInspirationImage(id, base64DataUrl) {
-    const [header, base64] = base64DataUrl.split(",");
-    const mime = header.match(/data:([^;]+)/)?.[1] || "image/jpeg";
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: mime });
+    const { blob, mime } = dataUrlToBlob(base64DataUrl, "image/jpeg");
     const path = `inspiration/${id}`;
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
       method: "POST",

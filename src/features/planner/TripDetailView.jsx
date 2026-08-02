@@ -5,12 +5,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, updateTrip } from "./plannerApi.js";
-import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
+import { analyzeTripDestination, generateTripDayLook } from "../../lib/ai/tripAdvisor.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
+import { SEASONAL_HIGHS } from "../../lib/time.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
-import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds } from "./outfits.js";
+import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps } from "./outfits.js";
 import { TRIP_ACTIVITIES } from "./tripPacker.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 
@@ -27,13 +28,6 @@ const PALETTE = {
 const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Sets", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts", "Occasionwear"];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-function isoDate(d) {
-  const z = new Date(d); z.setHours(0, 0, 0, 0);
-  return z.toISOString().slice(0, 10);
-}
-
-function addDays(d, n) { return new Date(new Date(d).getTime() + n * 86400000); }
 
 function tripDays(startIso, endIso) {
   const days = [];
@@ -193,12 +187,11 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
   //   2. AI-brief typical high for the destination (any horizon)
   //   3. Seasonal NYC estimate (last-resort fallback for trips without a
   //      destination set or before the brief arrives)
-  const SEASONAL_HIGH = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
   const weatherForDay = (iso) => {
     const forecastHigh = forecast?.[iso]?.high;
     if (forecastHigh != null) return bucketFromHigh(forecastHigh);
-    const highF = brief?.tempHighF ?? SEASONAL_HIGH[new Date(iso + "T00:00:00Z").getMonth()];
-    return tempToBucket(highF);
+    const highF = brief?.tempHighF ?? SEASONAL_HIGHS[new Date(iso + "T00:00:00Z").getMonth()];
+    return bucketFromHigh(highF);
   };
   // Used for the per-day temperature label (more accurate than brief.tempHighF
   // when the destination forecast is available).
@@ -364,6 +357,9 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
   // resyncs local state with whatever actually landed.
   const handleMoveOutfit = async (fromIso, outfitIdx, toIso) => {
     if (fromIso === toIso) return;
+    // Indices shift after a move — don't leave the move picker pointing at
+    // whatever outfit slides into this slot (same as handleRemoveOutfit).
+    setMovePicker(null);
     const source = outfitsOf(plans[fromIso]);
     const moved = source[outfitIdx];
     if (!moved) return;
@@ -382,11 +378,10 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
     }
   };
 
-  // Free-text label edit on a single outfit. Saved immediately so it persists
   // "+ Add another outfit" → just append an empty slot. Previously this
   // auto-fired generation; users wanted to choose Generate vs Build vs leave
   // it blank themselves. The empty-outfit branch of the per-outfit render
-  // (line ~644) shows the right CTA buttons.
+  // shows the right CTA buttons.
   const handleAppendEmptyOutfit = async (iso) => {
     const existing = outfitsOf(plans[iso]);
     const used = new Set(existing.map(o => o.occasion).filter(Boolean));
@@ -396,6 +391,8 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
     persistPlan(iso, next).catch(() => {});
   };
 
+  // Free-text label edit on a single outfit. Saved immediately (with an
+  // optimistic local update) so it persists without a separate Save action.
   const handleOutfitLabelChange = async (iso, outfitIdx, label) => {
     const existing = outfitsOf(plans[iso]);
     if (!existing[outfitIdx]) return;
@@ -492,15 +489,12 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
       const outfits = outfitsOf(plan);
       if (outfits.length === 0) { warnings.push(`Day ${idx + 1}: no outfit planned`); return; }
       outfits.forEach((o, oIdx) => {
-        const dayItems = resolveItems(o.items);
-        const hasDress = dayItems.some(it => ["Dresses","Jumpsuits","Sets","Occasionwear"].includes(it.category));
-        const hasTop   = dayItems.some(it => ["Tops","Knits"].includes(it.category));
-        const hasBot   = dayItems.some(it => it.category === "Bottoms");
-        const hasShoes = dayItems.some(it => it.category === "Shoes");
+        // Shared slot-based coverage rule (outfits.js).
+        const gaps = outfitCoverageGaps(resolveItems(o.items));
         const tag = outfits.length > 1 ? ` (${o.label || o.occasion || `Outfit ${oIdx + 1}`})` : "";
-        if (!hasDress && !hasTop) warnings.push(`Day ${idx + 1}${tag}: no top or dress`);
-        else if (!hasDress && !hasBot) warnings.push(`Day ${idx + 1}${tag}: no bottoms`);
-        if (!hasShoes) warnings.push(`Day ${idx + 1}${tag}: no shoes`);
+        if (gaps.includes("top")) warnings.push(`Day ${idx + 1}${tag}: no top or dress`);
+        else if (gaps.includes("bottom")) warnings.push(`Day ${idx + 1}${tag}: no bottoms`);
+        if (gaps.includes("shoes")) warnings.push(`Day ${idx + 1}${tag}: no shoes`);
       });
     });
 
@@ -512,7 +506,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
   }, [plans, days, items]);
 
   const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
-  const weatherBucket = brief ? tempToBucket(brief.tempHighF) : null;
+  const weatherBucket = brief ? bucketFromHigh(brief.tempHighF) : null;
 
   return (
     <div style={{ paddingBottom: 100 }}>

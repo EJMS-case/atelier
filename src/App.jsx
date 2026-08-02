@@ -9,23 +9,21 @@ import { bumpWearCounts, unbumpWearCounts, deriveWearStats, applyWearStats } fro
 import { runRecutDrip } from "./features/images/recutDrip.js";
 import HomeView from "./features/home/HomeView.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
-import { s, si, ss } from "./ui/styles.js";
+import { s, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, STYLE_ME_OCCASIONS } from "./constants/taxonomy.js";
-import { COLOR_FAMILY_RANGES, effectiveColorFamily } from "./constants/color.js";
-import {
-  colorSortIdx, defaultSortComparator, mergeItems,
-} from "./utils/item-helpers.js";
+import { effectiveColorFamily } from "./constants/color.js";
+import { defaultSortComparator, mergeItems } from "./utils/item-helpers.js";
 import { STYLE_FILTER_CHIPS } from "./utils/style-filters.js";
 import {
-  THEME_KEY, RECENT_LOOKS_KEY,
+  RECENT_LOOKS_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
   loadSetsMeta, saveSetsMeta, loadStylePrefs, loadAboutMe,
   migrateLocalStorage,
 } from "./utils/storage.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
-import { fetchNycForecast, bucketFromHigh } from "./lib/weather.js";
+import { fetchNycForecast } from "./lib/weather.js";
 import { nyToday } from "./lib/time.js";
 // The AI layer (stylist.js → prompts / sampler / validator / zod) is imported
 // dynamically at the call sites below so its ~170kB of schema + prompt code
@@ -141,7 +139,7 @@ export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
   const [view,       setViewRaw]    = useState("home");
   const closetScrollRef = useRef(0);
-  const viewRef = useRef("closet");
+  const viewRef = useRef("home");
   const setView = useCallback((v) => {
     // Save scroll position when leaving closet
     if (viewRef.current === "closet" && v !== "closet") {
@@ -156,15 +154,6 @@ export default function App() {
       });
     }
   }, []);
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"; }
-    catch { return "light"; }
-  });
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem(THEME_KEY, theme); } catch {}
-  }, [theme]);
-  const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
   const [allLooks,   setAllLooks]   = useState(() => {
@@ -777,12 +766,14 @@ export default function App() {
     // mode === "fresh" replaces outfits; mode === "append" keeps existing
     // looks and adds new ones (used by "Style 2 more").
     let streamedAny = false;
+    let streamedCount = 0; // looks streamed in THIS batch — the final splice below trims exactly these
     try {
       const onLook = (look) => {
         const normalized = normalizeLooks([look], occasion);
-        setOutfits(prev => mode === "append"
-          ? [...(prev || []), ...normalized]
-          : [...(prev || []), ...normalized]);
+        streamedCount += normalized.length;
+        // Both modes append here: "fresh" starts from a nulled outfits state
+        // (handleStyle clears it), so appending builds the new set in order.
+        setOutfits(prev => [...(prev || []), ...normalized]);
         if (!streamedAny) {
           streamedAny = true;
           if (mode === "fresh") setView("style");
@@ -820,8 +811,10 @@ export default function App() {
       setOutfits(prev => {
         if (mode === "append") {
           // Discard the (possibly partial) tail streamed in this batch and
-          // splice in the validated final looks.
-          const priorCount = (prev?.length || 0) - normalizedLooks.length;
+          // splice in the validated final looks. Trim by the count actually
+          // streamed — salvage can make the final set larger or smaller than
+          // what streamed, and trimming by final size would eat prior looks.
+          const priorCount = (prev?.length || 0) - streamedCount;
           const head = (prev || []).slice(0, Math.max(0, priorCount));
           return [...head, ...normalizedLooks];
         }
@@ -845,7 +838,15 @@ export default function App() {
     } finally {
       // Fire-and-forget: mirror this device's updated anti-repeat memory to
       // user_settings so her other devices rotate around these looks too.
-      sb.saveRotationState(exportRotationState());
+      // Merge the remote copy first — a blind push was last-writer-wins, so
+      // two devices styling in the same window clobbered each other's memory.
+      (async () => {
+        try {
+          const remote = await sb.getRotationState();
+          mergeRemoteRotationState(remote);
+        } catch { /* offline — push local as-is */ }
+        sb.saveRotationState(exportRotationState());
+      })();
     }
   };
 
@@ -1137,7 +1138,6 @@ export default function App() {
     <div style={s.app}>
       {/* GLOBAL KEYFRAMES */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Serif+Display&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
@@ -1207,14 +1207,6 @@ export default function App() {
                 )}
               </button>
             ))}
-            <button
-              onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
-              style={s.navBtn}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              title={theme === "dark" ? "Light mode" : "Dark mode"}
-            >
-              <Icon path={theme === "dark" ? icons.sun : icons.moon} size={15}/>
-            </button>
             <button onClick={() => setView("settings")}
               style={{...s.navBtn, ...(view==="settings" ? s.navActive : {})}}>
               <Icon path={icons.settings} size={15}/>
@@ -1380,9 +1372,9 @@ export default function App() {
                       {recentItems.map(item => (
                         <ItemCard key={item.id} item={item} allItems={items}
                           onDelete={deleteItem}
-                          onEdit={() => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
+                          onEdit={handleEditItemCard}
                           isFavorited={isFav("piece", item.id)}
-                          onToggleFav={() => toggleFav("piece", item.id)}
+                          onToggleFav={handleToggleFavPiece}
                           onStyleItem={styleWithItem}/>
                       ))}
                     </div>
@@ -1397,9 +1389,9 @@ export default function App() {
                       {uncategorized.map(item => (
                         <ItemCard key={item.id} item={item} allItems={items}
                           onDelete={deleteItem}
-                          onEdit={() => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
+                          onEdit={handleEditItemCard}
                           isFavorited={isFav("piece", item.id)}
-                          onToggleFav={() => toggleFav("piece", item.id)}
+                          onToggleFav={handleToggleFavPiece}
                           onStyleItem={styleWithItem}/>
                       ))}
                     </div>
@@ -1553,6 +1545,11 @@ export default function App() {
                 weather: existing?.weather ?? plan.weather ?? null,
                 activity: existing?.activity ?? null,
                 day_label: existing?.day_label ?? null,
+                // Forward the builder's multi-tag selections — without these,
+                // buildPlanPayload rederives singletons and the extra
+                // occasion/weather chips picked in the builder were dropped.
+                occasions: plan.occasions,
+                weathers: plan.weathers,
               });
               // Persist the manual canvas arrangement for the primary outfit
               // (the only slot whose layout currently round-trips at the row).
@@ -1601,8 +1598,8 @@ export default function App() {
             </div>
           )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={i} look={look} items={items}
-              onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
+            <LookCard key={`${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={items}
+              onEditItem={handleEditItemCard}
               onRate={async (lk, rating) => {
                 try {
                   const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
@@ -1825,17 +1822,16 @@ export default function App() {
                 weather: existing?.weather ?? plan.weather ?? null,
                 activity: existing?.activity ?? null,
                 day_label: existing?.day_label ?? null,
+                // Forward multi-tags from the scheduled look (see builder
+                // onSchedule above) so they aren't collapsed to singletons.
+                occasions: plan.occasions,
+                weathers: plan.weathers,
               });
               if (existing?.layout_data) merged.layout_data = existing.layout_data;
               await savePlan(merged);
             } catch {
               await savePlan(plan); // last-resort fallback
             }
-          }}
-          onStyleItem={(it) => {
-            setRequest(`use my ${it.color ? it.color + " " : ""}${it.subcategory || it.category} "${it.name}"`);
-            setView("style");
-            setStylePanelOpen(true);
           }}
           onBuildSimilar={buildSimilarLook}
         />
