@@ -8,9 +8,16 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#1a1613" />
     <link rel="apple-touch-icon" href="/icon-192.svg" />
+    <!-- Fonts start downloading before the JS bundle parses (was an @import
+         inside a component <style>, which serialized font fetch behind React). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Serif+Display&display=swap" />
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #F5F1EC; }
+      /* Matches the app canvas (--color-bg) so first paint doesn't flash a
+         different tint before React hydrates. */
+      body { background: #FDF8F0; }
     </style>
   </head>
   <body>

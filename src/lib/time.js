@@ -30,14 +30,15 @@ export function friendlyDate(iso) {
   if (!iso) return "";
   const today = nyToday();
   if (iso === today) return "Today";
-  // Yesterday / tomorrow checks live in UTC ms; works because the iso strings
-  // are aligned to NYC midnight before comparison.
-  const d   = new Date(iso + "T00:00:00");
-  const now = new Date(today + "T00:00:00");
+  // Anchor both dates at NOON UTC (the addDaysIso trick): a local-midnight
+  // parse rendered the previous calendar day in NY for any browser east of
+  // UTC, exactly when the owner travels.
+  const d   = new Date(iso + "T12:00:00Z");
+  const now = new Date(today + "T12:00:00Z");
   const diff = Math.round((d - now) / 86400000);
   if (diff === 1)  return "Tomorrow";
   if (diff === -1) return "Yesterday";
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ });
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 // TZ-safe "YYYY-MM-DD" for a Date object — built from LOCAL year/month/day

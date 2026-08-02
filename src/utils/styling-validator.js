@@ -1347,6 +1347,13 @@ export async function generateValidatedLooks({
                 ...checkLowerHalf(candidate, idMap, allItems),
                 ...checkUpperHalf(candidate, idMap, allItems),
                 ...checkDressStyling(candidate, idMap, allItems),
+                // Shoes + weather were missing from this gate, so a shoe-less
+                // or wool-in-July look could stream to screen and then be kept
+                // by the "never replace shown looks with an error wall" rule.
+                // Safe to gate now: the add-a-shoe salvage means the final pass
+                // can still ship a completed version of a held-back look.
+                ...checkShoes(candidate, idMap, allItems, occasion),
+                ...checkWeatherCompliance(candidate, idMap, allItems, weather),
               ];
               // Also guard against duplicating items already shown.
               const newIds = (candidate.looks[0]?.items || []).map(it =>

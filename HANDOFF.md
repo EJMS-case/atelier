@@ -1,6 +1,8 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed 2026-08-02 after the four-feature phase on branch `claude/atelier-pm-orchestrator-6n7lma` (combo anti-repeat, contact-sheet token cut, Saved search, planner day-moves) — see that PR. Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
+Refreshed 2026-08-02 (evening) after the cleanup-audit phase on branch `claude/atelier-cleanup-audit-ihqcfq` (PR #145): dark mode removed at owner request, four parallel audit sweeps + a production-incident investigation, three implementation batches. Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
+
+**Dark mode is REMOVED** (owner request, this phase): no theme toggle, no `THEME_KEY`, no `[data-theme]` CSS. Do not reintroduce. `migrateLocalStorage` strips the orphaned `atelier:theme` key.
 
 ## Owner preferences (standing, do not re-ask)
 
@@ -26,7 +28,9 @@ Refreshed 2026-08-02 after the four-feature phase on branch `claude/atelier-pm-o
 
 ## Resolved — do NOT re-investigate
 
-- **Error wall confirmed stopped (2026-08-02, verified this phase)**: #143 deployed 08:07 UTC; `ai_errors` shows ZERO `stylist_outfit:validation`, `:schema`, and `no_viable_looks` rows since, and the two post-deploy taps (15:15 UTC) recovered cleanly via coercion (`looks_string_parsed`). The handoff's winter-tights-on-Warm worry is structurally covered: the sampler already hard-excludes ALL hosiery from Hot/Warm pools (closet-sampler.js §3a, independent of the filterByWeather param), so the model can't even see tights there — no further sampler work needed.
+- **Work+Hot "no shoes" error wall (2026-08-02, fixed this phase)**: three `stylist_outfit:validation` rows 15:17–15:18 UTC, all "Look 1 has no shoes", Work + Hot. Root cause: Work bans Sandals from the pool while the old HOT prompt block said sandals/open-shoes/light-flats were the only legal footwear and everything else "an automatic failure" — the model omitted shoes; retries re-sent the same contradiction; the shoe-less look STREAMED to screen (the old streaming gate skipped checkShoes) and the no-error-wall rule kept it, so the owner saw incomplete looks, not errors. Fixed four ways: prompt wording aligned to validator reality, retry feedback lists eligible shoe short-IDs, new `salvageByAddingShoes` (logs `stylist_outfit:shoe_salvage`), streaming gate now includes checkShoes + checkWeatherCompliance. Terminal `:validation` payloads now include `pre_salvage` so model-omitted vs salvage-removed is distinguishable. Watch for `:shoe_salvage` rows — a few are fine (that's the safety net working); a spike means the prompt still isn't landing.
+- **`looks_string_parsed` on every tap (2026-08-02, addressed this phase)**: every production generation was double-encoding the looks array as a JSON string and paying the coercion repair. `LooksTool`'s description + `looks` property now explicitly demand a raw JSON array. Coercion stays as the safety net. Watch: `stylist_outfit:recovered` rows should drop from ~every-tap to rare; if they don't, the model is ignoring the schema description and the next lever is a system-prompt line.
+- **The counteractive-logic sweep is done** — shopping never-invent vs invent, HOT outerwear filter/prompt/validator trichotomy, WARM prompt vs relaxed validator, sampler note-rescue vs checkOccasion, HC2/HC5 preamble overclaims, shoulder rule on "Any". All aligned; don't re-audit these pairs without a new symptom.
 
 - **"Not seeing the real hosiery photos" (2026-08-02)**: `mergeItems` preferred the locally-cached `image` over the fresh Supabase one, so any server-side image replacement was permanently shadowed by every device's localStorage copy. Fixed — server image now wins when present; local stays as fallback for rows with no server image. If a device still shows old art after this deployed, it's the PWA stale-bundle case (force-quit + reopen).
 
@@ -46,13 +50,25 @@ Refreshed 2026-08-02 after the four-feature phase on branch `claude/atelier-pm-o
 
 ## Known open items (start here)
 
-1. **Ask how the de-branded shopping recs feel** (smarter/more personal?) next time she uses Shopping. Prompt tuning is the lever, not plumbing — still zero `shopping_*` rows in `ai_errors`.
-2. **Ask the owner how repetition feels.** Both levers are now live: item-level rotation (#134 + hearts tiebreaker) AND look-combination anti-repeat (this phase: the last 8 distinct combos render into the dynamic prompt as "don't rebuild this recipe" lines — see `recentCombos` in stylist.js). Observe before adding more machinery. Watch-signal: still **zero** `no_viable_looks` rows — the 24-look window is not starving narrow pools.
-3. **Watch `ai_errors`**: post-case-7, `:schema` should be genuinely rare. Protocol unchanged: pull the payload, replay through `coerce-shapes.js` in node, then fix. `no_tool_use` runs ~1–3/day and the retry path covers it; only worth attention if it climbs. Also watch for the first `stylist_outfit:validation` / `:item_salvage` rows (none so far — see Resolved).
-4. **Legacy dual-labeling**: rows store both L2 and L3 subcategory labels ("Heels" vs "Stiletto"). Matchers accept both, but a real normalization (one convention, enforced on write) would simplify everything.
-5. **Trip planner**: verify live post-deploy that `daily.weathercode` comes back for a real destination (code reads `weathercode`/`weather_code` defensively and degrades to estimate if absent). Also sanity-check the new move-outfit-between-days UX on the phone (⇄ day picker is the touch path; drag handle is desktop-only).
-6. **Favorites follow-ups (optional)**: Shopping sub-tab is still "coming soon".
-7. **Hosiery images & inventory** (adjusted 2026-08 per owner): the wardrobe now has **17** Noosh hosiery items, 15 with real bg-removed product photos. Removed as not owned: opaque brown, opaque skin-tone, and 2 of the 3 seeded micro-fishnet rows — the single owned pair is the renamed "Noosh micro fishnet tights — black" (real photo). Photo sources: black sheer/semi-opaque + skin-tone sheer from the Noosh order #457985 receipt email; everything else matched per-variant from the store's product JSON (Midnight = navy, Berry = burgundy, Brew = brew, Espresso = brown). PNGs live in `scripts/assets/hosiery/`, applied via `scripts/apply-noosh-photos.mjs` (idempotent); `seed-hosiery.mjs` excludes the not-owned combos. Only skin-tone and brown semi-opaque keep SVG placeholders (Noosh never made those variants).
+1. **Verify the no-shoes fix live**: next Work + Hot tap should produce complete looks. Check `ai_errors` for `:shoe_salvage` (fine, rare) vs repeated `:validation` shoes rows (prompt still losing).
+2. **Watch `looks_string_parsed` frequency** post-deploy (see Resolved) — should drop from every-tap to rare.
+3. **Ask how the de-branded shopping recs feel** (smarter/more personal?) next time she uses Shopping. Note the shopping prompts switched to `SHOPPING_STYLE_PROFILE` this phase (the "never invent items" contradiction is gone) — still zero `shopping_*` rows in `ai_errors`.
+4. **Ask the owner how repetition feels.** Both levers live: item-level rotation (#134 + hearts tiebreaker) AND look-combination anti-repeat (`recentCombos` in stylist.js). Rotation sync is now merge-then-write (was last-writer-wins across devices). Watch-signal: still **zero** `no_viable_looks` rows.
+5. **Watch `ai_errors`** — protocol unchanged: pull payload, replay through `coerce-shapes.js` in node, then fix. `:validation` rows now carry `pre_salvage`.
+6. **Legacy dual-labeling**: rows store both L2 and L3 subcategory labels ("Heels" vs "Stiletto"). Matchers accept both, but a real normalization (one convention, enforced on write) would simplify everything.
+7. **Trip planner**: verify live that `daily.weathercode` comes back for a real destination; sanity-check move-outfit-between-days on the phone. Trip days now store per-day weather buckets (this phase) — old rows keep the single trip-level bucket until re-saved.
+8. **Favorites follow-ups (optional)**: Shopping sub-tab is still "coming soon".
+9. **Hosiery images & inventory** (adjusted 2026-08 per owner): the wardrobe has **17** Noosh hosiery items, 15 with real bg-removed product photos. Removed as not owned: opaque brown, opaque skin-tone, and 2 of the 3 seeded micro-fishnet rows — the single owned pair is the renamed "Noosh micro fishnet tights — black" (real photo). PNGs live in `scripts/assets/hosiery/`, applied via `scripts/apply-noosh-photos.mjs` (idempotent); `seed-hosiery.mjs` excludes the not-owned combos. Only skin-tone and brown semi-opaque keep SVG placeholders (Noosh never made those variants).
+
+### Deliberately deferred by the audit (next candidates, all verified findings)
+
+- **Weather-band predicates**: the `/hot|85/`-style regex is still re-derived in ~6 places (`taxonomy.js` has unused `WEATHER_BUCKETS`/`weatherBucketOf`). Consolidating means touching sampler+validator+prompt together — do it as its own change with the full battery.
+- **Model-ID constants**: `claude-sonnet-4-6` ×8, `claude-haiku-4-5-20251001` ×3, etc. scattered as magic strings — one `src/constants/models.js` would end it.
+- **`resolveLookItems` extraction** in styling-validator.js (the ID-clean+resolve block repeats ~15×) and the statement-detector share with tripPacker (currently a synced copy, marked with a KEEP IN SYNC comment).
+- **supabase.js PGRST204 retry loop** is quadruplicated (upsert/saveOutfitLog/updateOutfitLog/savePlan) — consolidation deferred as behavior-risky.
+- **Home triple-fetch**: App, HomeView, and LookBackCard each fetch logs/plans on a Home visit — derive once in App and pass down. Also LooksView/OutfitHistory statically import SilhouetteBuilder (downloads the builder chunk on Saved-tab open).
+- **sw.js cache**: constant name `atelier-v2` means old hashed assets accumulate forever; needs a build-stamped cache name or activate-time pruning.
+- **PALETTE object** copy-pasted in 5 views with `accent` meaning two different colors (#6D1A2E vs var(--color-accent)) — needs a `--color-accent-strong` token decision.
 
 ## Efficiency / token-cost targets (owner explicitly wants this)
 
@@ -72,6 +88,6 @@ Refreshed 2026-08-02 after the four-feature phase on branch `claude/atelier-pm-o
 
 - Feature branch → PR → merge `main` (auto-deploy). Squash-merge with `(#NN)` in the title, matching history. **Parallel sessions ship to `main`**: always `git fetch origin main` and merge/rebase before pushing, and expect CHANGELOG conflicts at the top of the file.
 - Update `CHANGELOG.md` per feature (house style: Why / Added / Changed / Fixed).
-- Never break: `scripts/coerce-looks-shapes.test.mjs` (42 tests), `scripts/style-filters.test.mjs` (17), `scripts/rotation.test.mjs` (14), `scripts/weather.test.mjs` (65), `scripts/styling-validator.test.mjs` (13, `npm run test:validator` — added in #143, was missing from this list), `scripts/style-me-matrix.mjs`, `npm run build`. Run `npm ci` first in a fresh container.
+- Never break: `npm test` runs the whole battery — coerce (42), validator (19), filters (20), rotation (14), weather (65), matrix — plus `npm run build`. Run `npm ci` first in a fresh container.
 - Multi-agent sessions: agents share the working tree — scope each agent to disjoint files, keep CHANGELOG/HANDOFF/commits with the orchestrator, commit per-feature with explicit file lists (never `git add -A` while agents run).
 - Keep this HANDOFF.md current: when a session resolves or discovers items, rewrite the doc before ending — a stale handoff sends the next session chasing closed issues.

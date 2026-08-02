@@ -13,7 +13,7 @@ import { describeStyleFilters } from "../../utils/style-filters.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
 import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
-import { getSleeveType, filterByWeather, shuffle, slotForItem } from "../../utils/item-helpers.js";
+import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import {
@@ -75,7 +75,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const itemSuggestionCounts = loadSuggestionCounts();
   const recencyRank = getRecencyRank();
 
-  const { sampled, idMap, reverseMap, forceIncludeIds = [], onlyRescueIds = [] } = sampleClosetItems({
+  const { sampled, idMap, reverseMap, forceIncludeIds = [], onlyRescueIds = [], occasionNoteIds = [] } = sampleClosetItems({
     items,
     occasion,
     styleExcludes,
@@ -260,7 +260,10 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
       weather,
       contactSheets,
       forceIncludeIds,
-      onlyRescueIds,
+      // Note-rescued pieces (she tagged them fit for this comfort occasion)
+      // ride the same exemption as "Only" rescues: the sampler let them past
+      // the category ban, so the occasion check must not fail them back out.
+      onlyRescueIds: [...onlyRescueIds, ...occasionNoteIds],
       onLook: wrappedOnLook,
     });
   } catch (e) {
