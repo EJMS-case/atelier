@@ -1485,6 +1485,7 @@ export default function App() {
             if (result?.ok) setView(editReturnView || "closet");
             return result;
           }}
+          onSaveSetMeta={updateSetMeta}
           onDelete={() => { deleteItem(editItem.id); setView(editReturnView || "closet"); }}
           onBack={() => setView(editReturnView || "closet")}
           onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}/>

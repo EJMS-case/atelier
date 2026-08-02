@@ -5,7 +5,7 @@ import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders } from "../utils/images.js";
 
-export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround }) {
+export default function EditItemView({ item, allItems, onSave, onSaveSetMeta, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -17,11 +17,32 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     is_trimmed: item.is_trimmed,
   });
   const [preview, setPreview] = useState(item.image || null);
+  const [setName, setSetName] = useState(() => (setsMetaProp || {})[item.set_id]?.name || "");
   const [confirm, setConfirm] = useState(false);
   const [bgState, setBgState] = useState("idle"); // idle | running | success | error
   const [bgError, setBgError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  // Every set that already has members, in closet order, with a label that
+  // stays distinguishable when the set has no name yet — an unnamed set used to
+  // render as a bare "Unnamed Set", so several of them were indistinguishable
+  // and picking the right one for the second piece was guesswork.
+  const existingSets = (() => {
+    const order = [];
+    const byId = new Map();
+    for (const it of allItems || []) {
+      if (!it.set_id) continue;
+      if (!byId.has(it.set_id)) { byId.set(it.set_id, []); order.push(it.set_id); }
+      byId.get(it.set_id).push(it);
+    }
+    return order.map(id => {
+      const members = byId.get(id);
+      const name = (setsMetaProp || {})[id]?.name;
+      const who = members.map(m => m.name).filter(Boolean).slice(0, 2).join(", ");
+      return { id, count: members.length, name: name || "", label: name || (who ? `Unnamed — ${who}` : "Unnamed Set") };
+    });
+  })();
 
   // Async save wrapper. Awaits the parent's onSave (which returns {ok,error}),
   // shows a clear error if it failed, and only signals "done" on success so
@@ -32,6 +53,12 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     setSaving(true);
     setSaveError("");
     try {
+      // Persist the set's name before the item, so the set is already
+      // identifiable in this dropdown by the time she opens its partner piece.
+      if (onSaveSetMeta && form.set_id) {
+        const current = (setsMetaProp || {})[form.set_id]?.name || "";
+        if (setName.trim() !== current) onSaveSetMeta(form.set_id, { name: setName.trim() });
+      }
       const result = await onSave(form);
       if (result && result.ok === false) {
         setSaveError(result.error || "Couldn't save. Try again.");
@@ -216,33 +243,65 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
             const val = e.target.value;
             if (val === "__new__") {
               const newId = crypto.randomUUID();
-              setForm(f => ({ ...f, set_id: newId }));
+              // A brand-new set starts with this piece alone, so it is a member
+              // of a multi-piece set, not a two-piece stored as one item —
+              // separable by default. Without this a "Sets" garment carrying the
+              // column default (is_separable false) was silently linked LOCKED.
+              setForm(f => ({ ...f, set_id: newId, is_separable: true }));
+              setSetName("");
             } else if (val === "") {
               // Clearing set membership must also clear is_separable — otherwise
               // a stale `true` flag leaks in and the "Part of Set" badge + filter
               // silently treat the orphan as separable.
               setForm(f => ({ ...f, set_id: "", is_separable: false }));
+              setSetName("");
             } else {
-              setForm(f => ({ ...f, set_id: val }));
+              // Joining an existing set: same reasoning as above — a piece that
+              // was stored as a standalone complete set becomes one member of a
+              // multi-piece set the moment it is linked.
+              setForm(f => ({ ...f, set_id: val, is_separable: f.set_id ? f.is_separable : true }));
+              setSetName(existingSets.find(g => g.id === val)?.name || "");
             }
           }}>
           <option value="">— Not part of a set —</option>
           <option value="__new__">+ Create new set</option>
-          {(() => {
-            // Build unique set IDs from items
-            const seen = new Set();
-            return (allItems || []).filter(it => it.set_id && !seen.has(it.set_id) && (seen.add(it.set_id), true)).map(it => {
-              const setName = (setsMetaProp || {})[it.set_id]?.name;
-              const count = (allItems || []).filter(o => o.set_id === it.set_id).length;
-              return (
-                <option key={it.set_id} value={it.set_id}>
-                  {setName || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
-                </option>
-              );
-            });
-          })()}
+          {/* The just-created set has no members yet, so it is absent from the
+              list below. Without an option carrying its id the select matches
+              nothing and silently falls back to displaying "— Not part of a
+              set —", which read as "creating a set did nothing". */}
+          {form.set_id && !existingSets.some(g => g.id === form.set_id) && (
+            <option value={form.set_id}>{setName.trim() || "New set"} — not saved yet</option>
+          )}
+          {existingSets.map(g => (
+            <option key={g.id} value={g.id}>
+              {g.label} ({g.count} piece{g.count !== 1 ? "s" : ""})
+            </option>
+          ))}
         </select>
-        {form.category === "Sets" ? (
+
+        {form.set_id && (
+          // Naming the set lived only in the Sets tab, so a set created here
+          // stayed "Unnamed Set" — and every unnamed set renders identically in
+          // this dropdown, making the second piece impossible to link reliably.
+          <div style={{ marginBottom: 10 }}>
+            <div style={s.fieldLabel}>Set name</div>
+            <input style={{...s.input, width:"100%"}} value={setName}
+              placeholder="e.g. Navy Work Set, Weekend Linen"
+              onChange={e => setSetName(e.target.value)}/>
+          </div>
+        )}
+
+        {form.set_id ? (
+          // Linked into a multi-piece set: she chooses whether the piece also
+          // stands on its own. This control must win over the "Sets"-category
+          // branch below — a linked half is never a complete two-piece, and
+          // gating it on category left every linked "Sets" garment stuck LOCKED.
+          <label style={{display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--color-text)", cursor:"pointer"}}>
+            <input type="checkbox" checked={form.is_separable !== false}
+              onChange={e => setForm(f => ({ ...f, is_separable: e.target.checked }))}/>
+            Show as individual piece in its own category (separable)
+          </label>
+        ) : form.category === "Sets" ? (
           // A "Sets" item stored as one piece: let her declare whether it's a
           // complete two-piece to keep together (styled as one look, like a
           // dress) or pieces she also wears apart. Checked = keep together =
@@ -253,12 +312,6 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
             <input type="checkbox" checked={form.is_separable === false}
               onChange={e => setForm(f => ({ ...f, is_separable: !e.target.checked }))}/>
             <span>Complete two-piece — keep it together as one look (don't split into separate pieces). Uncheck if you also wear the top and bottom apart.</span>
-          </label>
-        ) : form.set_id ? (
-          <label style={{display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--color-text)", cursor:"pointer"}}>
-            <input type="checkbox" checked={form.is_separable}
-              onChange={e => setForm(f => ({ ...f, is_separable: e.target.checked }))}/>
-            Show as individual piece in its own category (separable)
           </label>
         ) : null}
       </div>

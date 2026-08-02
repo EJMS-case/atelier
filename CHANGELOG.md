@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Linking two garments as a coord set works again — 2026-08-02
+
+### Why
+Owner: "I'm unable to link 2 garments together as a set anymore. It keeps erroring out."
+
+Reproduced against a copy of the live closet (449 items, 39 sets). The save itself is fine — the item POST lands and `set_id` is stored correctly. What's broken is that the Coord Set panel gave her no way to see or steer the result, so the link either looked like it did nothing or landed on the wrong set.
+
+Three separate defects, all in `EditItemView`'s Coord Set panel:
+
+1. **"+ Create new set" showed no sign it had worked.** The handler mints a UUID into `form.set_id`, but the `<select>`'s options are derived from items that already carry a `set_id` — so nothing matched the fresh id, the select fell back to displaying **"— Not part of a set —"**, and the panel looked identical to before the tap. State was actually correct the whole time; only the display lied.
+2. **A set created here could only be named from the Sets tab**, so when she opened the second garment the new set appeared as `Unnamed Set (1 piece)` — the same label as every other unnamed set. In the repro this is exactly how the second piece got linked to an unrelated set.
+3. **A linked "Sets"-category garment could not be marked separable.** #108 replaced `form.set_id && <separable>` with a `form.category === "Sets" ? … : form.set_id ? …` ternary, so for a coord-set half — which is precisely what category "Sets" means — the separable control disappeared and was replaced by "Complete two-piece — keep it together". Since `wardrobe_items.is_separable` defaults to **false**, every "Sets" garment she linked after #108 became a LOCKED piece with no control to undo it. Her two post-#108 pairs (`Popflex Go with the Flow`, `L*Space Striped Diamond Eyes`) are the only fully-locked 2-piece sets in the closet; every set made before #108 is separable.
+
+### Fixed — `src/components/EditItemView.jsx`
+- The freshly minted set now renders its own `<option>` ("New set — not saved yet", live-updating to the typed name), so the selection is visible and the dropdown stops claiming the piece isn't in a set.
+- A **Set name** field appears whenever the piece is in a set, prefilled when the set already has a name. Saving pushes it through the new `onSaveSetMeta` prop → `updateSetMeta` → the `sets` table, so the set is identifiable by name by the time she opens its partner. Naming from the Sets tab still works and is unchanged.
+- Unnamed sets are now labelled by their members (`Unnamed — The Favorite Blazer`) instead of a bare `Unnamed Set`, so two of them are never interchangeable.
+- The separable checkbox is restored for **any** piece with a `set_id`, ahead of the category branch; "Complete two-piece" now shows only for a "Sets" item that is *not* linked — which matches `isCompleteSetItem`'s own fallback (`!set_id && is_separable === false`). #108's intent (a single-item set gets the control) is preserved.
+- Linking a piece that had no previous set now defaults `is_separable` to true, so a garment carrying the column default is no longer silently linked LOCKED.
+- The option list is built in one pass over `allItems` instead of a `filter` per set (was 39 × 449 scans on her closet).
+
+### Verified
+Replayed both link paths in a headless browser against a copy of her closet with the network stubbed (no writes to the live project): creating a set on garment A, naming it, then finding it by name from garment B now links both pieces to one set and the Sets grid shows "2 pieces". No page errors. `npm test` (coerce 42, validator 19+, filters 20, rotation 14, weather 65, matrix) and `npm run build` green.
+
 ## [Unreleased] — Honest trim progress + a Printed pants subcategory — 2026-08-02
 
 ### Why
