@@ -881,14 +881,30 @@ const SLOT_ROLES = {
   upper_half: new Set(["upper"]),
 };
 
-function eligibleShortIdsForSlot(slotType, idMap, allItems, { occasionSlots, weather, activeExclusions = [] } = {}) {
+// Which slot a look item occupies, for swap purposes. Only structurally
+// REQUIRED slots are listed: dropping one of these turns a fixable "wrong
+// item" failure into an unfixable "missing piece" one, so these must be
+// swapped rather than removed. Bags/accessories/outerwear are absent on
+// purpose — they're optional, so dropping them is always safe.
+const ROLE_TO_SLOT = { shoes: "shoes", lower: "lower_half", dress: "lower_half", upper: "upper_half" };
+
+// Does this single item, on its own, violate the per-item weather / exclusion /
+// occasion rules? Probing the REAL check functions with a one-item look keeps
+// this honest — an inlined copy of the rules is exactly what let a "no boots in
+// heat" shortcut pass a wool trouser as a valid warm-weather swap.
+function itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions = [], occasionSlots, forceIncludeIds = [] } = {}) {
+  const probe = { looks: [{ items: [{ id: shortId, role: "supporting" }] }] };
+  if (checkWeatherCompliance(probe, idMap, allItems, weather).length > 0) return true;
+  if (activeExclusions.length > 0 && checkExclusions(probe, idMap, allItems, activeExclusions).length > 0) return true;
+  if (checkOccasion(probe, idMap, allItems, occasionSlots, forceIncludeIds).length > 0) return true;
+  return false;
+}
+
+function eligibleShortIdsForSlot(slotType, idMap, allItems, { occasionSlots, weather, activeExclusions = [], forceIncludeIds = [] } = {}) {
   const roles = SLOT_ROLES[slotType];
   if (!roles) return [];
   const bannedCats = new Set(occasionSlots?.banned?.categories || []);
   const bannedSubs = new Set(occasionSlots?.banned?.subcategories || []);
-  const w = (weather || "").toLowerCase();
-  const hotOrWarm = weatherMatches(w, "Hot", "Warm");
-  const coolOrCold = weatherMatches(w, "Cool", "Cold");
   const out = [];
   for (const [shortId, realId] of Object.entries(idMap)) {
     const item = allItems.find(it => it.id === realId);
@@ -896,13 +912,90 @@ function eligibleShortIdsForSlot(slotType, idMap, allItems, { occasionSlots, wea
     if (!roles.has(getGarmentRole(item))) continue;
     if (bannedCats.has(item.category) || bannedSubs.has(item.subcategory)) continue;
     if (activeExclusions.length > 0 && explainFilterViolation(item, activeExclusions)) continue;
-    // Weather sanity — mirror checkWeatherCompliance's footwear rules: no
-    // boots in the heat, no sandals/open shoes in the cold.
-    if (hotOrWarm && isBootItem(item)) continue;
-    if (coolOrCold && (item.subcategory === "Sandals" || /sandal/i.test(item.name || ""))) continue;
+    // Full per-item weather/exclusion/occasion verdict, not a footwear-only
+    // shortcut: a candidate offered for the lower_half or upper_half slot has
+    // to survive the same heavy-fabric rules the validator will apply to it.
+    if (itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions, occasionSlots, forceIncludeIds })) continue;
     out.push(shortId);
   }
   return out;
+}
+
+// ── Item-swap salvage ────────────────────────────────────────────────────────
+// Runs BEFORE the item-drop salvage. When a hard failure names one offending
+// item that occupies a REQUIRED slot (shoes, bottom/dress, top), removing it
+// converts "wrong item" into "missing piece" — and only shoes have an add-back
+// path, so a dropped bottom dooms the whole tap. Production 2026-08-02
+// 18:22–18:25 UTC: three Work+Warm generations died exactly this way (a boot
+// wrong for Warm was dropped, leaving a shoe-less 2-item look; in one case the
+// wool trousers went too, leaving a single item).
+//
+// So: replace the offender IN PLACE with an eligible piece of the same slot,
+// preserving item count and slot coverage. All swaps are applied, then the
+// CALLER re-runs the full check suite and ships only if the result is clean —
+// same contract as the drop salvage. Offenders in optional slots are left
+// alone for the drop salvage to handle.
+export function salvageBySwappingItems(parsed, failures, idMap, allItems, ctx = {}) {
+  const { activeExclusions = [], occasionSlots = {}, weather = "", forceIncludeIds = [] } = ctx;
+  if (!parsed?.looks?.length) return null;
+
+  const looks = parsed.looks.map(l => ({
+    ...l,
+    items: Array.isArray(l.items) ? [...l.items] : l.items,
+  }));
+
+  // Every short-ID already in play anywhere in the response — HC4 forbids reuse.
+  const usedShortIds = new Set();
+  looks.forEach(l => (l.items || []).forEach(it => usedShortIds.add(cleanLookItemId(it))));
+
+  const candidatesBySlot = new Map();
+  const candidatesFor = (slot) => {
+    if (!candidatesBySlot.has(slot)) {
+      candidatesBySlot.set(slot, eligibleShortIdsForSlot(slot, idMap, allItems,
+        { occasionSlots, weather, activeExclusions, forceIncludeIds }));
+    }
+    return candidatesBySlot.get(slot);
+  };
+
+  let swappedAny = false;
+
+  for (const f of failures) {
+    if (!f.hard || !DROPPABLE_TYPES.has(f.type)) continue;
+    const lookMatch = f.message.match(/^Look (\d+)/);
+    if (!lookMatch) continue;
+    const look = looks[parseInt(lookMatch[1], 10) - 1];
+    if (!look || !Array.isArray(look.items)) continue;
+
+    const nameMatch = f.message.match(/'([^']+)'|"([^"]+)"/);
+    const offender = nameMatch && (nameMatch[1] || nameMatch[2]);
+    if (!offender) continue;
+
+    const idx = look.items.findIndex(it => resolveLookItem(it, idMap, allItems)?.name === offender);
+    if (idx === -1) continue;
+
+    const offenderRole = getGarmentRole(resolveLookItem(look.items[idx], idMap, allItems));
+    const slot = ROLE_TO_SLOT[offenderRole];
+    if (!slot) continue;   // optional piece — the drop salvage handles it
+
+    // Like-for-like only. The lower_half slot legitimately accepts both a
+    // bottom and a dress when building a look from scratch, but swapping a
+    // trouser for a DRESS in a look that still has its own top just trades a
+    // weather failure for a top-under-dress one. Match the offender's role.
+    const replacement = candidatesFor(slot).find(id =>
+      !usedShortIds.has(id) &&
+      getGarmentRole(allItems.find(it => it.id === (idMap?.[id] || id))) === offenderRole
+    );
+    if (!replacement) continue;  // nothing eligible; fall through to the drop salvage
+
+    const prev = look.items[idx];
+    const role = typeof prev === "string" ? "supporting" : (prev.role || "supporting");
+    look.items[idx] = { id: replacement, role };
+    usedShortIds.delete(cleanLookItemId(prev));
+    usedShortIds.add(replacement);
+    swappedAny = true;
+  }
+
+  return swappedAny ? { ...parsed, looks } : null;
 }
 
 // ── Add-a-shoe salvage ───────────────────────────────────────────────────────
@@ -1412,6 +1505,32 @@ export async function generateValidatedLooks({
       // logic below operates on an accurate failure list.
       lastFailures = runAllChecks(lastParsed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
       console.warn("[Atelier Validator] Cross-look duplicates auto-deduplicated; re-validated.");
+    }
+  }
+
+  // Salvage step 1.5: SWAP offending items that hold a required slot. Must run
+  // before the drop salvage — dropping a weather-wrong shoe or bottom turns a
+  // fixable "wrong item" failure into a "missing piece" one that only shoes can
+  // recover from. (Production 2026-08-02 18:22–18:25 UTC: three Work+Warm taps
+  // died this way.) Replacing in place keeps the look's item count and slot
+  // coverage intact.
+  if (lastParsed?.looks?.length && lastFailures.some(f => f.hard)) {
+    const swapped = salvageBySwappingItems(lastParsed, lastFailures, idMap, allItems,
+      { activeExclusions, occasionSlots, weather, forceIncludeIds });
+    if (swapped) {
+      const recheck = runAllChecks(swapped, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
+      if (!recheck.some(f => f.hard)) {
+        console.warn("[Atelier Validator] Item-swap salvage succeeded — shipped after replacing offending items:",
+          lastFailures.filter(f => f.hard).map(f => f.message));
+        logAiError("stylist_outfit:item_swap",
+          { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
+          "salvaged by swapping offending items for eligible ones");
+        return resolveIds(swapped, idMap, allItems, occasion);
+      }
+      // Swapping helped but didn't fully clear the board — carry the swapped
+      // looks + fresh failures into the drop salvage below.
+      lastParsed = swapped;
+      lastFailures = recheck;
     }
   }
 
