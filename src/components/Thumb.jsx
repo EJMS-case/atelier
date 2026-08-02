@@ -59,11 +59,11 @@ function ensureThumb(item) {
 
 export default function Thumb({ item, alt, style }) {
   const id = item?.id;
-  const [src, setSrc] = useState(() => (id && known.has(id) ? thumbUrl(id) : item?.image));
+  const [src, setSrc] = useState(() => (id && known.has(id) ? thumbUrl(id, item?.image) : item?.image));
 
   useEffect(() => {
     if (!item?.image) { setSrc(null); return; }
-    if (id && known.has(id)) { setSrc(thumbUrl(id)); return; }
+    if (id && known.has(id)) { setSrc(thumbUrl(id, item.image)); return; }
     // Unknown thumb: render the full image now (no regression), build the thumb
     // for next time. We intentionally don't hot-swap to the thumb mid-session —
     // the full image is already on screen, so re-fetching the thumb we just made
