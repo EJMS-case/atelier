@@ -160,6 +160,33 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     })
     .filter(Boolean);
 
+  // Recent combos — the LOOK-combination companion to the item-level rotation
+  // memory: rotation keeps individual pieces fresh, but pieces can still
+  // recombine into the same recipe. Same text-only format as loved/disliked
+  // looks (no W-IDs, so history can't pollute item selection). allLooks arrives
+  // oldest→newest, so reverse before slicing — the model reads newest first.
+  // Deduped on the sorted piece set so a re-generation of the same combination
+  // doesn't burn multiple lines of the 8-line budget.
+  const seenComboKeys = new Set();
+  const recentCombos = (previousLooks || [])
+    .slice()
+    .reverse()
+    .map(pl => {
+      const pieces = (pl.garment_ids || pl.items || [])
+        .map(id => items.find(it => it.id === id))
+        .filter(Boolean)
+        .slice(0, 8)
+        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
+      if (pieces.length < 2) return null;
+      const key = [...pieces].sort().join("|");
+      if (seenComboKeys.has(key)) return null;
+      seenComboKeys.add(key);
+      const occ = pl.occasion ? `[${pl.occasion}] ` : "";
+      return `${occ}${pieces.join(" + ")}`;
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+
   // Season/date context — the weather bands say how hot it is, not WHEN it is.
   // July and October can share a "Warm" band yet call for different fabrics
   // (linen and raffia vs suede and light wool), so the prompt gets one line of
@@ -192,6 +219,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     styleFingerprint,
     lovedLooks: lovedLookLines,
     dislikedLooks: dislikedLookLines,
+    recentCombos,
     comfortMode,
   });
 

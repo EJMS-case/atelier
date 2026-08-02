@@ -111,6 +111,13 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
   // null until geocode + forecast resolve; falls back to the trip-level
   // brief temperature for days outside the 16-day forecast horizon.
   const [forecast, setForecast] = useState(null);
+  // Moving an outfit between days. dragSource identifies the outfit being
+  // dragged (desktop HTML5 DnD); dragOverIso drives the drop-highlight on the
+  // hovered day card. movePicker is the touch path — it opens a compact
+  // "move to" day list on the outfit, since HTML5 DnD never fires on touch.
+  const [dragSource, setDragSource] = useState(null);   // { iso, outfitIdx }
+  const [dragOverIso, setDragOverIso] = useState(null); // iso
+  const [movePicker, setMovePicker] = useState(null);   // { iso, outfitIdx }
 
   const days = useMemo(() => tripDays(trip.start_date, trip.end_date), [trip]);
 
@@ -338,12 +345,40 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
   const handleRemoveOutfit = async (iso, outfitIdx) => {
     const existing = outfitsOf(plans[iso]);
     if (existing.length === 0) return;
+    // Indices shift after removal — don't leave the move picker pointing at
+    // whatever outfit slides into this slot.
+    setMovePicker(null);
     if (existing.length === 1) return handleClearDay(iso);
     const next = existing.filter((_, i) => i !== outfitIdx);
     try {
       await persistPlan(iso, next);
     } catch (e) {
       setError(e.message || "Couldn't update this day.");
+    }
+  };
+
+  // Move one outfit from a day to another: append it to the target day, then
+  // remove it from the source (deleting the source plan row when it was the
+  // last outfit, same as handleRemoveOutfit). Target-first ordering means a
+  // mid-move failure can duplicate but never lose the outfit; refreshPlans()
+  // resyncs local state with whatever actually landed.
+  const handleMoveOutfit = async (fromIso, outfitIdx, toIso) => {
+    if (fromIso === toIso) return;
+    const source = outfitsOf(plans[fromIso]);
+    const moved = source[outfitIdx];
+    if (!moved) return;
+    const remaining = source.filter((_, i) => i !== outfitIdx);
+    try {
+      await persistPlan(toIso, [...outfitsOf(plans[toIso]), moved]);
+      if (remaining.length === 0) {
+        await deletePlan(fromIso);
+        setPlans(prev => { const n = { ...prev }; delete n[fromIso]; return n; });
+      } else {
+        await persistPlan(fromIso, remaining);
+      }
+    } catch (e) {
+      setError(e.message || "Couldn't move this outfit.");
+      refreshPlans();
     }
   };
 
@@ -581,14 +616,39 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
             const wx = weatherForDay(iso);
             const isGenerating = generatingDay === iso;
             const hasOutfits = outfits.length > 0;
+            // A day is a drop target while an outfit from a DIFFERENT day is
+            // in flight; the source day never highlights (same-day = no-op).
+            const isDropTarget = dragSource != null && dragSource.iso !== iso;
+            const isDropHover = isDropTarget && dragOverIso === iso;
 
             return (
-              <div key={iso} style={{
+              <div key={iso}
+                onDragOver={isDropTarget ? (e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverIso !== iso) setDragOverIso(iso);
+                } : undefined}
+                onDragLeave={isDropTarget ? (e) => {
+                  // dragleave fires when entering children too — only clear
+                  // when the pointer genuinely left this card.
+                  if (!e.currentTarget.contains(e.relatedTarget)) {
+                    setDragOverIso(cur => (cur === iso ? null : cur));
+                  }
+                } : undefined}
+                onDrop={isDropTarget ? (e) => {
+                  e.preventDefault();
+                  const src = dragSource;
+                  setDragSource(null);
+                  setDragOverIso(null);
+                  handleMoveOutfit(src.iso, src.outfitIdx, iso);
+                } : undefined}
+                style={{
                 marginBottom: 14,
-                border: `1px solid ${hasOutfits ? PALETTE.accent + "40" : PALETTE.line}`,
+                border: `1px solid ${isDropHover ? PALETTE.accent : hasOutfits ? PALETTE.accent + "40" : PALETTE.line}`,
                 borderRadius: 10,
                 overflow: "hidden",
-                background: "#fff",
+                background: isDropHover ? `${PALETTE.accent}0A` : "#fff",
+                boxShadow: isDropHover ? `0 0 0 2px ${PALETTE.accent}40` : "none",
               }}>
                 {/* Day header — date + temp + count badge */}
                 <div style={{ padding: "10px 12px 8px", borderBottom: `1px solid ${PALETTE.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -682,6 +742,23 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                         }}>
                           {/* Outfit meta row */}
                           <div style={{ display: "flex", gap: 6, padding: "8px 12px", alignItems: "center", background: PALETTE.cream }}>
+                            {days.length > 1 && (
+                              // Desktop drag handle. Touch users move via the ⇄
+                              // button below — HTML5 DnD doesn't fire on touch.
+                              <div
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.effectAllowed = "move";
+                                  // Firefox requires data for the drag to start.
+                                  e.dataTransfer.setData("text/plain", outfit.id);
+                                  setDragSource({ iso, outfitIdx });
+                                }}
+                                onDragEnd={() => { setDragSource(null); setDragOverIso(null); }}
+                                title="Drag to another day"
+                                style={{ cursor: "grab", color: PALETTE.muted, fontSize: 13, lineHeight: 1, padding: "4px 2px", userSelect: "none", flexShrink: 0 }}>
+                                ⠿
+                              </div>
+                            )}
                             <select value={occ}
                               onChange={e => handleOccasionChange(iso, outfitIdx, e.target.value)}
                               style={{ flex: "0 0 96px", fontSize: 10, letterSpacing: "0.04em", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "4px 6px", background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
@@ -721,12 +798,39 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                                 ⊞ Build
                               </button>
                             )}
+                            {days.length > 1 && (
+                              <button
+                                onClick={() => setMovePicker(cur =>
+                                  cur && cur.iso === iso && cur.outfitIdx === outfitIdx
+                                    ? null
+                                    : { iso, outfitIdx })}
+                                title="Move to another day"
+                                style={{ padding: "7px 10px", background: movePicker && movePicker.iso === iso && movePicker.outfitIdx === outfitIdx ? PALETTE.cream : "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, cursor: "pointer" }}>
+                                ⇄
+                              </button>
+                            )}
                             <button onClick={() => handleRemoveOutfit(iso, outfitIdx)}
                               title={outfits.length > 1 ? "Remove this outfit" : "Clear this day"}
                               style={{ padding: "7px 10px", background: "transparent", color: PALETTE.muted, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, cursor: "pointer" }}>
                               ✕
                             </button>
                           </div>
+                          {/* Compact day picker — the touch-first way to move
+                              this outfit; taps do exactly what a drop does. */}
+                          {movePicker && movePicker.iso === iso && movePicker.outfitIdx === outfitIdx && (
+                            <div style={{ padding: "8px 12px 10px", borderTop: `1px dashed ${PALETTE.line}`, background: PALETTE.cream }}>
+                              <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted, fontWeight: 600, marginBottom: 6 }}>MOVE TO</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                {days.map((d, dIdx) => d === iso ? null : (
+                                  <button key={d}
+                                    onClick={() => { setMovePicker(null); handleMoveOutfit(iso, outfitIdx, d); }}
+                                    style={{ padding: "5px 10px", background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 12, fontSize: 10, color: PALETTE.ink, cursor: "pointer" }}>
+                                    {friendlyDay(d, dIdx)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

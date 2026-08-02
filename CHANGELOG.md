@@ -2,6 +2,38 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Look-combination anti-repeat: recent combos in the prompt — 2026-08-02
+
+### Why
+Handoff item 3 named the lever: item-level rotation (#134) keeps individual pieces fresh, but pieces can still recombine into the same-feeling outfit, and the `previousLooks` param App already passed to `generateOutfit` sat unused.
+
+### Changed — `src/lib/ai/stylist.js`, `src/prompts/styling-system-prompt.js`
+- The last 8 distinct previous looks (newest first, deduped on sorted piece set) now render as compact text lines — "[Occasion] color subcategory + …", no W-IDs so history can't pollute item selection, same pattern as loved/disliked looks — into a new 🔁 RECENTLY SUGGESTED COMBINATIONS block in the dynamic body: don't rebuild the same anchor pairing; reusing individual pieces is fine. `STYLING_STATIC_PREAMBLE` verified byte-identical, so the prompt cache is unaffected.
+
+## [Unreleased] — Contact sheets: ~36% fewer vision tokens per tap — 2026-08-02
+
+### Why
+The handoff's top efficiency target: 2–3 contact sheets per generation were the biggest per-tap cost, and the old 1300×1184 sheets sat OVER the API's ~1.15 MP downscale cap — ~2.4 tokens/item paid for pixels the API threw away.
+
+### Changed — `src/utils/contact-sheet.js`
+- Geometry 130px→90px thumbs, 18px→12px labels, 80→120 items/sheet: a full sheet is now 900×1224 (1.10 MP), under the cap, so every billed pixel is signal and thumbs reach the model sharper than the old post-downscale ~112px. Typical 160-item sample: ~3,067 → ~1,959 tokens (~19.2 → ~12.2/item). ID labels stay bold 10px — effectively larger than before since nothing downscales them. Token math documented in the module header; image cache and timeout logic untouched.
+
+## [Unreleased] — Saved: text search across Looks and Favorites — 2026-08-02
+
+### Why
+History gained text search on 2026-08-02; the handoff flagged extending the same pattern to Saved as cheap. Saved's lists fetch their own data (LooksView/FavoritesView), so the search box couldn't filter from SavedView alone.
+
+### Added — `src/components/SavedView.jsx`, `src/components/SavedLookCard.jsx`
+- Same search input and match semantics as Outfit History (item names + occasion tags + notes, case-insensitive substring), delivered via a new `LookSearchContext`: each SavedLookCard hides itself when it doesn't match. Filters Looks (All) and Favorites > Outfits; hidden on the History tab, which keeps its own identical box (context fed "" there so nothing double-filters).
+
+## [Unreleased] — Trip planner: move outfits between days — 2026-08-02
+
+### Why
+The last F3 leftover. Phone-first PWA, so HTML5 drag-and-drop alone wasn't enough.
+
+### Added — `src/features/planner/TripDetailView.jsx`
+- Desktop: ⠿ drag handle per outfit; other day cards are drop targets with an accent highlight. Touch (primary path): ⇄ button opens a compact "MOVE TO" day-pill list. Both share `handleMoveOutfit`, which appends to the target before removing from the source — a mid-move failure can duplicate but never lose an outfit — and resyncs via `refreshPlans()` on error. Persistence reuses `persistPlan`/`deletePlan` unchanged; affordances only render on multi-day trips.
+
 ## [Unreleased] — Style Me error wall: streaming restored, item-drop salvage, terminal-failure logging — 2026-08-02
 
 ### Why

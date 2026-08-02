@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { s } from "../ui/styles.js";
 import EditorialCollage from "./EditorialCollage.jsx";
 import ItemDetailSheet from "./ItemDetailSheet.jsx";
+import { tagsFor } from "../lib/multitag.js";
+
+// Free-text query provided by SavedView's search box. The Looks and Favorites
+// lists fetch and render their own data, so search reaches them here at the
+// card level: each card hides itself when it doesn't match. Default "" = no
+// filtering (History runs its own pre-card search and provides nothing).
+export const LookSearchContext = createContext("");
 
 // Shared card layout used by Looks (All), OutfitHistory, and Favorites. Renders
 // the outfit as the SAME styled editorial collage used for freshly generated
@@ -17,6 +24,7 @@ const CATEGORY_ORDER = ["Outerwear","Dresses","Tops","Knits","Bottoms","Shoes","
 
 export default function SavedLookCard({ log, items, subtitle, headerRight, notes, actions, onEditItem }) {
   const [detailItem, setDetailItem] = useState(null);
+  const searchQ = useContext(LookSearchContext);
 
   const logItems = (log.garment_ids || [])
     .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
@@ -25,6 +33,18 @@ export default function SavedLookCard({ log, items, subtitle, headerRight, notes
       const ai = CATEGORY_ORDER.indexOf(a.category); const bi = CATEGORY_ORDER.indexOf(b.category);
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
+
+  // Mirror OutfitHistory's search semantics: case-insensitive substring match
+  // over constituent item names, occasion tags, and notes.
+  const q = (searchQ || "").trim().toLowerCase();
+  if (q) {
+    const hay = [
+      ...logItems.map(i => i.name || ""),
+      ...tagsFor(log, "occasions", "occasion"),
+      notes || log.notes || "",
+    ].join(" ").toLowerCase();
+    if (!hay.includes(q)) return null;
+  }
 
   return (
     <div style={s.histCard}>
