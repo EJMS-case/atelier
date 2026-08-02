@@ -201,6 +201,17 @@ export const sb = {
     });
   },
 
+  // Delete only the derived thumbnail. Called when an item's image URL changes
+  // so every device rebuilds the thumb from the new image instead of rendering
+  // the one derived from the replaced photo (Thumb.jsx self-heals on the 404).
+  async removeThumb(itemId) {
+    await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
+      method: "DELETE",
+      headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ prefixes: [`thumbs/${itemId}`] }),
+    });
+  },
+
   // ── Outfit Logs ──
   // Mirrors the self-healing pattern in `upsert`: on PGRST204 (unknown
   // column, e.g. an older Supabase project that hasn't run the latest

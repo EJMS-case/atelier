@@ -546,6 +546,13 @@ export default function App() {
     // Tag as pending so a refresh mid-sync doesn't wipe the change.
     const pendingUpdate = items.map(it => it.id === id ? {...it, ...resolvedFields, pending_sync: true} : it);
     persistItems(pendingUpdate);
+    // Image replaced → invalidate the derived server thumbnail so every device
+    // rebuilds it from the new image (a stale thumb otherwise outlives the
+    // swap forever; Thumb.jsx falls back to the full image on the 404).
+    const prevItem = items.find(it => it.id === id);
+    if (resolvedFields.image && prevItem?.image && resolvedFields.image !== prevItem.image) {
+      sb.removeThumb(id).catch(() => {});
+    }
     flashSync("syncing");
     try {
       const item = pendingUpdate.find(it => it.id === id);
