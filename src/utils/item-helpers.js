@@ -281,9 +281,14 @@ export function mergeItems(sbItems, localItems) {
     if (local?.pending_sync) {
       return { ...it, ...local };
     }
+    // Server image wins when present — otherwise a server-side image change
+    // (bulk re-cut, photo replacement) can never reach a device that holds a
+    // cached copy of the old one, because the stale local URL would shadow the
+    // fresh row forever. The local overlay stays only as a fallback for rows
+    // whose server image is missing (e.g. upload failed after a local save).
     return {
       ...it,
-      image: local?.image || it.image || null,
+      image: it.image || local?.image || null,
       pending_sync: false,
     };
   });
