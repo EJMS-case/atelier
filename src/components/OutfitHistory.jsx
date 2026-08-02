@@ -15,6 +15,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   const [loading,    setLoading]    = useState(true);
   const [filterOcc,  setFilterOcc]  = useState("All");
   const [filterWx,   setFilterWx]   = useState("All");
+  const [searchQ,    setSearchQ]    = useState("");
   const [wearingId,  setWearingId]  = useState(null);
   const [deleteId,   setDeleteId]   = useState(null);
   const [unloggingId, setUnloggingId] = useState(null);
@@ -61,8 +62,23 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   });
   const allWorn = [...logs, ...plannerEntries];
 
+  // Free-text search across item names, occasion tags, and notes — AND'd with
+  // the chip filters below so search narrows within the selected occasion/weather.
+  const nameById = {};
+  (items || []).forEach(it => { nameById[it.id] = it.name || ""; });
+  const q = searchQ.trim().toLowerCase();
+  const matchesSearch = (log) => {
+    if (!q) return true;
+    const hay = [
+      ...(log.garment_ids || []).map(id => nameById[id] || ""),
+      ...tagsFor(log, "occasions", "occasion"),
+      log.notes || "",
+    ].join(" ").toLowerCase();
+    return hay.includes(q);
+  };
+
   const filtered = allWorn
-    .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx));
+    .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx) && matchesSearch(l));
   const grouped = {};
   filtered.forEach(log => {
     const d = log.date_worn || log.created_at?.slice(0, 10) || "Unknown";
@@ -132,6 +148,34 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   return (
     <div style={wrapStyle}>
       {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>}
+      {allWorn.length > 0 && (
+        <div style={{ position:"relative", marginBottom: 12 }}>
+          <input
+            type="text"
+            placeholder="Search items, occasion, notes…"
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+            style={{
+              width:"100%", padding:"10px 14px 10px 36px", boxSizing:"border-box",
+              border:"1px solid var(--color-border)", borderRadius:8, fontSize:13,
+              fontFamily:"'DM Sans',Inter,system-ui,sans-serif",
+              background:"#FDFBF9", color:"#2C2420", outline:"none",
+            }}
+          />
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none"
+            stroke="var(--color-text-muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+            style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }}>
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          {searchQ && (
+            <button onClick={() => setSearchQ("")}
+              style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
+                background:"none", border:"none", color:"var(--color-text-muted)", cursor:"pointer", fontSize:16, padding:"0 4px" }}>
+              ✕
+            </button>
+          )}
+        </div>
+      )}
       {allWorn.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
           {occasions.map(o => (
@@ -146,6 +190,11 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
             <button key={w} onClick={() => setFilterWx(w)}
               style={{...s.chip, ...(filterWx === w ? s.chipActive : {})}}>{w}</button>
           ))}
+        </div>
+      )}
+      {!loading && q && (
+        <div style={{ fontSize:11, color:"var(--color-text-muted)", marginBottom:8 }}>
+          {filtered.length} result{filtered.length !== 1 ? "s" : ""} for "{searchQ.trim()}"
         </div>
       )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading outfit history…</p></div>}

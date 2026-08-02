@@ -2,6 +2,53 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Coercion case 7: looks array streamed into the items slot — 2026-08-02
+
+### Why
+The first post-#131 `stylist_outfit:schema` row (2026-08-01 21:39 UTC) was a genuinely new malformation: the model streamed the entire (truncated) looks array into the `items` parameter. Case 6 parsed the string, case 4 wrapped it as a flat look — nesting a look inside a look — and Zod rejected a generation that was actually complete, burning a retry.
+
+### Fixed — `src/utils/coerce-shapes.js`
+- New case 7: a value parsed out of a stringified `items` that is LOOK-shaped (elements carrying their own nested `items[]` — an item never does) is adopted as `looks` instead, covering the array, single-look, and `{looks:[…]}` wrapper variants. Never overwrites a real looks array. Logged as `items_looks_unwrapped`.
+
+### Tests
+- `scripts/coerce-looks-shapes.test.mjs`: 41/41 (was 36) — includes a replay of the exact production payload from ai_errors 88e1406d.
+
+## [Unreleased] — Code-split the AI layer out of the initial bundle — 2026-08-02
+
+### Why
+The handoff flagged the ~455 kB main chunk and the onnx bundles. Verified: @imgly/background-removal was ALREADY fully lazy (main → bgRemoval → imgly → ort, all dynamic) — the real cold-start weight was the statically-imported stylist pipeline (stylist.js → prompts → sampler → validator → zod).
+
+### Changed — `src/App.jsx`, `src/lib/bgRemoval.js`
+- `generateOutfit` and `generateStyleFingerprint` are now dynamic imports at their call sites: ~140 kB (47 kB gzip) of schema/prompt code loads on the first Style Me tap instead of every cold start. Main chunk 457.6 → 317.7 kB (gzip 144.6 → 98.7). Dropped App's unused `classifyKnitAI`/`analyzeColorAI` imports (their real consumers are already lazy views) and bgRemoval's stale `@vite-ignore` comment.
+- Trade-off: the first Style Me tap fetches the stylist chunk once per session; a failed fetch surfaces through the existing generation error path.
+
+## [Unreleased] — Trip weather: real conditions + precipitation, layered caching — 2026-08-02
+
+### Why
+Handoff item 4 (PLAN.md F3): trip weather was temperature-only and partially estimate-based. Rain/snow is exactly what changes what gets packed.
+
+### Changed — `src/lib/weather.js`, `src/lib/geocode.js`, planner views
+- The Open-Meteo forecast fetch now also requests `weathercode` + `precipitation_probability_max`; WMO codes map to condition labels shown only when packing-relevant (Rainy/Snowy/Stormy/Drizzly/Foggy). Trip day headers distinguish real forecast (`62°F · Rainy 70%`) from seasonal estimate (`~62°F (est)`).
+- In-memory Maps now front the localStorage caches (weather 6 h TTL, geocode 30 d) so re-renders and tab switches never refetch. Weather cache key bumped v1→v2 for the new day shape.
+- Every failure path (geocode miss, network error, bad payload, beyond the 16-day horizon) still silently falls back to the estimate; downstream packing logic consumes the unchanged Hot/Warm/Mild/Cool/Cold buckets. Conditions are display-only.
+
+### Tests
+- New `scripts/weather.test.mjs` (65 tests, stubbed fetch; `npm run test:weather`): bucket boundaries, WMO mapping, URL construction, cache dedupe, and every failure shape returning null.
+
+## [Unreleased] — History text search + hearted pieces as a sampler tiebreaker — 2026-08-02
+
+### Why
+History had chip filters but no way to find "that black slip dress night"; and hearting an individual piece did nothing for Style Me (only `look_feedback` scores fed the sampler) — handoff item 5 / per-feature notes.
+
+### Added — `src/components/OutfitHistory.jsx`
+- Free-text search over item names, occasion tags, and notes — case-insensitive, AND'd with the existing occasion/weather chips, styled like the Closet global search, with a result count line.
+
+### Changed — `src/utils/closet-sampler.js`, `src/lib/ai/stylist.js`, `src/App.jsx`
+- Hearted pieces (`favorites` table, type `piece`) get a −0.25 nudge inside the freshness-band comparator only. Bands are whole numbers, so a heart wins ties within a band but can mathematically never jump one — loved-look scores, the 24-look drop, LRU floors, and freshest-first ordering from the anti-repeat work are untouched, so favorites cannot reintroduce repetition. Wired from App's already-loaded favorites state (no new fetch).
+
+### Tests
+- `scripts/rotation.test.mjs`: 14/14 (new test: a hearted piece never jumps a band).
+
 ## [Unreleased] — Style Me anti-repeat: look-deep rotation memory, freshest-first inventory, cross-device sync — 2026-08-01
 
 ### Why

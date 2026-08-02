@@ -7,6 +7,10 @@
 const CACHE_KEY = "atelier:geocode:v1";
 const TTL_MS    = 30 * 24 * 60 * 60 * 1000;
 
+// Session-scoped mirror of the localStorage cache — keeps re-renders from
+// refetching even when localStorage is unavailable (quota / private mode).
+const memCache = new Map(); // query(lowercase) → result
+
 /**
  * Look up a destination string. Returns the first hit:
  *   { name, country, lat, lon, timezone }
@@ -15,8 +19,13 @@ const TTL_MS    = 30 * 24 * 60 * 60 * 1000;
 export async function geocodeDestination(query) {
   const q = (query || "").trim();
   if (!q) return null;
+  const qKey = q.toLowerCase();
+  if (memCache.has(qKey)) return memCache.get(qKey);
   const cache = readCache();
-  if (cache[q.toLowerCase()]) return cache[q.toLowerCase()];
+  if (cache[qKey]) {
+    memCache.set(qKey, cache[qKey]);
+    return cache[qKey];
+  }
   try {
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`;
     const res = await fetch(url);
@@ -31,7 +40,8 @@ export async function geocodeDestination(query) {
       lon:      hit.longitude,
       timezone: hit.timezone || "UTC",
     };
-    writeCache({ ...cache, [q.toLowerCase()]: out });
+    memCache.set(qKey, out);
+    writeCache({ ...cache, [qKey]: out });
     return out;
   } catch {
     return null;
