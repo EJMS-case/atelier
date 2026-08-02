@@ -10,7 +10,7 @@ Refreshed 2026-08-02 after PR #137 (08-01 failure-cluster verification + shoppin
 - **No moods** (removed), **no sporty anything** ("Sporty" removed from the vibe vocabulary).
 - **No brand hard rules in shopping recs** (PR #137): she wants suggestions inferred from her actual closet, not a fixed brand short-list. The prescriptive brand lists were removed from both shopping prompts and `STYLE_PROFILE`. Don't reintroduce "use brands X, Y, Z" directives anywhere; the aesthetic-register brand references inside `STYLING_STATIC_PREAMBLE` (taste calibration, not shopping rules) stay.
 - **Dark Winter palette, quiet-luxury register** (The Row, Totême, Khaite; easy/feminine: Sézane, Posse…) — see `STYLING_STATIC_PREAMBLE`.
-- She wears skirts/minis year-round: hosiery (Accessories > Hosiery, 21 seeded Noosh pairs) makes them winter-viable. Never let cold weather exclude skirts.
+- She wears skirts/minis year-round: hosiery (Accessories > Hosiery, 17 Noosh pairs, 15 with real product photos) makes them winter-viable. Never let cold weather exclude skirts.
 
 ## Architecture snapshot
 
@@ -47,7 +47,7 @@ Refreshed 2026-08-02 after PR #137 (08-01 failure-cluster verification + shoppin
 5. **Legacy dual-labeling**: rows store both L2 and L3 subcategory labels ("Heels" vs "Stiletto"). Matchers accept both, but a real normalization (one convention, enforced on write) would simplify everything.
 6. **Trip planner**: drag-and-drop of outfits between days (last F3 leftover). Also verify live post-deploy that `daily.weathercode` comes back for a real destination (code reads `weathercode`/`weather_code` defensively and degrades to estimate if absent).
 7. **Favorites follow-ups (optional)**: Shopping sub-tab is still "coming soon".
-8. **Hosiery images** are inline SVG data-URIs — replacing with real bg-removed product photos of her Noosh pairs is an open nicety (`scripts/seed-hosiery.mjs --sql` is idempotent).
+8. **Hosiery images & inventory** (adjusted 2026-08 per owner): the wardrobe now has **17** Noosh hosiery items, 15 with real bg-removed product photos. Removed as not owned: opaque brown, opaque skin-tone, and 2 of the 3 seeded micro-fishnet rows — the single owned pair is the renamed "Noosh micro fishnet tights — black" (real photo). Photo sources: black sheer/semi-opaque + skin-tone sheer from the Noosh order #457985 receipt email; everything else matched per-variant from the store's product JSON (Midnight = navy, Berry = burgundy, Brew = brew, Espresso = brown). PNGs live in `scripts/assets/hosiery/`, applied via `scripts/apply-noosh-photos.mjs` (idempotent); `seed-hosiery.mjs` excludes the not-owned combos. Only skin-tone and brown semi-opaque keep SVG placeholders (Noosh never made those variants).
 
 ## Efficiency / token-cost targets (owner explicitly wants this)
 
