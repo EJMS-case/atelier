@@ -1,3 +1,5 @@
+> **Superseded — historical planning doc (2026-07). See HANDOFF.md + CHANGELOG.md for current state.**
+
 # Atelier — Fits-Parity Plan
 
 Draft. Needs your approval before any code changes land.

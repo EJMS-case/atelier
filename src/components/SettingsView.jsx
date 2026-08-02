@@ -15,21 +15,32 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
   const [showR,        setShowR]        = useState(false);
-  // Auto-save indicator that flashes briefly after a key change persists.
+  // Auto-save indicators that flash briefly after a key change persists —
+  // one per key card, so editing the Anthropic key doesn't flash "JUST
+  // SAVED" on the Remove.bg card and vice versa.
   // The "Save Settings" button at the bottom used to be the only way to
   // persist the API key — users typed it in, didn't tap save, and then got
   // "Add your API key first" errors from Style Me. Now we debounce-save
   // every change so typing alone is enough.
-  const [keyJustSaved, setKeyJustSaved] = useState(false);
+  const [anthJustSaved, setAnthJustSaved] = useState(false);
+  const [rmbgJustSaved, setRmbgJustSaved] = useState(false);
   useEffect(() => {
-    if (key === apiKey && rmbg === rmbgKey) return;
-    const t = setTimeout(() => {
+    const keyChanged  = key !== apiKey;
+    const rmbgChanged = rmbg !== rmbgKey;
+    if (!keyChanged && !rmbgChanged) return;
+    // Both timers are tracked so the effect's REAL cleanup clears them —
+    // a cleanup returned from inside a setTimeout callback is a no-op.
+    const timers = [];
+    timers.push(setTimeout(() => {
       onSave(key, rmbg, { silent: true });
-      setKeyJustSaved(true);
-      const clearT = setTimeout(() => setKeyJustSaved(false), 1800);
-      return () => clearTimeout(clearT);
-    }, 500);
-    return () => clearTimeout(t);
+      if (keyChanged)  setAnthJustSaved(true);
+      if (rmbgChanged) setRmbgJustSaved(true);
+      timers.push(setTimeout(() => {
+        setAnthJustSaved(false);
+        setRmbgJustSaved(false);
+      }, 1800));
+    }, 500));
+    return () => timers.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, rmbg]);
   const [prefs,        setPrefs]        = useState(() => loadStylePrefs());
@@ -123,7 +134,11 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
             role: "user",
             content: [
               { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-              { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: Tops/Knits/Bottoms/Dresses/Sets/Jumpsuits/Loungewear/Athleisure/Outerwear/Occasionwear/Shoes/Accessories), subcategory (specific type), color_family (main color). Return only valid JSON.` },
+              // Category list is built from the canonical taxonomy so this
+              // prompt can't drift (a hand-copied clone here was missing
+              // Swim/Bags/Belts and re-tagged bags as Accessories). The bag/
+              // belt instruction mirrors src/lib/anthropic.js's DETECT_PROMPT.
+              { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: ${CATEGORY_ORDER.join("/")}), subcategory (specific type), color_family (main color). If it's a bag (any shape), use category "Bags" (not "Accessories"). Belts use "Belts". Shoes use "Shoes". Return only valid JSON.` },
             ],
           }],
         }, { apiKey: key });
@@ -292,7 +307,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           <Icon path={icons.key} size={16}/> Anthropic API Key
           {apiKey && (
             <span style={{ fontSize: 10, color: "var(--color-success)", letterSpacing: "0.06em", fontWeight: 600 }}>
-              {keyJustSaved ? "✓ JUST SAVED" : "✓ SAVED"}
+              {anthJustSaved ? "✓ JUST SAVED" : "✓ SAVED"}
             </span>
           )}
         </div>
@@ -318,7 +333,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           ✦ Remove.bg API Key
           {rmbgKey && (
             <span style={{ fontSize: 10, color: "var(--color-success)", letterSpacing: "0.06em", fontWeight: 600 }}>
-              {keyJustSaved ? "✓ JUST SAVED" : "✓ SAVED"}
+              {rmbgJustSaved ? "✓ JUST SAVED" : "✓ SAVED"}
             </span>
           )}
         </div>
@@ -437,7 +452,10 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
 
       {/* About Me */}
       <div style={s.settingsCard}>
-        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}} onClick={() => setAboutMeOpen(v => !v)}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}
+          role="button" tabIndex={0} aria-expanded={aboutMeOpen}
+          onClick={() => setAboutMeOpen(v => !v)}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAboutMeOpen(v => !v); } }}>
           <div style={s.settingsTitle}>✦ About Me</div>
           <span style={{fontSize:12, color:"var(--color-text-muted)"}}>{aboutMeOpen ? "▲ Collapse" : "▼ Expand"}</span>
         </div>
@@ -610,7 +628,10 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
 
       {/* Recover Lost Items */}
       <div style={{...s.settingsCard, marginTop:16}}>
-        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}} onClick={() => setRecoverOpen(v => !v)}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}
+          role="button" tabIndex={0} aria-expanded={recoverOpen}
+          onClick={() => setRecoverOpen(v => !v)}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setRecoverOpen(v => !v); } }}>
           <div style={s.settingsTitle}>✦ Recover Lost Items</div>
           <span style={{fontSize:12, color:"var(--color-text-muted)"}}>{recoverOpen ? "▲ Collapse" : "▼ Expand"}</span>
         </div>
@@ -706,7 +727,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
             {fSyncDone?.nothingToSync && !fSyncRunning && (
               <div style={{fontSize:11, color:"var(--color-success)", marginBottom:10}}>✓ Already up to date — nothing to sync.</div>
             )}
-            <button style={{...s.settingsBtn, background: fSyncDone && !fSyncDone.failed ? "var(--color-success)" : "#8B6F5E", opacity: pendingCount === 0 && !fSyncRunning && !fSyncDone ? 0.5 : 1}}
+            <button style={{...s.btnPrimary, width:"100%", background: fSyncDone && !fSyncDone.failed ? "var(--color-success)" : "#8B6F5E", opacity: pendingCount === 0 && !fSyncRunning && !fSyncDone ? 0.5 : 1}}
               onClick={async () => {
                 setFSyncRunning(true); setFSyncDone(null);
                 setFSyncProg({ done: 0, total: pendingCount, failed: 0 });

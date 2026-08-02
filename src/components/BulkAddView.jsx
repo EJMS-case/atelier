@@ -3,7 +3,6 @@ import { s } from "../ui/styles.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
-import { classifyKnitAI } from "../lib/ai/stylist.js";
 import { compressImage, trimTransparentBorders } from "../utils/images.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 
@@ -82,6 +81,9 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
     if (cat === "Knits" && imgStr && apiKey) {
       setKnitSuggest(k => ({...k, [id]: "loading"}));
       try {
+        // Dynamic import: a static one pulled the whole stylist/zod bundle
+        // into the Add Items chunk for this one small classifier.
+        const { classifyKnitAI } = await import("../lib/ai/stylist.js");
         const result = await classifyKnitAI(imgStr, apiKey);
         setKnitSuggest(k => ({...k, [id]: result}));
       } catch {

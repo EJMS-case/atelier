@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { s } from "../ui/styles.js";
-import { icons } from "../ui/icons.jsx";
+import { icons, HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
-import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather } from "../lib/lookFilters.js";
+import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatWornDate } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 
@@ -79,17 +79,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
   // Only offer the status chips when they'd actually split the list.
   const hasWornOrScheduled = logs.some(l => l.date_worn || isScheduled(l));
 
-  const parseMeta = (url) => { try { return JSON.parse(url) || {}; } catch { return {}; } };
   const today = new Date().toISOString().slice(0, 10);
-  // "Worn Mar 4" (year appended only when it isn't the current one).
-  const formatWornDate = (d) => {
-    try {
-      const dt = new Date(d + "T12:00:00");
-      const opts = { month: "short", day: "numeric" };
-      if (dt.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
-      return dt.toLocaleDateString("en-US", opts);
-    } catch { return d; }
-  };
 
   const handleLog = async (log) => {
     const date = dateById[log.id] || today;
@@ -206,11 +196,8 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
             actions={
               <>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                  <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)}>
-                    <svg width={15} height={15} viewBox="0 0 24 24"
-                      fill={isFav("outfit", log.id) ? "var(--color-danger)" : "none"}
-                      stroke={isFav("outfit", log.id) ? "var(--color-danger)" : "var(--color-border-muted)"}
-                      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={icons.heart}/></svg>
+                  <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)} aria-label="Favorite this look">
+                    <HeartIcon filled={isFav("outfit", log.id)} size={15} stroke="var(--color-border-muted)"/>
                   </button>
                   <input type="date" value={pickedDate}
                     onChange={e => setDateById(d => ({ ...d, [log.id]: e.target.value }))}

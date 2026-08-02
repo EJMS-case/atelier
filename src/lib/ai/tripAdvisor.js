@@ -9,8 +9,7 @@
 
 import { z } from "zod";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
-import { LooksTool } from "./schemas.js";
-import { filterByWeather, shuffle } from "../../utils/item-helpers.js";
+import { filterByWeather } from "../../utils/item-helpers.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
 
@@ -61,6 +60,47 @@ export async function analyzeTripDestination(destination, startDate, apiKey) {
 }
 
 // ── Per-day look generation ───────────────────────────────────────────────────
+
+// LOCAL looks tool for trip days. Deliberately NOT the shared LooksTool from
+// schemas.js: that schema pins item ids to the Style Me short-ID format
+// (pattern ^W[0-9]{3}$, "never use UUIDs") while the trip prompt hands the
+// model an inventory of RAW UUIDs — when the model obeyed the shared schema,
+// every id failed to resolve and the day silently got no outfit. Ids here are
+// plain strings, and the tool also carries the `title` field this flow reads.
+const TripLooksTool = {
+  name: "return_looks",
+  description: "Return the single styled outfit look pulled from the client's wardrobe inventory.",
+  input_schema: {
+    type: "object",
+    properties: {
+      looks: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Short, evocative name for the look (3-6 words)." },
+            items: {
+              type: "array",
+              minItems: 3,
+              items: {
+                type: "object",
+                properties: {
+                  id:   { type: "string", description: "The item's real ID exactly as it appears after 'ID:' in the wardrobe inventory. Never invent IDs." },
+                  role: { type: "string" },
+                },
+                required: ["id"],
+              },
+            },
+            rationale: { type: "string", description: "One sentence on why this works for the day." },
+          },
+          required: ["items"],
+        },
+      },
+    },
+    required: ["looks"],
+  },
+};
 
 /**
  * Generate a single outfit look for one trip day.
@@ -190,7 +230,7 @@ Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:
       model: "claude-sonnet-4-6",
       maxTokens: 800,
       content: prompt,
-      tool: LooksTool,
+      tool: TripLooksTool,
     });
     if (!toolBlock?.input?.looks?.[0]) return null;
 

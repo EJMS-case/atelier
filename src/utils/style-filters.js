@@ -108,11 +108,19 @@ export const STYLE_FILTER_CHIPS = Object.entries(FILTER_TYPES).map(([key, t]) =>
 // Set TOP halves stay out — banning a zip-up because she wants jeans would
 // strip valid tops.
 const SET_BOTTOM_RE = /\b(pant|pants|trouser|trousers|short|shorts|skirt|skort|legging|leggings|jogger|joggers|bottom|bottoms)\b/i;
+// Top signals are tested FIRST for split-set halves: "Short Sleeve" contains
+// the word "short" and would otherwise read as a lower-half piece, making an
+// "Only Jeans" toggle ban a short-sleeve set top. Mirrors the TOP-before-
+// BOTTOM ordering in slotForItem / styling-validator.
+const SET_TOP_RE = /\b(top|tank|tee|shirt|blouse|hoodie|sweatshirt|zip|bra|crop|cami|sleeve)\b/i;
 function coversLowerHalf(it) {
   const slot = slotForItem(it);
   if (slot === "bottom" || slot === "dress") return true;
   if (slot === "set") {
-    return isCompleteSetItem(it) || SET_BOTTOM_RE.test((it.subcategory || "") + " " + (it.name || ""));
+    if (isCompleteSetItem(it)) return true;
+    const text = (it.subcategory || "") + " " + (it.name || "");
+    if (SET_TOP_RE.test(text)) return false;
+    return SET_BOTTOM_RE.test(text);
   }
   return false;
 }

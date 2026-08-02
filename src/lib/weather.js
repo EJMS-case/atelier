@@ -126,8 +126,12 @@ function validEnvelope(env) {
 }
 
 function readCache(key) {
-  const memHit = validEnvelope(memCache.get(key));
+  const memEnv = memCache.get(key);
+  const memHit = validEnvelope(memEnv);
   if (memHit) return memHit;
+  // Evict expired envelopes — validEnvelope returning null used to leave the
+  // dead entry in the Map forever (one per trip destination per session).
+  if (memEnv) memCache.delete(key);
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;

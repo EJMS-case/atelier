@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { s } from "../ui/styles.js";
 import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
+import { sortByCategoryOrder } from "../utils/item-helpers.js";
 import TrimmedImage from "./TrimmedImage.jsx";
 
 // Mobile gets a portrait canvas (125% padding-bottom ≈ 4:5) and its own
@@ -231,9 +232,7 @@ function buildFromLayout(items, layout, isMobile) {
 // a tall portrait canvas.
 export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride, compact = false }) {
   const isMobile = useIsMobileCollage();
-  const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
-  const sorted = [...lookItems]
-    .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
+  const sorted = sortByCategoryOrder(lookItems);
 
   if (compact) {
     const visible = sorted.slice(0, 6);

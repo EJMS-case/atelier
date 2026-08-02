@@ -3,6 +3,7 @@ import { s } from "../ui/styles.js";
 import EditorialCollage from "./EditorialCollage.jsx";
 import ItemDetailSheet from "./ItemDetailSheet.jsx";
 import { tagsFor } from "../lib/multitag.js";
+import { sortByCategoryOrder } from "../utils/item-helpers.js";
 
 // Free-text query provided by SavedView's search box. The Looks and Favorites
 // lists fetch and render their own data, so search reaches them here at the
@@ -16,23 +17,21 @@ export const LookSearchContext = createContext("");
 // way it actually looks, not as a loose grid of item thumbnails. Tapping a
 // garment opens the shared item-detail sheet (inspect / edit the piece).
 //
-// Items are ordered by category so the collage's auto-layout gets a sensible
+// Items are ordered by category (shared CATEGORY_DISPLAY_ORDER in
+// utils/item-helpers.js) so the collage's auto-layout gets a sensible
 // stacking order when no saved layout exists; if the outfit row carries a
 // `layout_data` arrangement (e.g. edited via the planner), the collage restores
 // it on desktop.
-const CATEGORY_ORDER = ["Outerwear","Dresses","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
 
 export default function SavedLookCard({ log, items, subtitle, headerRight, notes, actions, onEditItem }) {
   const [detailItem, setDetailItem] = useState(null);
   const searchQ = useContext(LookSearchContext);
 
-  const logItems = (log.garment_ids || [])
-    .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
-    .filter(Boolean)
-    .sort((a, b) => {
-      const ai = CATEGORY_ORDER.indexOf(a.category); const bi = CATEGORY_ORDER.indexOf(b.category);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
+  const logItems = sortByCategoryOrder(
+    (log.garment_ids || [])
+      .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
+      .filter(Boolean)
+  );
 
   // Mirror OutfitHistory's search semantics: case-insensitive substring match
   // over constituent item names, occasion tags, and notes.

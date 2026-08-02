@@ -10,11 +10,12 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
   const [rated,         setRated]         = useState(0);
   const [detailItem,    setDetailItem]    = useState(null);
 
-  const order = ["Outerwear","Dresses","Tops","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
+  // No pre-sort here: EditorialCollage sorts by the shared
+  // CATEGORY_DISPLAY_ORDER (see utils/item-helpers.js) — sorting twice was
+  // redundant, and this copy's `indexOf(x) ?? 99` compare was broken anyway.
   const lookItems = (look.items || [])
     .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
-    .filter(Boolean)
-    .sort((a,b) => (order.indexOf(a.category)??99) - (order.indexOf(b.category)??99));
+    .filter(Boolean);
 
   // Identify the hero item for visual badge
   const heroId = look.itemRoles ? Object.entries(look.itemRoles).find(([, role]) => role === "hero")?.[0] : null;

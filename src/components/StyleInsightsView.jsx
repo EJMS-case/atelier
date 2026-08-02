@@ -102,7 +102,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
       <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Style Intelligence</h2></div>
 
       {!isDismissed("profile") && <div style={si.profileCard}>
-        <div style={si.cardDismiss} onClick={() => dismiss("profile")}>✕</div>
+        <button style={si.cardDismiss} onClick={() => dismiss("profile")} aria-label="Dismiss monthly profile card">✕</button>
         <div style={si.sectionLabel}>MONTHLY PROFILE</div>
         {profile ? <div style={si.profileText}>{profile}</div>
           : <p style={si.profilePlaceholder}>{apiKey ? "Generate an AI-written style profile." : "Add your API key in Settings."}</p>}
@@ -113,7 +113,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
       </div>}
 
       {hasLogs && analysis.signaturePairs.length > 0 && !isDismissed("signatures") && <div style={si.card}>
-        <div style={si.cardDismiss} onClick={() => dismiss("signatures")}>✕</div>
+        <button style={si.cardDismiss} onClick={() => dismiss("signatures")} aria-label="Dismiss signature patterns card">✕</button>
         <div style={si.sectionHeader}>Signature Patterns</div>
         {analysis.signaturePairs.map((p, i) => (
           <div key={i} style={si.insightRow}>
@@ -133,7 +133,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
       </div>}
 
       {!isDismissed("gaps") && <div style={si.card}>
-        <div style={si.cardDismiss} onClick={() => dismiss("gaps")}>✕</div>
+        <button style={si.cardDismiss} onClick={() => dismiss("gaps")} aria-label="Dismiss category breakdown card">✕</button>
         <div style={si.sectionHeader}>Category Breakdown</div>
         <div style={si.barContainer}>
           {CATEGORY_ORDER.map(cat => {
@@ -150,7 +150,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
       </div>}
 
       {analysis.underutilized.length > 0 && !isDismissed("underutilized") && <div style={si.card}>
-        <div style={si.cardDismiss} onClick={() => dismiss("underutilized")}>✕</div>
+        <button style={si.cardDismiss} onClick={() => dismiss("underutilized")} aria-label="Dismiss underutilized pieces card">✕</button>
         <div style={si.sectionHeader}>Underutilized Pieces</div>
         <p style={si.subtleNote}>Active items you haven't worn in 30+ days</p>
         <div style={si.underutilGrid}>
@@ -167,7 +167,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
       </div>}
 
       {hasLogs && analysis.colorPairs.length > 0 && !isDismissed("colorpairs") && <div style={si.card}>
-        <div style={si.cardDismiss} onClick={() => dismiss("colorpairs")}>✕</div>
+        <button style={si.cardDismiss} onClick={() => dismiss("colorpairs")} aria-label="Dismiss color pair frequency card">✕</button>
         <div style={si.sectionHeader}>Color Pair Frequency</div>
         <div style={si.pairGrid}>
           {analysis.colorPairs.map((p, i) => { const [a, b] = p.pair.split(" + "); return (

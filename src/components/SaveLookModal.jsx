@@ -23,6 +23,9 @@ export default function SaveLookModal({ look, lookItems, onSave, onClose }) {
         // weather sort. Harmless if absent; saveOutfitLog strips unknown cols.
         weather: look.weather || null,
         weathers: look.weathers || null,
+        // Preserve the AI-composed collage arrangement — SavedLookCard renders
+        // log.layout_data, so dropping it here lost the layout on save.
+        layout_data: look.layout_data || null,
         notes: notes.trim() || null,
         collage_url: JSON.stringify({ mood: look.mood, styling: look.styling || look.why }),
       });
@@ -39,7 +42,7 @@ export default function SaveLookModal({ look, lookItems, onSave, onClose }) {
       <div style={s.modalCard} onClick={e => e.stopPropagation()}>
         <div style={s.modalHeader}>
           <span style={s.modalTitle}>{logAsWorn ? "Log This Look" : "Save This Look"}</span>
-          <button style={s.modalClose} onClick={onClose}>&times;</button>
+          <button style={s.modalClose} onClick={onClose} aria-label="Close">&times;</button>
         </div>
         {saved ? (
           <div style={{ padding:"40px 20px", textAlign:"center" }}>

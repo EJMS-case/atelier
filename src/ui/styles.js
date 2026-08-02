@@ -30,8 +30,7 @@ export const s = {
   pageTitle: { fontSize:20, fontWeight:400, letterSpacing:"0.05em", margin:0 },
   backBtn: { background:"none", border:"none", color:"var(--color-text-2)", fontSize:13, cursor:"pointer", padding:0 },
 
-  // Filter (legacy — kept for queue rows etc.)
-  chipRow: { display:"flex", gap:8, flexWrap:"wrap", marginBottom:24 },
+  // Filter
   chip: { background:"none", border:"1px solid var(--color-border-muted)", color:"var(--color-text-2)", fontSize:11, letterSpacing:"0.08em", padding:"5px 13px", borderRadius:20, cursor:"pointer", transition:"all 0.15s ease" },
   chipActive: { background:"var(--color-ink)", borderColor:"var(--color-ink)", color:"var(--color-surface)", fontWeight:500, boxShadow:"0 2px 8px rgba(28,24,20,0.25)" },
 
@@ -66,7 +65,6 @@ export const s = {
   // The panel still scrolls internally, so all controls remain reachable.
   stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid var(--color-border)", padding:"12px 16px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", maxHeight:"65vh", overflowY:"auto" },
   panelLabel: { fontSize:10, letterSpacing:"0.22em", color:"var(--color-text-muted)", marginBottom:10 },
-  panelRow: { display:"flex", gap:8, marginBottom:8 },
   select: { flex:1, border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)" },
   input: { flex:1, border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)", outline:"none" },
   err: { color:"var(--color-danger)", fontSize:12, margin:"4px 0 0" },
@@ -108,7 +106,6 @@ export const s = {
   // ── Look card
   lookCard: { background:"#fff", borderRadius:12, border:"1px solid var(--color-border)", marginBottom:28, overflow:"hidden", boxShadow:"0 4px 24px rgba(28,24,20,0.07)", animation:"fadeIn 0.35s ease" },
   lookHeader: { padding:"18px 22px 14px", borderBottom:"1px solid var(--color-border-soft)", display:"flex", justifyContent:"space-between", alignItems:"center" },
-  lookName: { fontSize:20, fontWeight:400, letterSpacing:"0.04em", marginBottom:3, fontFamily:"'DM Serif Display',Georgia,serif" },
   lookOcc:  { fontSize:9, letterSpacing:"0.2em", color:"var(--color-text-muted)" },
   lookMood: { color:"var(--color-accent)" },
   expandBtn: { background:"none", border:"1px solid #DDD5CC", borderRadius:20, padding:"4px 13px", fontSize:11, color:"var(--color-text-2)", cursor:"pointer", letterSpacing:"0.06em" },
@@ -171,8 +168,6 @@ export const s = {
   setPanelThumb: { width:64, height:80, objectFit:"contain", borderRadius:4, border:"1px solid var(--color-border)" },
   setPanelName: { fontSize:9, color:"var(--color-text)", textAlign:"center", lineHeight:1.3 },
   setPanelCat: { fontSize:8, color:"var(--color-text-muted)", letterSpacing:"0.08em" },
-  setGroup: { marginBottom:24 },
-  setGroupLabel: { fontSize:10, letterSpacing:"0.2em", color:"var(--color-text-muted)", marginBottom:12, paddingBottom:8, borderBottom:"1px solid var(--color-border)" },
 
   // ── Filter bar
   filterBar: { marginBottom:20 },
@@ -180,8 +175,6 @@ export const s = {
   filterSectionLabel: { fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:6 },
   filterRow: { display:"flex", gap:6, flexWrap:"wrap" },
   swatchBtn: { width:22, height:22, borderRadius:"50%", cursor:"pointer", flexShrink:0, transition:"box-shadow 0.15s" },
-  shadePopover: { position:"absolute", top:28, left:0, background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, padding:8, display:"flex", gap:6, zIndex:20, boxShadow:"0 4px 16px rgba(0,0,0,0.12)" },
-  shadeSwatch: { width:20, height:20, borderRadius:"50%", cursor:"pointer", transition:"box-shadow 0.15s" },
   filterToggleBtn: { background:"none", border:"1px solid var(--color-border)", borderRadius:16, padding:"4px 12px", fontSize:11, color:"var(--color-text-2)", cursor:"pointer", letterSpacing:"0.06em" },
   brandPanel: { marginTop:8, background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, padding:12 },
   activePills: { display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", marginTop:4 },
@@ -208,7 +201,6 @@ export const s = {
   modalTitle: { fontSize:16, letterSpacing:"0.04em" },
   modalClose: { background:"none", border:"none", fontSize:24, color:"var(--color-text-muted)", cursor:"pointer", padding:0, lineHeight:1 },
   modalLookPreview: { padding:"14px 22px", background:"var(--color-surface-2)", borderBottom:"1px solid var(--color-border-soft)" },
-  modalLookName: { fontSize:15, fontWeight:400, letterSpacing:"0.04em", marginBottom:4 },
   modalLookPieces: { fontSize:11, color:"var(--color-text-muted)" },
   modalField: { padding:"10px 22px 0" },
   modalLabel: { fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", display:"block", marginBottom:5, fontFamily:"sans-serif" },
@@ -219,15 +211,10 @@ export const s = {
   histMonthLabel: { fontSize:11, letterSpacing:"0.2em", color:"var(--color-text-muted)", padding:"0 0 10px", marginBottom:0, borderBottom:"1px solid var(--color-border)", fontFamily:"sans-serif" },
   histCard: { background:"#fff", borderRadius:10, border:"1px solid var(--color-border)", padding:0, marginTop:12, overflow:"hidden", boxShadow:"0 2px 12px rgba(28,24,20,0.04)" },
   histCardHeader: { padding:"14px 18px 10px" },
-  histLookName: { fontSize:16, fontWeight:400, letterSpacing:"0.04em", marginBottom:3 },
   histDate: { fontSize:11, color:"var(--color-text-muted)", letterSpacing:"0.04em" },
   histOcc: { color:"var(--color-text-2)" },
   histMood: { color:"var(--color-accent)", fontStyle:"italic" },
-  histThumbs: { display:"flex", gap:10, padding:"0 18px 12px", overflowX:"auto" },
-  histThumb: { flexShrink:0, width:56, textAlign:"center" },
-  histThumbImg: { width:56, height:68, objectFit:"contain", borderRadius:6, background:"var(--color-surface)" },
   histThumbPh: { width:56, height:68, borderRadius:6, background:"var(--color-surface)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, color:"var(--color-border-muted)" },
-  histThumbName: { fontSize:9, color:"var(--color-text-muted)", marginTop:3, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
   histNotes: { padding:"0 18px 12px", fontSize:12, color:"var(--color-text-2)", fontStyle:"italic" },
   histActions: { padding:"8px 18px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", borderTop:"1px solid var(--color-border-soft)" },
   histWearBtn: { background:"none", border:"1px solid var(--color-border)", borderRadius:4, padding:"5px 12px", fontSize:11, color:"var(--color-text-2)", cursor:"pointer", letterSpacing:"0.04em", display:"flex", alignItems:"center", gap:5 },
@@ -238,7 +225,8 @@ export const s = {
 export const si = {
   card: { background:"#fff", borderRadius:10, border:"1px solid var(--color-border)", padding:"22px 24px", marginBottom:20, position:"relative", animation:"fadeIn 0.35s ease" },
   profileCard: { background:"linear-gradient(135deg, var(--color-ink) 0%, #2A2420 100%)", borderRadius:12, padding:"26px 26px 22px", marginBottom:20, position:"relative", color:"var(--color-surface)", animation:"fadeIn 0.4s ease" },
-  cardDismiss: { position:"absolute", top:12, right:14, cursor:"pointer", color:"var(--color-text-muted)", fontSize:14, lineHeight:1, padding:4, opacity:0.5 },
+  // background/border reset so it renders identically as a real <button>.
+  cardDismiss: { position:"absolute", top:12, right:14, cursor:"pointer", color:"var(--color-text-muted)", fontSize:14, lineHeight:1, padding:4, opacity:0.5, background:"none", border:"none" },
   sectionLabel: { fontSize:9, letterSpacing:"0.22em", color:"var(--color-text-muted)", marginBottom:14, fontFamily:"sans-serif" },
   sectionHeader: { fontSize:18, fontFamily:"'DM Serif Display',Georgia,serif", fontWeight:400, letterSpacing:"0.02em", marginBottom:16, color:"var(--color-ink)" },
   profileText: { fontSize:15, lineHeight:1.7, fontStyle:"italic", color:"var(--color-border)", marginBottom:16, fontFamily:"Georgia,serif" },
