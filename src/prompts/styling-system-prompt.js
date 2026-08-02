@@ -125,6 +125,7 @@ export function buildStylingPrompt({
   styleFingerprint = "",
   lovedLooks = [],
   dislikedLooks = [],
+  recentCombos = [],
   comfortMode = false,
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
@@ -209,6 +210,14 @@ Weather still governs fabric weight and coverage.\n`
     ? `\n👎 COMBINATIONS SHE DISLIKED — these are anti-patterns to actively avoid. Don't recreate these pairings or aesthetics.\n${dislikedLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
     : "";
 
+  // Recent combinations — the LOOK-level anti-repeat, complementing the
+  // item-level rotation memory (which keeps pieces fresh but can't stop them
+  // recombining into the same recipe). Text-only like loved/disliked looks —
+  // no W-IDs — so the history steers composition without touching selection.
+  const recentCombosBlock = (recentCombos && recentCombos.length > 0)
+    ? `\n🔁 RECENTLY SUGGESTED COMBINATIONS — newest first. These exact piece-combinations were suggested in recent generations. Do NOT rebuild the same recipe: the same top+bottom+shoe trio (or dress+shoe pairing) reads as a rerun even with a different bag or layer swapped in. Reusing INDIVIDUAL pieces is fine — repeating the COMBINATION is not. Change the anchor pairing, not just the accessories.\n${recentCombos.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
+    : "";
+
   // Honesty clause — the stylist can say "nothing works" if the inventory is
   // genuinely insufficient. This is a last resort; a weak-but-real outfit is
   // always better than a fabricated one.
@@ -246,7 +255,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${recentCombosBlock}${honestyBlock}
 ${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
