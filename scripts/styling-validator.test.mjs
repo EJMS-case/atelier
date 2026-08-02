@@ -327,3 +327,45 @@ test("swap salvage: original parsed object is not mutated", () => {
   salvageBySwappingItems(parsed, failures, SWAP_MAP, SWAP_ITEMS, { occasionSlots: {}, weather: WARM });
   assert.equal(JSON.stringify(parsed), before);
 });
+
+// ── Hosiery pairing (HC: legwear belongs under skirts/dresses) ───────────────
+// Owner screenshot 2026-08-02: a Work look showed navy tights beside tailored
+// black trousers, unmentioned by the rationale. The static preamble already
+// said hosiery is "legwear layered under skirts/dresses", but nothing enforced
+// it. Hosiery is optional, so the failure is droppable — salvage removes the
+// tights and the look still ships.
+const HOSE_ITEMS = [
+  { id: "h-top",   name: "Square Neck Jersey Top", category: "Tops", subcategory: "Tops" },
+  { id: "h-trou",  name: "Pleated Wide Trouser", category: "Bottoms", subcategory: "Trousers" },
+  { id: "h-skirt", name: "Pleated Midi Skirt", category: "Bottoms", subcategory: "Midi" },
+  { id: "h-jump",  name: "Sienna Jumpsuit", category: "Jumpsuits", subcategory: "" },
+  { id: "h-shoe",  name: "Whipstitch Pointed Toe Heel", category: "Shoes", subcategory: "Stiletto" },
+  { id: "h-tight", name: "Noosh sheer tights — navy", category: "Accessories", subcategory: "Hosiery" },
+];
+const HOSE_MAP = { W001: "h-top", W002: "h-trou", W003: "h-skirt", W004: "h-jump", W005: "h-shoe", W006: "h-tight" };
+const hoseLook = (...ids) => ({
+  looks: [{
+    vibe: "Power Dressing",
+    items: ids.map(id => ({ id, role: "supporting" })),
+    silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "",
+  }],
+});
+
+test("hosiery: tights with trousers hard-fail, and salvage drops them", () => {
+  const parsed = hoseLook("W001", "W002", "W005", "W006");
+  const failures = runAllChecks(parsed, HOSE_MAP, HOSE_ITEMS, [], {}, "Work", "");
+  assert.ok(failures.some(f => f.type === "hosiery" && f.hard), "tights over trousers must fail");
+
+  const dropped = salvageByDroppingItems(parsed, failures, HOSE_MAP, HOSE_ITEMS);
+  assert.ok(dropped, "hosiery must be droppable");
+  const names = dropped.looks[0].items.map(it => HOSE_ITEMS.find(x => x.id === HOSE_MAP[it.id]).name);
+  assert.ok(!names.some(n => /tights/.test(n)), "the tights are what gets dropped");
+  assert.equal(runAllChecks(dropped, HOSE_MAP, HOSE_ITEMS, [], {}, "Work", "").filter(f => f.hard).length, 0);
+});
+
+test("hosiery: tights with a skirt or a jumpsuit are fine", () => {
+  for (const look of [hoseLook("W001", "W003", "W005", "W006"), hoseLook("W004", "W005", "W006")]) {
+    const failures = runAllChecks(look, HOSE_MAP, HOSE_ITEMS, [], {}, "Work", "");
+    assert.equal(failures.filter(f => f.type === "hosiery").length, 0);
+  }
+});

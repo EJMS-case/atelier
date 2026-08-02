@@ -15,7 +15,8 @@
     "test:filters": "node scripts/style-filters.test.mjs",
     "test:rotation": "node scripts/rotation.test.mjs",
     "test:weather": "node scripts/weather.test.mjs",
-    "test": "npm run test:coerce && npm run test:validator && npm run test:filters && npm run test:rotation && npm run test:weather && npm run test:matrix"
+    "test": "npm run test:coerce && npm run test:validator && npm run test:filters && npm run test:freetext && npm run test:rotation && npm run test:weather && npm run test:matrix",
+    "test:freetext": "node scripts/free-text-rescue.test.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "^1.5.5",
