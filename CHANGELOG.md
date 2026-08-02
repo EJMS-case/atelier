@@ -2,6 +2,22 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Honest trim progress + a Printed pants subcategory — 2026-08-02
+
+### Why
+Owner: garment boxes in the manual builder are far larger than the garment. #149 fixed the box geometry; this fixes the underlying images.
+
+The cause of the padding was a **false reassurance in Settings**. `is_trimmed` was blanket-set `true` on every row by the bulk import *without the crop ever running*, so Settings reported "✓ All 447 transparent items marked trimmed" while the real progress flag (`is_recut`, only written after a crop actually runs) said **16 of 446** — 430 photos untouched. The background drip processes 12 per session, so it needed ~36 more sessions to converge, and the one-shot batch was hidden behind a condition that only rendered once `is_trimmed` counted zero.
+
+### Fixed — `src/components/SettingsView.jsx`
+- Trim progress is now measured by `is_recut`, the flag that only exists after a real crop. The batch writes it too, so the on-demand pass and the background drip finally share progress instead of redoing each other's work.
+- The card now states the true number ("430 of 446 photos still carry padding"), promotes the full pass to the primary action with a plain-language label, and notes that it resumes where it left off — the per-item write that makes it slow is exactly what makes it interruptible.
+- The "✓ all cropped" state now only appears when that's actually true, and keeps a "Re-cut every photo again" escape hatch.
+
+### Added — `Printed` pants subcategory
+- `SUBCATEGORY_L3.Pants` gains `Printed`, and the zebra jersey pull-on + striped cotton palazzo are retagged. Deliberately off the otherwise fabric-led axis: those two share no fabric, and "Wide Leg" can't separate them because nearly every trouser in the closet is wide leg. What they share is a bold print and a non-office register — the palazzo's own notes already said "NOT good for work".
+- Banned from **Work** so they stop being treated as tailored trousers, and added to `TROUSER_SUBS` so the garment-type chips still cover them ("No Trousers" must exclude a printed pant — it's still a long pant).
+
 ## [Unreleased] — Builder: garment boxes now hug the garment, not its padding — 2026-08-02
 
 ### Why

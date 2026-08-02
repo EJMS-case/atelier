@@ -21,7 +21,11 @@ import { slotForItem, isBootItem, isCompleteSetItem, HEEL_SUBS } from "./item-he
 // Trouser-family allow-list carried over from the legacy "trousers-only"
 // toggle — includes the L3 labels rows actually store ("Satin/Silk", "Ponte",
 // "Wide Leg", "Straight") alongside the L2 "Trousers"/"Pants".
-const TROUSER_SUBS = new Set(["Trousers", "Pants", "Wide Leg", "Straight", "Satin/Silk", "Ponte"]);
+// "Printed" belongs here even though the occasion rules treat it very
+// differently from tailored Trousers: the chip is a garment-TYPE filter, so
+// "No Trousers" must also exclude a printed pant (it's still a long pant), and
+// "Only Trousers" should still be able to build around one.
+const TROUSER_SUBS = new Set(["Trousers", "Pants", "Wide Leg", "Straight", "Satin/Silk", "Ponte", "Printed"]);
 
 const SNEAKER_RE = /\b(sneaker|trainer|runner)s?\b/i;
 const FLAT_RE = /\b(flat|loafer|ballet|ballerina)s?\b/i;

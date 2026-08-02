@@ -194,16 +194,20 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
 
   const itemsClean       = items.filter(it => it.image && it.has_bg === false);
-  const itemsNeedingTrim = itemsClean.filter(it => it.is_trimmed !== true);
+  // `is_trimmed` is NOT a reliable record of "we actually cropped this": the
+  // bulk import blanket-set it true on every row without ever running the crop,
+  // which is why Settings used to claim all items were trimmed while most still
+  // carried transparent padding (and rendered in oversized boxes in the
+  // builder). `is_recut` is only ever written after a real crop runs, by this
+  // batch or by the background drip, so it's the honest progress signal — and
+  // sharing it means the two mechanisms stop redoing each other's work.
+  const itemsNeedingTrim = items.filter(it => it.image && it.is_recut !== true);
   const itemsNeedingBg   = items.filter(it => it.image && it.has_bg === true);
   const itemsUnknownBg   = items.filter(it => it.image && (it.has_bg === null || it.has_bg === undefined));
 
   const handleBatchTrim = async (force = false) => {
-    // Normal mode: only transparent items not yet trimmed. Force mode: re-cut
-    // EVERY item with a photo, ignoring is_trimmed — needed because a bulk
-    // import marked all items is_trimmed:true without ever running the crop, so
-    // photoroom exports with transparent padding slipped through and render with
-    // an oversized resize box in the builder.
+    // Normal mode: every photo we haven't genuinely cropped yet (is_recut).
+    // Force mode: re-cut EVERY photo regardless, for when a crop needs redoing.
     const toTrim = force ? items.filter(it => it.image) : itemsNeedingTrim;
     if (!toTrim.length) return;
     trimStop.current = false;
@@ -218,13 +222,13 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         const trimmed = await trimTransparentBorders(base64);
         if (trimmed === base64) {
           // Already tight — just mark it so we don't re-check next time.
-          if (onUpdateItem) await onUpdateItem(item.id, { is_trimmed: true });
+          if (onUpdateItem) await onUpdateItem(item.id, { is_trimmed: true, is_recut: true });
           setTrimProgress(p => ({ ...p, done: i + 1 }));
           continue;
         }
         const compressed = await compressImage(trimmed, 600, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
-        if (onUpdateItem) await onUpdateItem(item.id, { image: url, is_trimmed: true });
+        if (onUpdateItem) await onUpdateItem(item.id, { image: url, is_trimmed: true, is_recut: true });
       } catch { errors++; }
       setTrimProgress({ done: i + 1, total: toTrim.length, errors });
     }
@@ -520,7 +524,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           </p>
         )}
         {itemsNeedingBg.length === 0 && itemsUnknownBg.length === 0 && (
-          <p style={s.settingsSub}>All photos are clean. Use "Trim White Space" below if any still have padding around the item.</p>
+          <p style={s.settingsSub}>All photos are clean. Use "Trim photos to the garment" below if any still have padding around the item.</p>
         )}
 
         {/* Remove.bg batch */}
@@ -582,20 +586,28 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
             successful pass so re-running this is a no-op when there's
             nothing new to do. */}
         {itemsNeedingTrim.length > 0 && !trimRunning && !trimDone && (
-          <button style={{...s.btnSecondary, width:"100%"}} onClick={() => handleBatchTrim(false)}>
-            Trim White Space ({itemsNeedingTrim.length} new / untrimmed item{itemsNeedingTrim.length===1?"":"s"})
-          </button>
-        )}
-        {itemsClean.length > 0 && itemsNeedingTrim.length === 0 && !trimRunning && !trimDone && (
           <div style={{padding:"6px 0"}}>
             <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:6}}>
-              ✓ All {itemsClean.length} transparent item{itemsClean.length===1?"":"s"} marked trimmed.
+              {itemsNeedingTrim.length} of {items.filter(it => it.image).length} photo{itemsNeedingTrim.length===1?"":"s"} still carry padding around the garment.
+              Trimming makes pieces sit tight in the outfit builder, collages and the closet grid.
             </div>
-            {/* Force re-cut — for cutouts that render with an oversized outline
-                (padding the import never actually cropped). Re-crops every photo
-                tight to the item. */}
+            <button style={{...s.btnPrimary, width:"100%"}} onClick={() => handleBatchTrim(false)}>
+              Trim photos to the garment ({itemsNeedingTrim.length} to do)
+            </button>
+            <div style={{fontSize:10, color:"var(--color-text-muted)", marginTop:6}}>
+              Runs on this device and picks up where it left off, so you can stop and resume.
+            </div>
+          </div>
+        )}
+        {itemsNeedingTrim.length === 0 && !trimRunning && !trimDone && (
+          <div style={{padding:"6px 0"}}>
+            <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:6}}>
+              ✓ All {items.filter(it => it.image).length} photos cropped tight to the garment.
+            </div>
+            {/* Force re-cut — redo every photo, for when a crop needs redoing
+                (e.g. an image was replaced outside the normal edit path). */}
             <button style={{...s.btnSecondary, width:"100%"}} onClick={() => handleBatchTrim(true)}>
-              Re-cut all cutouts (fixes oversized outlines in collages)
+              Re-cut every photo again
             </button>
           </div>
         )}
