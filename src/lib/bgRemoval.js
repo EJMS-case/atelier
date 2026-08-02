@@ -71,9 +71,10 @@ async function removeBgApi(base64DataUrl, key) {
 
 async function imglyStrip(base64DataUrl) {
   // Dynamic import so users who never hit the fallback don't download the WASM
-  // bundle. If the package isn't installed, this import throws and the caller
-  // falls through to the "original" path.
-  const mod = await import(/* @vite-ignore */ "@imgly/background-removal").catch(() => null);
+  // bundle — Vite splits @imgly (and its onnx runtime) into lazy chunks that
+  // only fetch when this line runs. If the package isn't installed, this
+  // import throws and the caller falls through to the "original" path.
+  const mod = await import("@imgly/background-removal").catch(() => null);
   if (!mod?.removeBackground) throw new Error("@imgly/background-removal not installed");
   const blob = await mod.removeBackground(base64DataUrl);
   return await blobToDataUrl(blob);
