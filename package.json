@@ -11,6 +11,7 @@
     "test:matrix-live": "node scripts/style-me-matrix-live.mjs",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "test:coerce": "node scripts/coerce-looks-shapes.test.mjs",
+    "test:validator": "node scripts/styling-validator.test.mjs",
     "test:filters": "node scripts/style-filters.test.mjs",
     "test:rotation": "node scripts/rotation.test.mjs",
     "test:weather": "node scripts/weather.test.mjs"
