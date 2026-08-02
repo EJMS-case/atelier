@@ -228,6 +228,16 @@ test("case A: double-wrapped string with trailing ]} garbage recovers", () => {
   assert.deepStrictEqual(result.looks[0].items, ITEMS_3);
 });
 
+test("case A2: double-wrapped string with trailing </invoke> tag garbage recovers (production 2026-08-01 08:18)", () => {
+  const result = coerceLooksShape({
+    looks: JSON.stringify({ looks: [{ vibe: "Editorial", items: ITEMS_3, rationale: "sharp" }] }) + "\n</invoke>\n",
+  });
+  assert.ok(Array.isArray(result.looks));
+  assert.strictEqual(result.looks.length, 1);
+  assert.strictEqual(result.looks[0].vibe, "Editorial");
+  assert.deepStrictEqual(result.looks[0].items, ITEMS_3);
+});
+
 test("case B: array string with trailing } garbage recovers", () => {
   const result = coerceLooksShape(CASE_B);
   assert.ok(Array.isArray(result.looks));

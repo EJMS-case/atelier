@@ -2,6 +2,19 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Shopping recs: brand hard rules removed; 08-01 failure cluster verified fixed — 2026-08-02
+
+### Why
+Owner saw shopping suggestions locked to a fixed brand short-list and asked for the hard rule to go — recommendations should read her taste from what she actually owns. She also reported continued generation fails: replaying all 14 `stylist_outfit:schema` payloads from 2026-08-01 through the current coercion pipeline confirmed 13/14 now recover (the fixes in #131/#136 cover every observed pattern; the 14th lost its item IDs in-stream and correctly falls to the retry path). Every logged failure predates the deploy of the fix covering its pattern; zero `ai_errors` rows since #136 went live.
+
+### Changed — `src/lib/ai/stylist.js`, `src/constants/styling.js`
+- Gap-analysis prompt: dropped "Use brands she loves: The Row, Totême, Loro Piana…" — the model now infers taste from the wardrobe summary (which already carries her real per-group brand examples) and recommends the best piece for the gap at whatever maker/price genuinely fits, naming a brand only when it's truly the right make.
+- Outfit-completion prompt: same change ("never from a default luxury short-list").
+- `STYLE_PROFILE`: removed the hard-coded "Her closet is Totême, Khaite, Max Mara, Theory, COS" enumeration for the same reason. These blocks feed ONLY the two shopping prompts — Style Me's `STYLING_STATIC_PREAMBLE` is untouched and stays byte-stable, so its prompt cache is unaffected.
+
+### Tests
+- `scripts/coerce-looks-shapes.test.mjs`: 42 (was 41) — added the `</invoke>` trailing-garbage variant from the real 08-01 08:18 payload, the one production shape not already in the suite.
+
 ## [Unreleased] — Coercion case 7: looks array streamed into the items slot — 2026-08-02
 
 ### Why
