@@ -8,7 +8,7 @@
 import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
-import { coerceLooksShape as coerceLooksShapeCore } from "./coerce-shapes.js";
+import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
 import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
 import { explainFilterViolation } from "./style-filters.js";
 
@@ -860,6 +860,73 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   return allFailures;
 }
 
+// ── Item-drop salvage ────────────────────────────────────────────────────────
+// Last-resort recovery before the error wall: many hard failures name ONE
+// offending item (a winter-tagged piece on a warm day, a banned subcategory,
+// a top layered under a dress, a second pair of shoes). Dropping just that
+// item usually leaves a wearable look — and a shown look always beats an
+// error (owner's standing rule). The caller re-runs the full check suite on
+// the trimmed looks; salvage only ships if the result is genuinely clean.
+
+// Failure types whose message quotes the removable item's name. shoes /
+// lower_half / upper_half / shoulder_coverage failures are about something
+// MISSING and can't be fixed by removal, so they're deliberately absent.
+const DROPPABLE_TYPES = new Set(["exclusions", "occasion", "weather", "dress_styling"]);
+
+export function salvageByDroppingItems(parsed, failures, idMap, allItems) {
+  if (!parsed?.looks?.length) return null;
+  const looks = parsed.looks.map(l => ({
+    ...l,
+    items: Array.isArray(l.items) ? [...l.items] : l.items,
+  }));
+  let droppedAny = false;
+
+  const resolveItem = (lookItem) => {
+    const id = typeof lookItem === "string" ? lookItem : lookItem.id;
+    const cleanId = String(id).replace(/^ID:/i, "").trim();
+    const realId = idMap[cleanId] || cleanId;
+    return allItems.find(it => it.id === realId);
+  };
+  const dropByName = (look, name) => {
+    const idx = look.items.findIndex(it => resolveItem(it)?.name === name);
+    if (idx !== -1) { look.items.splice(idx, 1); droppedAny = true; }
+  };
+
+  for (const f of failures) {
+    if (!f.hard) continue;
+    const lookMatch = f.message.match(/^Look (\d+)/);
+    if (!lookMatch) continue;
+    const look = looks[parseInt(lookMatch[1], 10) - 1];
+    if (!look || !Array.isArray(look.items)) continue;
+
+    if (DROPPABLE_TYPES.has(f.type)) {
+      // The offender is the FIRST quoted name ('…' or "…") in the message.
+      const nameMatch = f.message.match(/'([^']+)'|"([^"]+)"/);
+      const offender = nameMatch && (nameMatch[1] || nameMatch[2]);
+      if (offender) dropByName(look, offender);
+    } else if (f.type === "complete_sets") {
+      // Here the first quote is the SET (which stays); the extra piece is the
+      // second quoted name in each message variant.
+      const extra = f.message.match(/separate bottom "([^"]+)"|adds top "([^"]+)" to|another full base "([^"]+)"/);
+      const offender = extra && (extra[1] || extra[2] || extra[3]);
+      if (offender) dropByName(look, offender);
+    } else if (f.type === "category_balance") {
+      // "Look N has X Shoes items (max 1 allowed)" — keep the first of the
+      // category, trim the rest. Only Shoes/Bottoms stacking is hard.
+      const catMatch = f.message.match(/has \d+ (Shoes|Bottoms) items/);
+      if (!catMatch) continue;
+      let kept = 0;
+      look.items = look.items.filter(it => {
+        if (resolveItem(it)?.category !== catMatch[1]) return true;
+        kept++;
+        if (kept > 1) { droppedAny = true; return false; }
+        return true;
+      });
+    }
+  }
+  return droppedAny ? { ...parsed, looks } : null;
+}
+
 // ── Normalize response ───────────────────────────────────────────────────────
 // Handle both old format (items as string[]) and new format (items as {id, role}[])
 
@@ -957,7 +1024,7 @@ function scrubRationale(text) {
 // Starting at indexOf('"looks"') would miss that brace and shift everything
 // down by one, making looks appear at depth 1 and never get extracted.
 
-function extractCompleteLooks(partialJson) {
+function scanCompleteLooks(partialJson) {
   const looks = [];
   let depth = 0;
   let inString = false;
@@ -979,7 +1046,12 @@ function extractCompleteLooks(partialJson) {
         const slice = partialJson.slice(lookStart, i + 1);
         try {
           const parsed = JSON.parse(slice);
-          if (parsed.name && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          // A look is the only depth-2 object carrying a non-empty items[].
+          // (This used to require `parsed.name`, a field the LooksTool schema
+          // has never had — looks carry `vibe` — so NO look ever streamed and
+          // the fast-first-look flow plus the "keep what's shown" safety were
+          // silently dead. Requiring items[] matches the real shape.)
+          if (Array.isArray(parsed.items) && parsed.items.length > 0) {
             looks.push(parsed);
           }
         } catch { /* incomplete object — skip */ }
@@ -989,6 +1061,22 @@ function extractCompleteLooks(partialJson) {
     }
   }
   return looks;
+}
+
+export function extractCompleteLooks(partialJson) {
+  // String-mode: the model sometimes double-encodes the whole looks array as a
+  // JSON string (`"looks": "[{\"vibe\"…}]"`) — the dominant malformation since
+  // 2026-08-01 (ai_errors case looks_string_parsed). Braces inside a string are
+  // invisible to the depth scanner, so decode the string body and scan that,
+  // re-wrapped so look objects sit at depth 2 like in the well-formed shape.
+  const m = partialJson.match(/"looks"\s*:\s*"/);
+  if (m) {
+    const inner = unescapeJsonStringPrefix(partialJson.slice(m.index + m[0].length));
+    // A bare array needs a wrapper so looks land at depth 2; a string that
+    // carries its own `{"looks":[…]}` wrapper (coercion case 2) already has one.
+    return scanCompleteLooks(inner.trimStart().startsWith("[") ? `{"looks":${inner}` : inner);
+  }
+  return scanCompleteLooks(partialJson);
 }
 
 // Shape recovery for malformed tool output lives in coerce-shapes.js (pure,
@@ -1254,6 +1342,30 @@ export async function generateValidatedLooks({
     }
   }
 
+  // Salvage step 2: drop individually-offending items. A single bad piece — a
+  // winter-tagged item on a warm day, a banned subcategory, a doubled shoe —
+  // used to doom the whole look (and with single-look generation, the whole
+  // tap). Remove exactly the pieces the hard failures name and re-validate;
+  // ship only if the trimmed looks come back clean.
+  if (lastParsed?.looks?.length && lastFailures.some(f => f.hard)) {
+    const trimmed = salvageByDroppingItems(lastParsed, lastFailures, idMap, allItems);
+    if (trimmed) {
+      const recheck = runAllChecks(trimmed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
+      if (!recheck.some(f => f.hard)) {
+        console.warn("[Atelier Validator] Item-drop salvage succeeded — shipped after removing offending items:",
+          lastFailures.filter(f => f.hard).map(f => f.message));
+        logAiError("stylist_outfit:item_salvage",
+          { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
+          "salvaged by dropping offending items");
+        return resolveIds(trimmed, idMap, allItems, occasion);
+      }
+      // Item-dropping helped but didn't fully clear the board — hand the
+      // trimmed looks + fresh failure list to the look-drop salvage below.
+      lastParsed = trimmed;
+      lastFailures = recheck;
+    }
+  }
+
   // All retries exhausted. Try to salvage the last parsed response by dropping
   // any look that triggered a hard per-look failure (messages start with "Look N").
   // Cross-cutting hard failures (parse, schema, structure, no_duplicates without
@@ -1283,6 +1395,21 @@ export async function generateValidatedLooks({
       }
     }
   }
+
+  // The terminal failure MUST be observable: for days the ai_errors table
+  // showed only ":recovered" rows while the user kept hitting the error wall,
+  // because the post-coercion semantic failures were never logged. Record the
+  // failure list plus a compact item-level snapshot of what the model built,
+  // so the next debugging session can see exactly which checks fired.
+  logAiError("stylist_outfit:validation", {
+    occasion,
+    weather,
+    failures: lastFailures.map(f => ({ type: f.type, hard: f.hard, message: f.message })),
+    looks: lastParsed?.looks?.map(l => ({
+      vibe: l.vibe,
+      items: (l.items || []).map(it => (typeof it === "object" ? { id: it.id, role: it.role } : it)),
+    })) ?? null,
+  }, "hard validation failures persisted after all retries and salvage");
 
   throw new ValidationError(
     `Validation failed after ${MAX_RETRIES + 1} attempts. Issues: ${lastFailures.map(f => f.message).join("; ")}`,

@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Me error wall: streaming restored, item-drop salvage, terminal-failure logging — 2026-08-02
+
+### Why
+Owner kept hitting "Couldn't quite land a full set this time" (screenshot taps at 07:51/07:53 UTC line up with paired `stylist_outfit:recovered` rows). Diagnosis: (1) the streaming extractor required a `name` field the looks schema never had (looks carry `vibe`), so no look EVER streamed — the fast-first-look flow and App's "keep what's shown instead of the error wall" safety were silently dead; (2) since 08-01 the model predominantly double-encodes the looks array as a JSON string (`looks_string_parsed`), which the brace-depth scanner can't see into, killing streaming a second way; (3) when all retries hard-fail, the terminal `ValidationError` was never logged to `ai_errors` — the table showed only benign ":recovered" rows while she saw errors, so the failure was invisible to the replay protocol; (4) with single-look generation, ONE bad piece in the look (e.g. winter-tagged Noosh opaque tights on a Warm day — 4 rows in the closet carry `season_weight: "winter"`) doomed the whole tap, because look-level salvage of a 1-look set salvages nothing.
+
+### Fixed — `src/utils/styling-validator.js`, `src/utils/coerce-shapes.js`
+- `extractCompleteLooks` accepts real look objects (non-empty `items[]`) instead of the never-present `name`, and handles string-mode output by decoding the escaped string body (new pure helper `unescapeJsonStringPrefix`) and re-scanning it — looks stream again in both well-formed and double-encoded responses.
+- New salvage step 2 (`salvageByDroppingItems`): when retries are exhausted and a hard failure names a specific removable piece (weather/occasion/exclusion violations, top-under-dress, belt-on-dress, complete-set extras, doubled Shoes/Bottoms), drop exactly that piece and re-run the full check suite; ship only if the trimmed looks come back genuinely clean. Missing-piece failures (no shoes/top/bottom) are deliberately not "fixable" by dropping. Successful salvages log as `stylist_outfit:item_salvage`.
+
+### Added
+- Terminal validation failures now log to `ai_errors` as `stylist_outfit:validation` with the failure list (type/hard/message), a compact item-level snapshot of the rejected looks, and occasion + weather — the next failure is diagnosable from the table instead of invisible.
+
+### Tests
+- New `scripts/styling-validator.test.mjs` (13, wired as `npm run test:validator`): unescape edge cases (dangling escapes, partial `\uXX`, close-quote stop), extraction in well-formed / string-mode / wrapped-string variants, and salvage scenarios including the production winter-tights-on-Warm case, doubled shoes, a declined missing-shoes case, and input non-mutation.
+
 ## [Unreleased] — Shopping recs: brand hard rules removed; 08-01 failure cluster verified fixed — 2026-08-02
 
 ### Why

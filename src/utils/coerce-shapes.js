@@ -71,6 +71,49 @@ export function parseLooseJson(str) {
   return null;
 }
 
+// ── JSON string-body unescape (streaming) ────────────────────────────────────
+
+// Decode the BODY of a JSON string value that may still be mid-stream (no
+// closing quote yet): `[{\"vibe\": \"Quiet Luxury\"…` → `[{"vibe": "Quiet
+// Luxury"…`. Decoding stops at the first unescaped `"` (the value's closing
+// quote); a dangling escape or partial \uXXXX at the stream edge is dropped.
+// Used by the streaming look extractor when the model double-encodes the
+// looks array as a string. Never throws.
+export function unescapeJsonStringPrefix(str) {
+  if (typeof str !== "string") return "";
+  let out = "";
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '"') break; // unescaped close-quote — the string value ended
+    if (ch !== "\\") { out += ch; continue; }
+    const next = str[i + 1];
+    if (next === undefined) break; // dangling escape at the stream edge
+    i++;
+    switch (next) {
+      case '"': out += '"'; break;
+      case "\\": out += "\\"; break;
+      case "/": out += "/"; break;
+      case "n": out += "\n"; break;
+      case "t": out += "\t"; break;
+      case "r": out += "\r"; break;
+      case "b": out += "\b"; break;
+      case "f": out += "\f"; break;
+      case "u": {
+        const hex = str.slice(i + 1, i + 5);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          out += String.fromCharCode(parseInt(hex, 16));
+          i += 4;
+        } else {
+          return out; // partial \uXX at the stream edge — drop it
+        }
+        break;
+      }
+      default: out += next; break;
+    }
+  }
+  return out;
+}
+
 // ── XML-ish parameter fragment extraction ────────────────────────────────────
 
 // ai_errors case C: a field arrives as a raw tool-call fragment like
