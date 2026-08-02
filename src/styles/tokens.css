@@ -1,13 +1,7 @@
 /* ── ATELIER DESIGN TOKENS ─────────────────────────────────────────────────
  * Single source of truth for palette colors. Referenced from inline styles
- * across src/** as var(--color-*). Adding a dark-mode override here plus a
- * `document.documentElement.dataset.theme = 'dark'` flip is all that's needed
- * to theme the app — no Tailwind, no CSS framework, just custom properties.
- *
- * All light values are 1:1 mappings of the hex that was hardcoded prior to
- * tokenization — no visual change is intended from the sweep itself.
- * Contrast adjustments (e.g. raising --color-text-muted for AA) land in a
- * follow-on commit so any regression is easy to bisect.
+ * across src/** as var(--color-*) — no Tailwind, no CSS framework, just
+ * custom properties.
  */
 
 :root {
@@ -34,26 +28,4 @@
   --color-accent: #C4A882;
   --color-success: #306e50;
   --color-danger: #C0392B;
-}
-
-[data-theme="dark"] {
-  --color-bg: #151210;
-  --color-surface: #1C1814;
-  --color-surface-2: #24201B;
-  --color-surface-3: #2A2420;
-
-  --color-ink: #F5F1EC;
-  --color-ink-2: #E8E0D8;
-  --color-text: #E0D6CA;
-  --color-text-2: #B8ADA0;
-  --color-text-muted: #8A7F74;
-
-  --color-border: #2E2622;
-  --color-border-strong: #3A322C;
-  --color-border-muted: #44392F;
-  --color-border-soft: #24201B;
-
-  --color-accent: #C4A882;
-  --color-success: #4E9866;
-  --color-danger: #D45848;
 }

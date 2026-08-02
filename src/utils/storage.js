@@ -16,7 +16,6 @@ export const RMBG_KEY_STORE        = "atelier:rmbg-key";
 export const SETS_META_KEY         = "atelier:sets-meta:v1";
 export const STYLE_PREFS_KEY       = "atelier:style-prefs:v1";
 export const ABOUT_ME_KEY          = "atelier:about-me:v1";
-export const THEME_KEY             = "atelier:theme";
 export const RECENT_LOOKS_KEY      = "atelier:recent-looks";
 export const INSIGHTS_DISMISSED_KEY = "atelier:insights-dismissed";
 export const RECENT_ITEMS_KEY      = "atelier:recently-suggested-items";

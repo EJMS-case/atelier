@@ -18,7 +18,7 @@ import {
 } from "./utils/item-helpers.js";
 import { STYLE_FILTER_CHIPS } from "./utils/style-filters.js";
 import {
-  THEME_KEY, RECENT_LOOKS_KEY,
+  RECENT_LOOKS_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
   loadSetsMeta, saveSetsMeta, loadStylePrefs, loadAboutMe,
   migrateLocalStorage,
@@ -156,14 +156,6 @@ export default function App() {
       });
     }
   }, []);
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"; }
-    catch { return "light"; }
-  });
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem(THEME_KEY, theme); } catch {}
-  }, [theme]);
   const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
@@ -1207,14 +1199,6 @@ export default function App() {
                 )}
               </button>
             ))}
-            <button
-              onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
-              style={s.navBtn}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              title={theme === "dark" ? "Light mode" : "Dark mode"}
-            >
-              <Icon path={theme === "dark" ? icons.sun : icons.moon} size={15}/>
-            </button>
             <button onClick={() => setView("settings")}
               style={{...s.navBtn, ...(view==="settings" ? s.navActive : {})}}>
               <Icon path={icons.settings} size={15}/>
