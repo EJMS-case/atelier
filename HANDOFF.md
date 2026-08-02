@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed 2026-08-02 (evening) after the cleanup-audit phase on branch `claude/atelier-cleanup-audit-ihqcfq` (PR #145): dark mode removed at owner request, four parallel audit sweeps + a production-incident investigation, three implementation batches. Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
+Refreshed 2026-08-02 (late) after the deferred-backlog phase on branch `claude/atelier-project-manager-v2poqz` (PR #146): the whole "deliberately deferred by the audit" list from #145 is now closed. Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
 
 **Dark mode is REMOVED** (owner request, this phase): no theme toggle, no `THEME_KEY`, no `[data-theme]` CSS. Do not reintroduce. `migrateLocalStorage` strips the orphaned `atelier:theme` key.
 
@@ -50,31 +50,40 @@ Refreshed 2026-08-02 (evening) after the cleanup-audit phase on branch `claude/a
 
 ## Known open items (start here)
 
-1. **Verify the no-shoes fix live**: next Work + Hot tap should produce complete looks. Check `ai_errors` for `:shoe_salvage` (fine, rare) vs repeated `:validation` shoes rows (prompt still losing).
-2. **Watch `looks_string_parsed` frequency** post-deploy (see Resolved) — should drop from every-tap to rare.
+1. **Verify the no-shoes fix live — still UNVERIFIED, and read this timing note before concluding anything.** #145 merged at **16:19 UTC on 2026-08-02**. Every `ai_errors` row that exists as of this writing predates that deploy, including a Work+**Warm** no-shoes `:validation` at 16:13 and Work+Hot ones at 15:17–15:18. So none of them test the fix — they are not evidence it failed. The first rows after 16:19 UTC are the real signal. Note the 16:13 row was **Warm**, not Hot: if no-shoes recurs post-deploy, the contradiction isn't Hot-specific and the WARM prompt block needs the same read the HOT one got. Check `ai_errors` for `:shoe_salvage` (fine, rare — that's the net working) vs repeated `:validation` shoes rows (prompt still losing).
+2. **Watch `looks_string_parsed` frequency** post-deploy (see Resolved) — should drop from every-tap to rare. Same timing caveat: the 15:15–16:13 `:recovered` rows all predate the #145 deploy, so they say nothing about whether the `LooksTool` wording landed. One `item_salvage` row (belt-on-dress, 15:19) shows that salvage path working as designed.
 3. **Ask how the de-branded shopping recs feel** (smarter/more personal?) next time she uses Shopping. Note the shopping prompts switched to `SHOPPING_STYLE_PROFILE` this phase (the "never invent items" contradiction is gone) — still zero `shopping_*` rows in `ai_errors`.
 4. **Ask the owner how repetition feels.** Both levers live: item-level rotation (#134 + hearts tiebreaker) AND look-combination anti-repeat (`recentCombos` in stylist.js). Rotation sync is now merge-then-write (was last-writer-wins across devices). Watch-signal: still **zero** `no_viable_looks` rows.
 5. **Watch `ai_errors`** — protocol unchanged: pull payload, replay through `coerce-shapes.js` in node, then fix. `:validation` rows now carry `pre_salvage`.
-6. **Legacy dual-labeling**: rows store both L2 and L3 subcategory labels ("Heels" vs "Stiletto"). Matchers accept both, but a real normalization (one convention, enforced on write) would simplify everything.
+6. **Legacy dual-labeling** — now quantified against live data (2026-08-02), so the next session doesn't have to re-survey. `wardrobe_items.subcategory` mixes L2 (`TAXONOMY`) and L3 (`SUBCATEGORY_L3`) labels, unevenly by category:
+   - **Bottoms is the extreme case**: *zero* rows use the L2 labels "Pants" or "Skirts". All 58 non-Shorts rows are L3 — Trousers 14, Mini 13, Jeans 11, Midi 7, Ponte 5, Maxi 5, Satin/Silk 3. Only "Shorts" (11) is L2. Any matcher testing `subcategory === "Skirts"` matches nothing today.
+   - **Shoes is mixed both ways**: L2 Sandals 14, Boots 6, Flats 6, Heels 3 — plus L3 Stiletto 6, Kitten 2 (children of Heels) and Ankle 1 (child of Boots). So 9 of 38 shoe rows are L3.
+   - **Accessories carries parent and child simultaneously**: "Scarves & Twillys" 3 *and* "Silk / Twilly" 2; "Jewelry" 1 *and* "Necklaces" 2.
+   - **Belts** splits between `""` (11) and `null` (3) — Belts has no subcategories, so this is just an empty-value inconsistency.
+   Nothing is broken (matchers accept both), so this is a simplification, not a bug fix. Real normalization = pick one convention, migrate, enforce on write. Do it as its own change with the full battery.
 7. **Trip planner**: verify live that `daily.weathercode` comes back for a real destination; sanity-check move-outfit-between-days on the phone. Trip days now store per-day weather buckets (this phase) — old rows keep the single trip-level bucket until re-saved.
 8. **Favorites follow-ups (optional)**: Shopping sub-tab is still "coming soon".
 9. **Hosiery images & inventory** (adjusted 2026-08 per owner): the wardrobe has **17** Noosh hosiery items, 15 with real bg-removed product photos. Removed as not owned: opaque brown, opaque skin-tone, and 2 of the 3 seeded micro-fishnet rows — the single owned pair is the renamed "Noosh micro fishnet tights — black" (real photo). PNGs live in `scripts/assets/hosiery/`, applied via `scripts/apply-noosh-photos.mjs` (idempotent); `seed-hosiery.mjs` excludes the not-owned combos. Only skin-tone and brown semi-opaque keep SVG placeholders (Noosh never made those variants).
 
-### Deliberately deferred by the audit (next candidates, all verified findings)
+### Deferred-audit list — CLOSED this phase (PR #146), do not re-open
 
-- **Weather-band predicates**: the `/hot|85/`-style regex is still re-derived in ~6 places (`taxonomy.js` has unused `WEATHER_BUCKETS`/`weatherBucketOf`). Consolidating means touching sampler+validator+prompt together — do it as its own change with the full battery.
-- **Model-ID constants**: `claude-sonnet-4-6` ×8, `claude-haiku-4-5-20251001` ×3, etc. scattered as magic strings — one `src/constants/models.js` would end it.
-- **`resolveLookItems` extraction** in styling-validator.js (the ID-clean+resolve block repeats ~15×) and the statement-detector share with tripPacker (currently a synced copy, marked with a KEEP IN SYNC comment).
-- **supabase.js PGRST204 retry loop** is quadruplicated (upsert/saveOutfitLog/updateOutfitLog/savePlan) — consolidation deferred as behavior-risky.
-- **Home triple-fetch**: App, HomeView, and LookBackCard each fetch logs/plans on a Home visit — derive once in App and pass down. Also LooksView/OutfitHistory statically import SilhouetteBuilder (downloads the builder chunk on Saved-tab open).
-- **sw.js cache**: constant name `atelier-v2` means old hashed assets accumulate forever; needs a build-stamped cache name or activate-time pruning.
-- **PALETTE object** copy-pasted in 5 views with `accent` meaning two different colors (#6D1A2E vs var(--color-accent)) — needs a `--color-accent-strong` token decision.
+All seven items below were the #145 audit's deferred backlog. Six are done; one was
+deliberately left alone. Don't re-audit these without a new symptom.
+
+- **Weather-band predicates** → `weatherMatches(w, ...buckets)` in `taxonomy.js`, built on the formerly-unused `WEATHER_BUCKETS`. Tests each named bucket independently (unlike first-match-wins `weatherBucketOf`) so combined labels still match several buckets, as the old inline regexes did. All ~6 sites converted.
+- **Model-ID constants** → `src/constants/models.js` (`MODEL_TOP`/`MODEL_STRONG`/`MODEL_STANDARD`/`MODEL_FAST`), 17 magic strings across 11 files retired. No model assignments changed.
+- **`resolveLookItems` + statement detector** → both done. Resolution helpers live in `styling-validator.js`; `isStatementPiece`/`STATEMENT_PATTERNS` moved to `item-helpers.js` and are shared with tripPacker, so the KEEP IN SYNC copies are gone. The packer's genuine differences are now explicit: a `fringeCounts` option and the hosiery exemption. It also picked up `featherwork` (the validator already had it) — an intentional convergence, not a regression.
+- **Home triple-fetch** → App owns one `refreshWearData`; concurrent callers share the in-flight promise. HomeView and LookBackCard filter their own date windows from the shared rows. A fourth redundant `fetchAllPlans` in the fingerprint path is gone. **SilhouetteBuilder** is now `lazy()` in LooksView/OutfitHistory — it was already its own chunk, but the Saved chunk imported it statically, so Saved-tab open eagerly fetched ~28.6 kB (9.5 kB gzip).
+- **sw.js cache** → stamped per build. **The stamping is a build STEP** (`vite build && node scripts/stamp-sw.mjs`), deliberately NOT a Vite plugin: Vite copies `publicDir` into `dist` *after* `closeBundle`, so a plugin's stamp gets overwritten by the pristine `public/sw.js`. Two traps are worth remembering if you touch this — the placeholder token must not appear in sw.js's own prose (the stamper would rewrite that instead; it uses `replaceAll` now), and a missing placeholder **throws and fails the build** on purpose, because a silent no-op here regresses to one constant cache name and nobody would notice for months.
+- **PALETTE** → `src/constants/palette.js` + a new `--color-accent-strong: #6D1A2E` token. Calendar/TripDetail keep a literal hex because they build alpha variants by string concatenation (`${PALETTE.accent}0A`), which a `var()` can't do. Zero rendered change across all six views.
+- **supabase.js PGRST204 retry loop** (quadruplicated across upsert/saveOutfitLog/updateOutfitLog/savePlan) — **still open, still deliberately deferred.** It's the one item genuinely behaviour-risky to merge, and it has no symptom attached. Leave it unless something breaks.
 
 ## Efficiency / token-cost targets (owner explicitly wants this)
 
 - **Contact sheets (reworked this phase)**: geometry now sits under the API's ~1.15 MP downscale cap (90px thumbs, 120 items/sheet, 900×1224) — typical 160-item tap costs ~1,959 vision tokens, down ~36% from ~3,067, attempt 0 only. Token math is in the contact-sheet.js header; don't enlarge thumbs past the cap or the extra pixels are billed then thrown away. Remaining levers if she wants more: fewer/conditional sheets on re-rolls (the image cache already makes re-rolls fast, but tokens are per-call), or skipping sheets for small pools.
 - **Prompt caching**: static preamble is cached (`cache_control: ephemeral`); keep it byte-stable — any edit invalidates the cache for every user tap.
-- **Bundle**: main chunk ~318 kB (98.7 gzip) after the AI-layer split. Next candidates if desired: PlannerWrapper (64 kB) is already lazy; the residual main chunk is mostly React + app shell — diminishing returns.
+- **Bundle**: main chunk ~318 kB (99.1 gzip) — unchanged this phase; the win was deferring the builder chunk (~28.6 kB / 9.5 gzip) off the Saved-tab path, not shrinking main. Next candidates if desired: PlannerWrapper (66 kB) is already lazy; the residual main chunk is mostly React + app shell — diminishing returns.
+- **Tooling note**: `npm run build` is now `vite build && node scripts/stamp-sw.mjs`. If you add a build step, keep the stamper last — it rewrites `dist/sw.js` and throws if the placeholder is missing.
 
 ## Per-feature improvement notes
 
