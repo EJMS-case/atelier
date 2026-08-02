@@ -11,6 +11,7 @@ import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
 import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
 import { explainFilterViolation } from "./style-filters.js";
+import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
@@ -25,8 +26,8 @@ const MAX_RETRIES = 2;
 // drops to Sonnet 5 — far less contended and still excellent for styling — so a
 // generation succeeds instead of surfacing an error. Opus stays primary; the
 // fallback only kicks in when Opus can't be reached.
-const PRIMARY_MODEL = "claude-opus-4-8";
-const FALLBACK_MODEL = "claude-sonnet-5";
+const PRIMARY_MODEL = MODEL_TOP;
+const FALLBACK_MODEL = MODEL_STRONG;
 const TRANSIENT_STATUS = new Set([408, 409, 429, 500, 502, 503, 529]);
 
 // ── Validation Error ─────────────────────────────────────────────────────────

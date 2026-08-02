@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
+import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
 import { filterByWeather } from "../../utils/item-helpers.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ export async function analyzeTripDestination(destination, startDate, apiKey) {
     const month = new Date(startDate + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
     return await invokeTool({
       apiKey,
-      model: "claude-haiku-4-5-20251001",
+      model: MODEL_FAST,
       maxTokens: 300,
       content: `What is the typical weather in ${destination.trim()} during ${month}? Return a brief for packing purposes.`,
       tool: BriefTool,
@@ -227,7 +228,7 @@ Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:
   try {
     const { toolBlock } = await invokeToolRaw({
       apiKey,
-      model: "claude-sonnet-4-6",
+      model: MODEL_STANDARD,
       maxTokens: 800,
       content: prompt,
       tool: TripLooksTool,

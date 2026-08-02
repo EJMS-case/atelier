@@ -8,6 +8,7 @@
 import { familyForColorString, effectiveColorFamily } from "../../constants/color.js";
 import { buildImgSource } from "../../lib/ai/stylist.js";
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { MODEL_STANDARD } from "../../constants/models.js";
 import { sb } from "../../lib/supabase.js";
 
 // Compact, styling-useful subset of a vision read, persisted on the item as
@@ -72,7 +73,7 @@ export async function enrichItemVision({ item, apiKey }) {
   let res;
   try {
     res = await anthropicFetch({
-      model: "claude-sonnet-4-6",
+      model: MODEL_STANDARD,
       max_tokens: 500,
       messages: [{
         role: "user",

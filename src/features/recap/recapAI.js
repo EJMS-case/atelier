@@ -4,6 +4,7 @@
 // the model can boost them, per the user's choice ("AI-judged, hearts boosted").
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { MODEL_STANDARD } from "../../constants/models.js";
 
 function pieceLabel(it) {
   if (!it) return null;
@@ -63,7 +64,7 @@ Outfits (# — date · occasion · weather · where · flags — pieces):
 ${lines}`;
 
   const res = await anthropicFetch({
-    model: "claude-sonnet-4-6",
+    model: MODEL_STANDARD,
     max_tokens: 700,
     messages: [{ role: "user", content: prompt }],
   }, { apiKey });

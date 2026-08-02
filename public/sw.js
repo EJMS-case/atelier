@@ -1,4 +1,10 @@
-const CACHE = "atelier-v2";
+// __BUILD_ID__ is stamped by the stampServiceWorker plugin in vite.config.js on
+// every production build. A new cache name per deploy makes the activate handler
+// below drop the previous deploy's cache, so old hashed assets stop accumulating
+// forever. (Already-running tabs are unaffected: hashed assets are also in the
+// HTTP cache with immutable max-age.) If the stamp ever fails the literal stays,
+// which just reproduces the old constant-name behavior.
+const CACHE = "atelier-__BUILD_ID__";
 const PRECACHE = ["/", "/favicon.svg", "/manifest.webmanifest", "/icon-192.svg", "/icon-512.svg"];
 
 self.addEventListener("install", (event) => {

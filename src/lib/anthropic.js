@@ -5,6 +5,7 @@
 import { invokeTool } from "./ai/toolUse.js";
 import { AutoDetectSchema, AutoDetectTool } from "./ai/schemas.js";
 import { TAXONOMY } from "../constants/taxonomy.js";
+import { MODEL_FAST } from "../constants/models.js";
 
 // ── F1: AUTO-DETECT CLOTHING ITEM FROM PHOTO ─────────────────────────────────
 // Returns a structured object matching the wardrobe_items schema. The caller
@@ -48,7 +49,7 @@ export async function autoDetectItem(base64DataUrl, apiKey, opts = {}) {
   const match = String(base64DataUrl).match(/^data:([^;]+);base64,(.*)$/);
   if (!match) return null;
   const [, mime, data] = match;
-  const model = opts.model || "claude-haiku-4-5-20251001";
+  const model = opts.model || MODEL_FAST;
 
   let detected;
   try {

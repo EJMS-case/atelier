@@ -16,6 +16,7 @@ import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
+import { MODEL_STANDARD, MODEL_STRONG } from "../../constants/models.js";
 import {
   KnitSchema, KnitTool,
   ColorAnalysisSchema, ColorAnalysisTool,
@@ -289,7 +290,7 @@ export async function classifyKnitAI(imgStr, apiKey) {
   if (!source) throw new Error("No image");
   return invokeTool({
     apiKey,
-    model: "claude-sonnet-4-6",
+    model: MODEL_STANDARD,
     maxTokens: 200,
     content: [
       { type: "image", source },
@@ -326,7 +327,7 @@ ${wardrobeItems ? "Fill in pairingCount, pairingItemIds (up to 5), and dimension
 
   return invokeTool({
     apiKey,
-    model: "claude-sonnet-4-6",
+    model: MODEL_STANDARD,
     maxTokens: 900,
     content: [
       { type: "image", source },
@@ -359,7 +360,7 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
 export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, onDelta) {
   const prompt = buildProfilePrompt(items, outfitLogs, analysis);
   const res = await anthropicFetch(
-    { model: "claude-sonnet-4-6", max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] },
+    { model: MODEL_STANDARD, max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] },
     { apiKey },
   );
   if (!res.body) throw new Error("Profile generation failed");
@@ -473,7 +474,7 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
 
     return invokeShoppingTool({
       apiKey,
-      model: "claude-sonnet-5",
+      model: MODEL_STRONG,
       maxTokens: 3000,
       content: [
         // Shopping-safe profile: palette/fit/taste WITHOUT the styling
@@ -514,7 +515,7 @@ Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. B
 
   return invokeShoppingTool({
     apiKey,
-    model: "claude-sonnet-5",
+    model: MODEL_STRONG,
     maxTokens: 2500,
     content: [
       // Shopping-safe profile — see the gap-mode call above.

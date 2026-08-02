@@ -12,6 +12,7 @@
 // Output: a plain-text block of 4–8 short bullet observations.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { MODEL_STANDARD } from "../../constants/models.js";
 
 // Compact one-line representation of an outfit. Resolves garment_ids to the
 // minimum metadata Claude needs to spot patterns: category, color, brand,
@@ -104,7 +105,7 @@ Outfits (${lines.length} total — date | occasion | weather — pieces):
 ${lines.join("\n")}`;
 
   const res = await anthropicFetch({
-    model: "claude-sonnet-4-6",
+    model: MODEL_STANDARD,
     max_tokens: 600,
     messages: [{ role: "user", content: prompt }],
   }, { apiKey });
