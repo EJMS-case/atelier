@@ -19,6 +19,52 @@ The tell was "**some** items": uniform upscaling would have softened everything.
 ### Note
 The bulk re-trim does **not** fix builder blur — `compressImage` only downscales, so re-cropping a 300px garment out of a 600px frame leaves it at 300px. It does sharpen the **closet grid**: thumbnails are 256px generated from the whole padded frame, so trimming redirects that entire budget to the garment.
 
+## [Unreleased] — Planner and Saved previews show the layout she actually arranged — 2026-08-02
+
+### Why
+Owner: "When I click on an outfit from the planner, it has a layout that isn't the layout I made. When I edit it, it's the layout I made." Screenshots: the Aug 13 planned look renders as a generic flat-lay in the day modal, but opening Edit shows her real arrangement.
+
+`EditorialCollage` was discarding `layoutOverride` outright on mobile:
+
+```js
+const slots = !isMobile && Array.isArray(layoutOverride) && layoutOverride.length > 0
+```
+
+The stated reason — "override coords were authored against the desktop landscape canvas" — is only true of the *stylist's* guessed coords (`normalizeLooks`' `aiLayout`). It is not true of a layout she dragged out herself in `SilhouetteBuilder`, which is a portrait **3:4** canvas, near enough to this collage's **4:5** that her composition transfers intact. On her phone every consumer of a saved layout — the planner day modal, Saved look cards, Style Me cards — silently fell back to an auto-recipe. `SilhouetteBuilder` reads `layout_data` directly, which is why Edit looked right.
+
+The two sources are distinguishable in already-stored rows: `buildLayoutData` stamps a `z` on every entry, `aiLayout` emits none. In her data that separates cleanly — all 12 planner rows with a layout are `source: "manual"` with `z` on every entry, and 12 of 13 saved looks likewise; the one AI-authored row has no `z` anywhere.
+
+### Fixed — `src/components/EditorialCollage.jsx`
+- A hand-arranged layout (every entry carries a numeric `z`) is now honoured on mobile as well as desktop. The stylist's `z`-less coords keep deferring to the mobile recipes, so the reason the guard existed is preserved.
+- Fixes the planner day modal, Saved look cards and Style Me cards in one place — they all render through this component.
+
+### Verified
+Replayed her real Aug 13 plan through the running app at a 430px viewport (the mobile branch is active) with the network stubbed. Before: the boxes matched `MOBILE_RECIPES.layerTopBottom` exactly — the generic layout in her screenshot. After: every box matches her saved `layout_data` to the decimal (blazer `0,0,53.2,65.9`; bodysuit `28.9,0,60.6,58.7`; pant `60.3,19.4,39.7,80.6`; stiletto `13.5,68.8,43.2,29.9`; bag `0,65.5,28,17.5`), z-order included. `npm test` and `npm run build` green.
+
+## [Unreleased] — Linking two garments as a coord set works again — 2026-08-02
+
+### Why
+Owner: "I'm unable to link 2 garments together as a set anymore. It keeps erroring out."
+
+Reproduced against a copy of the live closet (449 items, 39 sets). The save itself is fine — the item POST lands and `set_id` is stored correctly. What's broken is that the Coord Set panel gave her no way to see or steer the result, so the link either looked like it did nothing or landed on the wrong set.
+
+Three separate defects, all in `EditItemView`'s Coord Set panel:
+
+1. **"+ Create new set" showed no sign it had worked.** The handler mints a UUID into `form.set_id`, but the `<select>`'s options are derived from items that already carry a `set_id` — so nothing matched the fresh id, the select fell back to displaying **"— Not part of a set —"**, and the panel looked identical to before the tap. State was actually correct the whole time; only the display lied.
+2. **A set created here could only be named from the Sets tab**, so when she opened the second garment the new set appeared as `Unnamed Set (1 piece)` — the same label as every other unnamed set. In the repro this is exactly how the second piece got linked to an unrelated set.
+3. **A linked "Sets"-category garment could not be marked separable.** #108 replaced `form.set_id && <separable>` with a `form.category === "Sets" ? … : form.set_id ? …` ternary, so for a coord-set half — which is precisely what category "Sets" means — the separable control disappeared and was replaced by "Complete two-piece — keep it together". Since `wardrobe_items.is_separable` defaults to **false**, every "Sets" garment she linked after #108 became a LOCKED piece with no control to undo it. Her two post-#108 pairs (`Popflex Go with the Flow`, `L*Space Striped Diamond Eyes`) are the only fully-locked 2-piece sets in the closet; every set made before #108 is separable.
+
+### Fixed — `src/components/EditItemView.jsx`
+- The freshly minted set now renders its own `<option>` ("New set — not saved yet", live-updating to the typed name), so the selection is visible and the dropdown stops claiming the piece isn't in a set.
+- A **Set name** field appears whenever the piece is in a set, prefilled when the set already has a name. Saving pushes it through the new `onSaveSetMeta` prop → `updateSetMeta` → the `sets` table, so the set is identifiable by name by the time she opens its partner. Naming from the Sets tab still works and is unchanged.
+- Unnamed sets are now labelled by their members (`Unnamed — The Favorite Blazer`) instead of a bare `Unnamed Set`, so two of them are never interchangeable.
+- The separable checkbox is restored for **any** piece with a `set_id`, ahead of the category branch; "Complete two-piece" now shows only for a "Sets" item that is *not* linked — which matches `isCompleteSetItem`'s own fallback (`!set_id && is_separable === false`). #108's intent (a single-item set gets the control) is preserved.
+- Linking a piece that had no previous set now defaults `is_separable` to true, so a garment carrying the column default is no longer silently linked LOCKED.
+- The option list is built in one pass over `allItems` instead of a `filter` per set (was 39 × 449 scans on her closet).
+
+### Verified
+Replayed both link paths in a headless browser against a copy of her closet with the network stubbed (no writes to the live project): creating a set on garment A, naming it, then finding it by name from garment B now links both pieces to one set and the Sets grid shows "2 pieces". No page errors. `npm test` (coerce 42, validator 19+, filters 20, rotation 14, weather 65, matrix) and `npm run build` green.
+
 ## [Unreleased] — Honest trim progress + a Printed pants subcategory — 2026-08-02
 
 ### Why

@@ -272,11 +272,21 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
     );
   }
 
-  // On mobile, ignore any saved/AI-generated layout and use the built-in
-  // mobile recipes. Override coords were authored against the desktop
-  // landscape canvas and look scattered when re-projected onto a portrait
-  // mobile canvas — consistency across looks beats preserving them here.
-  const slots = !isMobile && Array.isArray(layoutOverride) && layoutOverride.length > 0
+  // Two very different things arrive as `layoutOverride`, and only one of them
+  // should lose to the mobile recipes:
+  //   · An arrangement she dragged out herself in the builder. Every entry
+  //     carries a `z` (buildLayoutData stamps it) and the coords are relative
+  //     to the builder's portrait 3:4 canvas — near enough to this canvas's
+  //     4:5 that her composition transfers intact. Blanket-ignoring it on
+  //     mobile meant the planner and Saved previews showed an auto-layout she
+  //     never chose, while tapping Edit revealed the real one.
+  //   · The stylist's guessed coords (normalizeLooks' aiLayout), which have no
+  //     `z` and were composed against the desktop landscape canvas. Those do
+  //     read as scattered when re-projected onto a portrait canvas, so they
+  //     keep deferring to the mobile recipes.
+  const hasOverride = Array.isArray(layoutOverride) && layoutOverride.length > 0;
+  const handArranged = hasOverride && layoutOverride.every(e => e && typeof e.z === "number");
+  const slots = hasOverride && (!isMobile || handArranged)
     ? buildFromLayout(sorted, layoutOverride, isMobile)
     : buildCollageLayout(sorted, isMobile);
 
