@@ -3,6 +3,17 @@
 // `stripBackground` in lib/bgRemoval.js for background removal — it has the
 // Remove.bg + imgly fallback chain this file used to lack.
 
+// Longest edge kept for a stored garment cutout. Every write path (bulk add,
+// the Settings trim/re-cut passes, the background drip) uses this ONE value —
+// they must agree, because a re-trim at a smaller cap would silently downscale
+// a sharper photo the upload path had just saved.
+//
+// Raised 600 → 1000 (2026-08-02): once builder boxes hugged the garment instead
+// of its padding, pieces rendered up to ~2x larger and 600px cutouts visibly
+// softened. compressImage never upscales, so this only sharpens NEW photos —
+// the detail already discarded from existing items can't be recovered.
+export const PHOTO_MAX_DIM = 1000;
+
 export function compressImage(dataUrl, maxDim = 400, quality = 0.6, transparent = false) {
   return new Promise((resolve) => {
     if (!dataUrl) { resolve(null); return; }

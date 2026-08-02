@@ -22,8 +22,12 @@ import { getAlphaBbox } from "../utils/images.js";
 
 // Cropped transparent PNGs are cached as data URLs; cap their dimension so a
 // 2000px source doesn't sit in memory at full size (collage slots are ≤ ~300px).
-const MAX_DIM = 720;
-const MAX_CACHE = 300;
+// Matches PHOTO_MAX_DIM so a stored cutout is never re-downscaled at render
+// time (720 here would have thrown away the extra detail the 1000px upload cap
+// now keeps). MAX_CACHE drops in step so total cached pixels stay flat:
+// 300 × 720² ≈ 155M px before, 150 × 1000² = 150M px now.
+const MAX_DIM = 1000;
+const MAX_CACHE = 150;
 const cache = new Map();     // src -> { url, nw, nh }
 const inflight = new Map();  // src -> Promise<{ url, nw, nh }>
 

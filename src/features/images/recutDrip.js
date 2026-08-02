@@ -9,7 +9,7 @@
 // Progress is tracked by the `is_recut` column (distinct from the legacy,
 // blanket-set `is_trimmed`), so the drip converges and never redoes an item.
 
-import { imageToBase64, trimTransparentBorders, compressImage } from "../../utils/images.js";
+import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../../utils/images.js";
 import { sb } from "../../lib/supabase.js";
 
 /**
@@ -36,7 +36,7 @@ export async function runRecutDrip({ items, updateItem, limit = 12, concurrency 
         const trimmed = await trimTransparentBorders(b64);
         if (trimmed && trimmed !== b64) {
           // Had padding to crop — re-upload the tightened image.
-          const compressed = await compressImage(trimmed, 600, 0.9, true);
+          const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
           const url = await sb.uploadImage(it.id, compressed);
           await updateItem(it.id, { image: url, is_recut: true, is_trimmed: true });
         } else {

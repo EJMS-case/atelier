@@ -231,7 +231,18 @@ export default function SilhouetteBuilder({
     const imgAR = naturalW / naturalH;
     setPositions(prev => {
       const cur = prev[key] || DEFAULT_POSITIONS[slot] || { x:10, y:10, w:40, h:40 };
-      const widthPx = (cur.w / 100) * rect.width;
+      let widthPx = (cur.w / 100) * rect.width;
+      // Don't stretch a piece past its own resolution. Once the box started
+      // hugging the garment (rather than its transparent padding) each piece
+      // rendered up to ~2x larger, which exposed how few pixels some cutouts
+      // actually have — the low-res ones looked blurry. naturalW/H here are the
+      // TRIMMED dimensions, so this reads each piece's real detail budget and
+      // only scales back the ones that can't fill their slot sharply. The floor
+      // keeps a very small cutout usable rather than shrinking it to nothing;
+      // either way the box stays tight and the user can still resize up.
+      const minWpx = (cur.w / 100) * rect.width * 0.4;
+      const maxWpx = Math.max(naturalW, minWpx);
+      if (widthPx > maxWpx) widthPx = maxWpx;
       let newHpx = widthPx / imgAR;
       // Cap height so the box stays inside the canvas.
       const maxHpx = rect.height - (cur.y / 100) * rect.height;
@@ -241,7 +252,7 @@ export default function SilhouetteBuilder({
         const newWpx = newHpx * imgAR;
         return { ...prev, [key]: { ...cur, w: (newWpx / rect.width) * 100, h: (newHpx / rect.height) * 100 } };
       }
-      return { ...prev, [key]: { ...cur, h: (newHpx / rect.height) * 100 } };
+      return { ...prev, [key]: { ...cur, w: (widthPx / rect.width) * 100, h: (newHpx / rect.height) * 100 } };
     });
     setAutoFitted(prev => {
       const next = new Set(prev);
