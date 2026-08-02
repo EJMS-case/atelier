@@ -2,6 +2,23 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Builder: stop stretching low-res cutouts past their resolution — 2026-08-02
+
+### Why
+Owner: "some items are super blurry all of a sudden." Caused by #149 earlier the same day. Before it, each garment was letterboxed inside a box shaped like its *padded* photo, so it rendered smaller than its box. Making the box hug the garment meant pieces then **filled** it — up to ~2× larger in each dimension — which exposed how few pixels some cutouts actually have. Default slots are large (a top is 76% of canvas width, outerwear 100%), so a low-resolution cutout was being stretched 2–3×.
+
+The tell was "**some** items": uniform upscaling would have softened everything. Only cutouts whose garment occupies a small slice of the stored photo were affected.
+
+### Fixed — `src/features/builder/SilhouetteBuilder.jsx`
+- `fitBoxToImage` now clamps a piece's width so it never renders wider than its own pixel count. Self-tuning: pieces with detail to spare still fill their slot, only the genuinely low-res ones scale back. A floor at 40% of the slot's default keeps a very small cutout usable, the box stays tight to the garment (resize handle still lands on the piece), and the user can drag anything larger. The clamped width is now written back — the previous branch returned the original width and only adjusted height.
+
+### Changed — one shared resolution cap
+- New `PHOTO_MAX_DIM` (1000, was an inline 600) in `utils/images.js`, used by every write path: bulk add, both Settings trim passes, and the background drip. They **must** agree — a re-trim at a smaller cap would silently downscale a sharper photo the upload path had just saved. `compressImage` never upscales, so this only sharpens NEW photos; detail already discarded from existing items can't be recovered.
+- `TrimmedImage`'s `MAX_DIM` raised 720 → 1000 to match, so a stored cutout isn't re-downscaled at render. `MAX_CACHE` drops 300 → 150 in step, keeping total cached pixels flat (300 × 720² ≈ 155M px before, 150 × 1000² = 150M px now).
+
+### Note
+The bulk re-trim does **not** fix builder blur — `compressImage` only downscales, so re-cropping a 300px garment out of a 600px frame leaves it at 300px. It does sharpen the **closet grid**: thumbnails are 256px generated from the whole padded frame, so trimming redirects that entire budget to the garment.
+
 ## [Unreleased] — Planner and Saved previews show the layout she actually arranged — 2026-08-02
 
 ### Why

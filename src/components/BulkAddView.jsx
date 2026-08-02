@@ -3,7 +3,7 @@ import { s } from "../ui/styles.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
-import { compressImage, trimTransparentBorders } from "../utils/images.js";
+import { compressImage, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 
 export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
@@ -35,7 +35,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         const bgP = stripBackground(rawImage, { rmbgKey })
           .then(async r => {
             const trimmed = r.has_bg ? r.image : await trimTransparentBorders(r.image);
-            const compressed = await compressImage(trimmed, 600, 0.9, true);
+            const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
             // is_trimmed is set when we actually ran the trim path
             // (i.e. the bg was removed). Items that retain their bg still
             // need a future trim pass once a bg removal happens.

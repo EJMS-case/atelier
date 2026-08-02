@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { s } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import { sb, SUPABASE_URL } from "../lib/supabase.js";
-import { compressImage, imageToBase64, detectTransparency, trimTransparentBorders } from "../utils/images.js";
+import { compressImage, imageToBase64, detectTransparency, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../utils/storage.js";
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
@@ -226,7 +226,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           setTrimProgress(p => ({ ...p, done: i + 1 }));
           continue;
         }
-        const compressed = await compressImage(trimmed, 600, 0.9, true);
+        const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
         if (onUpdateItem) await onUpdateItem(item.id, { image: url, is_trimmed: true, is_recut: true });
       } catch { errors++; }
@@ -251,7 +251,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         const result = await stripBackground(base64, { rmbgKey: rmbg });
         if (result.has_bg) { errors++; continue; } // both Remove.bg and fallback gave up
         const trimmed = await trimTransparentBorders(result.image);
-        const compressed = await compressImage(trimmed, 600, 0.9, true);
+        const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
         // BG removal pipeline already trims as its last step, so the trim
         // flag is set here too — no need for a second pass in handleBatchTrim.
