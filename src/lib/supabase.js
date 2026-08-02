@@ -22,8 +22,21 @@ export const STORAGE_HEADERS = {
 // Public URL for an item's small grid thumbnail. Thumbs live under a `thumbs/`
 // prefix in the same bucket, keyed by item id, so the URL is derivable without
 // a DB column. Generated lazily client-side (see components/Thumb.jsx).
-export function thumbUrl(itemId) {
-  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/thumbs/${itemId}`;
+//
+// `cacheKey` (normally the item's current image URL) is hashed into a query
+// param so a replaced photo mints a fresh thumb URL. Without it, the stable
+// URL + storage's max-age kept serving hour-old thumb bytes from the browser
+// HTTP cache even after the server thumb was regenerated. Steady state is
+// unaffected: same image → same hash → cache still works.
+export function thumbUrl(itemId, cacheKey) {
+  let v = "";
+  if (cacheKey) {
+    let h = 5381;
+    const s = String(cacheKey);
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    v = `?v=${(h >>> 0).toString(36)}`;
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/thumbs/${itemId}${v}`;
 }
 
 export const sb = {
