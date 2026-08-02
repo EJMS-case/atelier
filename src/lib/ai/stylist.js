@@ -436,7 +436,7 @@ Identify the 5-8 HIGHEST-IMPACT gaps, weighing:
 3. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't
 4. The season ahead (next 3 months from today's date)
 
-For each gap suggest ONE specific product to buy. Be specific: brand, color, fabric, silhouette. Use brands she loves: The Row, Totême, Loro Piana, Khaite, Max Mara, Theory, COS, Vince. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
+For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
 
     return invokeShoppingTool({
       apiKey,
@@ -473,7 +473,7 @@ Analyze what's missing from this outfit to make it complete and elevated, then r
 - Could a specific accessory elevate it?
 - Is there a texture or color gap?
 
-Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific with brands, colors, fabrics. Keep description and why to one tight sentence each.`;
+Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific: color, fabric, silhouette. Infer her taste from what she owns — name a brand only when it's genuinely the right make for the piece, never from a default luxury short-list. Keep description and why to one tight sentence each.`;
 
   return invokeShoppingTool({
     apiKey,

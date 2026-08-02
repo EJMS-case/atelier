@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed 2026-08-02 at the end of the four-workstream session (coercion case 7, AI-layer code split, trip weather conditions, history search + favorites tiebreaker). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
+Refreshed 2026-08-02 (second session: 08-01 failure-cluster verification + shopping de-branding). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
 
 ## Owner preferences (standing, do not re-ask)
 
@@ -8,6 +8,7 @@ Refreshed 2026-08-02 at the end of the four-workstream session (coercion case 7,
 - **No hard rules that force errors** — a shown look always beats an error. The validator is soft where taste is involved; keep moving in that direction.
 - **Priority occasions: Work, Work Dinner, Dinner, Casual.** Occasion + Lounge stay in the Style Me picker; Active/Travel Day/Vacation were removed from Style Me (planner/history still use the full list).
 - **No moods** (removed), **no sporty anything** ("Sporty" removed from the vibe vocabulary).
+- **No brand hard rules in shopping recs** (2026-08-02): she wants suggestions inferred from her actual closet, not a fixed brand short-list. The prescriptive brand lists were removed from both shopping prompts and `STYLE_PROFILE`. Don't reintroduce "use brands X, Y, Z" directives anywhere; the aesthetic-register brand references inside `STYLING_STATIC_PREAMBLE` (taste calibration, not shopping rules) stay.
 - **Dark Winter palette, quiet-luxury register** (The Row, Totême, Khaite; easy/feminine: Sézane, Posse…) — see `STYLING_STATIC_PREAMBLE`.
 - She wears skirts/minis year-round: hosiery (Accessories > Hosiery, 21 seeded Noosh pairs) makes them winter-viable. Never let cold weather exclude skirts.
 
@@ -25,13 +26,14 @@ Refreshed 2026-08-02 at the end of the four-workstream session (coercion case 7,
 
 ## Resolved — do NOT re-investigate
 
-- **Coercion case 7 (2026-08-02)**: the one post-#131 `:schema` row (21:39 UTC) was the model streaming the whole truncated looks array into the `items` slot. Look-shaped values parsed out of `items` are now adopted as `looks` (`items_looks_unwrapped`). The exact payload is a test. 41 coerce tests.
+- **The 2026-08-01 failure cluster (verified 2026-08-02)**: owner reported "continued fails". All 14 `stylist_outfit:schema` payloads from 08-01 were replayed through the current `coerce-shapes.js` + Zod in node: 13/14 recover under current code (patterns: stringified looks arrays, `{looks:[…]}` wrappers, trailing `]}`/`</invoke>` garbage, truncation, `<parameter>` fragments, case 7). The 14th (08:29) lost its item IDs in-stream — retry is the correct handling, don't try to "fix" it. Every failure predates the deploy of its covering fix (#131 deployed 18:12 UTC, after the 08:09–14:51 rows; #136 deployed 02:30 UTC 08-02, after the 21:39 case-7 row). Zero `ai_errors` rows since. The `</invoke>`-garbage variant is now test 42. If she still reports fails with NO new `ai_errors` rows, suspect a stale client (PWA service worker `public/sw.js` is cache-first for hashed JS; a long-lived tab/PWA that never re-navigates keeps running old code — force-quit + reopen fixes it), or a failure mode that doesn't log (API key/network) — not the coercion pipeline.
+- **Coercion case 7 (2026-08-02)**: the one post-#131 `:schema` row (21:39 UTC) was the model streaming the whole truncated looks array into the `items` slot. Look-shaped values parsed out of `items` are now adopted as `looks` (`items_looks_unwrapped`). The exact payload is a test. 42 coerce tests.
 - **Bundle (2026-08-02)**: the handoff's old framing was stale — @imgly/onnx were already fully lazy. The real cold-start weight was the statically-imported stylist pipeline; now dynamic. See Architecture note before touching App imports.
 - **Trip weather (2026-08-02)**: PLAN.md F3 fully closed (real per-destination forecast + conditions + precip + caching). Drag-and-drop between days is the only F3 leftover.
 - **Favorites (PR #132)**: Saved > Favorites merges hearted logs with loved Style Me looks (`look_feedback` rating=1) via `sb.fetchLovedLooks()`, deduped by item set, un-lovable in place. `outfit_logs.is_favorite` confirmed dead and left inert.
 - **Piece-hearts now feed the sampler (2026-08-02)**: −0.25 within-band tiebreaker only — deliberately cannot cross a freshness band, so it can't reintroduce repetition. Don't make it bigger without re-reading the anti-repeat rationale in rotation.test.mjs.
 - **Stylist schema recovery (PR #131)**: `items` as a stringified item-array fragment → case 6. A fragment holding only a lone id (data genuinely lost) correctly still retries.
-- **Shopping + gap analysis** rebuilt (PR #128). Still no `shopping_*` rows in `ai_errors` — and still no verified live use; when she uses it, ask how the results felt and tune the PROMPT, not the plumbing.
+- **Shopping + gap analysis** rebuilt (PR #128); prompts de-branded (2026-08-02). She HAS now used it live — her feedback was the brand short-list complaint, addressed by removing the hard rules so recs are inferred from her closet. Next feedback loop: ask whether the de-branded suggestions feel smarter/more personal.
 - **`wardrobe_items_backup_20260728` RLS** enabled (service-role-only). Remaining advisor warnings are the app's intentional single-user design.
 - **Style fingerprint** exists and self-maintains. **`OutfitBuilder` dead code** removed.
 - **"Same pieces over and over" (PR #134)**: look-based 24-deep memory, streamed looks always recorded, LRU floor backfill, freshest-first bucket ordering, cross-device sync via `user_settings.rotation_state`. Tests: `npm run test:rotation` (14).
@@ -57,12 +59,12 @@ Refreshed 2026-08-02 at the end of the four-workstream session (coercion case 7,
 - **Closet**: bulk re-categorization UX, better dedup, surfacing RESTING/neglected pieces.
 - **Crop / bg-removal / trim**: pipeline in `src/lib/bgRemoval.js`, `src/features/images/recutDrip.js`, `TrimmedImage.jsx`. Owner cares about isolation/trim quality; audit results on real items.
 - **Saved/History**: History now has text search (2026-08-02); Saved looks don't — extending the same pattern there is cheap. Maybe collage regeneration for old looks.
-- **Shopping**: first follow-up is asking how results felt after real use, then tuning the prompt.
+- **Shopping**: prompts are now brand-agnostic (taste inferred from the closet). Follow up on whether results feel smarter; the Favorites > Shopping sub-tab is still "coming soon".
 
 ## Working agreements
 
 - Feature branch → PR → merge `main` (auto-deploy). Squash-merge with `(#NN)` in the title, matching history. **Parallel sessions ship to `main`**: always `git fetch origin main` and merge/rebase before pushing, and expect CHANGELOG conflicts at the top of the file.
 - Update `CHANGELOG.md` per feature (house style: Why / Added / Changed / Fixed).
-- Never break: `scripts/coerce-looks-shapes.test.mjs` (41 tests), `scripts/style-filters.test.mjs` (17), `scripts/rotation.test.mjs` (14), `scripts/weather.test.mjs` (65), `scripts/style-me-matrix.mjs`, `npm run build`. Run `npm ci` first in a fresh container.
+- Never break: `scripts/coerce-looks-shapes.test.mjs` (42 tests), `scripts/style-filters.test.mjs` (17), `scripts/rotation.test.mjs` (14), `scripts/weather.test.mjs` (65), `scripts/style-me-matrix.mjs`, `npm run build`. Run `npm ci` first in a fresh container.
 - Multi-agent sessions: agents share the working tree — scope each agent to disjoint files, keep CHANGELOG/HANDOFF/commits with the orchestrator, commit per-feature with explicit file lists (never `git add -A` while agents run).
 - Keep this HANDOFF.md current: when a session resolves or discovers items, rewrite the doc before ending — a stale handoff sends the next session chasing closed issues.
