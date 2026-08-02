@@ -156,7 +156,6 @@ export default function App() {
       });
     }
   }, []);
-  const [filter,     setFilter]     = useState("All"); // legacy — still used for Sets view
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const [outfits,    setOutfits]    = useState(null);
   const [allLooks,   setAllLooks]   = useState(() => {
@@ -1537,6 +1536,11 @@ export default function App() {
                 weather: existing?.weather ?? plan.weather ?? null,
                 activity: existing?.activity ?? null,
                 day_label: existing?.day_label ?? null,
+                // Forward the builder's multi-tag selections — without these,
+                // buildPlanPayload rederives singletons and the extra
+                // occasion/weather chips picked in the builder were dropped.
+                occasions: plan.occasions,
+                weathers: plan.weathers,
               });
               // Persist the manual canvas arrangement for the primary outfit
               // (the only slot whose layout currently round-trips at the row).
@@ -1809,17 +1813,16 @@ export default function App() {
                 weather: existing?.weather ?? plan.weather ?? null,
                 activity: existing?.activity ?? null,
                 day_label: existing?.day_label ?? null,
+                // Forward multi-tags from the scheduled look (see builder
+                // onSchedule above) so they aren't collapsed to singletons.
+                occasions: plan.occasions,
+                weathers: plan.weathers,
               });
               if (existing?.layout_data) merged.layout_data = existing.layout_data;
               await savePlan(merged);
             } catch {
               await savePlan(plan); // last-resort fallback
             }
-          }}
-          onStyleItem={(it) => {
-            setRequest(`use my ${it.color ? it.color + " " : ""}${it.subcategory || it.category} "${it.name}"`);
-            setView("style");
-            setStylePanelOpen(true);
           }}
           onBuildSimilar={buildSimilarLook}
         />

@@ -40,6 +40,21 @@ export function friendlyDate(iso) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ });
 }
 
+// TZ-safe "YYYY-MM-DD" for a Date object — built from LOCAL year/month/day
+// parts. The old pattern (`setHours(0,0,0,0)` + `toISOString()`) converted the
+// local midnight back to UTC, which lands on the *previous* day in UTC+
+// timezones and shifted every derived key/date by one.
+export function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Typical NYC monthly high temps (°F), Jan → Dec. Last-resort seasonal
+// estimate when neither a real forecast nor a destination brief is available.
+export const SEASONAL_HIGHS = [38, 42, 52, 62, 72, 80, 85, 83, 76, 64, 52, 42];
+
 // Add days to an iso "YYYY-MM-DD" while staying timezone-stable.
 export function addDaysIso(iso, n) {
   const d = new Date(iso + "T12:00:00Z"); // noon UTC keeps tz drift away

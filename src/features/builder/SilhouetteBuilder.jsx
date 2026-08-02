@@ -10,6 +10,7 @@ import { sendBuilderMessage } from "./builderChat.js";
 import { OCCASIONS } from "../../constants/taxonomy.js";
 import { slotForItem } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
+import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 
@@ -52,6 +53,12 @@ const MULTI_SLOTS = new Set(["top", "bottom", "outerwear", "swim", "shoes", "bag
 // Stable key for per-instance state (positions, zOrders, autoFitted) so each
 // item in a multi-slot has its own canvas slot.
 const posKey = (slot, itemId) => `${slot}__${itemId}`;
+
+// Default stacking order (back → front) shared by the live canvas, the saved
+// collage compositing, and the exported layout snapshot. Sets and swim wear
+// like a dress (full-body base layer), so they take the dress z. Unknown
+// slots fall back to 3 at each use site.
+const DEFAULT_Z = { outerwear: 1, dress: 2, set: 2, swim: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
 
 // Item-label format under each picker thumb: "{brand} {color} {name}" all
 // lowercased. Empty parts are skipped, so an item with no brand still reads
@@ -164,8 +171,10 @@ export default function SilhouetteBuilder({
     return arr.length ? arr : ["Work"];
   });
   const [weathers, setWeathers] = useState(() => tagsFor(initialLook, "weathers", "weather"));
-  const [scheduleDate, setScheduleDate] = useState(() => initialScheduleDate || new Date().toISOString().slice(0, 10));
-  const isFutureSchedule = saveMode === "schedule" && scheduleDate > new Date().toISOString().slice(0, 10);
+  // NYC "today" — `toISOString()` is UTC, which from ~7-8pm NYC time already
+  // reads as tomorrow and mislabeled a same-day schedule as future.
+  const [scheduleDate, setScheduleDate] = useState(() => initialScheduleDate || nyToday());
+  const isFutureSchedule = saveMode === "schedule" && scheduleDate > nyToday();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
   const [saveErr, setSaveErr] = useState("");
@@ -424,7 +433,6 @@ export default function SilhouetteBuilder({
 
     // Draw back→front using the same z-resolution as the live canvas so the
     // saved image matches what the user sees (including any Front/Back overrides).
-    const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
     const sorted = [...pickedItems].sort((a, b) => {
       const za = zOrders[posKey(a.slot, a.item.id)] ?? DEFAULT_Z[a.slot] ?? 3;
       const zb = zOrders[posKey(b.slot, b.item.id)] ?? DEFAULT_Z[b.slot] ?? 3;
@@ -438,7 +446,6 @@ export default function SilhouetteBuilder({
   // viewer (LookCard, planner cells) can rebuild the same arrangement and the
   // builder can restore it on reopen.
   function buildLayoutData() {
-    const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
     return pickedItems.map(p => {
       const key = posKey(p.slot, p.item.id);
       const pos = positions[key] || defaultPosFor(p.slot, p.item.id);
@@ -573,13 +580,12 @@ export default function SilhouetteBuilder({
       </div>
 
       {/* Canvas area — plain white, draggable items.
-          Default stacking order (back→front) lives inline below as DEFAULT_Z;
+          Default stacking order (back→front) is the module-level DEFAULT_Z;
           zOrders[slot] overrides it when the user uses the Front/Back controls. */}
       <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 6, overflow: "hidden", touchAction: "none" }}>
         {pickedItems.map(({ slot, item }) => {
           const key = posKey(slot, item.id);
           const pos = positions[key] || defaultPosFor(slot, item.id);
-          const DEFAULT_Z = { outerwear: 1, dress: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
           const z = zOrders[key] ?? DEFAULT_Z[slot] ?? 3;
           const isActive = activeCanvasKey === key;
           return (
