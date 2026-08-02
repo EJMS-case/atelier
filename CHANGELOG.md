@@ -2,6 +2,17 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Builder: garment boxes now hug the garment, not its padding — 2026-08-02
+
+### Why
+Owner: in the manual outfit builder "the square for the garment is so large it impacts how I can resize it… it makes it really difficult to see the whole outfit."
+
+`TrimmedImage` renders the alpha-cropped garment but reported the **original** `naturalWidth`/`naturalHeight` back through `onLoad`. The builder's `fitBoxToImage` snaps each box's aspect ratio to those numbers, so the box kept the padded photo's shape while `objectFit: contain` letterboxed the trimmed garment inside it. Every piece floated in a frame larger than itself, with its resize handle stranded in dead transparent space and neighbouring boxes overlapping.
+
+### Fixed — `src/components/TrimmedImage.jsx`
+- The reported dimensions now describe what is actually rendered: the cropped size when a bbox is found, the natural size when nothing is cropped or the canvas is tainted. Boxes fit the garment, the resize handle lands on its corner, and pieces stop colliding.
+- `fitBoxToImage` in SilhouetteBuilder is the only consumer of this callback, so the corrected numbers can't affect anything else.
+
 ## [Unreleased] — Tights with trousers, and named pieces being ignored — 2026-08-02
 
 ### Why

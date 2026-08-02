@@ -47,7 +47,13 @@ function loadTrimmed(src) {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      const nw = img.naturalWidth, nh = img.naturalHeight;
+      // nw/nh are the dimensions of what we actually RENDER, so they track the
+      // cropped image once a bbox is found. Reporting the untrimmed size here
+      // made the builder's fitBoxToImage snap each box to the padded photo's
+      // aspect ratio while objectFit:contain letterboxed the trimmed garment
+      // inside it — the piece floated in a too-large frame with its resize
+      // handle stranded out in dead space (owner report 2026-08-02).
+      let nw = img.naturalWidth, nh = img.naturalHeight;
       let url = src;
       try {
         const bbox = getAlphaBbox(img);
@@ -62,8 +68,9 @@ function loadTrimmed(src) {
           canvas.width = dw; canvas.height = dh;
           canvas.getContext("2d").drawImage(img, bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, dw, dh);
           url = canvas.toDataURL("image/png");
+          nw = dw; nh = dh;   // report the cropped size, not the padded original
         }
-      } catch { url = src; /* tainted canvas — render original */ }
+      } catch { url = src; nw = img.naturalWidth; nh = img.naturalHeight; /* tainted canvas — render original */ }
       const val = put(src, { url, nw, nh });
       inflight.delete(src);
       resolve(val);
