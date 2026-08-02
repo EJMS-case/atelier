@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, updateTrip } from "./plannerApi.js";
 import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
 import { geocodeDestination } from "../../lib/geocode.js";
-import { fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
+import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds } from "./outfits.js";
@@ -597,10 +597,20 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                     <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 1 }}>
                       {wx}
                       {(() => {
+                        // Real Open-Meteo forecast → exact temp + condition when
+                        // it's packing-relevant (rain/snow/storm/fog). Beyond the
+                        // 16-day horizon (or when geocode/fetch failed) → the
+                        // seasonal/brief estimate, marked "~ … (est)".
                         const t = tempHighForDay(iso);
                         if (t == null) return "";
-                        const isForecast = forecast?.[iso]?.high != null;
-                        return ` · ${isForecast ? "" : "~"}${t}°F`;
+                        const fc = forecast?.[iso];
+                        const isForecast = fc?.high != null;
+                        if (!isForecast) return ` · ~${t}°F (est)`;
+                        let line = ` · ${t}°F`;
+                        if (isNotableCondition(fc.condition)) {
+                          line += ` · ${fc.condition}${fc.precip != null ? ` ${fc.precip}%` : ""}`;
+                        }
+                        return line;
                       })()}
                     </div>
                   </div>

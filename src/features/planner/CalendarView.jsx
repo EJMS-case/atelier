@@ -7,7 +7,7 @@ import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } 
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
 import { newOutfitId, buildPlanPayload } from "./outfits.js";
 import { nyToday, dayPart, friendlyDate, CITY } from "../../lib/time.js";
-import { fetchNycForecast, fetchTripForecast, bucketFromHigh } from "../../lib/weather.js";
+import { fetchNycForecast, fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
@@ -226,7 +226,10 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, fontSize: 11, color: PALETTE.muted, letterSpacing: "0.06em" }}>
         <span>📍 {CITY} · {friendlyDate(todayIso)}</span>
         {forecast?.[todayIso] && (
-          <span>Today {forecast[todayIso].high}°F · {forecast[todayIso].bucket}</span>
+          <span>
+            Today {forecast[todayIso].high}°F · {forecast[todayIso].bucket}
+            {isNotableCondition(forecast[todayIso].condition) && ` · ${forecast[todayIso].condition}`}
+          </span>
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -493,6 +496,8 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
             {forecast?.[iso] && (
               <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 2 }}>
                 {forecast[iso].high}°F / {forecast[iso].low}°F · {forecast[iso].bucket}
+                {isNotableCondition(forecast[iso].condition) &&
+                  ` · ${forecast[iso].condition}${forecast[iso].precip != null ? ` ${forecast[iso].precip}%` : ""}`}
               </div>
             )}
           </div>
@@ -1080,6 +1085,8 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
                         <div style={{ fontSize: 10, color: PALETTE.muted, whiteSpace: "nowrap" }}>
                           ☀ {dayHi}°
                           {dayLo != null && <> · ☾ {dayLo}°</>}
+                          {hasRealForecast && isNotableCondition(perDayForecast[dayIso].condition) &&
+                            <> · {perDayForecast[dayIso].condition}</>}
                           {!hasRealForecast && " (est)"}
                         </div>
                       )}
