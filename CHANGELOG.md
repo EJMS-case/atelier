@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Tights with trousers, and named pieces being ignored — 2026-08-02
+
+### Why
+Two owner reports from the same Work generation (weather **Any**, free text `include my Navy Jumpsuit "Sienna Jumpsuit"`): navy tights turned up next to tailored black trousers — unmentioned by the look's own rationale — and the jumpsuit she explicitly named never appeared. They turned out to share a root cause.
+
+`matchesFreeText` is deliberately generous (colour, material, category all score), which is right for "include my red blazer". But the colour token **"navy"** — an adjective describing the jumpsuit — also matched a pair of navy tights, so the tights were *force-included*: the model was instructed to use them, which is exactly why they appear in the collage but not in the rationale. Meanwhile the jumpsuit itself was removed in sampler **step 1** (Work bans the `Jumpsuits` category) long before force-include runs in **step 4**, so it could never come back — while the UI kept promising "Named pieces are force-included."
+
+### Fixed — `src/utils/closet-sampler.js`
+- **Named pieces now clear the occasion's category and subcategory bans.** A literal name match (the request contains the item's own name) is an unambiguous instruction. A bare colour word still cannot: `"black"` on Work must not drag in an Occasionwear cocktail dress, and it doesn't. The name must carry two ≥3-char tokens so generic one-word names ("Heels") can't rescue themselves off any request using the word.
+- **When the request names specific pieces, force-include exactly those.** An adjective describing a named piece is not a second request. With no explicit name anywhere, the generous matcher still applies, so "include my red blazer" is unaffected.
+
+### Added — hosiery pairing check, `src/utils/styling-validator.js`
+- `STYLING_STATIC_PREAMBLE` already stated hosiery is "legwear layered under skirts/dresses", but **nothing enforced it**. New `checkHosieryPairing` hard-fails hosiery in a look whose lower half is a full-length bottom (trousers, jeans, leggings, ponte); skirts, shorts, dresses and jumpsuits are fine. Registered as droppable, so the salvage removes the tights and the look still ships rather than erroring — a shown look always beats an error.
+- This needed the force-include fix to land with it: dropping a *force-included* item trips `checkRequestedItems`, so fixing only the pairing rule would have converted "odd tights" into an error wall. Verified in node before shipping.
+
+### Tests
+- `scripts/styling-validator.test.mjs`: 26 (was 24) — tights-with-trousers fails and is dropped cleanly; tights with a skirt or jumpsuit pass.
+- New `scripts/free-text-rescue.test.mjs` (4, wired as `npm run test:freetext`): the named jumpsuit survives Work's category ban and is force-included alone; the colour adjective doesn't drag the tights along; a bare colour word still can't bypass a ban; the fuzzy path still works when nothing is named.
+
 ## [Unreleased] — Fix the Work+Warm error wall: swap offending items instead of dropping them — 2026-08-02
 
 ### Why

@@ -241,6 +241,26 @@ const FREE_TEXT_STOPWORDS = new Set([
  *
  * Returns true if the item is likely referenced by the user's request.
  */
+// Did the user name this exact piece? True only when the request literally
+// contains the item's own name — "include my Navy Jumpsuit \"Sienna Jumpsuit\""
+// against an item named "Sienna Jumpsuit". This is the strong signal that
+// separates an explicit request from the incidental matches matchesFreeText
+// also accepts (a bare "black" hitting every black item's color field).
+//
+// Only strong matches are allowed to override an occasion ban, so naming a
+// piece works while a stray colour word still can't drag a cocktail dress into
+// Work. The name must carry at least two ≥3-char tokens: generic one-word
+// names ("Heels", "Tops") would otherwise rescue themselves off any request
+// that happened to use the word.
+function namedExplicitly(item, freeText) {
+  if (!freeText) return false;
+  const name = String(item.name || "").toLowerCase().trim();
+  if (name.length < 6) return false;
+  const nameTokens = name.split(/[\s,;.!?/-]+/).filter(t => t.length >= 3);
+  if (nameTokens.length < 2) return false;
+  return String(freeText).toLowerCase().includes(name);
+}
+
 function matchesFreeText(item, freeText) {
   if (!freeText) return false;
   const req = String(freeText).toLowerCase().trim();
@@ -365,7 +385,20 @@ export function sampleClosetItems({
   const occasionNoteIds = new Set(
     isComfort ? items.filter(it => noteSaysOccasion(it, occasion)).map(it => it.id) : []
   );
-  const catRescued = (it) => freeTextOverrideIds.has(it.id) || occasionNoteIds.has(it.id);
+  // Explicitly-named pieces. The UI promises "Named pieces are force-included",
+  // but force-include (step 4) samples from the ALREADY-banned pool, so naming
+  // a piece whose category the occasion bans could never work: asking Work for
+  // "Sienna Jumpsuit" hit the Jumpsuits category ban in step 1 and the piece
+  // was gone before force-include ran (owner report 2026-08-02). A literal
+  // name match is an unambiguous instruction, so it clears occasion category
+  // AND subcategory bans. Weather filters and active "No …" toggles still
+  // apply — those are separate deliberate signals, not this request.
+  const nameRescueIds = new Set(
+    freeTextRequest ? items.filter(it => namedExplicitly(it, freeTextRequest)).map(it => it.id) : []
+  );
+
+  const catRescued = (it) =>
+    freeTextOverrideIds.has(it.id) || occasionNoteIds.has(it.id) || nameRescueIds.has(it.id);
 
   // "Only …" rescue set: an active "Only Jeans"/"Only Heels"/… toggle is a
   // direct instruction to build around that garment type, so matching items
@@ -394,9 +427,9 @@ export function sampleClosetItems({
     // dress. Only the note-rescue (a piece she tagged for a comfort occasion)
     // clears a category ban here; free-text can still rescue items past the
     // softer prefilters in step 1b below.
-    if (bannedCats.has(it.category) && !occasionNoteIds.has(it.id)) return false;
-    if (bannedSubs.has(it.subcategory) && !onlyRescueIds.has(it.id)) return false;
-    if (bannedSubs.has("Jeans") && isDenim(it) && !onlyRescueIds.has(it.id)) return false;
+    if (bannedCats.has(it.category) && !occasionNoteIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
+    if (bannedSubs.has(it.subcategory) && !onlyRescueIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
+    if (bannedSubs.has("Jeans") && isDenim(it) && !onlyRescueIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
     if (bannedKeywords.length > 0) {
       const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
       if (bannedKeywords.some(kw => text.includes(kw.toLowerCase()))) return false;
@@ -520,8 +553,19 @@ export function sampleClosetItems({
   }
 
   // ── 4. Identify force-include items (free-text match) ──
+  // When the request NAMES specific pieces, force-include exactly those. The
+  // fuzzy matcher is deliberately generous (colour, material, category all
+  // count), which is right for "include my red blazer" but wrong once she has
+  // been specific: 'include my Navy Jumpsuit "Sienna Jumpsuit"' also matched a
+  // pair of navy tights on the colour token and force-included THEM (owner
+  // report 2026-08-02 — tights turned up beside tailored trousers in a Work
+  // look, unmentioned by the rationale, because the model had been told to use
+  // them). An adjective describing the named piece is not a second request.
+  // With no explicit name anywhere, the generous match still applies.
   const forceInclude = freeTextRequest
-    ? pool.filter(it => matchesFreeText(it, freeTextRequest))
+    ? (nameRescueIds.size > 0
+        ? pool.filter(it => nameRescueIds.has(it.id))
+        : pool.filter(it => matchesFreeText(it, freeTextRequest)))
     : [];
   const forceIds = new Set(forceInclude.map(it => it.id));
 

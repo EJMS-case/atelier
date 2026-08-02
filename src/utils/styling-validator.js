@@ -617,6 +617,46 @@ function checkCoordSets(response, idMap, allItems) {
  *   · No belt finishing a dress/jumpsuit — belts are for separates only.
  * Both are hard: the look must be rebuilt without the offending piece.
  */
+/**
+ * Hosiery pairing. STYLING_STATIC_PREAMBLE already states that Accessories >
+ * Hosiery is "legwear layered under skirts/dresses", but nothing enforced it —
+ * so the model could pair tights with tailored trousers and the look shipped
+ * (owner screenshot 2026-08-02: navy tights beside black trousers on a Work
+ * look, with the rationale not even mentioning them). Tights under trousers
+ * aren't a taste call, they're an error.
+ *
+ * Bare-leg garments are what hosiery layers under: skirts, dresses, jumpsuits,
+ * shorts, and skirted/dress-like sets. A full-length leg covering (trousers,
+ * jeans, leggings) leaves nowhere for it to go. Hosiery is an OPTIONAL
+ * accessory, so this is registered as droppable — the salvage removes the
+ * tights and ships the look rather than erroring (owner's standing rule).
+ */
+function checkHosieryPairing(response, idMap, allItems) {
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const resolved = resolveLookItems(look, idMap, allItems);
+    const hosiery = resolved.find(isHosieryItem);
+    if (!hosiery) return;
+
+    const bareLeg = resolved.some(it => {
+      const role = getGarmentRole(it);
+      if (role === "dress") return true;                 // dresses, jumpsuits, occasionwear
+      if (role !== "lower") return false;
+      // Lower-half pieces: only skirts/shorts leave the leg bare. Trousers,
+      // jeans, leggings and ponte pants cover it.
+      const sub = (it.subcategory || "").toLowerCase();
+      const text = ((it.name || "") + " " + sub).toLowerCase();
+      if (/trouser|pant|jean|legging|ponte|culotte|chino/.test(text)) return false;
+      return /skirt|mini|midi|maxi|short/.test(text);
+    });
+
+    if (!bareLeg) {
+      failures.push(`Look ${i + 1} pairs hosiery "${hosiery.name}" with a full-length bottom — hosiery is legwear for skirts and dresses only. Drop it.`);
+    }
+  });
+  return failures;
+}
+
 function checkDressStyling(response, idMap, allItems) {
   const failures = [];
   const DRESS_CATS = new Set(["Dresses", "Jumpsuits", "Occasionwear"]);
@@ -783,6 +823,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   allFailures.push(...checkBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "bag", message: f, hard: false })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
   allFailures.push(...checkDressStyling(response, idMap, allItems).map(f => ({ type: "dress_styling", message: f, hard: true })));
+  allFailures.push(...checkHosieryPairing(response, idMap, allItems).map(f => ({ type: "hosiery", message: f, hard: true })));
   allFailures.push(...checkCompleteSets(response, idMap, allItems).map(f => ({ type: "complete_sets", message: f, hard: true })));
   allFailures.push(...checkRequestedItems(response, idMap, forceIncludeIds).map(f => ({ type: "requested_items", message: f, hard: true })));
   // Statement count (HC8) is now SOFT: pattern-stacking is a taste call, and
@@ -818,7 +859,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
 // Failure types whose message quotes the removable item's name. shoes /
 // lower_half / upper_half / shoulder_coverage failures are about something
 // MISSING and can't be fixed by removal, so they're deliberately absent.
-const DROPPABLE_TYPES = new Set(["exclusions", "occasion", "weather", "dress_styling"]);
+const DROPPABLE_TYPES = new Set(["exclusions", "occasion", "weather", "dress_styling", "hosiery"]);
 
 export function salvageByDroppingItems(parsed, failures, idMap, allItems) {
   if (!parsed?.looks?.length) return null;
