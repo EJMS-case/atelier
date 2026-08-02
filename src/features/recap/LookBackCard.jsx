@@ -3,17 +3,12 @@
 // went, an AI "most stylish" pick (on demand), the garments she leaned on (with
 // "try instead" nudges), and two forward looks (rediscover + a small challenge).
 
-import { useEffect, useMemo, useState } from "react";
-import { fetchPlansBetween } from "../planner/plannerApi.js";
+import { useMemo, useState } from "react";
 import { buildRecap, monthWindow } from "./recapData.js";
 import { judgeMostStylish } from "./recapAI.js";
 import { nyToday, friendlyDate } from "../../lib/time.js";
+import { PALETTE } from "../../constants/palette.js";
 
-const PALETTE = {
-  ink: "var(--color-ink)", soft: "var(--color-text)", muted: "var(--color-text-muted)",
-  bg: "var(--color-surface)", cream: "var(--color-bg)",
-  line: "var(--color-border-strong)", soft_line: "var(--color-border)",
-};
 
 const card = { background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: 14, marginBottom: 14 };
 const label = { fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted, marginBottom: 8 };
@@ -31,17 +26,21 @@ function monthLabel(startIso, endIso) {
   } catch { return "last 30 days"; }
 }
 
-export default function LookBackCard({ items, favorites = [], apiKey, onEditItem, onStyleItem }) {
+export default function LookBackCard({ items, favorites = [], apiKey, plans: allPlans, onEditItem, onStyleItem }) {
   const todayIso = nyToday();
-  const [plans, setPlans] = useState(null);
   const [stylish, setStylish] = useState(null);
   const [judging, setJudging] = useState(false);
   const [judgeErr, setJudgeErr] = useState("");
 
-  useEffect(() => {
+  // The recap's 30-day window comes out of the shared planner rows App fetched
+  // (null while that fetch is still in flight — same "stay quiet" gate as when
+  // this card fetched its own window). fetchPlansBetween applied the same
+  // date-ascending order and gte/lte bounds, so the client-side filter matches.
+  const plans = useMemo(() => {
+    if (!Array.isArray(allPlans)) return null;
     const { startIso } = monthWindow(todayIso, 30);
-    fetchPlansBetween(startIso, todayIso).then(r => setPlans(Array.isArray(r) ? r : [])).catch(() => setPlans([]));
-  }, [todayIso]);
+    return allPlans.filter(r => r.date >= startIso && r.date <= todayIso);
+  }, [allPlans, todayIso]);
 
   const favLogIds = useMemo(() => new Set(favorites.filter(f => f.type === "outfit").map(f => f.reference_id)), [favorites]);
   const favPieceIds = useMemo(() => new Set(favorites.filter(f => f.type === "piece").map(f => f.reference_id)), [favorites]);

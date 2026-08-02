@@ -1,14 +1,25 @@
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { s } from "../ui/styles.js";
 import { HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import SearchInput from "./SearchInput.jsx";
-import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
 import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatDate } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
+
+// Code-split the builder (same pattern as App.jsx's lazy views) — a static
+// import made the whole builder chunk download as soon as the Saved tab
+// opened, even if the user never tapped Edit on a logged outfit.
+const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuilder.jsx"));
+
+// Minimal placeholder while the builder chunk loads — mirrors App's RouteFallback.
+const BuilderFallback = () => (
+  <div style={{ padding: "40px 16px", display: "flex", justifyContent: "center" }}>
+    <span style={s.spinner}/>
+  </div>
+);
 
 export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
@@ -125,20 +136,22 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   // (which routes to sb.updateOutfitLog when editing_log_id is set).
   if (editingLog && onSaveLook) {
     return (
-      <SilhouetteBuilder
-        items={items}
-        apiKey={apiKey}
-        initialLook={editingLog}
-        onSave={async (log) => {
-          const saved = await onSaveLook(log);
-          setEditingLog(null);
-          loadLogs();
-          return saved;
-        }}
-        onFavoriteLook={onFavoriteLook}
-        onSchedule={onSchedule}
-        onClose={() => setEditingLog(null)}
-      />
+      <Suspense fallback={<BuilderFallback/>}>
+        <SilhouetteBuilder
+          items={items}
+          apiKey={apiKey}
+          initialLook={editingLog}
+          onSave={async (log) => {
+            const saved = await onSaveLook(log);
+            setEditingLog(null);
+            loadLogs();
+            return saved;
+          }}
+          onFavoriteLook={onFavoriteLook}
+          onSchedule={onSchedule}
+          onClose={() => setEditingLog(null)}
+        />
+      </Suspense>
     );
   }
 

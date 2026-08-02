@@ -10,11 +10,11 @@
 import { useMemo, useState } from "react";
 import { s } from "../ui/styles.js";
 import { enrichItemVision, enrichAndPersistItem, pickPilotSample } from "../features/vision/visionEnrich.js";
+import { PALETTE as SHARED_PALETTE } from "../constants/palette.js";
 
-const PALETTE = {
-  ink: "var(--color-ink)", soft: "var(--color-text)", muted: "var(--color-text-muted)",
-  cream: "var(--color-bg)", line: "var(--color-border)", ok: "#2E7D5B", warn: "#B5651D",
-};
+// This view's `line` has always been the lighter border (not border-strong),
+// and it carries its own ok/warn status colors — keep those as local overrides.
+const PALETTE = { ...SHARED_PALETTE, line: "var(--color-border)", ok: "#2E7D5B", warn: "#B5651D" };
 
 export default function VisionPilotView({ items, apiKey, onBack, onEnriched }) {
   const withImg = useMemo(() => (items || []).filter(it => it.image), [items]);

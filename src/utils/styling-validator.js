@@ -9,7 +9,8 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem, isStatementPiece } from "./item-helpers.js";
+import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
 
@@ -96,6 +97,35 @@ function getGarmentRole(item) {
   return "other";
 }
 
+// ── Look-item ID resolution ──────────────────────────────────────────────────
+// The model returns look items as either bare "W012" strings or {id, role}
+// objects, sometimes with a stray "ID:" prefix; idMap translates the short
+// W-ID back to the real Supabase ID. Every check needs some slice of this
+// chain, so it lives here once instead of being restated inline per check.
+
+// Normalized short ID ("ID:W012 " → "W012") for a look item in either format.
+function cleanLookItemId(lookItem) {
+  const id = typeof lookItem === "string" ? lookItem : lookItem.id;
+  return String(id).replace(/^ID:/i, "").trim();
+}
+
+// Real Supabase ID (falls back to the cleaned short ID when unmapped).
+function realIdOf(lookItem, idMap) {
+  const cleanId = cleanLookItemId(lookItem);
+  return idMap?.[cleanId] || cleanId;
+}
+
+// The closet item object for a look item, or undefined when unresolvable.
+function resolveLookItem(lookItem, idMap, allItems) {
+  const realId = realIdOf(lookItem, idMap);
+  return allItems?.find(it => it.id === realId);
+}
+
+// All of a look's items resolved to closet objects, unresolvable ones dropped.
+function resolveLookItems(look, idMap, allItems) {
+  return (look.items || []).map(item => resolveLookItem(item, idMap, allItems)).filter(Boolean);
+}
+
 // ── 8 Validation Checks ──────────────────────────────────────────────────────
 
 /**
@@ -137,8 +167,7 @@ function checkItemsExist(response, idMap) {
   const validIds = new Set(Object.keys(idMap));
   response.looks.forEach((look, i) => {
     (look.items || []).forEach((item) => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const cleanId = cleanLookItemId(item);
       if (!validIds.has(cleanId)) {
         failures.push(`Look ${i + 1} references non-existent item '${cleanId}'.`);
       }
@@ -155,8 +184,7 @@ function checkNoDuplicates(response) {
   const usedIds = new Set();
   response.looks.forEach((look, i) => {
     (look.items || []).forEach((item) => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
+      const cleanId = cleanLookItemId(item);
       if (usedIds.has(cleanId)) {
         failures.push(`Look ${i + 1}: Item '${cleanId}' is a duplicate — each item can only appear in one look.`);
       }
@@ -174,12 +202,7 @@ function checkNoDuplicates(response) {
 function checkLowerHalf(response, idMap, allItems) {
   const failures = [];
   response.looks.forEach((look, i) => {
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
+    const resolved = resolveLookItems(look, idMap, allItems);
 
     const hasCoverage = resolved.some(it => {
       const role = getGarmentRole(it);
@@ -201,12 +224,7 @@ function checkLowerHalf(response, idMap, allItems) {
 function checkUpperHalf(response, idMap, allItems) {
   const failures = [];
   response.looks.forEach((look, i) => {
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
+    const resolved = resolveLookItems(look, idMap, allItems);
 
     const roles = resolved.map(getGarmentRole);
     if (roles.includes("dress")) return;
@@ -231,10 +249,7 @@ function checkExclusions(response, idMap, allItems, activeExclusions) {
   const failures = [];
   response.looks.forEach((look, i) => {
     (look.items || []).forEach((item) => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      const resolved = allItems.find(it => it.id === realId);
+      const resolved = resolveLookItem(item, idMap, allItems);
       if (!resolved) return;
 
       const violation = explainFilterViolation(resolved, activeExclusions);
@@ -263,9 +278,7 @@ function checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds
 
   response.looks.forEach((look, i) => {
     (look.items || []).forEach((item) => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
+      const realId = realIdOf(item, idMap);
       if (overrideIds.has(realId)) return;
       const resolved = allItems.find(it => it.id === realId);
       if (!resolved) return;
@@ -299,12 +312,9 @@ function checkItemCount(response, idMap, allItems) {
     if (count < 3) {
       failures.push(`Look ${i + 1} has only ${count} items — minimum 3 required. Looks with only accessories/shoes/outerwear and no clothing are not valid.`);
     }
-    const nonHosiery = (look.items || []).filter(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap?.[cleanId] || cleanId;
-      return !isHosieryItem(allItems?.find(it => it.id === realId));
-    }).length;
+    const nonHosiery = (look.items || []).filter(item =>
+      !isHosieryItem(resolveLookItem(item, idMap, allItems))
+    ).length;
     if (nonHosiery > 6) {
       failures.push(`Look ${i + 1} has ${nonHosiery} items (maximum 6 allowed).`);
     }
@@ -326,10 +336,7 @@ function checkHeroDiversity(response, idMap, allItems) {
     });
 
     if (heroItem) {
-      const id = typeof heroItem === "string" ? heroItem : heroItem.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      const resolved = allItems.find(it => it.id === realId);
+      const resolved = resolveLookItem(heroItem, idMap, allItems);
       if (resolved) {
         heroCategories.push({ lookIndex: i, category: resolved.category });
       }
@@ -357,10 +364,7 @@ function checkCategoryBalance(response, idMap, allItems) {
   response.looks.forEach((look, i) => {
     const catCounts = {};
     (look.items || []).forEach((item) => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      const resolved = allItems.find(it => it.id === realId);
+      const resolved = resolveLookItem(item, idMap, allItems);
       if (!resolved) return;
       // Hosiery is a legwear layer, not a "real" accessory — it must not
       // consume the Accessories cap (earrings + necklace + tights is fine).
@@ -393,21 +397,18 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
   const w = weather.toLowerCase();
   if (w === "any" || w === "") return [];
 
-  const isHot = /hot|85/i.test(w);
-  const isWarm = /warm|70-84/i.test(w);
-  const isMild = /mild|55-69/i.test(w);
-  const isCool = /cool|40-54/i.test(w);
-  const isCold = /cold|below 40/i.test(w);
+  const isHot = weatherMatches(w, "Hot");
+  const isWarm = weatherMatches(w, "Warm");
+  const isMild = weatherMatches(w, "Mild");
+  const isCool = weatherMatches(w, "Cool");
+  const isCold = weatherMatches(w, "Cold");
   if (!isHot && !isWarm && !isMild && !isCool && !isCold) return [];
 
   const failures = [];
 
   response.looks.forEach((look, i) => {
     (look.items || []).forEach((item) => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      const resolved = allItems.find(it => it.id === realId);
+      const resolved = resolveLookItem(item, idMap, allItems);
       if (!resolved) return;
 
       const text = ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.subcategory || "") + " " + (resolved.material || "")).toLowerCase();
@@ -528,12 +529,9 @@ function checkShoes(response, idMap, allItems, occasion) {
   const failures = [];
   const lounge = occasion === "Lounge";
   response.looks.forEach((look, i) => {
-    const cats = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId)?.category;
-    }).filter(Boolean);
+    const cats = (look.items || []).map(item =>
+      resolveLookItem(item, idMap, allItems)?.category
+    ).filter(Boolean);
     if (!lounge && cats.filter(c => c === "Shoes").length === 0) {
       failures.push(`Look ${i + 1} has no shoes. Every non-lounge look needs exactly 1 pair.`);
     }
@@ -551,12 +549,9 @@ function checkBag(response, idMap, allItems, occasion, occasionSlots) {
   if (!occasionSlots?.required?.bag) return [];
   const failures = [];
   response.looks.forEach((look, i) => {
-    const bags = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId)?.category;
-    }).filter(Boolean).filter(c => c === "Bags").length;
+    const bags = (look.items || []).map(item =>
+      resolveLookItem(item, idMap, allItems)?.category
+    ).filter(Boolean).filter(c => c === "Bags").length;
     if (bags === 0) failures.push(`Look ${i + 1} could use a bag — ${occasion} usually calls for one.`);
   });
   return failures;
@@ -575,10 +570,7 @@ function checkRequestedItems(response, idMap, forceIncludeIds) {
   const usedRealIds = new Set();
   response.looks.forEach(look => {
     (look.items || []).forEach(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      usedRealIds.add(realId);
+      usedRealIds.add(realIdOf(item, idMap));
     });
   });
   const matched = [...requested].filter(id => usedRealIds.has(id));
@@ -599,12 +591,7 @@ function checkCoordSets(response, idMap, allItems) {
   const inSample = new Set(Object.values(idMap));
 
   response.looks.forEach((look, i) => {
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
+    const resolved = resolveLookItems(look, idMap, allItems);
 
     const lookIds = new Set(resolved.map(it => it.id));
     const locked = resolved.filter(it => it.set_id && !it.is_separable);
@@ -639,12 +626,7 @@ function checkDressStyling(response, idMap, allItems) {
     /\bbelt\b/i.test(it.name || "");
 
   response.looks.forEach((look, i) => {
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
+    const resolved = resolveLookItems(look, idMap, allItems);
 
     if (!resolved.some(it => DRESS_CATS.has(it.category))) return; // not a dress look
 
@@ -670,12 +652,7 @@ function checkDressStyling(response, idMap, allItems) {
 function checkCompleteSets(response, idMap, allItems) {
   const failures = [];
   response.looks.forEach((look, i) => {
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
+    const resolved = resolveLookItems(look, idMap, allItems);
 
     const set = resolved.find(isCompleteSetItem);
     if (!set) return;
@@ -704,57 +681,16 @@ function checkCompleteSets(response, idMap, allItems) {
  * (sequin, embroidered, lace, beaded, brocade, jacquard, metallic). Texture
  * cues (satin sheen, fringe, suede) DON'T count — they're accents, not
  * statements, and counting them would block normal tonal layering.
- */
-/**
- * Statement-piece detector for HC8 (one statement per look). The HC8 rule lists
- * specific kinds of statement: non-solid PATTERNS (floral, polka, plaid, animal,
- * paisley, etc.) and explicit EMBELLISHMENT keywords (sequin, lace, brocade…).
  *
- * Earlier this used a "not solid" blacklist on the pattern field, which falsely
- * flagged anything with a non-empty texture tag (e.g. a denim slingback whose
- * pattern got auto-detected as "denim", or a leather bag tagged "leather").
- * Now it's a whitelist of pattern values that genuinely read as statement.
+ * The detector itself (isStatementPiece + STATEMENT_PATTERNS) is shared with
+ * the trip packer and lives in item-helpers.js. Note this check deliberately
+ * calls it WITHOUT the packer's `fringeCounts` option — fringe stays an
+ * accent, not a statement, for HC8.
  */
-const STATEMENT_PATTERNS = new Set([
-  "striped", "stripe", "stripes",
-  "plaid", "tartan", "houndstooth", "gingham", "windowpane", "check", "checked", "chevron", "argyle",
-  "floral", "botanical",
-  "polka-dot", "polka dot", "polkadot", "polka.dot",
-  "abstract", "abstract print", "graphic", "graphic print", "print",
-  "animal", "leopard", "zebra", "snake", "cheetah", "tiger",
-  "paisley",
-  "tie-dye", "tie dye",
-  "geometric",
-  "camouflage", "camo",
-]);
-
-function isStatementPiece(item) {
-  if (!item) return false;
-  const pattern = (item.pattern || "").toLowerCase().trim();
-  if (STATEMENT_PATTERNS.has(pattern)) return true;
-  // Visual-AI read: when the closet has been enriched, the vision model reports
-  // the actual pattern off the photo — this catches bold prints the user never
-  // tagged (a floral or plaid saved with a blank pattern field), so HC8's
-  // one-statement rule stops two loud prints from landing in the same look.
-  // ("solid"/"colourblock" aren't in STATEMENT_PATTERNS, so they never trip it.)
-  const vpattern = (item.vision_data?.pattern || "").toLowerCase().trim();
-  if (STATEMENT_PATTERNS.has(vpattern)) return true;
-  const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
-  if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|featherwork|lace)\b/i.test(text)) return true;
-  // Bold prints in the name even when pattern field is unset (sparse metadata).
-  if (/\b(floral|polka.?dot|leopard|zebra|snake|cheetah|paisley|gingham|houndstooth|chevron|argyle|tartan|tie.?dye|abstract print|graphic print)\b/i.test(text)) return true;
-  return false;
-}
-
 function checkStatementCount(response, idMap, allItems) {
   const failures = [];
   response.looks.forEach((look, i) => {
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
+    const resolved = resolveLookItems(look, idMap, allItems);
 
     // Hosiery never counts as the look's statement — micro-fishnet tights
     // carry pattern "fishnet", but legwear is a supporting layer by
@@ -784,16 +720,11 @@ function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
   // only states the shoulder rule for cool/mild/cold, so enforcing it on an
   // unweathered generation would fail looks the model was never told to layer.
   if (w === "" || w === "any") return [];
-  if (/hot|warm|85|70-84/.test(w)) return [];
+  if (weatherMatches(w, "Hot", "Warm")) return [];
   const failures = [];
 
   response.looks.forEach((look, i) => {
-    const resolved = (look.items || []).map(item => {
-      const id = typeof item === "string" ? item : item.id;
-      const cleanId = String(id).replace(/^ID:/i, "").trim();
-      const realId = idMap[cleanId] || cleanId;
-      return allItems.find(it => it.id === realId);
-    }).filter(Boolean);
+    const resolved = resolveLookItems(look, idMap, allItems);
 
     const hasLayer = resolved.some(it =>
       it.category === "Outerwear" || it.category === "Knits"
@@ -897,12 +828,7 @@ export function salvageByDroppingItems(parsed, failures, idMap, allItems) {
   }));
   let droppedAny = false;
 
-  const resolveItem = (lookItem) => {
-    const id = typeof lookItem === "string" ? lookItem : lookItem.id;
-    const cleanId = String(id).replace(/^ID:/i, "").trim();
-    const realId = idMap[cleanId] || cleanId;
-    return allItems.find(it => it.id === realId);
-  };
+  const resolveItem = (lookItem) => resolveLookItem(lookItem, idMap, allItems);
   const dropByName = (look, name) => {
     const idx = look.items.findIndex(it => resolveItem(it)?.name === name);
     if (idx !== -1) { look.items.splice(idx, 1); droppedAny = true; }
@@ -961,8 +887,8 @@ function eligibleShortIdsForSlot(slotType, idMap, allItems, { occasionSlots, wea
   const bannedCats = new Set(occasionSlots?.banned?.categories || []);
   const bannedSubs = new Set(occasionSlots?.banned?.subcategories || []);
   const w = (weather || "").toLowerCase();
-  const hotOrWarm = /hot|warm|85|70-84/.test(w);
-  const coolOrCold = /cool|cold|40-54|below 40/.test(w);
+  const hotOrWarm = weatherMatches(w, "Hot", "Warm");
+  const coolOrCold = weatherMatches(w, "Cool", "Cold");
   const out = [];
   for (const [shortId, realId] of Object.entries(idMap)) {
     const item = allItems.find(it => it.id === realId);
@@ -1004,8 +930,7 @@ export function salvageByAddingShoes(parsed, failures, idMap, allItems, ctx = {}
   // Every short-ID already used anywhere in the response — HC4 forbids reuse.
   const usedShortIds = new Set();
   parsed.looks.forEach(l => (l.items || []).forEach(item => {
-    const id = typeof item === "string" ? item : item.id;
-    usedShortIds.add(String(id).replace(/^ID:/i, "").trim());
+    usedShortIds.add(cleanLookItemId(item));
   }));
 
   const candidates = eligibleShortIdsForSlot("shoes", idMap, allItems, { occasionSlots, weather, activeExclusions });
@@ -1357,9 +1282,7 @@ export async function generateValidatedLooks({
                 ...checkWeatherCompliance(candidate, idMap, allItems, weather),
               ];
               // Also guard against duplicating items already shown.
-              const newIds = (candidate.looks[0]?.items || []).map(it =>
-                String(typeof it === "string" ? it : it.id).replace(/^ID:/i, "").trim()
-              );
+              const newIds = (candidate.looks[0]?.items || []).map(cleanLookItemId);
               const hasDupe = newIds.some(id => streamedIds.has(id));
               if (cFailures.length === 0 && !hasDupe) {
                 const resolved = resolveIds(candidate, idMap, allItems, occasion);
@@ -1479,8 +1402,7 @@ export async function generateValidatedLooks({
       lastParsed.looks.forEach(look => {
         if (!Array.isArray(look.items)) return;
         look.items = look.items.filter(item => {
-          const id = typeof item === "string" ? item : item.id;
-          const cleanId = String(id).replace(/^ID:/i, "").trim();
+          const cleanId = cleanLookItemId(item);
           if (seen.has(cleanId)) return false;
           seen.add(cleanId);
           return true;
@@ -1605,9 +1527,7 @@ function resolveIds(parsed, idMap, allItems, occasion) {
     // Resolve item IDs
     if (look.items) {
       look.items = look.items.map(item => {
-        const id = typeof item === "string" ? item : item.id;
-        const cleanId = String(id).replace(/^ID:/i, "").trim();
-        const realId = idMap[cleanId] || cleanId;
+        const realId = realIdOf(item, idMap);
         return {
           ...(typeof item === "object" ? item : {}),
           id: realId,

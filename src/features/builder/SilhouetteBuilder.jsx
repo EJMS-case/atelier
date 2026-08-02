@@ -13,18 +13,12 @@ import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
+import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
 
 const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
 
-const PALETTE = {
-  ink:    "var(--color-ink)",
-  soft:   "var(--color-text)",
-  muted:  "var(--color-text-muted)",
-  bg:     "var(--color-surface)",
-  cream:  "var(--color-bg)",
-  line:   "var(--color-border-strong)",
-  accent: "#6D1A2E",
-};
+// Builder accent is the deep burgundy, not the brand gold.
+const PALETTE = { ...SHARED_PALETTE, accent: "var(--color-accent-strong)" };
 
 // Slots route through the shared slotForItem classifier (utils/item-helpers) so
 // the builder, the sampler, and the availability note agree on where every piece

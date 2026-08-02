@@ -119,6 +119,17 @@ export function weatherBucketOf(w) {
   return (WEATHER_BUCKETS.find(b => b.match.test(w)) || {}).short || null;
 }
 
+// Independent per-bucket predicate: true when ANY of the named buckets' regexes
+// match the weather string. Unlike `weatherBucketOf` (first match wins), each
+// bucket is tested independently — so a combined label ("Hot days, cool
+// nights") can satisfy several buckets at once, exactly like the inline
+// /hot|85/-style predicates this replaces across the stylist pipeline.
+// Falsy weather (undefined / "" / null) matches nothing.
+export function weatherMatches(w, ...shorts) {
+  if (!w) return false;
+  return WEATHER_BUCKETS.some(b => shorts.includes(b.short) && b.match.test(w));
+}
+
 // Given a category + subcategory value (may be L2 or L3), find the L2 parent.
 export function getSubcatL2(category, subcategory) {
   if (!subcategory) return "";

@@ -3,7 +3,7 @@
 // and a per-day occasion list, produce one outfit per trip day plus the
 // derived packing list (union of items actually used).
 
-import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 
@@ -236,33 +236,18 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   // Statement-piece detector — mirrors the Style Me HC8 rule. Used to make
   // sure each day's outfit has AT MOST ONE statement piece (fringe bag +
   // argyle skirt in the same look was the kind of thing the user flagged
-  // as "yikes"). Whitelist of patterns + embellishment keywords.
-  // KEEP IN SYNC with styling-validator.js's isStatementPiece (consolidation
-  // tracked) — in particular its vision_data pattern read and its hosiery
-  // exemption, both mirrored below.
-  const STATEMENT_PATTERNS = new Set([
-    "striped","stripe","stripes","plaid","tartan","houndstooth","gingham",
-    "windowpane","check","checked","chevron","argyle","floral","botanical",
-    "polka-dot","polka dot","polkadot","abstract","abstract print","graphic",
-    "graphic print","print","animal","leopard","zebra","snake","cheetah",
-    "tiger","paisley","tie-dye","tie dye","geometric","camouflage","camo",
-  ]);
-  const isStatement = (item) => {
-    if (!item) return false;
-    // Hosiery is a supporting legwear layer, never the look's statement —
-    // fishnet tights must not block a printed skirt (validator does the same).
-    if (isHosieryItem(item)) return false;
-    const pattern = (item.pattern || "").toLowerCase().trim();
-    if (STATEMENT_PATTERNS.has(pattern)) return true;
-    // Vision-AI pattern read off the photo (enriched closets) — catches bold
-    // prints the user never tagged in the pattern field.
-    const vpattern = (item.vision_data?.pattern || "").toLowerCase().trim();
-    if (STATEMENT_PATTERNS.has(vpattern)) return true;
-    const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
-    if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|fringe|lace)\b/.test(text)) return true;
-    if (/\b(floral|polka.?dot|leopard|zebra|snake|cheetah|paisley|gingham|houndstooth|chevron|argyle|tartan|tie.?dye|abstract print|graphic print)\b/.test(text)) return true;
-    return false;
-  };
+  // as "yikes"). The detector body is shared with the validator's HC8 check
+  // (isStatementPiece in item-helpers.js) — no more hand-synced copies.
+  //
+  // Two packer-specific wrappers on top of the shared body:
+  //   - `fringeCounts` — fringe IS a statement when packing (that's the exact
+  //     "yikes" combo above); the validator deliberately treats it as a mere
+  //     texture accent, so the option keeps both behaviours honest.
+  //   - hosiery exemption — a supporting legwear layer is never the look's
+  //     statement, so fishnet tights must not block a printed skirt. The
+  //     validator applies this at its own call site for the same reason.
+  const isStatement = (item) =>
+    !!item && !isHosieryItem(item) && isStatementPiece(item, { fringeCounts: true });
 
   // Pick one best item from a list for this day, factoring in occasion +
   // variety + a statement-stacking penalty: if there's already a statement

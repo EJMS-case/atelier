@@ -26,6 +26,7 @@
 
   /* Brand + status */
   --color-accent: #C4A882;
+  --color-accent-strong: #6D1A2E; /* deep burgundy — builder/planner accent */
   --color-success: #306e50;
   --color-danger: #C0392B;
 }

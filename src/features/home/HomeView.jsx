@@ -4,65 +4,53 @@
 // Wear sub-tab of Saved (most-worn, neglected, cost-per-wear) plus a quick
 // Style Me CTA and the user's plan for today (if any).
 
-import { useEffect, useMemo, useState } from "react";
-import { fetchPlansBetween, fetchAllPlans } from "../planner/plannerApi.js";
+import { useEffect, useMemo } from "react";
 import { flattenPlanItemIds } from "../planner/outfits.js";
-import { mostWornItems, neglectedItems, costPerWear, deriveWearStats, applyWearStats } from "../wear/wearApi.js";
-import { sb } from "../../lib/supabase.js";
+import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
 import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
 // Categories the "Neglected" list surfaces — real garments only (no
 // accessories/belts/shoes/bags, no swim/lounge/athleisure). Shared with the
 // recap's rediscover/challenge nudges so the two lists never drift.
 import { GARMENT_CATS as NEGLECT_CATS } from "../recap/recapData.js";
+import { PALETTE } from "../../constants/palette.js";
 
-const PALETTE = {
-  ink:    "var(--color-ink)",
-  soft:   "var(--color-text)",
-  muted:  "var(--color-text-muted)",
-  bg:     "var(--color-surface)",
-  cream:  "var(--color-bg)",
-  line:   "var(--color-border-strong)",
-  soft_line: "var(--color-border)",
-  accent: "var(--color-accent)",
-};
 
-export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem }) {
+export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
   // Show the next 14 days; render the first 5 non-empty ones as "Coming up".
   const horizonIso = addDaysIso(todayIso, 14);
-  const [todayPlan, setTodayPlan] = useState(null);
-  const [upcomingPlans, setUpcomingPlans] = useState([]);
 
-  useEffect(() => {
-    fetchPlansBetween(todayIso, horizonIso)
-      .then(rows => {
-        const list = Array.isArray(rows) ? rows : [];
-        setTodayPlan(list.find(r => r.date === todayIso) || null);
-        setUpcomingPlans(
-          list
-            // flattenPlanItemIds reads every outfit on the day — a multi-
-            // outfit day whose legacy `items` mirror is empty still counts.
-            .filter(r => r.date > todayIso && flattenPlanItemIds(r).length > 0)
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .slice(0, 5)
-        );
-      })
-      .catch(() => {});
-  }, [todayIso, horizonIso]);
+  // Plans + wear stats are fetched once by App (shared with the stylist and
+  // LookBackCard) and passed down. Ask for a refresh on every Home visit so
+  // the dashboard reflects outfits logged / plans saved since the last fetch —
+  // the same per-mount refetch semantics this view had when it fetched itself.
+  // Swallow rejections: the refresh is best-effort (the view just keeps the
+  // stats it already has), and an unhandled rejection would surface in console.
+  useEffect(() => { onRefreshWearData?.()?.catch?.(() => {}); }, [onRefreshWearData]);
+
+  // Today + "Coming up" derive from the shared planner rows. fetchAllPlans and
+  // fetchPlansBetween return the same select=*, date-ascending rows, so the
+  // client-side date-window filter matches the old scoped fetch exactly.
+  const { todayPlan, upcomingPlans } = useMemo(() => {
+    const list = (Array.isArray(plans) ? plans : []).filter(r => r.date >= todayIso && r.date <= horizonIso);
+    return {
+      todayPlan: list.find(r => r.date === todayIso) || null,
+      upcomingPlans: list
+        // flattenPlanItemIds reads every outfit on the day — a multi-
+        // outfit day whose legacy `items` mirror is empty still counts.
+        .filter(r => r.date > todayIso && flattenPlanItemIds(r).length > 0)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 5),
+    };
+  }, [plans, todayIso, horizonIso]);
 
   // Real wear stats come from the calendar (planned_outfits) + legacy worn logs,
   // NOT the stored wear_count/last_worn cache (which froze when the user moved to
   // the calendar). Overlay the derived truth onto items so every metric below —
   // and the Look-Back card — reads accurate wears.
-  const [wearStats, setWearStats] = useState(null);
-  useEffect(() => {
-    Promise.all([fetchAllPlans().catch(() => []), sb.fetchOutfitLogs().catch(() => [])])
-      .then(([plans, logs]) => setWearStats(deriveWearStats(plans || [], logs || [])))
-      .catch(() => setWearStats({}));
-  }, []);
   const wearItems = useMemo(() => applyWearStats(items, wearStats || {}), [items, wearStats]);
 
   const topWorn   = useMemo(() => mostWornItems(wearItems, 5), [wearItems]);
@@ -150,11 +138,11 @@ export default function HomeView({ items, favorites, apiKey, onOpenPlanner, onOp
       )}
 
       {/* Monthly look-back — recap of the last 30 days (worn diary + AI picks
-          + leaned-on pieces + forward nudges). Self-contained; fetches its own
-          calendar window. */}
+          + leaned-on pieces + forward nudges). Reads its 30-day window out of
+          the shared planner rows passed down from App. */}
       {items.length > 0 && (
         <LookBackCard items={wearItems} favorites={favorites || []} apiKey={apiKey}
-          onEditItem={onEditItem} onStyleItem={onStyleItem}/>
+          plans={plans} onEditItem={onEditItem} onStyleItem={onStyleItem}/>
       )}
 
       {/* Most-worn metric */}
