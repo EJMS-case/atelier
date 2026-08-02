@@ -186,3 +186,22 @@ test("a positive feedback score lifts an over-suggested piece a band forward", (
   assert.ok(tops.indexOf("top0") < tops.indexOf("top1"),
     "loved top0 should sort ahead of equally-suggested top1");
 });
+
+test("a hearted piece is a within-band tiebreaker only — it never jumps a band", () => {
+  // top0 and top1 share band 2 (counts of 4); top2 sits in band 1; the rest
+  // are band 0. Hearting top0 (-0.25) must win the tie against top1 but must
+  // NOT lift it past fresher bands — hearts are a quarter of a feedback band,
+  // so rotation pressure always outranks them.
+  const counts = { top0: 4, top1: 4, top2: 1 };
+  const { sampled } = sample({
+    itemSuggestionCounts: counts,
+    favoriteItemIds: ["top0"],
+  });
+  const tops = sampled.filter(it => it.category === "Tops").map(it => it.id);
+  assert.ok(tops.indexOf("top0") < tops.indexOf("top1"),
+    "hearted top0 should lead equally-suggested top1");
+  assert.ok(tops.indexOf("top2") < tops.indexOf("top0"),
+    "band-1 top2 must still sort ahead of the hearted band-2 piece");
+  assert.equal(tops.indexOf("top0"), tops.length - 2,
+    "hearted top0 stays in its band: every fresher top precedes it, only top1 trails");
+});

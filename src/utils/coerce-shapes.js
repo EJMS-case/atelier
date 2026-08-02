@@ -147,6 +147,9 @@ export function normalizeVibe(v, fallback = "Effortless") {
 //   6. items is a stringified array (often a `<parameter name="items">[…]`
 //      fragment — parseLooseJson skips the prefix)     → parse so case 4 can
 //      wrap the flat look
+//   7. items is a stringified LOOK or looks array (each element carries its
+//      own nested items[]) — the whole looks payload streamed into the items
+//      slot                                            → adopt as `looks`
 // Finally every look's vibe is normalized onto VIBE_VOCABULARY (untouched
 // when already canonical).
 //
@@ -185,9 +188,31 @@ export function coerceLooksShape(input, { onRecover } = {}) {
   // prefix is skipped naturally. Only accept an array result; anything else
   // (e.g. a fragment holding a lone id — the item data is simply gone) is
   // left for the retry path.
+  //
+  // Case 7: the parsed value is LOOK-shaped, not item-shaped — production
+  // 2026-08-01 21:39 streamed the entire looks array (truncated) into the
+  // items slot: `[{"vibe":"Modern Minimal","items":[{"id":"W075",…}…]`.
+  // An item never carries a nested items[] array, so that's the
+  // discriminator. Adopting it as items would nest a look inside a look and
+  // die in Zod; adopt it as `looks` instead. Never overwrite a real looks
+  // array that survived on its own.
+  const isLookShaped = (v) =>
+    v && typeof v === "object" && !Array.isArray(v) && Array.isArray(v.items);
   if (typeof out.items === "string") {
     const parsedItems = parseLooseJson(out.items);
-    if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+    const trappedLooks =
+      Array.isArray(parsedItems) && parsedItems.length > 0 && parsedItems.every(isLookShaped)
+        ? parsedItems
+        : isLookShaped(parsedItems)
+          ? [parsedItems]
+          : parsedItems && !Array.isArray(parsedItems) && Array.isArray(parsedItems.looks)
+            ? parsedItems.looks
+            : null;
+    if (trappedLooks && !Array.isArray(out.looks)) {
+      const { items: _dead, ...rest } = out;
+      out = { ...rest, looks: trappedLooks };
+      cases.push("items_looks_unwrapped");
+    } else if (Array.isArray(parsedItems) && parsedItems.length > 0) {
       out = { ...out, items: parsedItems };
       cases.push("items_string_parsed");
     }

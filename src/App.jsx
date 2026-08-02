@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef, la
 // prompt builder / rotation tracker) live behind generateOutfit and don't
 // need to be re-imported here.
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
-import { generateStyleFingerprint } from "./features/stylist/styleFingerprint.js";
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
 import { bumpWearCounts, unbumpWearCounts, deriveWearStats, applyWearStats } from "./features/wear/wearApi.js";
 import { runRecutDrip } from "./features/images/recutDrip.js";
@@ -28,9 +27,10 @@ import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import { fetchNycForecast, bucketFromHigh } from "./lib/weather.js";
 import { nyToday } from "./lib/time.js";
-import {
-  generateOutfit, classifyKnitAI, analyzeColorAI,
-} from "./lib/ai/stylist.js";
+// The AI layer (stylist.js → prompts / sampler / validator / zod) is imported
+// dynamically at the call sites below so its ~170kB of schema + prompt code
+// stays out of the initial bundle — it only loads on the first Style Me tap
+// (or fingerprint refresh), never on cold start.
 // Rotation memory sync: generation-time reads/writes stay inside generateOutfit;
 // App only bridges the localStorage state to user_settings for cross-device use.
 import { exportRotationState, mergeRemoteRotationState } from "./utils/rotation-tracker.js";
@@ -353,6 +353,7 @@ export default function App() {
         const have = fp?.source_count || 0;
         if (fp && count - have < 10) return;   // still fresh enough
         const plans = await sb.fetchAllPlans().catch(() => []);
+        const { generateStyleFingerprint } = await import("./features/stylist/styleFingerprint.js");
         const fresh = await generateStyleFingerprint({ items, logs, plans, apiKey });
         if (fresh?.text) { setStyleFingerprint(fresh); sb.saveStyleFingerprint(fresh).catch(() => {}); }
       } catch { /* non-fatal — regenerate next session */ }
@@ -789,10 +790,14 @@ export default function App() {
       // (drives the [RESTING] rediscovery tag). Falls back to the item as-is
       // when there's no wear record.
       const itemsForStyling = applyWearStats(items, wearStatsRef.current);
+      const { generateOutfit } = await import("./lib/ai/stylist.js");
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
-        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, count }
+        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks,
+          // Hearted pieces — a tiny within-band sampler tiebreaker (see closet-sampler.js).
+          favoriteItemIds: favorites.filter(f => f.type === "piece").map(f => f.reference_id),
+          count }
       );
       if (result?.no_viable_looks) {
         throw new Error(result.stylist_note || "The stylist couldn't build a suitable look from your current wardrobe for this combination.");

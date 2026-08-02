@@ -332,6 +332,7 @@ export function sampleClosetItems({
   recencyRank = {},             // { itemId: looksAgo } — LRU backfill ordering
   recentlyWornItems = [],       // F2 — items from outfit_logs in last 3 days
   feedbackScores = {},          // F2 — { itemId: signedSum } from look_feedback
+  favoriteItemIds = [],         // hearted pieces (favorites table, type="piece")
   userId = "default",
 }) {
   const excludeSet = styleExcludes instanceof Set ? styleExcludes : new Set(styleExcludes);
@@ -541,10 +542,16 @@ export function sampleClosetItems({
   // band's worth of credit: one loved rating offsets a tier of familiarity;
   // down-votes push a piece back. feedbackScores is a signed sum — items stay
   // in the pool regardless, scores only shift ordering.
+  // Hearted pieces (favorites table) get a deliberately tiny -0.25 nudge —
+  // a within-band tiebreaker only. Bands are whole numbers, so a heart can
+  // never lift a piece past a fresher band the way a loved rating (full band)
+  // can, and it never touches the recent-look drop or LRU floors above:
+  // favorites must not reintroduce the repetition the rotation work removed.
+  const heartedIds = favoriteItemIds instanceof Set ? favoriteItemIds : new Set(favoriteItemIds);
   for (const key of Object.keys(buckets)) {
     buckets[key] = seededShuffle(buckets[key], rng);
     buckets[key].sort((a, b) => {
-      const bandOf = (it) => Math.max(0, freshnessBand(itemSuggestionCounts[it.id] || 0) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0));
+      const bandOf = (it) => Math.max(0, freshnessBand(itemSuggestionCounts[it.id] || 0) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0);
       return bandOf(a) - bandOf(b);
     });
   }
