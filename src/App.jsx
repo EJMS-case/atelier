@@ -794,7 +794,10 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
-        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, count }
+        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks,
+          // Hearted pieces — a tiny within-band sampler tiebreaker (see closet-sampler.js).
+          favoriteItemIds: favorites.filter(f => f.type === "piece").map(f => f.reference_id),
+          count }
       );
       if (result?.no_viable_looks) {
         throw new Error(result.stylist_note || "The stylist couldn't build a suitable look from your current wardrobe for this combination.");
