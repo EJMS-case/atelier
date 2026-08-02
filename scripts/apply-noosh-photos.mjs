@@ -35,13 +35,15 @@ const HEADERS = {
 // Berry = burgundy, Brew = brew, Espresso = brown). Receipt-sourced shots
 // (order #457985) cover black sheer/semi-opaque and skin-tone sheer; the rest
 // are the product galleries' own variant images. Noosh makes no semi-opaque
-// Espresso and no opaque Brew/Espresso product — those rows use the closest
-// real espresso/brew gallery shot. Skin-tone semi/opaque and the micro
-// fishnet rows keep generated SVG placeholders.
+// Espresso and no opaque Brew product — the brew opaque row uses the closest
+// real brew gallery shot. Skin-tone and brown semi-opaque keep generated SVG
+// placeholders. The owner's inventory has no opaque brown/skin-tone and a
+// single black micro fishnet pair (rows adjusted 2026-08).
 const PHOTOS = [
   { file: "hosiery-black-sheer.png",          name: "Noosh sheer stockings — black" },
   { file: "hosiery-black-semi-opaque.png",    name: "Noosh semi-opaque stockings — black" },
   { file: "hosiery-black-opaque.png",         name: "Noosh opaque tights — black" },
+  { file: "hosiery-black-micro-fishnet.png",  name: "Noosh micro fishnet tights — black" },
   { file: "hosiery-skin-tone-sheer.png",      name: "Noosh sheer stockings — skin-tone" },
   { file: "hosiery-navy-sheer.png",           name: "Noosh sheer stockings — navy" },
   { file: "hosiery-navy-semi-opaque.png",     name: "Noosh semi-opaque stockings — navy" },
@@ -53,7 +55,6 @@ const PHOTOS = [
   { file: "hosiery-brew-semi-opaque.png",     name: "Noosh semi-opaque stockings — brew" },
   { file: "hosiery-brew-opaque.png",          name: "Noosh opaque tights — brew" },
   { file: "hosiery-brown-sheer.png",          name: "Noosh sheer stockings — brown" },
-  { file: "hosiery-brown-opaque.png",         name: "Noosh opaque tights — brown" },
 ];
 
 async function uploadPng(path, bytes) {

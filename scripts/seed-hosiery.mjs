@@ -83,12 +83,19 @@ ${defs}${legs}
 }
 
 // ── Item assembly ────────────────────────────────────────────────────────────
+// Combos the owner doesn't actually own (adjusted 2026-08): no opaque brown,
+// no opaque skin-tone, and only ONE micro fishnet pair — which lives as the
+// renamed row "Noosh micro fishnet tights — black" (see apply-noosh-photos.mjs),
+// so the fishnet colorway is excluded from seeding entirely.
+const EXCLUDE = new Set(["brown/opaque", "skin-tone/opaque", "micro-fishnet/sheer", "micro-fishnet/semi-opaque", "micro-fishnet/opaque"]);
+
 function buildItems() {
   const base = Date.now();
   let n = 0;
   const items = [];
   for (const cw of COLORWAYS) {
     for (const op of OPACITIES) {
+      if (EXCLUDE.has(`${cw.slug}/${op.key}`)) continue;
       const svg = tightsSvg({ hex: cw.hex, fillOpacity: op.fillOpacity, fishnet: cw.fishnet });
       const path = `hosiery-${cw.slug}-${op.key}.svg`;
       const note = cw.fishnet
