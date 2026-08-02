@@ -453,23 +453,34 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
         if (isBootItem(resolved)) {
           failures.push(`Look ${i + 1}: "${resolved.name}" (Boots) is wrong for ${weather} — pick lighter.`);
         }
+        // Explicitly-light outerwear (linen/unstructured/unlined etc. in the
+        // item's own name/notes/material) is the one layer allowed in HOT —
+        // this matches filterByWeather's isLightOuter rule, which deliberately
+        // keeps light linen/unstructured pieces in the pool for AC/evening.
+        // Previously the validator hard-failed ANY Outerwear in hot while the
+        // sampler kept offering these pieces and the prompt banned them — a
+        // three-way contradiction that burned retries.
+        const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(
+          ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.material || "")).toLowerCase()
+        );
         if (resolved.subcategory === "Coats") {
           const isHeavyCoat = /wool|cashmere|shearling|sherpa|puffer|parka|down|quilted|long|heavy/i.test(text);
-          if (isHot || isHeavyCoat) {
+          if ((isHot && !isLightOuter) || isHeavyCoat) {
             failures.push(`Look ${i + 1}: "${resolved.name}" (Coats) is wrong for ${weather} — pick lighter.`);
           }
         }
-        // Outerwear is a hot-weather hard fail. For warm, only reject the
-        // genuinely heavy / winter pieces — a regular blazer worn over a
-        // blouse for the office in 75°F is fine. Previously this rejected
-        // anything that didn't literally say "linen|cotton|unstructured" in
-        // its text, which combined with the HC_SHOULDER rule produced
-        // unsatisfiable Work + Warm validations.
+        // Outerwear in HOT: only explicitly light pieces (linen blazer,
+        // unlined cotton jacket) pass; everything else fails. For warm, only
+        // reject the genuinely heavy / winter pieces — a regular blazer worn
+        // over a blouse for the office in 75°F is fine. Previously the warm
+        // branch rejected anything that didn't literally say
+        // "linen|cotton|unstructured" in its text, which combined with the
+        // HC_SHOULDER rule produced unsatisfiable Work + Warm validations.
         if (resolved.category === "Outerwear") {
           const isHeavyOuter = /parka|puffer|sherpa|shearling|fleece|down|quilted|overcoat|peacoat|long\s*wool|heavy/i.test(text);
-          if (isHot) {
-            failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear — wrong for ${weather}. Skip the layer entirely.`);
-          } else if (isHeavyOuter) {
+          if (isHot && !isLightOuter) {
+            failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear without an explicitly lightweight/unlined fabric — wrong for ${weather}. Only genuinely light linen/cotton layers work in this heat; otherwise skip the layer entirely.`);
+          } else if (!isHot && isHeavyOuter) {
             failures.push(`Look ${i + 1}: "${resolved.name}" is heavy outerwear — wrong for ${weather}. Pick a lighter blazer or skip the layer.`);
           }
         }
@@ -768,6 +779,10 @@ function checkStatementCount(response, idMap, allItems) {
 function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
   if (!["Work", "Work Dinner"].includes(occasion)) return [];
   const w = (weather || "").toLowerCase();
+  // No weather / "any" matches checkWeatherCompliance's early-out: the prompt
+  // only states the shoulder rule for cool/mild/cold, so enforcing it on an
+  // unweathered generation would fail looks the model was never told to layer.
+  if (w === "" || w === "any") return [];
   if (/hot|warm|85|70-84/.test(w)) return [];
   const failures = [];
 
@@ -925,6 +940,102 @@ export function salvageByDroppingItems(parsed, failures, idMap, allItems) {
     }
   }
   return droppedAny ? { ...parsed, looks } : null;
+}
+
+// ── Slot eligibility ─────────────────────────────────────────────────────────
+// Short-IDs from the sampled pool that could legitimately fill a structural
+// slot ("shoes" / "lower_half" / "upper_half") under the current occasion,
+// weather, and exclusion filters. Used by the retry prompt (to point the model
+// at real acceptable picks instead of re-sending the same contradiction) and
+// by the add-a-shoe salvage below.
+const SLOT_ROLES = {
+  shoes: new Set(["shoes"]),
+  lower_half: new Set(["lower", "dress"]),
+  upper_half: new Set(["upper"]),
+};
+
+function eligibleShortIdsForSlot(slotType, idMap, allItems, { occasionSlots, weather, activeExclusions = [] } = {}) {
+  const roles = SLOT_ROLES[slotType];
+  if (!roles) return [];
+  const bannedCats = new Set(occasionSlots?.banned?.categories || []);
+  const bannedSubs = new Set(occasionSlots?.banned?.subcategories || []);
+  const w = (weather || "").toLowerCase();
+  const hotOrWarm = /hot|warm|85|70-84/.test(w);
+  const coolOrCold = /cool|cold|40-54|below 40/.test(w);
+  const out = [];
+  for (const [shortId, realId] of Object.entries(idMap)) {
+    const item = allItems.find(it => it.id === realId);
+    if (!item) continue;
+    if (!roles.has(getGarmentRole(item))) continue;
+    if (bannedCats.has(item.category) || bannedSubs.has(item.subcategory)) continue;
+    if (activeExclusions.length > 0 && explainFilterViolation(item, activeExclusions)) continue;
+    // Weather sanity — mirror checkWeatherCompliance's footwear rules: no
+    // boots in the heat, no sandals/open shoes in the cold.
+    if (hotOrWarm && isBootItem(item)) continue;
+    if (coolOrCold && (item.subcategory === "Sandals" || /sandal/i.test(item.name || ""))) continue;
+    out.push(shortId);
+  }
+  return out;
+}
+
+// ── Add-a-shoe salvage ───────────────────────────────────────────────────────
+// Complement to the item-drop salvage: shoes are a MISSING-piece failure, so
+// dropping can never fix them — but the pool almost always contains an
+// acceptable pair. When a look's only hard problem is "no shoes" (the Work+Hot
+// incident: the prompt's weather block contradicted the occasion ban, so the
+// model omitted footwear entirely and every retry re-sent the same
+// contradiction), add an unused, occasion/weather/exclusion-eligible shoe and
+// keep the addition only if the completed look re-validates clean.
+export function salvageByAddingShoes(parsed, failures, idMap, allItems, ctx = {}) {
+  const { activeExclusions = [], occasionSlots = {}, occasion = "Work", weather = "", onlyRescueIds = [] } = ctx;
+  if (!parsed?.looks?.length) return null;
+
+  const shoeFailures = failures.filter(f => f.hard && f.type === "shoes");
+  if (shoeFailures.length === 0) return null;
+
+  const missing = new Set();
+  for (const f of shoeFailures) {
+    const m = f.message.match(/^Look (\d+)/);
+    if (m) missing.add(parseInt(m[1], 10) - 1);
+  }
+  if (missing.size === 0) return null;
+
+  // Every short-ID already used anywhere in the response — HC4 forbids reuse.
+  const usedShortIds = new Set();
+  parsed.looks.forEach(l => (l.items || []).forEach(item => {
+    const id = typeof item === "string" ? item : item.id;
+    usedShortIds.add(String(id).replace(/^ID:/i, "").trim());
+  }));
+
+  const candidates = eligibleShortIdsForSlot("shoes", idMap, allItems, { occasionSlots, weather, activeExclusions });
+
+  const looks = parsed.looks.map(l => ({
+    ...l,
+    items: Array.isArray(l.items) ? [...l.items] : l.items,
+  }));
+  let addedAny = false;
+
+  for (const idx of missing) {
+    const look = looks[idx];
+    if (!look || !Array.isArray(look.items)) continue;
+    for (const shortId of candidates) {
+      if (usedShortIds.has(shortId)) continue;
+      const candidateLook = { ...look, items: [...look.items, { id: shortId, role: "supporting" }] };
+      // Full per-look re-check: accept a shoe only if it leaves THIS look
+      // completely clean — which also means salvage never ships a look whose
+      // problems went beyond the missing shoes. (forceIncludeIds is
+      // deliberately [] here: that check is response-wide and the caller's
+      // full recheck re-verifies it.)
+      const check = runAllChecks({ looks: [candidateLook] }, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, [], onlyRescueIds);
+      if (!check.some(f => f.hard)) {
+        looks[idx] = candidateLook;
+        usedShortIds.add(shortId);
+        addedAny = true;
+        break;
+      }
+    }
+  }
+  return addedAny ? { ...parsed, looks } : null;
 }
 
 // ── Normalize response ───────────────────────────────────────────────────────
@@ -1148,7 +1259,26 @@ export async function generateValidatedLooks({
       if (lastStrippedCount > 0) {
         prefix = `\n\n🛑 IDs RULE VIOLATION: your last response had ${lastStrippedCount} item ID(s) that did NOT match the required W-ID format (W001-W999). Those items were discarded, which is why looks below are undersized.\n\nYou MUST use ONLY W-IDs from the WARDROBE INVENTORY above. Examples of valid IDs: W001, W014, W092. NEVER return long numeric IDs, timestamps, or UUIDs.\n`;
       }
-      dynamicText += `${prefix}\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
+      // Structural-slot hints: when a hard failure says a whole slot is
+      // MISSING (shoes / lower half / upper half), name real eligible
+      // short-IDs from the pool. Without this, a prompt contradiction (the
+      // Work + Hot "sandals banned but sandals are the footwear" incident)
+      // makes the model omit the slot again on every retry.
+      const SLOT_HINT_LABELS = [
+        ["shoes", "shoes"],
+        ["lower_half", "bottoms/dresses"],
+        ["upper_half", "tops/knits"],
+      ];
+      const slotHints = [];
+      for (const [slotType, label] of SLOT_HINT_LABELS) {
+        if (!lastFailures.some(f => f.hard && f.type === slotType)) continue;
+        const ids = eligibleShortIdsForSlot(slotType, idMap, allItems, { occasionSlots, weather, activeExclusions }).slice(0, 10);
+        if (ids.length > 0) {
+          slotHints.push(`These ${label} ARE in the inventory and acceptable for this occasion and weather — pick exactly ONE per look: ${ids.join(", ")}.`);
+        }
+      }
+      const slotHintBlock = slotHints.length > 0 ? `\n\n${slotHints.join("\n")}` : "";
+      dynamicText += `${prefix}\n\n⚠️ RETRY ${attempt}/${MAX_RETRIES} — your previous response failed validation:\n${failureList}${slotHintBlock}\n\nPlease fix these specific issues and regenerate. Respond with the corrected JSON only.`;
     }
 
     // Build message content — always an array. Cache the static preamble so
@@ -1314,6 +1444,19 @@ export async function generateValidatedLooks({
       failures.map(f => f.message));
   }
 
+  // Snapshot the model's terminal output BEFORE any salvage mutates it. The
+  // :validation log used to report the salvage-mutated looks + failures,
+  // which made it impossible to tell "the model omitted the shoes" from
+  // "salvage removed them" during incident review.
+  const snapshotLooks = (p) => p?.looks?.map(l => ({
+    vibe: l.vibe,
+    items: (l.items || []).map(it => (typeof it === "object" ? { id: it.id, role: it.role } : it)),
+  })) ?? null;
+  const preSalvage = {
+    looks: snapshotLooks(lastParsed),
+    failures: lastFailures.map(f => ({ type: f.type, hard: f.hard, message: f.message })),
+  };
+
   // Salvage step 1: dedupe items across looks. Cross-look duplicates are a
   // common AI failure ("two looks both use the burgundy heels") that the
   // existing per-look salvage couldn't recover from because the failure
@@ -1360,8 +1503,34 @@ export async function generateValidatedLooks({
         return resolveIds(trimmed, idMap, allItems, occasion);
       }
       // Item-dropping helped but didn't fully clear the board — hand the
-      // trimmed looks + fresh failure list to the look-drop salvage below.
+      // trimmed looks + fresh failure list to the salvage steps below.
       lastParsed = trimmed;
+      lastFailures = recheck;
+    }
+  }
+
+  // Salvage step 3: ADD footwear when a look's only problem is that the model
+  // omitted shoes (the Work + Hot incident: the weather block's footwear line
+  // contradicted the occasion's sandal ban, the model returned shoe-less looks,
+  // and neither retries nor the drop-based salvages could fix a MISSING piece).
+  // Pick an unused, occasion/weather/exclusion-eligible shoe from the pool and
+  // ship only if the completed looks re-validate clean.
+  if (lastParsed?.looks?.length && lastFailures.some(f => f.hard && f.type === "shoes")) {
+    const completed = salvageByAddingShoes(lastParsed, lastFailures, idMap, allItems,
+      { activeExclusions, occasionSlots, occasion, weather, onlyRescueIds });
+    if (completed) {
+      const recheck = runAllChecks(completed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
+      if (!recheck.some(f => f.hard)) {
+        console.warn("[Atelier Validator] Shoe-add salvage succeeded — shipped after adding footwear:",
+          lastFailures.filter(f => f.hard).map(f => f.message));
+        logAiError("stylist_outfit:shoe_salvage",
+          { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
+          "salvaged by adding an eligible shoe to a shoe-less look");
+        return resolveIds(completed, idMap, allItems, occasion);
+      }
+      // Shoes were added but other hard failures remain — hand the completed
+      // looks + fresh failure list to the look-drop salvage below.
+      lastParsed = completed;
       lastFailures = recheck;
     }
   }
@@ -1405,10 +1574,11 @@ export async function generateValidatedLooks({
     occasion,
     weather,
     failures: lastFailures.map(f => ({ type: f.type, hard: f.hard, message: f.message })),
-    looks: lastParsed?.looks?.map(l => ({
-      vibe: l.vibe,
-      items: (l.items || []).map(it => (typeof it === "object" ? { id: it.id, role: it.role } : it)),
-    })) ?? null,
+    looks: snapshotLooks(lastParsed),
+    // What the MODEL actually returned, before any salvage step mutated the
+    // looks/failures above — lets incident review distinguish model-omitted
+    // pieces from salvage-removed ones.
+    pre_salvage: preSalvage,
   }, "hard validation failures persisted after all retries and salvage");
 
   throw new ValidationError(

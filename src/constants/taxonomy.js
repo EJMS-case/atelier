@@ -38,9 +38,6 @@ export const SUBCATEGORY_L3 = {
   "Formal Separates":   ["Formal Skirts","Formal Tops"],
 };
 
-// Flat list for legacy compatibility (AI inventory, sort, etc.)
-export const CATEGORIES = CATEGORY_ORDER;
-
 // Bag detection — used by normalizeItem (taxonomy migration) and
 // EditorialCollage (slot assignment). Listed once here so the rule doesn't
 // drift between callers. The regex catches free-form `name` strings; the

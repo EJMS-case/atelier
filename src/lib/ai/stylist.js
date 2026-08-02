@@ -4,10 +4,11 @@
 // Each function returns parsed JSON (or a string for streamStyleProfile).
 // Callers are responsible for UI state.
 
-import { STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
+import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
 import { TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
+import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
-import { sampleClosetItems, formatInventory } from "../../utils/closet-sampler.js";
+import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
 import { describeStyleFilters } from "../../utils/style-filters.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
 import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
@@ -45,8 +46,9 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   occasion = normalizeOccasion(occasion) || "Casual";
   // Comfort occasions: ease over elevation. These opt OUT of the editorial hero
   // briefs and the "elevation moves" preamble (which were pushing blazers,
-  // statement jewelry, and dressy fabrics onto loungewear).
-  const comfortMode = new Set(["Lounge", "Active", "Travel Day"]).has(occasion);
+  // statement jewelry, and dressy fabrics onto loungewear). The occasion set
+  // is shared with the closet-sampler so the two can never drift apart.
+  const comfortMode = COMFORT_OCCASIONS.has(occasion);
   const baseSlots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Casual;
   const w = (weather || "").toLowerCase();
   const isHotOrWarm = /hot|warm|85|70-84/i.test(w);
@@ -471,7 +473,11 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
       model: "claude-sonnet-5",
       maxTokens: 3000,
       content: [
-        { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
+        // Shopping-safe profile: palette/fit/taste WITHOUT the styling
+        // profile's "inventory only / never invent items" rule, which
+        // directly contradicted a prompt whose job is recommending products
+        // to BUY.
+        { type: "text", text: `${SHOPPING_STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
         { type: "text", text: dynamic },
       ],
       tool: GapsTool,
@@ -508,7 +514,8 @@ Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. B
     model: "claude-sonnet-5",
     maxTokens: 2500,
     content: [
-      { type: "text", text: `${STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
+      // Shopping-safe profile — see the gap-mode call above.
+      { type: "text", text: `${SHOPPING_STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },
       { type: "text", text: dynamic },
     ],
     tool: CompletionsTool,
@@ -519,16 +526,31 @@ Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. B
 }
 
 // ── COLOR NAME → HEX (small helper used by insights) ────────────────────────
+// Derived from COLOR_FAMILIES so the insight swatches can never disagree with
+// the wardrobe's canonical shade hexes (the old hand-copied map had drifted:
+// Burgundy, Teal, Emerald, Ivory all showed different colors here than in the
+// closet filter chips). The extras map covers legacy/AI color names that
+// COLOR_FAMILIES doesn't carry as shades.
+const COLOR_HEX_MAP = (() => {
+  const map = {};
+  for (const fam of COLOR_FAMILIES) {
+    if (map[fam.name] === undefined) map[fam.name] = fam.hex;
+    for (const sh of fam.shades) map[sh.name] = sh.hex;
+  }
+  // Names used in STYLE_PREFS pairs / historical data but absent from
+  // COLOR_FAMILIES.
+  map["Cool Red"] = "#C41E3A";
+  map["Cool Pink"] = "#C2185B";
+  return map;
+})();
+
+// Longest-name-first so a compound name ("Cool Red", "Deep Teal") matches its
+// own entry before a shorter substring ("Red", "Teal") steals it.
+const COLOR_HEX_KEYS = Object.keys(COLOR_HEX_MAP).sort((a, b) => b.length - a.length);
+
 export function colorHex(name) {
-  const map = {
-    "Black":"#1C1814","Navy":"#1B2A4A","Burgundy":"#722F37","White":"#F5F1EC",
-    "Cream":"#F5E6C8","Camel":"#C4A882","Brown":"#6B4226","Espresso":"#3C2415",
-    "Red":"#B22234","Cool Red":"#C41E3A","Gray":"#8B8680","Charcoal":"#36454F",
-    "Blush":"#DE98A0","Pink":"#E8A0BF","Teal":"#2A6B6B","Cobalt":"#0047AB",
-    "Sapphire":"#0F52BA","Emerald":"#046307","Lavender":"#B4A7D6","Ivory":"#FFFFF0",
-    "Cool Pink":"#C2185B","Deep Teal":"#00474F","Neutral":"#C4A882",
-  };
   if (!name) return "#C8BFB4";
-  const key = Object.keys(map).find(k => name.toLowerCase().includes(k.toLowerCase()));
-  return key ? map[key] : "#C8BFB4";
+  const lower = name.toLowerCase();
+  const key = COLOR_HEX_KEYS.find(k => lower.includes(k.toLowerCase()));
+  return key ? COLOR_HEX_MAP[key] : "#C8BFB4";
 }

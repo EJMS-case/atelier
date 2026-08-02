@@ -96,12 +96,13 @@ export const LooksResponseSchema = z.object({
 
 export const LooksTool = {
   name: "return_looks",
-  description: "Return the styled outfit looks pulled from the client's closet. If you genuinely cannot build even one appropriate look from the available inventory, set no_viable_looks: true and explain why in stylist_note — use an empty array for looks.",
+  description: "Return the styled outfit looks pulled from the client's closet. The `looks` field MUST be a raw JSON array of look objects — NEVER a JSON string that encodes the array (do not stringify or double-encode it). If you genuinely cannot build even one appropriate look from the available inventory, set no_viable_looks: true and explain why in stylist_note — use an empty array for looks.",
   input_schema: {
     type: "object",
     properties: {
       looks: {
         type: "array",
+        description: "Array of look objects. Pass the actual JSON array — never a stringified/escaped copy of it.",
         minItems: 0,
         items: {
           type: "object",

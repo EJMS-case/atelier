@@ -106,9 +106,10 @@ export const COLOR_FAMILY_RANGES = (() => {
   return out;
 })();
 
-// Maps each shade name → its parent family name. Used by the filter and
-// effectiveColorFamily() to bucket loose color labels into the right chip.
-export const SHADE_TO_FAMILY = (() => {
+// Maps each shade name → its parent family name. Used within this module by
+// familyForColorString() to bucket loose color labels into the right chip.
+// (Module-private — no external importers; re-export if a caller ever needs it.)
+const SHADE_TO_FAMILY = (() => {
   const out = {};
   for (const fam of COLOR_FAMILIES) {
     for (const sh of fam.shades) {

@@ -20,6 +20,7 @@ import { unescapeJsonStringPrefix } from "../src/utils/coerce-shapes.js";
 import {
   extractCompleteLooks,
   salvageByDroppingItems,
+  salvageByAddingShoes,
   runAllChecks,
 } from "../src/utils/styling-validator.js";
 
@@ -100,8 +101,10 @@ const ALL_ITEMS = [
   { id: "r3", name: "Kitten slingback", category: "Shoes", subcategory: "Heels" },
   { id: "r4", name: "Noosh opaque tights — black", category: "Accessories", subcategory: "Hosiery", season_weight: "winter", material: "nylon blend" },
   { id: "r5", name: "Second slingback", category: "Shoes", subcategory: "Heels" },
+  { id: "r6", name: "Linen blazer", category: "Outerwear", subcategory: "Blazers", material: "linen", notes: "unstructured, unlined" },
+  { id: "r7", name: "Wool overcoat", category: "Outerwear", subcategory: "Coats", material: "wool" },
 ];
-const ID_MAP = { W001: "r1", W002: "r2", W003: "r3", W004: "r4", W005: "r5" };
+const ID_MAP = { W001: "r1", W002: "r2", W003: "r3", W004: "r4", W005: "r5", W006: "r6", W007: "r7" };
 
 const lookOf = (...ids) => ({
   looks: [{
@@ -151,4 +154,85 @@ test("salvage: original parsed object is not mutated", () => {
   const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "Warm (70-84°F)");
   salvageByDroppingItems(parsed, failures, ID_MAP, ALL_ITEMS);
   assert.equal(parsed.looks[0].items.length, 4, "input must stay untouched");
+});
+
+// ── Hot-weather outerwear: light layers allowed, heavy still rejected ────────
+// The 2026-08-02 Work + Hot incident fix relaxed the validator's blanket
+// "any Outerwear in hot = hard fail" to match filterByWeather's isLightOuter
+// rule: explicitly light linen/cotton/unstructured/unlined pieces pass.
+
+test("hot weather: explicitly light outerwear (unstructured linen blazer) passes", () => {
+  const parsed = lookOf("W001", "W002", "W003", "W006"); // blouse + skirt + heels + linen blazer
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "Hot (85°F+)");
+  assert.ok(!failures.some(f => f.type === "weather" && f.hard),
+    `linen blazer must survive Hot, got: ${failures.filter(f => f.hard).map(f => f.message)}`);
+  assert.ok(!failures.some(f => f.hard), "look should be fully clean in Hot");
+});
+
+test("hot weather: wool coat still hard-fails", () => {
+  const parsed = lookOf("W001", "W002", "W003", "W007"); // … + wool overcoat
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "Hot (85°F+)");
+  assert.ok(failures.some(f => f.type === "weather" && f.hard && /Wool overcoat/.test(f.message)),
+    "a wool coat in Hot must trip the weather check");
+});
+
+// ── salvageByAddingShoes ─────────────────────────────────────────────────────
+// Missing shoes is a MISSING-piece failure that dropping can never fix — the
+// add-a-shoe salvage picks an unused, eligible pool shoe instead.
+
+test("shoe salvage: adds exactly one eligible shoe and the look passes", () => {
+  const parsed = lookOf("W001", "W002", "W004"); // blouse + skirt + tights, no shoes
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "");
+  assert.ok(failures.some(f => f.type === "shoes" && f.hard), "expected a hard shoes failure");
+
+  const completed = salvageByAddingShoes(parsed, failures, ID_MAP, ALL_ITEMS,
+    { occasionSlots: {}, occasion: "Work", weather: "" });
+  assert.ok(completed, "salvage should have added a shoe");
+  const shoes = completed.looks[0].items.filter(it => ["W003", "W005"].includes(it.id));
+  assert.equal(shoes.length, 1, "salvaged look must contain exactly one shoe");
+
+  const recheck = runAllChecks(completed, ID_MAP, ALL_ITEMS, [], {}, "Work", "");
+  assert.ok(!recheck.some(f => f.hard),
+    `completed look should be clean, got: ${recheck.filter(f => f.hard).map(f => f.message)}`);
+  assert.equal(parsed.looks[0].items.length, 3, "input must stay untouched");
+});
+
+test("shoe salvage: hot weather skips boots when picking", () => {
+  const withBoot = [...ALL_ITEMS,
+    { id: "r8", name: "Leather boots", category: "Shoes", subcategory: "Boots" }];
+  const idMap = { ...ID_MAP, W008: "r8" };
+  const parsed = lookOf("W001", "W002"); // no shoes
+  const failures = runAllChecks(parsed, idMap, withBoot, [], {}, "Work", "Hot (85°F+)");
+  assert.ok(failures.some(f => f.type === "shoes" && f.hard));
+  const completed = salvageByAddingShoes(parsed, failures, idMap, withBoot,
+    { occasionSlots: {}, occasion: "Work", weather: "Hot (85°F+)" });
+  assert.ok(completed, "an eligible non-boot shoe exists, salvage must succeed");
+  assert.ok(!completed.looks[0].items.some(it => it.id === "W008"), "boots must never be added in Hot");
+});
+
+test("shoe salvage: no eligible shoe in the pool → salvage declines (retry path)", () => {
+  const parsed = lookOf("W001", "W002", "W004");
+  const slots = { banned: { subcategories: ["Heels"] } }; // both pool shoes are Heels
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], slots, "Work", "");
+  assert.ok(failures.some(f => f.type === "shoes" && f.hard));
+  assert.equal(
+    salvageByAddingShoes(parsed, failures, ID_MAP, ALL_ITEMS,
+      { occasionSlots: slots, occasion: "Work", weather: "" }),
+    null,
+    "with no acceptable shoe, salvage must decline so the failure surfaces"
+  );
+});
+
+test("shoe salvage: declines when the look has other hard failures besides shoes", () => {
+  // No shoes AND a wool coat in Hot — adding a shoe can't make this clean,
+  // so the per-look recheck must reject every candidate.
+  const parsed = lookOf("W001", "W002", "W007");
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "Hot (85°F+)");
+  assert.ok(failures.some(f => f.type === "shoes" && f.hard));
+  assert.ok(failures.some(f => f.type === "weather" && f.hard));
+  assert.equal(
+    salvageByAddingShoes(parsed, failures, ID_MAP, ALL_ITEMS,
+      { occasionSlots: {}, occasion: "Work", weather: "Hot (85°F+)" }),
+    null
+  );
 });
