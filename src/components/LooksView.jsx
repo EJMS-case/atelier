@@ -1,13 +1,24 @@
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { s } from "../ui/styles.js";
 import { icons, HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
-import SilhouetteBuilder from "../features/builder/SilhouetteBuilder.jsx";
 import SavedLookCard from "./SavedLookCard.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
 import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatWornDate } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
+
+// Code-split the builder (same pattern as App.jsx's lazy views) — a static
+// import made the whole builder chunk download as soon as the Saved tab
+// opened, even if the user never tapped "Build a Look".
+const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuilder.jsx"));
+
+// Minimal placeholder while the builder chunk loads — mirrors App's RouteFallback.
+const BuilderFallback = () => (
+  <div style={{ padding: "40px 16px", display: "flex", justifyContent: "center" }}>
+    <span style={s.spinner}/>
+  </div>
+);
 
 // Status chip shown in the card header for worn/scheduled looks — muted,
 // letter-spaced small caps, matching the app's chip design language.
@@ -96,30 +107,32 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
 
   if (showBuilder) {
     return (
-      <SilhouetteBuilder
-        items={items}
-        apiKey={apiKey}
-        initialLook={editingLook}
-        onSave={async (log) => {
-          const saved = await onSaveLook(log);
-          setLoading(true);
-          loadLogs();
-          return saved;
-        }}
-        onFavoriteLook={onFavoriteLook}
-        onSchedule={async (plan) => {
-          const res = await onSchedule(plan);
-          // Optimistically badge the just-scheduled look as "Scheduled" (it
-          // stays in Saved — it's just marked as being on the calendar).
-          setSchedSigs(prev => {
-            const next = new Set(prev);
-            outfitsOf(plan).forEach(o => { const sg = sigOf(o.items); if (sg) next.add(sg); });
-            return next;
-          });
-          return res;
-        }}
-        onClose={() => { setShowBuilder(false); setEditingLook(null); loadLogs(); }}
-      />
+      <Suspense fallback={<BuilderFallback/>}>
+        <SilhouetteBuilder
+          items={items}
+          apiKey={apiKey}
+          initialLook={editingLook}
+          onSave={async (log) => {
+            const saved = await onSaveLook(log);
+            setLoading(true);
+            loadLogs();
+            return saved;
+          }}
+          onFavoriteLook={onFavoriteLook}
+          onSchedule={async (plan) => {
+            const res = await onSchedule(plan);
+            // Optimistically badge the just-scheduled look as "Scheduled" (it
+            // stays in Saved — it's just marked as being on the calendar).
+            setSchedSigs(prev => {
+              const next = new Set(prev);
+              outfitsOf(plan).forEach(o => { const sg = sigOf(o.items); if (sg) next.add(sg); });
+              return next;
+            });
+            return res;
+          }}
+          onClose={() => { setShowBuilder(false); setEditingLook(null); loadLogs(); }}
+        />
+      </Suspense>
     );
   }
 

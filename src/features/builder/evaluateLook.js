@@ -4,6 +4,7 @@
 // purchases.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { MODEL_FAST } from "../../constants/models.js";
 
 const EVAL_PROMPT = `You are Elyce's personal stylist with a sharp, senior creative-director eye. She built this outfit from her own wardrobe and wants your honest read.
 
@@ -35,7 +36,7 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   }).join("\n");
 
   const res = await anthropicFetch({
-    model: opts.model || "claude-haiku-4-5-20251001",
+    model: opts.model || MODEL_FAST,
     max_tokens: 400,
     temperature: 0.6,
     messages: [{

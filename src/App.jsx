@@ -230,6 +230,29 @@ export default function App() {
   // "[RESTING]" rediscovery tag reflects real wear — the stored last_worn column
   // went stale once wear moved to the calendar.
   const wearStatsRef = useRef({});
+  // Planner rows + derived wear stats, fetched ONCE here and shared down the
+  // tree. HomeView and LookBackCard used to each re-fetch the same
+  // planned_outfits / outfit_logs tables on every Home visit (three
+  // overlapping fetches); App now owns the single fetch and passes rows +
+  // stats down as props. HomeView still asks for a refresh on every mount —
+  // so a just-logged outfit or freshly saved plan shows up when returning
+  // Home — but concurrent callers share one in-flight request.
+  const [wearData, setWearData] = useState({ plans: null, stats: null });
+  const wearFetchRef = useRef(null);
+  const refreshWearData = useCallback(() => {
+    if (wearFetchRef.current) return wearFetchRef.current;
+    const p = Promise.all([
+      sb.fetchAllPlans().catch(() => []),
+      sb.fetchOutfitLogs().catch(() => []),
+    ]).then(([plans, logs]) => {
+      const stats = deriveWearStats(plans || [], logs || []);
+      wearStatsRef.current = stats;
+      setWearData({ plans: plans || [], stats });
+      return { plans: plans || [], logs: logs || [] };
+    }).finally(() => { wearFetchRef.current = null; });
+    wearFetchRef.current = p;
+    return p;
+  }, []);
 
   // ── Auto-populate today's weather from the NYC forecast on first mount.
   // Weather stays editable — the user can override any chip at any time.
@@ -333,7 +356,7 @@ export default function App() {
     // since it was last generated. It used to refresh ONLY from a Settings
     // button, so it silently went stale; this keeps "personal patterns" current
     // without the user doing anything. Fully best-effort.
-    const maybeRefreshFingerprint = async (logs) => {
+    const maybeRefreshFingerprint = async (logs, plans) => {
       if (!apiKey) return;
       const count = (logs || []).length;
       if (count < 5) return;
@@ -341,7 +364,6 @@ export default function App() {
         const fp = await sb.getStyleFingerprint().catch(() => null);
         const have = fp?.source_count || 0;
         if (fp && count - have < 10) return;   // still fresh enough
-        const plans = await sb.fetchAllPlans().catch(() => []);
         const { generateStyleFingerprint } = await import("./features/stylist/styleFingerprint.js");
         const fresh = await generateStyleFingerprint({ items, logs, plans, apiKey });
         if (fresh?.text) { setStyleFingerprint(fresh); sb.saveStyleFingerprint(fresh).catch(() => {}); }
@@ -350,8 +372,9 @@ export default function App() {
 
     // Favorites + outfit history together → recently-worn (anti-repeat) and
     // loved looks (elevation exemplars for the stylist), plus the fingerprint
-    // refresh above.
-    Promise.all([sb.fetchFavorites(), sb.fetchOutfitLogs()]).then(([favs, logs]) => {
+    // refresh above. Logs + plans come through refreshWearData, the shared
+    // fetch that also derives wear stats (stylist RESTING tag + Home metrics).
+    Promise.all([sb.fetchFavorites(), refreshWearData()]).then(([favs, { plans, logs }]) => {
       setFavorites(favs || []);
 
       const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -362,13 +385,6 @@ export default function App() {
         }
       });
       setRecentlyWornItems([...wornIds]);
-
-      // Derive true wear stats (calendar + logs) for the stylist's RESTING tag.
-      // Best-effort and non-blocking — if plans fail to load, the tag simply
-      // doesn't fire rather than misfiring on stale stored last_worn.
-      sb.fetchAllPlans()
-        .then(plans => { wearStatsRef.current = deriveWearStats(plans || [], logs || []); })
-        .catch(() => {});
 
       // Loved looks = hearted outfit_logs (newest first, capped).
       const lovedIds = new Set((favs || []).filter(f => f.type === "outfit").map(f => f.reference_id));
@@ -382,7 +398,7 @@ export default function App() {
       // Disliked looks = thumbs-down look_feedback rows (newest first, capped).
       sb.fetchDislikedLooks().then(rows => setDislikedLooks(rows || [])).catch(() => {});
 
-      maybeRefreshFingerprint(logs || []);
+      maybeRefreshFingerprint(logs || [], plans || []);
     }).catch(() => {});
 
     // Load sets metadata from Supabase and backfill any local-only sets.
@@ -422,7 +438,7 @@ export default function App() {
     }).catch(() => {});
 
     reloadFromSupabase();
-  }, [reloadFromSupabase]);
+  }, [reloadFromSupabase, refreshWearData]);
 
   // ── Persist to both localStorage and Supabase
   const persistItems = useCallback((updated) => {
@@ -1227,6 +1243,9 @@ export default function App() {
             items={items}
             favorites={favorites}
             apiKey={apiKey}
+            plans={wearData.plans}
+            wearStats={wearData.stats}
+            onRefreshWearData={refreshWearData}
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}

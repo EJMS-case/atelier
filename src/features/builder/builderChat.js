@@ -6,6 +6,7 @@
 // prepended to the first user message instead.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { MODEL_STANDARD } from "../../constants/models.js";
 
 const SLOT_CATEGORIES = {
   shoes:     ["Shoes"],
@@ -96,7 +97,7 @@ export async function sendBuilderMessage({ messages, assembledItems, closetItems
   });
 
   const res = await anthropicFetch({
-    model: "claude-sonnet-4-6",
+    model: MODEL_STANDARD,
     max_tokens: 500,
     temperature: 0.7,
     messages: apiMessages,

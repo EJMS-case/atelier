@@ -6,7 +6,7 @@
 // repeats from the pool outright (step 3b), and each bucket is ordered
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
-import { normalizeOccasion } from "../constants/taxonomy.js";
+import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
 import { slotForItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, FILTER_TYPES } from "./style-filters.js";
 
@@ -453,8 +453,8 @@ export function sampleClosetItems({
   // belong (explicit here, independent of the filterByWeather param being
   // passed). Mild keeps them available for sheer-hosiery looks.
   const wRaw = (weather || "").toLowerCase();
-  const hotOrWarm = /hot|warm|85|70-84/.test(wRaw);
-  const coolOrCold = /cool|cold|40-54|below 40/.test(wRaw);
+  const hotOrWarm = weatherMatches(wRaw, "Hot", "Warm");
+  const coolOrCold = weatherMatches(wRaw, "Cool", "Cold");
   if (hotOrWarm) pool = pool.filter(it => !isHosieryItem(it));
   // Boost applies only when the pool can actually use legwear (a skirt or
   // dress survived the filters): hosiery is exempted from the repeat-rotation

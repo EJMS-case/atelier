@@ -7,6 +7,7 @@
 // not a shopping list.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { MODEL_STANDARD } from "../../constants/models.js";
 
 export async function summarizeInspiration(base64DataUrl, apiKey, { occasion, weather } = {}) {
   if (!base64DataUrl || !apiKey) throw new Error("Image and API key required");
@@ -29,7 +30,7 @@ Do NOT:
 Context (use lightly, don't restate): occasion = ${occasion || "any"}, weather = ${weather || "any"}.`;
 
   const res = await anthropicFetch({
-    model: "claude-sonnet-4-6",
+    model: MODEL_STANDARD,
     max_tokens: 220,
     messages: [{
       role: "user",

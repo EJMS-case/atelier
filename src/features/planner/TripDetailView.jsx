@@ -14,16 +14,12 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps } from "./outfits.js";
 import { TRIP_ACTIVITIES } from "./tripPacker.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
+import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
 
-const PALETTE = {
-  ink:    "var(--color-ink)",
-  soft:   "var(--color-text)",
-  muted:  "var(--color-text-muted)",
-  bg:     "var(--color-surface)",
-  cream:  "var(--color-bg)",
-  line:   "var(--color-border-strong)",
-  accent: "#6D1A2E",
-};
+// Accent stays a literal hex (matches --color-accent-strong): this view builds
+// alpha variants by string concatenation (`${PALETTE.accent}0A`), which a
+// var() reference can't do.
+const PALETTE = { ...SHARED_PALETTE, accent: "#6D1A2E" };
 
 const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Sets", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts", "Occasionwear"];
 

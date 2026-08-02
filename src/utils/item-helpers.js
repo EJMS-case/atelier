@@ -1,7 +1,7 @@
 // ── ITEM HELPERS ─────────────────────────────────────────────────────────────
 // Weather filter, sort comparators, sleeve classifier, taxonomy migration.
 
-import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
+import { BAG_SUBCATEGORIES, BAG_NAME_RE, weatherMatches } from "../constants/taxonomy.js";
 import {
   COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT,
   COLOR_FAMILY_RANGES, familyForColorString,
@@ -107,16 +107,66 @@ export function isHosieryItem(item) {
   );
 }
 
+// ── STATEMENT-PIECE DETECTOR ────────────────────────────────────────────────
+// Single source of truth for "is this a statement piece" — used by the
+// styling-validator's HC8 check (one statement per look) and the trip
+// packer's statement-stacking penalty; previously each kept a hand-synced
+// copy. A statement = a non-solid PATTERN (floral, polka, plaid, animal,
+// paisley, etc.) OR explicit heavy EMBELLISHMENT keywords (sequin, lace,
+// brocade…). Texture cues (satin sheen, suede) DON'T count — they're accents,
+// not statements, and counting them would block normal tonal layering.
+//
+// Earlier the validator used a "not solid" blacklist on the pattern field,
+// which falsely flagged anything with a non-empty texture tag (e.g. a denim
+// slingback whose pattern got auto-detected as "denim", or a leather bag
+// tagged "leather"). Now it's a whitelist of pattern values that genuinely
+// read as statement.
+export const STATEMENT_PATTERNS = new Set([
+  "striped", "stripe", "stripes",
+  "plaid", "tartan", "houndstooth", "gingham", "windowpane", "check", "checked", "chevron", "argyle",
+  "floral", "botanical",
+  "polka-dot", "polka dot", "polkadot", "polka.dot",
+  "abstract", "abstract print", "graphic", "graphic print", "print",
+  "animal", "leopard", "zebra", "snake", "cheetah", "tiger",
+  "paisley",
+  "tie-dye", "tie dye",
+  "geometric",
+  "camouflage", "camo",
+]);
+
+// `fringeCounts`: the validator deliberately does NOT treat fringe as a
+// statement (it's a texture accent per HC8's comment), while the trip packer
+// deliberately DOES (a fringe bag + argyle skirt on the same day was the
+// user-flagged "yikes"). The option preserves both behaviors from one body.
+export function isStatementPiece(item, { fringeCounts = false } = {}) {
+  if (!item) return false;
+  const pattern = (item.pattern || "").toLowerCase().trim();
+  if (STATEMENT_PATTERNS.has(pattern)) return true;
+  // Visual-AI read: when the closet has been enriched, the vision model reports
+  // the actual pattern off the photo — this catches bold prints the user never
+  // tagged (a floral or plaid saved with a blank pattern field), so HC8's
+  // one-statement rule stops two loud prints from landing in the same look.
+  // ("solid"/"colourblock" aren't in STATEMENT_PATTERNS, so they never trip it.)
+  const vpattern = (item.vision_data?.pattern || "").toLowerCase().trim();
+  if (STATEMENT_PATTERNS.has(vpattern)) return true;
+  const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
+  if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|featherwork|lace)\b/i.test(text)) return true;
+  if (fringeCounts && /\bfringe\b/i.test(text)) return true;
+  // Bold prints in the name even when pattern field is unset (sparse metadata).
+  if (/\b(floral|polka.?dot|leopard|zebra|snake|cheetah|paisley|gingham|houndstooth|chevron|argyle|tartan|tie.?dye|abstract print|graphic print)\b/i.test(text)) return true;
+  return false;
+}
+
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
 export function filterByWeather(items, weather) {
   const raw = (weather || "").toLowerCase();
   if (!raw || raw === "any") return items;
 
-  const isHot  = /hot|85/.test(raw);
-  const isWarm = /warm|70-84/.test(raw);
-  const isMild = /mild|55-69/.test(raw);
-  const isCool = /cool|40-54/.test(raw);
-  const isCold = /cold|below 40/.test(raw);
+  const isHot  = weatherMatches(raw, "Hot");
+  const isWarm = weatherMatches(raw, "Warm");
+  const isMild = weatherMatches(raw, "Mild");
+  const isCool = weatherMatches(raw, "Cool");
+  const isCold = weatherMatches(raw, "Cold");
 
   return items.filter(it => {
     const sleeve = getSleeveType(it);

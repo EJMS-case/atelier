@@ -8,6 +8,7 @@ import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../uti
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { generateStyleFingerprint } from "../features/stylist/styleFingerprint.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
+import { MODEL_TOP } from "../constants/models.js";
 import { anthropicFetch } from "../lib/ai/toolUse.js";
 
 export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, styleFingerprint, setStyleFingerprint, onNavigate }) {
@@ -128,7 +129,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         } catch { /* skip if image can't be fetched */ }
         if (!base64) continue;
         const aiRes = await anthropicFetch({
-          model: "claude-opus-4-8",
+          model: MODEL_TOP,
           max_tokens: 256,
           messages: [{
             role: "user",

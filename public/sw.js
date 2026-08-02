@@ -1,4 +1,10 @@
-const CACHE = "atelier-v2";
+// The build-id placeholder below is rewritten by scripts/stamp-sw.mjs, which
+// runs as part of `npm run build`. A distinct cache name per build makes the
+// activate handler drop the previous deploy's cache, so old hashed assets stop
+// accumulating in Cache Storage forever. (Already-running tabs are unaffected:
+// hashed assets also sit in the HTTP cache with immutable max-age.) Keep the
+// placeholder token out of prose above — the stamper would rewrite that instead.
+const CACHE = "atelier-__BUILD_ID__";
 const PRECACHE = ["/", "/favicon.svg", "/manifest.webmanifest", "/icon-192.svg", "/icon-512.svg"];
 
 self.addEventListener("install", (event) => {

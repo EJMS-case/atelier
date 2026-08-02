@@ -2,6 +2,38 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Deferred-audit cleanups: weather predicates, look-item resolution, statement detector, Home fetches, PALETTE — 2026-08-02
+
+### Why
+The remaining "deliberately deferred by the audit" list from #145 — every item a verified finding, held back only because it needed the full battery behind it. Nothing here changes what the app decides; it removes the duplicate copies that were drifting apart.
+
+### Changed — weather-band predicates now have one source
+- The `/hot|85/`-style regexes re-derived in ~6 places across `closet-sampler.js`, `styling-validator.js` and `item-helpers.js` now call a new `weatherMatches(w, ...buckets)` in `taxonomy.js`, built on the previously-unused `WEATHER_BUCKETS`. It tests each named bucket independently (unlike `weatherBucketOf`, which is first-match-wins), so a combined label like "Hot days, cool nights" still satisfies both — exactly what the inline regexes did. Each replacement was checked to match the same label set; falsy weather still matches nothing.
+
+### Changed — look-item resolution extracted
+- The "strip an `ID:` prefix → map the short W-ID → find the closet item" chain was restated inline in ~15 validator checks. Now `cleanLookItemId` / `realIdOf` / `resolveLookItem` / `resolveLookItems` in `styling-validator.js`, used everywhere. Pure refactor.
+
+### Changed — statement detector deduplicated
+- `isStatementPiece` + `STATEMENT_PATTERNS` moved to `item-helpers.js` and are now shared by the validator's HC8 check and the trip packer, replacing two hand-synced copies and their KEEP IN SYNC comments. The packer's two deliberate differences survive as explicit wrappers: a `fringeCounts` option (fringe is a statement when packing — the "fringe bag + argyle skirt" combo the owner flagged — but only a texture accent for HC8) and the hosiery exemption, so fishnet tights never block a printed skirt.
+- One intentional convergence: the packer now also reads `featherwork` as an embellishment, which the validator's copy already did. A featherwork gown genuinely is a statement piece; the packer's copy had simply drifted.
+
+### Changed — Home stopped fetching the same rows three times
+- `App`, `HomeView` and `LookBackCard` each fetched `planned_outfits` / `outfit_logs` on a Home visit. App now owns a single `refreshWearData` (in-flight requests are shared, so concurrent callers can't stampede) and passes rows + derived wear stats down; the two children filter their own date windows client-side out of the same `fetchAllPlans` result. A fourth redundant `fetchAllPlans` inside the style-fingerprint refresh is gone too. HomeView still triggers a refresh per mount, preserving the "reflect what I just logged" behaviour.
+- `SilhouetteBuilder` is now a `lazy()` import in `LooksView` and `OutfitHistory`. It was already its own chunk, but the Saved tab's chunk **statically** imported it, so opening Saved eagerly fetched ~28.6 kB (9.5 kB gzip) whether or not the builder was ever opened. Confirmed against a baseline build: `import … from "./SilhouetteBuilder-….js"` → `import("./SilhouetteBuilder-….js")`.
+
+### Changed — PALETTE consolidated
+- The `PALETTE` const copy-pasted across 6 views now lives in `src/constants/palette.js`, with a new `--color-accent-strong: #6D1A2E` token beside `--color-accent`. Views keep local overrides only where they genuinely differ (VisionPilot's lighter `line` and its ok/warn colors; the builder's burgundy accent). Calendar and TripDetail keep a literal hex because they build alpha variants by string concatenation (`${PALETTE.accent}0A`), which a `var()` can't do — zero rendered change in all six.
+
+## [Unreleased] — Deferred-audit cleanups: model-ID constants, sw.js cache pruning — 2026-08-02
+
+### Why
+The #145 audit verified these findings but deferred them; this phase works through that backlog. Model IDs were scattered as 17 magic strings across 11 files, and the service worker's constant cache name (`atelier-v2`) meant every deploy's hashed assets accumulated in Cache Storage forever.
+
+### Changed — `src/constants/models.js` (new), 11 call-site files, `public/sw.js`, `scripts/stamp-sw.mjs` (new), `package.json`
+- One tier table (`MODEL_TOP`/`MODEL_STRONG`/`MODEL_STANDARD`/`MODEL_FAST`) now feeds every Anthropic call site — upgrading a tier is a one-line change. No model assignments changed.
+- sw.js cache name is now stamped per build, so the existing activate handler prunes the previous deploy's cache instead of letting old hashed assets accumulate in Cache Storage forever. Running tabs are unaffected — hashed assets also sit in the HTTP cache with immutable max-age.
+- The stamp runs as a build STEP (`vite build && node scripts/stamp-sw.mjs`), not a Vite plugin: Vite copies `publicDir` into `dist` *after* `closeBundle`, so a plugin's stamp gets overwritten by the pristine `public/sw.js`. The stamp is a hash of the emitted asset filenames rather than a timestamp, so an unchanged build keeps its cache name and doesn't purge caches needlessly. Missing placeholder throws and fails the build — a silent no-op here would regress to one constant cache name and nobody would notice for months.
+
 ## [Unreleased] — Dark mode removed + full cleanup audit — 2026-08-02
 
 ### Why
