@@ -20,6 +20,7 @@ import { unescapeJsonStringPrefix } from "../src/utils/coerce-shapes.js";
 import {
   extractCompleteLooks,
   salvageByDroppingItems,
+  salvageBySwappingItems,
   salvageByAddingShoes,
   runAllChecks,
 } from "../src/utils/styling-validator.js";
@@ -235,4 +236,94 @@ test("shoe salvage: declines when the look has other hard failures besides shoes
       { occasionSlots: {}, occasion: "Work", weather: "Hot (85°F+)" }),
     null
   );
+});
+
+// ── Item-swap salvage ────────────────────────────────────────────────────────
+// Production incident 2026-08-02 18:22–18:25 UTC: three consecutive Work+Warm
+// generations hit the error wall. Root cause was NOT the model — it was the
+// drop salvage removing items that hold a REQUIRED slot. A boot flagged "wrong
+// for Warm" got dropped, leaving a shoe-less 2-item look; in one case the wool
+// trousers were dropped too, leaving a single item. Only shoes have an add-back
+// path, so a dropped bottom doomed the tap. The swap salvage replaces such
+// items in place instead, preserving item count and slot coverage.
+const SWAP_ITEMS = [
+  { id: "s1", name: "Silk Blouse", category: "Tops", subcategory: "Blouses", material: "Silk", season_weight: "Light" },
+  { id: "s2", name: "Wool Trousers", category: "Bottoms", subcategory: "Trousers", material: "Wool", season_weight: "Medium" },
+  { id: "s3", name: "Marrgo Ankle Boot", category: "Shoes", subcategory: "Ankle", material: "Leather", season_weight: "Medium" },
+  { id: "s4", name: "Linen Wide-Leg Trouser", category: "Bottoms", subcategory: "Trousers", material: "Linen", season_weight: "Light" },
+  { id: "s5", name: "Whipstitch Pointed Toe Heel", category: "Shoes", subcategory: "Stiletto", material: "Leather", season_weight: "Medium" },
+  { id: "s6", name: "Ponte Sheath Dress", category: "Dresses", subcategory: "Midi", material: "Ponte", season_weight: "Medium" },
+  { id: "s7", name: "Structured Tote", category: "Bags", subcategory: "Tote", material: "Leather" },
+];
+const SWAP_MAP = { W001: "s1", W002: "s2", W003: "s3", W004: "s4", W005: "s5", W006: "s6", W007: "s7" };
+const WARM = "Warm (70-84°F)";
+const swapLook = (...ids) => ({
+  looks: [{
+    vibe: "Power Dressing",
+    items: ids.map(id => ({ id, role: "supporting" })),
+    silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "",
+  }],
+});
+
+test("swap salvage: weather-wrong bottom AND shoe are replaced, look survives intact", () => {
+  // The 18:23:36 production shape. Dropping both would leave one item.
+  const parsed = swapLook("W001", "W002", "W003");
+  const failures = runAllChecks(parsed, SWAP_MAP, SWAP_ITEMS, [], {}, "Work", WARM);
+  assert.equal(failures.filter(f => f.hard && f.type === "weather").length, 2);
+
+  const swapped = salvageBySwappingItems(parsed, failures, SWAP_MAP, SWAP_ITEMS,
+    { occasionSlots: {}, weather: WARM });
+  assert.ok(swapped, "swap salvage should fire");
+  assert.equal(swapped.looks[0].items.length, 3, "item count must be preserved");
+  const after = runAllChecks(swapped, SWAP_MAP, SWAP_ITEMS, [], {}, "Work", WARM);
+  assert.equal(after.filter(f => f.hard).length, 0, "swapped look must validate clean");
+});
+
+test("swap salvage: replacement is like-for-like — a bottom is never swapped for a dress", () => {
+  // lower_half legitimately accepts a dress when building from scratch, but the
+  // look already has its own top: swapping in a dress would just trade a
+  // weather failure for a top-under-dress one.
+  const parsed = swapLook("W001", "W002", "W005");
+  const failures = runAllChecks(parsed, SWAP_MAP, SWAP_ITEMS, [], {}, "Work", WARM);
+  const swapped = salvageBySwappingItems(parsed, failures, SWAP_MAP, SWAP_ITEMS,
+    { occasionSlots: {}, weather: WARM });
+  assert.ok(swapped);
+  const roles = swapped.looks[0].items.map(it => SWAP_ITEMS.find(x => x.id === SWAP_MAP[it.id]).category);
+  assert.ok(!roles.includes("Dresses"), "must not substitute a dress for a bottom");
+  assert.equal(runAllChecks(swapped, SWAP_MAP, SWAP_ITEMS, [], {}, "Work", WARM).filter(f => f.hard).length, 0);
+});
+
+test("swap salvage: optional pieces are left for the drop salvage", () => {
+  // A belt on a dress is a dress_styling failure, but a belt holds no required
+  // slot — swapping it for another belt would not help, so swap must decline
+  // and let the drop salvage remove it.
+  const items = [...SWAP_ITEMS, { id: "s8", name: "Maria Suede Belt", category: "Belts", subcategory: "", material: "Suede" }];
+  const idMap = { ...SWAP_MAP, W008: "s8" };
+  const parsed = swapLook("W006", "W005", "W007", "W008");
+  const failures = runAllChecks(parsed, idMap, items, [], {}, "Work", WARM);
+  assert.ok(failures.some(f => f.hard && f.type === "dress_styling"));
+  const swapped = salvageBySwappingItems(parsed, failures, idMap, items, { occasionSlots: {}, weather: WARM });
+  assert.equal(swapped, null, "no required-slot offender → swap declines");
+  const dropped = salvageByDroppingItems(parsed, failures, idMap, items);
+  assert.ok(dropped, "drop salvage still handles the belt");
+  assert.equal(runAllChecks(dropped, idMap, items, [], {}, "Work", WARM).filter(f => f.hard).length, 0);
+});
+
+test("swap salvage: declines when the pool has no eligible replacement", () => {
+  // Only the offending wool trouser exists for the lower half — nothing to
+  // swap to, so the failure must surface rather than a bogus look shipping.
+  const items = SWAP_ITEMS.filter(i => i.id !== "s4");
+  const idMap = { W001: "s1", W002: "s2", W003: "s3", W005: "s5" };
+  const parsed = swapLook("W001", "W002", "W005");
+  const failures = runAllChecks(parsed, idMap, items, [], {}, "Work", WARM);
+  assert.ok(failures.some(f => f.hard && f.type === "weather"));
+  assert.equal(salvageBySwappingItems(parsed, failures, idMap, items, { occasionSlots: {}, weather: WARM }), null);
+});
+
+test("swap salvage: original parsed object is not mutated", () => {
+  const parsed = swapLook("W001", "W002", "W003");
+  const before = JSON.stringify(parsed);
+  const failures = runAllChecks(parsed, SWAP_MAP, SWAP_ITEMS, [], {}, "Work", WARM);
+  salvageBySwappingItems(parsed, failures, SWAP_MAP, SWAP_ITEMS, { occasionSlots: {}, weather: WARM });
+  assert.equal(JSON.stringify(parsed), before);
 });

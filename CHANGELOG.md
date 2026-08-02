@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Fix the Work+Warm error wall: swap offending items instead of dropping them — 2026-08-02
+
+### Why
+Owner reported "still getting a lot of errors" after #146. Three `stylist_outfit:validation` rows at 18:22–18:25 UTC, all **Work + Warm**, all terminal. This was NOT the model and NOT the Hot-weather prompt contradiction fixed in #145 — it was our own salvage destroying the look.
+
+`salvageByDroppingItems` removes every item a hard failure names. When the named item holds a **required slot**, dropping it converts a fixable "wrong item" failure into an unfixable "missing piece" one — and only shoes have an add-back path (`salvageByAddingShoes`), so a dropped bottom dooms the whole tap. Replayed both production shapes in node:
+- 18:22:41 — ankle boot wrong for Warm + belt on a dress → both dropped → 2 items, no shoes.
+- 18:23:36 — wool trousers *and* ankle boot both wrong for Warm → both dropped → 1 item, no bottom, no shoes.
+
+### Added — `salvageBySwappingItems` in `src/utils/styling-validator.js`
+- New salvage step **1.5**, ahead of the drop salvage: when a hard failure names an item occupying a required slot (shoes / bottom / dress / top), replace it **in place** with an eligible piece of the same slot instead of removing it, preserving item count and slot coverage. All swaps apply, then the caller re-runs the full suite and ships only if clean — same contract as the drop salvage. Logs `stylist_outfit:item_swap`.
+- Swaps are **like-for-like by garment role**. The `lower_half` slot legitimately accepts a dress when building from scratch, but substituting a dress for a trouser in a look that still has its own top merely trades a weather failure for a top-under-dress one.
+- Offenders in optional slots (a belt on a dress, a doubled accessory) are deliberately left to the drop salvage, which is still the right tool there.
+
+### Fixed — slot eligibility applied footwear-only weather rules
+- `eligibleShortIdsForSlot` hand-rolled "no boots in heat, no sandals in cold", which was fine while only shoes used it but silently wrong for the bottom/top slots the swap salvage needs — it would have happily offered wool trousers as a Warm-weather replacement. It now probes the real `checkWeatherCompliance` / `checkExclusions` / `checkOccasion` with a one-item look, so a candidate must survive exactly the rules the validator will later apply to it. No rule is duplicated.
+
+### Tests
+- `scripts/styling-validator.test.mjs`: 24 (was 19). Both production shapes replay as regression tests, plus like-for-like enforcement, the optional-piece hand-off to the drop salvage, declining when the pool has no eligible replacement, and input non-mutation.
+
 ## [Unreleased] — Deferred-audit cleanups: weather predicates, look-item resolution, statement detector, Home fetches, PALETTE — 2026-08-02
 
 ### Why
