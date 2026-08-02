@@ -287,6 +287,59 @@ test("case 6: plain stringified items array also parses", () => {
   assert.strictEqual(result.looks[0].vibe, "Quiet Luxury");
 });
 
+test("case 7: looks array streamed into the items slot (production 2026-08-01 21:39)", () => {
+  // ai_errors 88e1406d — the exact payload: a truncated stringified array of
+  // LOOK objects sitting in `items`. Before case 7, case 6 adopted it as items
+  // and case 4 nested a look inside a look (Zod: looks.0.items.0.id invalid).
+  const result = coerceLooksShape({
+    items:
+      '[{"vibe": "Modern Minimal", "items": [{"id": "W075", "role": "supporting", "x": 34, "y": 6, "w": 32, "h": 34}, {"id": "W116", "role": "hero", "x": 33, "y": 38, "w": 34, "h": 42}, {"id": "W192", "role": "supporting", "x": 12, "y": 62, "w": 24, "h": 34}, {"id": "W196", "role": "finishing", "x": 64, "y": 60, "w": 26, "h": 32}]',
+  });
+  assert.ok(Array.isArray(result.looks));
+  assert.strictEqual(result.looks.length, 1);
+  const look = result.looks[0];
+  assert.strictEqual(look.vibe, "Modern Minimal");
+  assert.strictEqual(look.items.length, 4);
+  assert.deepStrictEqual(look.items.map(i => i.id), ["W075", "W116", "W192", "W196"]);
+  assert.strictEqual(result.items, undefined);
+});
+
+test("case 7: single look object trapped in items → wrapped as looks array", () => {
+  const result = coerceLooksShape({
+    items: JSON.stringify({ vibe: "Quiet Luxury", items: ITEMS_3, rationale: "r" }),
+  });
+  assert.ok(Array.isArray(result.looks));
+  assert.strictEqual(result.looks.length, 1);
+  assert.strictEqual(result.looks[0].vibe, "Quiet Luxury");
+  assert.deepStrictEqual(result.looks[0].items, ITEMS_3);
+});
+
+test("case 7: {looks:[…]} wrapper trapped in items → unwrapped", () => {
+  const result = coerceLooksShape({
+    items: JSON.stringify({ looks: [{ vibe: "Effortless", items: ITEMS_3 }] }),
+  });
+  assert.ok(Array.isArray(result.looks));
+  assert.deepStrictEqual(result.looks[0].items, ITEMS_3);
+});
+
+test("case 7: never overwrites a real looks array that survived on its own", () => {
+  const real = [{ vibe: "Effortless", items: ITEMS_3, rationale: "r" }];
+  const result = coerceLooksShape({
+    looks: real,
+    items: JSON.stringify([{ vibe: "Modern Minimal", items: ITEMS_3 }]),
+  });
+  assert.deepStrictEqual(result.looks, real);
+});
+
+test("case 7 reports items_looks_unwrapped via onRecover", () => {
+  let seen = null;
+  coerceLooksShape(
+    { items: JSON.stringify([{ vibe: "Modern Minimal", items: ITEMS_3 }]) },
+    { onRecover: (_o, _c, cases) => { seen = cases; } }
+  );
+  assert.deepStrictEqual(seen, ["items_looks_unwrapped"]);
+});
+
 test("truncated stream: repaired to the last complete look", () => {
   const result = coerceLooksShape(CASE_TRUNCATED);
   assert.ok(Array.isArray(result.looks));
