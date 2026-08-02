@@ -25,7 +25,13 @@ export const TAXONOMY = {
 };
 
 export const SUBCATEGORY_L3 = {
-  "Pants":              ["Jeans","Satin/Silk","Trousers","Ponte"],
+  // "Printed" is the odd one out on a fabric-led axis (Jeans/Satin-Silk/Ponte
+  // are materials, Trousers is tailored-woven) — deliberately so. Her printed
+  // pants are a jersey zebra pull-on and a cotton striped palazzo: no shared
+  // fabric, and "Wide Leg" can't separate them because nearly every trouser she
+  // owns is wide leg. What they share is a bold print and a decidedly
+  // non-office register, which is exactly the distinction the stylist needs.
+  "Pants":              ["Jeans","Satin/Silk","Trousers","Ponte","Printed"],
   "Skirts":             ["Mini","Midi","Maxi"],
   "Boots":              ["Ankle","Knee-High","Over-the-Knee"],
   "Heels":              ["Block","Kitten","Stiletto"],

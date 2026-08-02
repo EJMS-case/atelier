@@ -75,7 +75,7 @@ export const OCCASION_SLOTS = {
     // OCCASION_PREFILTERS handles the "no shorts" rule at the pool stage; the
     // banned list below no longer drops "Jeans" so denim pants reach the AI.
     required: { layer: ["Blazers","Coats","Jackets","Cardigans"], bag: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories"], keywords: ["evening","cocktail","gown","formal","ripped","distressed"] },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["T-Shirts","Tanks","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories","Printed"], keywords: ["evening","cocktail","gown","formal","ripped","distressed"] },
     promptNote: "WORK: Polished and current, never stiff or corporate — everyday office through executive meetings and interviews. She should read powerful and effortless: sharp tailoring, considered layering, one quiet point of interest. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind.",
   },
   "Work Dinner": {
