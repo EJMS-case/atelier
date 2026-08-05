@@ -272,15 +272,31 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
     );
   }
 
-  // On mobile, ignore any saved/AI-generated layout and use the built-in
-  // mobile recipes. Override coords were authored against the desktop
-  // landscape canvas and look scattered when re-projected onto a portrait
-  // mobile canvas — consistency across looks beats preserving them here.
-  const slots = !isMobile && Array.isArray(layoutOverride) && layoutOverride.length > 0
+  // MANUAL layouts (from SilhouetteBuilder) are honored on EVERY viewport.
+  // This used to be desktop-only ("override coords look scattered re-projected
+  // onto a portrait canvas"), but that had it backwards for the owner's data:
+  // she builds on her PHONE, on the builder's portrait 3:4 canvas — so the
+  // mobile review was discarding hand-made arrangements that were authored
+  // portrait in the first place, and the planner showed an auto-collage
+  // instead of what she built (owner report 2026-08-05, "collages aren't
+  // saving correctly"). The stored rows were fine all along; only this render
+  // branch dropped them.
+  //
+  // Discriminator: builder layouts stamp a z on every entry (buildLayoutData);
+  // the AI LooksTool schema has no z. AI layouts keep their old behavior —
+  // honored on desktop, recipe on mobile — so this fix can't restyle every
+  // saved Style Me look on the phone as a side effect.
+  // A manual override renders on the builder's own 3:4 aspect so the percent
+  // coords re-project 1:1; recipe layouts keep the 4:5 canvas they were
+  // designed for. Desktop behavior unchanged.
+  const hasOverride = Array.isArray(layoutOverride) && layoutOverride.length > 0;
+  const isManualLayout = hasOverride && layoutOverride.every(e => e && e.z != null);
+  const useOverride = hasOverride && (!isMobile || isManualLayout);
+  const slots = useOverride
     ? buildFromLayout(sorted, layoutOverride, isMobile)
     : buildCollageLayout(sorted, isMobile);
 
-  const mobileCanvas = isMobile ? { paddingBottom: "125%" } : null;
+  const mobileCanvas = isMobile ? { paddingBottom: useOverride ? "133.33%" : "125%" } : null;
 
   return (
     <div style={{ ...s.collageCanvas, ...mobileCanvas, ...canvasStyle }}>

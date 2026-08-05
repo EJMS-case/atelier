@@ -255,7 +255,8 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       <input style={{...s.input,...s.queueInput}} placeholder="Brand"
                         value={item.brand} onChange={e=>update(item.id,"brand",e.target.value)}/>
                     </div>
-                    <input style={{...s.input,...s.queueInput}}
+                    <textarea rows={2}
+                      style={{...s.input,...s.queueInput, minHeight:52, resize:"vertical", fontFamily:"inherit", lineHeight:1.4}}
                       placeholder="Notes (e.g. cropped, chunky knit, cashmere)"
                       value={item.notes} onChange={e=>update(item.id,"notes",e.target.value)}/>
                   </div>
