@@ -446,3 +446,71 @@ test("gaps: already-correct array passes through", () => {
   const result = coerceGapsShape(input);
   assert.deepStrictEqual(result, input);
 });
+
+// ── Case 8: invalid per-item layout numbers ──────────────────────────────────
+// Production 2026-08-05 12:17:52 UTC (ai_errors b061af6a): the model emitted
+// per-item collage layout and one item carried w:0,h:0 — under the schema's
+// w/h min(1) the WHOLE attempt died in Zod despite the look being complete.
+// Layout is a nicety (EditorialCollage auto-places anything without it), so
+// the bad item's layout fields are stripped and valid layouts elsewhere kept.
+test("case 8: w:0/h:0 layout on one item is stripped, look survives (production 2026-08-05)", () => {
+  // Exact production payload shape from the ai_errors row.
+  const input = {
+    looks: [{
+      vibe: "Modern Minimal",
+      items: [
+        { h: 42, w: 32, x: 34, y: 45, id: "W124", role: "hero" },
+        { h: 30, w: 28, x: 36, y: 8,  id: "W076", role: "supporting" },
+        { h: 34, w: 26, x: 8,  y: 10, id: "W039", role: "supporting" },
+        { h: 0,  w: 0,  x: 60, y: 40, id: "W129", role: "supporting" },
+        { h: 20, w: 22, x: 66, y: 62, id: "W176", role: "finishing" },
+        { h: 24, w: 24, x: 8,  y: 66, id: "W173", role: "finishing" },
+      ],
+    }],
+    notes: "",
+  };
+  const out = coerceLooksShape(input);
+  const items = out.looks[0].items;
+  // The offending item keeps its identity but loses its layout…
+  const bad = items.find(it => it.id === "W129");
+  assert.equal(bad.w, undefined);
+  assert.equal(bad.h, undefined);
+  assert.equal(bad.x, undefined);
+  assert.equal(bad.y, undefined);
+  assert.equal(bad.role, "supporting");
+  // …while valid layouts on the other items survive untouched.
+  const hero = items.find(it => it.id === "W124");
+  assert.deepEqual({ x: hero.x, y: hero.y, w: hero.w, h: hero.h }, { x: 34, y: 45, w: 32, h: 42 });
+});
+
+test("case 8: non-finite and out-of-range values also strip; items with no layout untouched", () => {
+  const input = {
+    looks: [{
+      vibe: "Quiet Luxury",
+      items: [
+        { id: "W001", role: "hero", x: NaN, y: 10, w: 20, h: 20 },
+        { id: "W002", role: "supporting", x: 10, y: 10, w: 120, h: 20 },
+        { id: "W003", role: "finishing" },
+      ],
+    }],
+  };
+  const out = coerceLooksShape(input);
+  assert.equal(out.looks[0].items[0].x, undefined);
+  assert.equal(out.looks[0].items[1].w, undefined);
+  assert.deepEqual(out.looks[0].items[2], { id: "W003", role: "finishing" });
+});
+
+test("case 8: fully valid layouts are left byte-identical (no false positives)", () => {
+  const input = {
+    looks: [{
+      vibe: "Effortless",
+      items: [
+        { id: "W001", role: "hero", x: 0, y: 0, w: 1, h: 100 },
+        { id: "W002", role: "supporting", x: 100, y: 100, w: 100, h: 1 },
+        { id: "W003" },
+      ],
+    }],
+  };
+  const out = coerceLooksShape(input);
+  assert.strictEqual(out, input); // untouched object identity — no case fired
+});

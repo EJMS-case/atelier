@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, FILTER_TYPES } from "./style-filters.js";
 
 /**
@@ -489,6 +489,22 @@ export function sampleClosetItems({
   const hotOrWarm = weatherMatches(wRaw, "Hot", "Warm");
   const coolOrCold = weatherMatches(wRaw, "Cool", "Cold");
   if (hotOrWarm) pool = pool.filter(it => !isHosieryItem(it));
+  // Footwear the validator hard-fails UNCONDITIONALLY for this weather never
+  // belongs in the pool either (same principle as the hosiery gate above,
+  // independent of the filterByWeather param): boots in Hot/Warm and sandals
+  // in Cool/Cold are not taste calls the model may weigh — checkWeatherCompliance
+  // rejects them 100% of the time, so offering them is pure retry-bait.
+  //
+  // The subtler harm (production 2026-08-05, Work + Warm/Hot error wall): in
+  // summer, boots are never suggested, so they always count as "fresh" in the
+  // rotation step below — and once every warm-viable shoe was recently
+  // suggested, the fresh boots alone satisfied the shoes KEEP_FLOOR. The
+  // sampled pool's ENTIRE shoe section became boots: the model either picked
+  // one (hard weather fail) or obeyed "no boots" and omitted shoes, and the
+  // swap/add-shoe salvages found zero candidates because none existed. Gating
+  // boots out lets the floor backfill the least-recently-used real options.
+  if (hotOrWarm) pool = pool.filter(it => !isBootItem(it));
+  if (coolOrCold) pool = pool.filter(it => !(it.subcategory === "Sandals" || /sandal/i.test(it.name || "")));
   // Boost applies only when the pool can actually use legwear (a skirt or
   // dress survived the filters): hosiery is exempted from the repeat-rotation
   // drop in 3b and sorted to the front of the accessories bucket in 6 so the
