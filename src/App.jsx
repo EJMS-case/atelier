@@ -1846,7 +1846,14 @@ export default function App() {
                 occasions: plan.occasions,
                 weathers: plan.weathers,
               });
-              if (existing?.layout_data) merged.layout_data = existing.layout_data;
+              // Persist the builder's canvas arrangement when this look becomes
+              // the day's primary outfit (#0 is the only slot whose layout
+              // round-trips at the row) — this handler used to keep only the
+              // EXISTING row's layout, so scheduling a manual build onto an
+              // empty day silently dropped the arrangement and the planner
+              // review fell back to the auto collage (owner report 2026-08-05).
+              if (current.length === 0 && plan.layout_data) merged.layout_data = plan.layout_data;
+              else if (existing?.layout_data) merged.layout_data = existing.layout_data;
               await savePlan(merged);
             } catch {
               await savePlan(plan); // last-resort fallback

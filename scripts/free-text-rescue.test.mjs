@@ -54,3 +54,52 @@ test("without an explicit name, the generous matcher still force-includes", () =
   const r = sample("black trouser");
   assert.ok(r.forceIncludeIds.includes("b1"), "fuzzy force-include must keep working");
 });
+
+// ── Weather footwear gate (2026-08-05 Work+Warm/Hot error wall) ──────────────
+// Boots in Hot/Warm (and sandals in Cool/Cold) are hard-failed by the
+// validator 100% of the time, so the sampler must not offer them. The real
+// harm was subtler: in summer boots are never suggested, so they always count
+// as "fresh" in rotation and alone satisfied the shoes KEEP_FLOOR — the pool's
+// entire shoe section became boots, the model either picked one (hard fail) or
+// omitted shoes, and the swap/add-shoe salvages had zero candidates.
+const SHOE_ITEMS = [
+  { id: "boot1", name: "Marrgo Ankle Boot", category: "Shoes", subcategory: "Ankle" },
+  { id: "boot2", name: "Naples Stiletto Boot", category: "Shoes", subcategory: "Boots" },
+  { id: "heel1", name: "Whipstitch Pointed Toe Heel", category: "Shoes", subcategory: "Stiletto" },
+  { id: "flat1", name: "Javier Slingback Flat", category: "Shoes", subcategory: "Flats" },
+  { id: "sand1", name: "Dalton Mule Sandal", category: "Shoes", subcategory: "Sandals" },
+  { id: "top1",  name: "Silk Blouse", category: "Tops", subcategory: "Blouses" },
+  { id: "bot1",  name: "Wide Leg Trouser", category: "Bottoms", subcategory: "Trousers" },
+];
+
+test("hot/warm: boots are gated out of the pool even when rotation would keep them fresh", () => {
+  for (const weather of ["Hot (85°F+)", "Warm (70-84°F)"]) {
+    const r = sampleClosetItems({
+      items: SHOE_ITEMS, occasion: "NoPrefilterProbe", occasionSlots: {},
+      weather,
+      // every non-boot shoe recently suggested — the exact starvation setup
+      recentlySuggestedItems: ["heel1", "flat1", "sand1"],
+    });
+    const ids = r.sampled.map(it => it.id);
+    assert.ok(!ids.includes("boot1") && !ids.includes("boot2"), `${weather}: boots must be gated`);
+    assert.ok(ids.includes("heel1") || ids.includes("flat1") || ids.includes("sand1"),
+      `${weather}: rotation floor must backfill real warm-viable shoes`);
+  }
+});
+
+test("cool/cold: sandals are gated out; boots stay available", () => {
+  for (const weather of ["Cool (40-54°F)", "Cold (below 40°F)"]) {
+    const r = sampleClosetItems({
+      items: SHOE_ITEMS, occasion: "NoPrefilterProbe", occasionSlots: {}, weather,
+    });
+    const ids = r.sampled.map(it => it.id);
+    assert.ok(!ids.includes("sand1"), `${weather}: sandals must be gated`);
+    assert.ok(ids.includes("boot1") && ids.includes("boot2"), `${weather}: boots stay`);
+  }
+});
+
+test("weather Any: no footwear gating at all", () => {
+  const r = sampleClosetItems({ items: SHOE_ITEMS, occasion: "NoPrefilterProbe", occasionSlots: {}, weather: "" });
+  const ids = r.sampled.map(it => it.id);
+  for (const id of ["boot1", "boot2", "heel1", "flat1", "sand1"]) assert.ok(ids.includes(id), id);
+});

@@ -282,6 +282,39 @@ export function coerceLooksShape(input, { onRecover } = {}) {
     }
   }
 
+  // Case 8: invalid per-item layout numbers. The optional x/y/w/h fields carry
+  // Zod bounds (x/y 0-100, w/h 1-100); production 2026-08-05 12:17 UTC sent one
+  // item with w:0,h:0 and the WHOLE attempt died in Zod. Layout is a nicety —
+  // EditorialCollage auto-places anything without it — so strip the layout
+  // fields from any item whose numbers are out of range or non-finite instead
+  // of letting them sink a complete look. Valid layouts on other items stay.
+  if (Array.isArray(out.looks)) {
+    const badLayout = (it) => {
+      if (!it || typeof it !== "object") return false;
+      const has = ["x", "y", "w", "h"].some(k => it[k] !== undefined);
+      if (!has) return false;
+      const okNum = (v, min) => typeof v === "number" && Number.isFinite(v) && v >= min && v <= 100;
+      return !(okNum(it.x ?? 0, 0) && okNum(it.y ?? 0, 0) && okNum(it.w ?? 1, 1) && okNum(it.h ?? 1, 1));
+    };
+    if (out.looks.some(look => Array.isArray(look?.items) && look.items.some(badLayout))) {
+      out = {
+        ...out,
+        looks: out.looks.map(look => {
+          if (!Array.isArray(look?.items) || !look.items.some(badLayout)) return look;
+          return {
+            ...look,
+            items: look.items.map(it => {
+              if (!badLayout(it)) return it;
+              const { x, y, w, h, ...rest } = it;
+              return rest;
+            }),
+          };
+        }),
+      };
+      cases.push("invalid_layout_stripped");
+    }
+  }
+
   // Field alias: model occasionally returns 'hero' where schema expects 'focal_point'.
   // Zod silently drops the value (focal_point has .default("")) — remap before the check.
   if (Array.isArray(out.looks)) {

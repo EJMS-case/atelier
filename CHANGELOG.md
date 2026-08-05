@@ -2,6 +2,31 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Planner keeps the manual collage; shoe-starved pools; layout coercion; raw-array rule — 2026-08-05
+
+### Why
+Three owner reports in one message: manual-build collages don't survive into the planner's review, an error on a Work + Hot/Warm tap ("might be because I don't have enough clothes"), and no visible change from the bulk trim. Plus one new failure shape found in `ai_errors` while investigating.
+
+### Fixed — scheduling a manual build finally keeps its collage (`src/App.jsx`)
+- The builder has always sent `layout_data` with a scheduled look, and the planner-edit path saved it — but **SavedView's `onSchedule` handler only ever preserved the EXISTING plan row's layout**, so scheduling a manual build onto an empty day silently dropped the arrangement, and the planner review fell back to the auto collage. Now the incoming layout is written when the look becomes the day's primary outfit (#0, the only slot whose layout round-trips at the row), matching the planner-edit handler.
+
+### Fixed — Work + Hot/Warm error wall was rotation starving the shoe slot (`src/utils/closet-sampler.js`)
+- Her guess was close: not "not enough clothes", but not enough **un-recently-suggested** warm shoes. The pool is deliberately not weather-filtered, and in summer boots are never suggested — so they always count as "fresh" in rotation, and once all 17 warm-viable Work shoes were recently suggested, the fresh boots alone satisfied the shoes `KEEP_FLOOR`. The sampled pool's entire shoe section became boots: the model either picked one (unconditional hard weather failure) or obeyed "no boots" and omitted shoes, and the #147 swap/add-shoe salvages found zero candidates because none existed in the pool.
+- New footwear gate in step 3a (same principle as the hosiery gate, independent of the `filterByWeather` param): boots out in Hot/Warm, sandals out in Cool/Cold — exactly the two rules `checkWeatherCompliance` enforces **unconditionally**, so nothing the model could legitimately use is lost, and the rotation floor now backfills least-recently-used real options instead.
+
+### Fixed — coercion case 8: invalid per-item layout (`src/utils/coerce-shapes.js`)
+- New in production 2026-08-05 12:17 UTC: the model emitted collage layout (`x/y/w/h`) with `w:0,h:0` on one item, and the whole attempt died in Zod (`w/h` have `min(1)`). Layout is a nicety — EditorialCollage auto-places anything without it — so out-of-range/non-finite layout numbers are stripped from the offending item (id/role kept, valid layouts elsewhere untouched) instead of sinking a complete look. Logged as `invalid_layout_stripped`. The exact production payload is a test.
+
+### Changed — raw-array output rule in the DYNAMIC prompt body (`src/prompts/styling-system-prompt.js`)
+- `looks_string_parsed` still fires on essentially every tap — the #145 tool-description fix demonstrably didn't land. The handoff's named next lever (a prompt line) is now in the dynamic body: `looks` must be a raw JSON array, never a JSON-encoded string. Dynamic body changes per tap anyway, so `STYLING_STATIC_PREAMBLE` stays byte-identical and the prompt cache is untouched (verified in the diff). Watch: `:recovered` rows should finally drop from every-tap to rare.
+
+### Tests
+- coerce 45 (was 42): production replay of the w:0/h:0 payload, non-finite/out-of-range stripping, and a no-false-positive check (valid layouts pass through with object identity).
+- freetext 7 (was 4): boots gated in Hot/Warm even when rotation would keep them fresh (the exact starvation setup), sandals gated in Cool/Cold with boots kept, and no gating on "Any" — using a prefilter-free occasion so the tests isolate weather behavior.
+
+### Note — "not seeing much change" from the bulk trim is partly expected
+- 326 of 454 photos were genuinely re-cropped (128 were already tight). But `TrimmedImage` was ALREADY cropping at render time everywhere it's used (builder, collages, planner), so those surfaces look identical by design — the trim's visible win is the closet grid, whose 256px server thumbnails now spend their whole budget on the garment. Thumbs regenerate lazily per session, so the grid sharpens as tiles rebuild rather than all at once.
+
 ## [Unreleased] — Builder: stop stretching low-res cutouts past their resolution — 2026-08-02
 
 ### Why
