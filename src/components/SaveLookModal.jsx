@@ -79,7 +79,7 @@ export default function SaveLookModal({ look, lookItems, onSave, onClose }) {
               <label style={s.modalLabel}>NOTES</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder="How did it feel? Any styling notes…"
-                rows={3} style={{...s.modalInput, resize:"vertical", fontFamily:"inherit"}}/>
+                rows={5} style={{...s.modalInput, minHeight:110, resize:"vertical", fontFamily:"inherit", lineHeight:1.5}}/>
             </div>
             <button style={s.modalSaveBtn} onClick={handleSave} disabled={saving}>
               {saving ? <><span style={s.spinnerSm}/> Saving…</> : (logAsWorn ? "Log in History" : "Save to Looks")}

@@ -2,6 +2,22 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Mobile planner review finally shows the manual collage; bigger notes editors — 2026-08-05
+
+### Why
+Owner re-tested after #154 and still didn't see her manual arrangements in the planner. The database showed why the #154 fix wasn't enough: **nearly every manual plan row already had `layout_data` saved** — the loss wasn't in saving, it was in rendering. `EditorialCollage` honored `layoutOverride` only on desktop; on mobile (where she actually uses the app) it deliberately discarded any saved layout and drew the recipe auto-collage. The old comment justified this as "override coords were authored against the desktop landscape canvas" — backwards for her data, since she builds on her phone on the builder's portrait 3:4 canvas.
+
+### Fixed — `src/components/EditorialCollage.jsx`
+- MANUAL layouts (from SilhouetteBuilder) are now honored on every viewport, rendered on the builder's own 3:4 aspect so the percent coordinates re-project 1:1.
+- Deliberately scoped: builder layouts stamp a `z` on every entry, the AI `LooksTool` schema has none — that's the discriminator. AI-generated layouts keep their old behavior (honored on desktop, recipe on mobile), so this can't restyle every saved Style Me look on the phone as a side effect. Trip-day cards keep their intentional compact grid.
+- #154's save-path fix remains correct and necessary (the empty-day schedule path really did drop the layout); it just wasn't the whole story.
+
+### Changed — notes are real multi-line editors now (owner request)
+- **EditItemView**: Notes was a one-line `<input>` — for notes that are full sentences the stylist reads, editing meant horizontal scrolling. Now a 4-row textarea (min-height 96px, vertical resize).
+- **BulkAddView**: queue notes input → 2-row textarea.
+- **SaveLookModal**: notes textarea 3 → 5 rows with a min-height.
+- These are the only three notes-editing surfaces in the app (verified — only one `<textarea>` existed app-wide before this).
+
 ## [Unreleased] — Planner keeps the manual collage; shoe-starved pools; layout coercion; raw-array rule — 2026-08-05
 
 ### Why

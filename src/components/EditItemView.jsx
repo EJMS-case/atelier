@@ -129,7 +129,6 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           ["Name *","name","e.g. Wool Blazer Navy"],
           ["Brand","brand","e.g. Totême, The Row, COS"],
           ["Color","color","e.g. Burgundy, Navy, Espresso"],
-          ["Notes","notes","e.g. cropped, chunky knit, cashmere"],
         ].map(([label,field,placeholder]) => (
           <div key={field}>
             <div style={s.fieldLabel}>{label}</div>
@@ -137,6 +136,17 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
               value={form[field]} onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
           </div>
         ))}
+
+        {/* Notes gets a real multi-line editor — her notes are sentences
+            (fit, care, occasion guidance the stylist reads), and a one-line
+            input made editing them a horizontal-scroll exercise. */}
+        <div>
+          <div style={s.fieldLabel}>Notes</div>
+          <textarea rows={4}
+            style={{...s.input, width:"100%", minHeight:96, resize:"vertical", fontFamily:"inherit", lineHeight:1.5}}
+            placeholder="e.g. cropped, chunky knit, cashmere — fit, care, when to wear it"
+            value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}/>
+        </div>
 
         <div style={{display:"flex",gap:10}}>
           <div style={{flex:1}}>
