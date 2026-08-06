@@ -727,6 +727,39 @@ function checkCompleteSets(response, idMap, allItems) {
  * calls it WITHOUT the packer's `fringeCounts` option — fringe stays an
  * accent, not a statement, for HC8.
  */
+/**
+ * Tank layering (SOFT). Tanks were un-banned for the dressy occasions on
+ * 2026-08-06 (owner: "they're great under blazers… I'd rather it focus on the
+ * notes"), with one accepted opening: nothing stopped a solo tank from
+ * shipping as the only visible top at the office. The owner then asked for
+ * the offered soft nudge. SOFT is deliberate — soft failures never trigger a
+ * retry or an error wall on their own; they only steer the corrective prompt
+ * when a retry happens for a hard reason. A shown look always beats an error,
+ * and a piece's own notes may legitimately say it dresses up alone.
+ *
+ * Fires only for the dressy set (the four occasions tanks used to be banned
+ * from), only on separates looks (a tank layered under a dress is the dress's
+ * business), and only when no layer (Outerwear/Knits) is present.
+ */
+const TANK_LAYER_OCCASIONS = new Set(["Work", "Work Dinner", "Dinner", "Occasion"]);
+
+function checkTankLayering(response, idMap, allItems, occasion) {
+  if (!TANK_LAYER_OCCASIONS.has(occasion)) return [];
+  const failures = [];
+  response.looks.forEach((look, i) => {
+    const resolved = resolveLookItems(look, idMap, allItems);
+    const roles = resolved.map(getGarmentRole);
+    if (roles.includes("dress")) return;
+    const tank = resolved.find(it => it.category === "Tops" && it.subcategory === "Tanks");
+    if (!tank) return;
+    const hasLayer = resolved.some(it => it.category === "Outerwear" || it.category === "Knits");
+    if (!hasLayer) {
+      failures.push(`Look ${i + 1} styles tank "${tank.name}" as the only visible top — for ${occasion}, tanks read best layered under a blazer, jacket, or knit (see the piece's own notes). Add a layer or pick a different top.`);
+    }
+  });
+  return failures;
+}
+
 function checkStatementCount(response, idMap, allItems) {
   const failures = [];
   response.looks.forEach((look, i) => {
@@ -833,6 +866,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   // showing the look. The prompt still teaches one-statement; a soft failure
   // still steers any retry triggered by a real (hard) problem.
   allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: false })));
+  allFailures.push(...checkTankLayering(response, idMap, allItems, occasion).map(f => ({ type: "tank_layering", message: f, hard: false })));
   allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion, weather).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
 
   // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
