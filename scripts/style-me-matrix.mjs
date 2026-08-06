@@ -136,9 +136,9 @@ function isCool(w) { return /cool|40-54/i.test(w); }
 function isCold(w) { return /cold|below 40/i.test(w); }
 
 function pickTop(occasion, w) {
-  // Tanks are banned for Work / Work Dinner / Dinner. Use a
-  // blouse everywhere except cold (where a long-sleeve blouse is still
-  // fine — the validator only flags absent items, not sleeves on tops).
+  // Tanks are no longer occasion-banned (2026-08-05, owner request — they're
+  // layering bases under blazers; per-piece notes steer usage). The blouse
+  // stays the matrix's pick everywhere so cells stay deterministic.
   return reverseMap["blouse"];
 }
 

@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Tanks are layering pieces, not banned — 2026-08-06
+
+### Why
+Owner: tanks were hard-banned from Work, Work Dinner, Dinner, and Occasion — but "they're great under blazers… I'd rather it focus on the notes." The ban meant tanks were stripped from the pool before the model ever saw them, so the per-piece notes she writes (exactly how each tank should be worn) were never even read for those occasions.
+
+### Changed — `src/constants/styling.js`
+- "Tanks" removed from all four occasions' `banned.subcategories`. This single edit moves both enforcement points at once — the sampler's pool pre-filter and the validator's `checkOccasion` read the same lists, so no counteractive pair is created.
+- All four `promptNote`s gain layering guidance: tanks/sleeveless shells are layering bases under a blazer/jacket/knit, defer to each piece's own notes, avoid a tank as the only visible top unless its notes say it dresses up. Prompt notes live in the dynamic body — prompt cache unaffected.
+- T-Shirts, Shorts, Sandals and the rest of the ban lists are untouched.
+
+### Implications (told to the owner before shipping)
+- Cold-weather safety unchanged: in Mild/Cool/Cold a sleeveless top without a layer still hard-fails shoulder coverage, so a solo tank can't ship in winter.
+- The one real opening is Hot/Warm, where a tank could now ship as the only visible top — guidance is taste (prompt + notes), not law. If that ever produces a look she dislikes, the next step is a soft check, not re-banning.
+- Matrix comment updated (it referenced the old ban); the matrix still picks a blouse for determinism, so all cells stay green.
+
 ## [Unreleased] — Mobile planner review finally shows the manual collage; bigger notes editors — 2026-08-05
 
 ### Why
