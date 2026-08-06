@@ -2,6 +2,15 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Soft tank-layering nudge — 2026-08-06
+
+### Why
+Follow-up to #156 by owner request: the accepted opening (a solo tank could ship as the only visible top at a dressy occasion in Hot/Warm) gets the offered soft nudge.
+
+### Added — `checkTankLayering` in `src/utils/styling-validator.js`
+- SOFT check, `tank_layering`: fires for Work / Work Dinner / Dinner / Occasion when a separates look's only visible top is a Tank with no layer (Outerwear/Knits) present. Soft is deliberate — soft failures never trigger a retry or an error wall on their own; they steer the corrective prompt when a retry fires for a hard reason. Dress looks are exempt (a tank under a dress is the dress's business), Casual/Lounge never fire, and a piece whose own notes say it dresses up alone still ships.
+- Validator tests 26 → 29: solo tank is soft-only (look still ships), a blazer OR knit silences it, Casual and dress looks exempt.
+
 ## [Unreleased] — Tanks are layering pieces, not banned — 2026-08-06
 
 ### Why

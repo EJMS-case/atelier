@@ -369,3 +369,47 @@ test("hosiery: tights with a skirt or a jumpsuit are fine", () => {
     assert.equal(failures.filter(f => f.type === "hosiery").length, 0);
   }
 });
+
+// ── Tank layering (soft) ─────────────────────────────────────────────────────
+// Tanks were un-banned from the dressy occasions (2026-08-06); the owner then
+// asked for the offered soft nudge. It must never hard-fail a look — a shown
+// look beats an error — only steer retries that fire for hard reasons.
+const TANK_ITEMS = [
+  { id: "t-tank",  name: "Silk Tank", category: "Tops", subcategory: "Tanks" },
+  { id: "t-blz",   name: "Camel Blazer", category: "Outerwear", subcategory: "Blazers" },
+  { id: "t-knit",  name: "Fine Cardigan", category: "Knits", subcategory: "Cardigans" },
+  { id: "t-trou",  name: "Wide Leg Trouser", category: "Bottoms", subcategory: "Trousers" },
+  { id: "t-shoe",  name: "Whipstitch Heel", category: "Shoes", subcategory: "Stiletto" },
+  { id: "t-dress", name: "Ponte Sheath Dress", category: "Dresses", subcategory: "Midi" },
+];
+const TANK_MAP = { W001: "t-tank", W002: "t-blz", W003: "t-knit", W004: "t-trou", W005: "t-shoe", W006: "t-dress" };
+const tankLook = (...ids) => ({
+  looks: [{
+    vibe: "Power Dressing",
+    items: ids.map(id => ({ id, role: "supporting" })),
+    silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "",
+  }],
+});
+
+test("tank layering: solo tank at Work is a SOFT failure only", () => {
+  const parsed = tankLook("W001", "W004", "W005");
+  const failures = runAllChecks(parsed, TANK_MAP, TANK_ITEMS, [], {}, "Work", "");
+  const tankF = failures.filter(f => f.type === "tank_layering");
+  assert.equal(tankF.length, 1);
+  assert.equal(tankF[0].hard, false, "must never hard-fail — no error wall over taste");
+  assert.equal(failures.filter(f => f.hard).length, 0, "look still ships");
+});
+
+test("tank layering: blazer or knit over the tank silences it; Casual never fires", () => {
+  for (const layer of ["W002", "W003"]) {
+    const failures = runAllChecks(tankLook("W001", layer, "W004", "W005"), TANK_MAP, TANK_ITEMS, [], {}, "Work", "");
+    assert.equal(failures.filter(f => f.type === "tank_layering").length, 0, layer);
+  }
+  const casual = runAllChecks(tankLook("W001", "W004", "W005"), TANK_MAP, TANK_ITEMS, [], {}, "Casual", "");
+  assert.equal(casual.filter(f => f.type === "tank_layering").length, 0);
+});
+
+test("tank layering: dress looks are exempt (tank under a dress is the dress's business)", () => {
+  const failures = runAllChecks(tankLook("W006", "W001", "W005"), TANK_MAP, TANK_ITEMS, [], {}, "Work", "");
+  assert.equal(failures.filter(f => f.type === "tank_layering").length, 0);
+});
