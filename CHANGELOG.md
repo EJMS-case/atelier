@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Builder boxes hug the garment through resize and reopen — 2026-08-06
+
+### Why
+Owner screenshots (2026-08-06): the builder's dashed selection outline still floated far outside the garment for a saved look's top and bottom. Pixel-audited both images from inside Supabase (deployed a temporary `img-audit` edge function, called via the `http` extension since the sandbox can't reach storage): **both are correctly trimmed transparent cutouts** — the pants even carry the recut pipeline's exact 2% margin. #149's auto-fit works; the dead space came from box GEOMETRY, not the images. Two mechanisms: (1) the corner resize handle grew `w`/`h` independently, so any manual resize broke the box's aspect ratio and `objectFit: contain` letterboxed the piece back into dead space; (2) `layout_data` saved those boxes verbatim, and restored layouts are marked `autoFitted`, so reopening never re-hugged them — the damage round-tripped through every edit/save cycle. The look in the screenshots (saved 03:36 UTC 2026-08-06) had box aspects 0.69/0.75 against image aspects 0.89/0.46.
+
+### Fixed — `src/features/builder/SilhouetteBuilder.jsx`
+- **Resize is aspect-locked** to the trimmed image's aspect ratio (recorded per (slot,item) from `TrimmedImage`'s onLoad). The pointer's diagonal pull scales the box uniformly; the scale (not each dimension) is clamped to the 8% floor and canvas edges, so clamping can't break the ratio either.
+- **Restored/stale boxes self-heal on load**: when a box's aspect drifts >2% from its image's, the box collapses to the rect the contained image actually occupies — center-preserving, so the rendered garment is pixel-identical; only the outline and resize handle move in to hug it. Skipped mid-drag so it can't fight the pointer. Existing saved looks heal on open and persist healed on the next save.
+
+### Fixed — `src/components/EditItemView.jsx` (latent, found during diagnosis)
+- Replacing a photo reset `has_bg`/`is_trimmed` to `undefined` — which JSON serialization silently drops, so the upsert kept the OLD photo's flags — and never touched `is_recut` at all. A padded replacement photo inherited "already cropped" flags and the recut drip skipped it forever. Now: new photo → `has_bg: null` (Settings backfill re-detects), `is_trimmed: false`, `is_recut: false` (drip re-trims next session); in-form background removal → all three set clean (`is_recut: true` — it was just trimmed client-side).
+
+### Notes
+- The `img-audit` edge function (read-only diagnostic) is still deployed on the Supabase project; harmless (JWT-gated), delete whenever.
+
 ## [Unreleased] — Soft tank-layering nudge — 2026-08-06
 
 ### Why

@@ -15,6 +15,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     price_paid: item.price_paid ?? null,
     has_bg: item.has_bg,
     is_trimmed: item.is_trimmed,
+    is_recut: item.is_recut,
   });
   const [preview, setPreview] = useState(item.image || null);
   const [confirm, setConfirm] = useState(false);
@@ -51,7 +52,13 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     const reader = new FileReader();
     reader.onload = ev => {
       setPreview(ev.target.result);
-      setForm(f=>({...f,image:ev.target.result, has_bg: undefined, is_trimmed: undefined}));
+      // Reset the cleanliness flags with WRITABLE values. `undefined` here was
+      // a silent trap: JSON serialization drops undefined keys, so the upsert
+      // kept the OLD photo's has_bg/is_trimmed — and is_recut wasn't reset at
+      // all. A padded replacement photo inherited "already cropped" flags and
+      // the recut drip skipped it forever. null (unknown → Settings backfill
+      // re-detects) and false (drip re-trims next session) actually persist.
+      setForm(f=>({...f,image:ev.target.result, has_bg: null, is_trimmed: false, is_recut: false}));
       setBgState("idle"); setBgError("");
     };
     reader.readAsDataURL(file);
@@ -75,7 +82,9 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
       // piece. The bg removal almost always leaves padding around the item.
       const trimmed = await trimTransparentBorders(result.image);
       setPreview(trimmed);
-      setForm(f => ({...f, image: trimmed, has_bg: false, is_trimmed: true}));
+      // is_recut: true — this image was just alpha-trimmed right here, so the
+      // background drip doesn't need to (and shouldn't) re-process it.
+      setForm(f => ({...f, image: trimmed, has_bg: false, is_trimmed: true, is_recut: true}));
       setBgState("success");
     } catch (e) {
       setBgState("error");
