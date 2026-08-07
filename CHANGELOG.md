@@ -2,6 +2,32 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Box-math invariants + full code audit — 2026-08-07
+
+### Why
+Owner goal: (1) make "garments stay cropped after resize" a tested guarantee, (2) run a FULL audit and eliminate duplicative / counterproductive / dead code, (3) bring the docs current. Four parallel audit passes covered dead code, duplication, counteractive logic, and stale docs; every finding was re-verified against the code before changing anything.
+
+### Added
+- `src/features/builder/boxMath.js` + `scripts/box-math.test.mjs` (11 tests, `npm run test:boxmath`, in the battery): the hug invariant (resize always holds the garment's aspect — scale-level clamping so floors/edges can't break it) and the heal invariant (drifted boxes collapse center-preserving onto the contained-image rect), including a production replay of the 2026-08-06 saved-look boxes. Resize now anchors to the content rect, so a piece can't jump even if resized before its image decodes.
+- `unionTags` (outfits.js), `WEATHER_HIGH` (weather.js), `WEATHER_SHORTS` (taxonomy.js), `blobToDataUrl` (images.js), `PALETTE_STRONG`/`ACCENT_STRONG_HEX` (palette.js), shared `RouteFallback` component, `forgetThumb` (Thumb.jsx).
+- Migration 0015: records the out-of-band `planned_outfits.outfits` column (applied as a no-op).
+
+### Fixed
+- **UTC "today"**: four sites stamped logs/boundaries with the UTC date (tomorrow from ~8pm ET) — all now `nyToday()`.
+- **Tanks were still banned for Occasion** via the sampler prefilter, contradicting the standing rule and the promptNote.
+- **Streaming gate** now includes every non-negotiable hard check (exclusions, occasion, hosiery, shoulders, sets, min-count, duplicates) — a streamed look survives terminal failures by design, so the gate was the only barrier between a filter-violating look and the screen.
+- **Sampler step-3a** now gates everything checkWeatherCompliance rejects unconditionally (knits in Hot, heavy/winter pieces in Hot/Warm, winter-only in Mild, shorts/swim/summer in Cool/Cold) — closes the remaining rotation-starvation lanes the #154 boots gate fixed for shoes.
+- **Plan-day writes preserved multi-tags**: pin/unpin-worn and day-generate collapsed builder-authored `occasions`/`weathers` to singletons and dropped `outfit_log_id`.
+- **Collage z-scale collision**: builder z (1–6) mixed with auto-layout z (2–10) inverted layering for auto-appended pieces.
+- **Permanently stale thumbs**: if the thumb DELETE failed on image replacement, the fresh cache-buster URL 200'd with old bytes forever; the local known-set is now cleared too.
+- **Flag holes**: Settings bg-removal batch writes `is_recut` (stopped re-queuing finished work); EditItemView bg removal caps at PHOTO_MAX_DIM.
+
+### Removed (dead code, all verified zero consumers)
+- `STYLE_PROFILE`, `getSetName`, BulkAdd `detected` state, LookCard `heroId` + App `itemRoles`, CalendarView `isFuture`, `resolveIds` unused `allItems` param, `saveLookFeedback` `mood` param.
+
+### Changed (docs)
+- README F2/F4/F5/F7 rewritten to match the shipped app; stale headers/comments fixed across builder, validator, collage, sampler, item-helpers, prompts (the false "will be rejected" claim — string-mode is first-class since #159); HANDOFF counts, statuses, and a full fixed-vs-deferred audit ledger.
+
 ## [Unreleased] — String-mode looks are a first-class shape — 2026-08-07
 
 ### Why

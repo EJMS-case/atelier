@@ -3,7 +3,7 @@ import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
-import { imageToBase64, trimTransparentBorders } from "../utils/images.js";
+import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 
 export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround }) {
   const [form, setForm] = useState({
@@ -81,10 +81,15 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
       // Trim transparent border so the saved photo is tight to the visible
       // piece. The bg removal almost always leaves padding around the item.
       const trimmed = await trimTransparentBorders(result.image);
-      setPreview(trimmed);
+      // Cap at PHOTO_MAX_DIM like every other write path (bulk add, both
+      // Settings passes, the drip) — this was the one image writer that could
+      // store an oversized photo, and is_recut: true tells the drip to never
+      // revisit it.
+      const capped = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
+      setPreview(capped);
       // is_recut: true — this image was just alpha-trimmed right here, so the
       // background drip doesn't need to (and shouldn't) re-process it.
-      setForm(f => ({...f, image: trimmed, has_bg: false, is_trimmed: true, is_recut: true}));
+      setForm(f => ({...f, image: capped, has_bg: false, is_trimmed: true, is_recut: true}));
       setBgState("success");
     } catch (e) {
       setBgState("error");

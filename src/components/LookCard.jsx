@@ -17,9 +17,6 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
     .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
     .filter(Boolean);
 
-  // Identify the hero item for visual badge
-  const heroId = look.itemRoles ? Object.entries(look.itemRoles).find(([, role]) => role === "hero")?.[0] : null;
-
   return (
     <div style={s.lookCard}>
       <div style={s.lookHeader}>

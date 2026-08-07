@@ -19,10 +19,12 @@ const Img = ({ it, size }) => (
   </div>
 );
 
+// Short "Mar 4"-style label, noon-anchored so the date can't roll a day.
+const shortDate = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
 function monthLabel(startIso, endIso) {
   try {
-    const f = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return `${f(startIso)} – ${f(endIso)}`;
+    return `${shortDate(startIso)} – ${shortDate(endIso)}`;
   } catch { return "last 30 days"; }
 }
 
@@ -156,7 +158,7 @@ export default function LookBackCard({ items, favorites = [], apiKey, plans: all
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 11, color: PALETTE.ink, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{item.name}</div>
                       <div style={{ fontSize: 10, color: PALETTE.muted }}>
-                        worn <strong>{wears}×</strong> · {dates.map(d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })).join(", ")}
+                        worn <strong>{wears}×</strong> · {dates.map(shortDate).join(", ")}
                       </div>
                     </div>
                     {alternatives.length > 0 && (

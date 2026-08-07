@@ -5,23 +5,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
-import { newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps } from "./outfits.js";
+import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps } from "./outfits.js";
 import { nyToday, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
-import { fetchNycForecast, fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
+import { fetchNycForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
-import { OCCASIONS } from "../../constants/taxonomy.js";
+import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import TripDetailView from "./TripDetailView.jsx";
-import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
+import { PALETTE_STRONG } from "../../constants/palette.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
 // alpha variants by string concatenation (`${PALETTE.accent}12`), which a
 // var() reference can't do.
-const PALETTE = { ...SHARED_PALETTE, accent: "#6D1A2E" };
+const PALETTE = PALETTE_STRONG;
 
 const cellStyle = {
   position: "relative",
@@ -165,8 +165,10 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
         weather: existing?.weather ?? pickedWx,
         activity: existing?.activity ?? null,
         day_label: existing?.day_label ?? null,
-        occasions: overrides.occasion ? [overrides.occasion] : logOcc,
-        weathers:  overrides.weather  ? [overrides.weather]  : logWx,
+        // Union with the row's stored plurals — replacing them with only the
+        // new look's tags dropped the day's other outfits' contexts.
+        occasions: unionTags(existing?.occasions, overrides.occasion ? [overrides.occasion] : logOcc),
+        weathers:  unionTags(existing?.weathers,  overrides.weather  ? [overrides.weather]  : logWx),
       });
       // Only link the saved look's layout when it becomes the day's primary
       // outfit — the linked-log layout only round-trips for outfit #0.
@@ -209,6 +211,8 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       weather: existing?.weather ?? (wxBucket || null),
       activity: existing?.activity ?? null,
       day_label: existing?.day_label ?? null,
+      occasions: unionTags(existing?.occasions, outfits.map(o => o.occasion)),
+      weathers:  unionTags(existing?.weathers, existing?.weather ?? wxBucket),
     });
     if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
     if (existing?.layout_data) merged.layout_data = existing.layout_data;
@@ -481,7 +485,6 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
   const part = dayPart(iso);
-  const isFuture  = part === "future";
   const isPast    = part === "past";
   const isToday   = part === "today";
 
@@ -642,8 +645,6 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
 //   • change each day's occasion individually
 //   • shuffle a day's outfit, swap any single item, or remove an item
 // All edits stay local until "Pin to calendar".
-const WEATHER_BUCKETS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
-const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
 
 function TripModal({ items, apiKey, onClose, onAssign }) {
   const [start, setStart] = useState(isoDate(new Date()));
@@ -1030,7 +1031,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
             <select value={weather} onChange={e => { setWeather(e.target.value); invalidatePreview(); }}
               style={dateInput}>
               <option value="auto">Auto · {effW}</option>
-              {WEATHER_BUCKETS.map(w => <option key={w} value={w}>{w}</option>)}
+              {WEATHER_SHORTS.map(w => <option key={w} value={w}>{w}</option>)}
             </select>
           </label>
         </div>

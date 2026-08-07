@@ -36,9 +36,9 @@ const HEADERS = {
 // (order #457985) cover black sheer/semi-opaque and skin-tone sheer; the rest
 // are the product galleries' own variant images. Noosh makes no semi-opaque
 // Espresso and no opaque Brew product — the brew opaque row uses the closest
-// real brew gallery shot. Skin-tone and brown semi-opaque keep generated SVG
-// placeholders. The owner's inventory has no opaque brown/skin-tone and a
-// single black micro fishnet pair (rows adjusted 2026-08).
+// real brew gallery shot. Every row — including skin-tone and brown
+// semi-opaque — now maps to a shipped -v2 PNG. The owner's inventory has no
+// opaque brown/skin-tone and a single black micro fishnet pair (2026-08).
 // Display images are the `-v2` recolored templates (owner request, 2026-08):
 // one clean straight-leg cutout per opacity, recolored per shade, so every
 // hosiery card shares the same pose/crop and looks uniform in collages. The

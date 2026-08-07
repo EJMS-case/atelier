@@ -120,6 +120,10 @@ export const WEATHER_BUCKETS = [
   { short: "Cold", match: /cold|below 40/i },
 ];
 
+// Bare chip labels, for pickers that just need the five names. Derived from
+// WEATHER_BUCKETS so a new bucket can't miss a picker.
+export const WEATHER_SHORTS = WEATHER_BUCKETS.map(b => b.short);
+
 export function weatherBucketOf(w) {
   if (!w) return null;
   return (WEATHER_BUCKETS.find(b => b.match.test(w)) || {}).short || null;

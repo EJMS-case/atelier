@@ -193,6 +193,11 @@ export function normalizeVibe(v, fallback = "Effortless") {
 //   7. items is a stringified LOOK or looks array (each element carries its
 //      own nested items[]) — the whole looks payload streamed into the items
 //      slot                                            → adopt as `looks`
+//   8. per-item layout numbers out of range/non-finite → strip that item's
+//      x/y/w/h so a bad layout can't sink a complete look
+// Note on case 1: a looks string that JSON.parses CLEANLY is a first-class
+// input shape (2026-08-07) — normalized silently, no case recorded. Only
+// strings needing tolerant repair count as recoveries.
 // Finally every look's vibe is normalized onto VIBE_VOCABULARY (untouched
 // when already canonical).
 //

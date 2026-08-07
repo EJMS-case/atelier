@@ -554,7 +554,7 @@ export const sb = {
   },
 
   // ── Look feedback (thumbs up/down on generated looks) ──
-  async saveLookFeedback({ lookHash, rating, itemIds, occasion, mood }) {
+  async saveLookFeedback({ lookHash, rating, itemIds, occasion }) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/look_feedback`, {
       method: "POST",
       headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
@@ -563,7 +563,6 @@ export const sb = {
         rating,
         item_ids: itemIds,
         occasion,
-        mood: mood || null,
       }),
     });
     if (!res.ok) {

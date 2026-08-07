@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef, lazy, Suspense } from "react";
-// Outfit generation, knit classify, color analyze — sole entry points into
-// the AI layer from App.jsx. The lower-level helpers (sampler / validator /
-// prompt builder / rotation tracker) live behind generateOutfit and don't
-// need to be re-imported here.
+// The stylist pipeline is dynamic-imported at its call sites (see
+// generateAndAppendLooks) so the AI chunk stays off the cold-start path —
+// only the small feedback helpers are imported statically here.
 import { saveLookFeedback, fetchItemFeedbackScores, lookHash } from "./features/stylist/feedback.js";
 import { savePlan, deletePlan } from "./features/planner/plannerApi.js";
 import { bumpWearCounts, unbumpWearCounts, deriveWearStats, applyWearStats } from "./features/wear/wearApi.js";
@@ -37,6 +36,8 @@ import { exportRotationState, mergeRemoteRotationState } from "./utils/rotation-
 import FilterBar from "./components/FilterBar.jsx";
 import SetCard from "./components/SetCard.jsx";
 import ItemCard from "./components/ItemCard.jsx";
+import RouteFallback from "./components/RouteFallback.jsx";
+import { forgetThumb } from "./components/Thumb.jsx";
 import LookCard from "./components/LookCard.jsx";
 
 // Code-split everything else. Each chunk only ships when the matching view
@@ -56,16 +57,8 @@ const InspirationView   = lazy(() => import("./features/inspiration/InspirationV
 const VisionPilotView   = lazy(() => import("./components/VisionPilotView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
-import { outfitsOf, buildPlanPayload, newOutfitId } from "./features/planner/outfits.js";
+import { unionTags, outfitsOf, buildPlanPayload, newOutfitId } from "./features/planner/outfits.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
-
-// Minimal placeholder while a lazy chunk loads. Reuses the existing spinner
-// styles so the visual register matches the rest of the app.
-const RouteFallback = () => (
-  <div style={{ padding: "40px 16px", display: "flex", justifyContent: "center" }}>
-    <span style={s.spinner}/>
-  </div>
-);
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
@@ -98,8 +91,15 @@ async function pinWornToDate({ date, itemIds, occasion }) {
       weather: existing?.weather ?? null,
       activity: existing?.activity ?? null,
       day_label: existing?.day_label ?? null,
+      // Preserve the row's stored multi-tags and add this wear's occasion —
+      // omitting these re-derived occasions from outfits and collapsed
+      // builder-authored plurals to singletons (same trap the onSchedule
+      // comment documents).
+      occasions: unionTags(existing?.occasions, outfits.map(o => o.occasion), occasion),
+      weathers:  unionTags(existing?.weathers, existing?.weather),
     });
     if (existing?.layout_data) merged.layout_data = existing.layout_data;
+    if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
     await savePlan(merged);
   } catch {
     // Last-resort fallback keeps the old behavior so a fetch blip still records something.
@@ -128,8 +128,11 @@ async function unpinWornFromDate({ date, itemIds }) {
       weather: existing.weather ?? null,
       activity: existing.activity ?? null,
       day_label: existing.day_label ?? null,
+      occasions: unionTags(existing.occasions, remaining.map(o => o.occasion)),
+      weathers:  unionTags(existing.weathers, existing.weather),
     });
     if (existing.layout_data) merged.layout_data = existing.layout_data;
+    if (existing.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
     await savePlan(merged);
   } catch { /* leave the row untouched on failure */ }
 }
@@ -471,10 +474,6 @@ export default function App() {
       .forEach(it => sb.upsert(it).catch(() => {}));
   }, [items, persistItems]);
 
-  const getSetName = useCallback((setId, index) => {
-    return setsMeta[setId]?.name || `Set ${index + 1}`;
-  }, [setsMeta]);
-
   const addItems = useCallback(async (newItems) => {
     // Mark every new item pending_sync until Supabase confirms it. The merge
     // logic uses this flag to preserve local-only items on reload — without
@@ -557,6 +556,10 @@ export default function App() {
     const prevItem = items.find(it => it.id === id);
     if (resolvedFields.image && prevItem?.image && resolvedFields.image !== prevItem.image) {
       sb.removeThumb(id).catch(() => {});
+      // Belt-and-braces: also drop this device's "thumb exists" memory. If the
+      // DELETE above fails, the derived thumb URL still 200s with stale bytes
+      // (no onError), so the local forget is the only reliable invalidation.
+      forgetThumb(id);
     }
     flashSync("syncing");
     try {
@@ -750,10 +753,6 @@ export default function App() {
       items: (look.items || []).map(item =>
         typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
       ),
-      itemRoles: (look.items || []).reduce((acc, item) => {
-        if (typeof item === "object" && item.id && item.role) acc[item.id] = item.role;
-        return acc;
-      }, {}),
       layout_data: look.layout_data || aiLayout || undefined,
       mood: look.vibe || look.mood || "",
       occasion: look.occasion || fallbackOccasion,
@@ -1780,7 +1779,7 @@ export default function App() {
             flashSync("synced");
           }}
           onWearAgain={async (log) => {
-            const today = new Date().toISOString().slice(0, 10);
+            const today = nyToday();
             const newLog = {
               garment_ids: log.garment_ids,
               date_worn: today,

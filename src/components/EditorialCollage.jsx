@@ -4,7 +4,8 @@ import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
 import { sortByCategoryOrder } from "../utils/item-helpers.js";
 import TrimmedImage from "./TrimmedImage.jsx";
 
-// Mobile gets a portrait canvas (125% padding-bottom ≈ 4:5) and its own
+// Mobile gets a portrait canvas (4:5 recipes; manual layouts render at the
+// builder's 3:4 — see the override logic below) and its own
 // layout recipes that mimic Pinterest flat-lays — large hero garment, bag
 // overlapping a hip, shoes grounding the bottom. Desktop keeps the wider
 // landscape composition that already works there.
@@ -218,7 +219,17 @@ function buildFromLayout(items, layout, isMobile) {
     }
   }
   if (missing.length > 0) {
-    positioned.push(...buildCollageLayout(missing, isMobile));
+    // The auto-layout engine's z values live on a different scale (2–10+) than
+    // builder-authored layout z (DEFAULT_Z, 1–6 ± Front/Back nudges). Mixing
+    // them verbatim inverted intent — an auto-placed bag (7) rendered in front
+    // of a builder-placed shoe (5) even though both scales agree shoes go in
+    // front of bags. Remap appended items onto the builder scale so the two
+    // populations interleave by MEANING, not raw number.
+    const AUTO_TO_BUILDER_Z = { 2: 1, 3: 2, 4: 2, 5: 3, 6: 5, 7: 4, 9: 6, 10: 6 };
+    positioned.push(...buildCollageLayout(missing, isMobile).map(slot => ({
+      ...slot,
+      zIndex: AUTO_TO_BUILDER_Z[slot.zIndex] ?? (slot.zIndex > 10 ? 6 : 3),
+    })));
   }
   return positioned.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
 }

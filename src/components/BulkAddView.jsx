@@ -10,7 +10,6 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
   const [queue,      setQueue]      = useState([]);
   const [saving,     setSaving]     = useState(false);
   const [processing, setProcessing] = useState({}); // id -> "bg"|"detect"|"done"|"error"
-  const [detected,   setDetected]   = useState({}); // id -> true once AI detect applied (prevents re-runs)
   const [knitSuggest, setKnitSuggest] = useState({}); // id -> { weight, fit, summary } | "loading" | "dismissed"
 
   const handleFiles = (e) => {
@@ -66,7 +65,6 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           }
           return next;
         }));
-        if (detection) setDetected(d => ({ ...d, [id]: true }));
         setProcessing(p => ({...p, [id]: "done"}));
       };
       reader.readAsDataURL(file);

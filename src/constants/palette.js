@@ -12,6 +12,12 @@
 //     (`${PALETTE.accent}0A`) needs a literal hex, not a var() — those views
 //     keep the raw #6D1A2E in their local override instead.
 
+// The one JS literal for --color-accent-strong (tokens.css). Views that build
+// alpha variants by string concatenation (`${accent}0A`) need the raw hex —
+// keep it here so the token value has a single JS home instead of being
+// hand-mirrored per view.
+export const ACCENT_STRONG_HEX = "#6D1A2E";
+
 export const PALETTE = {
   ink:    "var(--color-ink)",
   soft:   "var(--color-text)",
@@ -22,3 +28,7 @@ export const PALETTE = {
   soft_line: "var(--color-border)",
   accent: "var(--color-accent)",
 };
+
+// Deep-burgundy register with a literal hex accent, for views that
+// string-concatenate alpha variants (Calendar, TripDetail).
+export const PALETTE_STRONG = { ...PALETTE, accent: ACCENT_STRONG_HEX };

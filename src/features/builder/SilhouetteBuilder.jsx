@@ -1,13 +1,15 @@
-// ── F4 — SILHOUETTE BUILDER ──────────────────────────────────────────────────
-// Blank figure with 4 slots (top/bottom/shoes/accessory). Swipe through the
-// closet per slot; tap to lock in. Live preview composites items on the
-// silhouette. On save the silhouette is stripped and only the items are
-// exported on a white background.
+// ── F4 — LOOK BUILDER ────────────────────────────────────────────────────────
+// Manual outfit collage on a white 3:4 canvas. Nine slots (top/bottom/dress/
+// set/swim/shoes/outerwear/bag/accessory) picked from a searchable bottom-
+// sheet grid; multi-slots stack. Pieces drag, aspect-locked resize, and
+// re-layer; boxes auto-fit each garment's trimmed image (boxMath.js). Save
+// composites the arrangement to a 600×800 JPEG and snapshots layout_data so
+// viewers and future edits rebuild the exact arrangement.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
-import { OCCASIONS } from "../../constants/taxonomy.js";
+import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
 import { slotForItem } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
@@ -16,7 +18,7 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { normalizeBoxToContent, aspectLockedResize } from "./boxMath.js";
 import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
 
-const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
+const WEATHERS = WEATHER_SHORTS;
 
 // Builder accent is the deep burgundy, not the brand gold.
 const PALETTE = { ...SHARED_PALETTE, accent: "var(--color-accent-strong)" };
@@ -211,7 +213,7 @@ export default function SilhouetteBuilder({
   function defaultPosFor(slot, itemId) {
     const base = DEFAULT_POSITIONS[slot] || { x: 10, y: 10, w: 40, h: 40 };
     if (!MULTI_SLOTS.has(slot)) return base;
-    const ids = Array.isArray(selections[slot]) ? selections[slot] : (selections[slot] ? [selections[slot]] : []);
+    const ids = asArray(selections[slot]);
     const idx = ids.indexOf(itemId);
     if (idx <= 0) return base;
     // Stagger each subsequent item by a small offset so they're individually grabbable.
@@ -358,7 +360,7 @@ export default function SilhouetteBuilder({
     const members = entry.kind === "single" ? [entry.item] : entry.members;
     const pickedCount = members.filter(m => {
       const slot = entry.kind === "single" ? "set" : naturalSlotFor(m);
-      const cur = Array.isArray(selections[slot]) ? selections[slot] : (selections[slot] ? [selections[slot]] : []);
+      const cur = asArray(selections[slot]);
       return cur.includes(m.id);
     }).length;
     if (pickedCount === 0) return "none";
@@ -374,7 +376,7 @@ export default function SilhouetteBuilder({
       entry.members.forEach(m => {
         const slot = naturalSlotFor(m);
         const isMulti = MULTI_SLOTS.has(slot);
-        const cur = Array.isArray(next[slot]) ? [...next[slot]] : (next[slot] ? [next[slot]] : []);
+        const cur = [...asArray(next[slot])];
         if (removing) {
           const filtered = cur.filter(x => x !== m.id);
           if (filtered.length) next[slot] = filtered; else delete next[slot];
@@ -399,7 +401,7 @@ export default function SilhouetteBuilder({
   // Toggle helper. Multi-slots accumulate; single-slots replace.
   const togglePick = (slot, id) => {
     setSelections(prev => {
-      const cur = Array.isArray(prev[slot]) ? prev[slot] : (prev[slot] ? [prev[slot]] : []);
+      const cur = asArray(prev[slot]);
       const isMulti = MULTI_SLOTS.has(slot);
       if (cur.includes(id)) {
         const next = cur.filter(x => x !== id);
@@ -763,7 +765,7 @@ export default function SilhouetteBuilder({
       {/* Slot status bar — tap any slot to open the picker sheet */}
       <div style={{ display: "flex", gap: 5, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
         {SLOTS.map(s => {
-          const picked = Array.isArray(selections[s.key]) ? selections[s.key] : (selections[s.key] ? [selections[s.key]] : []);
+          const picked = asArray(selections[s.key]);
           const count = picked.length;
           const isActive = activeSlot === s.key && pickerOpen;
           return (
@@ -804,7 +806,7 @@ export default function SilhouetteBuilder({
             {/* Slot tabs inside sheet */}
             <div style={{ display: "flex", gap: 5, overflowX: "auto", padding: "0 16px 8px" }}>
               {SLOTS.map(s => {
-                const cnt = (Array.isArray(selections[s.key]) ? selections[s.key] : (selections[s.key] ? [selections[s.key]] : [])).length;
+                const cnt = (asArray(selections[s.key])).length;
                 return (
                   <button key={s.key} onClick={() => setActiveSlot(s.key)}
                     style={{ fontSize: 10, letterSpacing: "0.09em", padding: "5px 9px", borderRadius: 12, flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer",
@@ -868,7 +870,7 @@ export default function SilhouetteBuilder({
                 <div style={{ gridColumn: "1 / -1", fontSize: 12, color: PALETTE.muted, padding: "28px 0", textAlign: "center" }}>No items in this category.</div>
               )}
               {poolForSlot.map(it => {
-                const curIds = Array.isArray(selections[activeSlot]) ? selections[activeSlot] : (selections[activeSlot] ? [selections[activeSlot]] : []);
+                const curIds = asArray(selections[activeSlot]);
                 const isPicked = curIds.includes(it.id);
                 return (
                   <button key={it.id} onClick={() => togglePick(activeSlot, it.id)}

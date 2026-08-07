@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect } from "react";
+import RouteFallback from "./RouteFallback.jsx";
 import { s } from "../ui/styles.js";
 import { icons, HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
@@ -7,18 +8,12 @@ import { tagsFor, joinTags } from "../lib/multitag.js";
 import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatWornDate } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
+import { nyToday } from "../lib/time.js";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
 // opened, even if the user never tapped "Build a Look".
 const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuilder.jsx"));
-
-// Minimal placeholder while the builder chunk loads — mirrors App's RouteFallback.
-const BuilderFallback = () => (
-  <div style={{ padding: "40px 16px", display: "flex", justifyContent: "center" }}>
-    <span style={s.spinner}/>
-  </div>
-);
 
 // Status chip shown in the card header for worn/scheduled looks — muted,
 // letter-spaced small caps, matching the app's chip design language.
@@ -90,7 +85,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
   // Only offer the status chips when they'd actually split the list.
   const hasWornOrScheduled = logs.some(l => l.date_worn || isScheduled(l));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = nyToday(); // NYC date — UTC would roll to tomorrow from ~8pm ET
 
   const handleLog = async (log) => {
     const date = dateById[log.id] || today;
@@ -107,7 +102,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
 
   if (showBuilder) {
     return (
-      <Suspense fallback={<BuilderFallback/>}>
+      <Suspense fallback={<RouteFallback/>}>
         <SilhouetteBuilder
           items={items}
           apiKey={apiKey}
@@ -227,7 +222,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
                 ) : (
                   <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                     {onBuildSimilar && (
-                      <button style={s.histDeleteBtn} onClick={() => onBuildSimilar(log)} title="Open Style Me seeded with this look's silhouette + occasion + weather + mood">
+                      <button style={s.histDeleteBtn} onClick={() => onBuildSimilar(log)} title="Open Style Me seeded with this look's occasion + weather">
                         ✦ Build similar
                       </button>
                     )}

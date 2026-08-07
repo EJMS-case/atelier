@@ -1,5 +1,8 @@
 // ── ITEM HELPERS ─────────────────────────────────────────────────────────────
-// Weather filter, sort comparators, sleeve classifier, taxonomy migration.
+// Shared garment classifiers + item utilities: slotForItem (the slot
+// vocabulary), boot/hosiery/complete-set predicates, statement-piece detector,
+// weather filter, sort comparators, sleeve classifier, taxonomy migration,
+// and the server-wins mergeItems.
 
 import { BAG_SUBCATEGORIES, BAG_NAME_RE, weatherMatches } from "../constants/taxonomy.js";
 import {

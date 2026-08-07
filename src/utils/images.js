@@ -35,17 +35,23 @@ export function compressImage(dataUrl, maxDim = 400, quality = 0.6, transparent 
   });
 }
 
-export async function imageToBase64(src) {
-  if (!src) return null;
-  if (src.startsWith("data:")) return src;
-  const res = await fetch(src);
-  const blob = await res.blob();
+// Blob → data URL. Shared by imageToBase64, bgRemoval, and Settings so the
+// FileReader plumbing (with its error path) exists exactly once.
+export function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+
+export async function imageToBase64(src) {
+  if (!src) return null;
+  if (src.startsWith("data:")) return src;
+  const res = await fetch(src);
+  const blob = await res.blob();
+  return blobToDataUrl(blob);
 }
 
 // Compute the alpha bounding box of an image — the smallest rectangle that
