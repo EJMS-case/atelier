@@ -349,6 +349,19 @@ export function mergeItems(sbItems, localItems) {
   return merged.map(normalizeItem);
 }
 
+// ── ITEM-ID RESOLUTION ──────────────────────────────────────────────────────
+// Resolve a list of stored garment ids (strings, numbers, or {id} objects —
+// legacy rows mix all three) against the live closet. Map-backed so callers
+// resolving many looks don't rescan the items array per id; the String()
+// key normalizes numeric-vs-string id drift. Missing ids (deleted items)
+// drop out silently.
+export function resolveItemIds(items, ids) {
+  const byId = new Map(items.map(it => [String(it.id), it]));
+  return (ids || [])
+    .map(raw => byId.get(String(typeof raw === "object" && raw !== null ? raw.id : raw)))
+    .filter(Boolean);
+}
+
 // ── CATEGORY DISPLAY ORDER ──────────────────────────────────────────────────
 // The order look/outfit cards render their pieces in (outer layers first,
 // grounding pieces last). Single source of truth for LookCard, SavedLookCard,

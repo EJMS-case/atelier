@@ -750,6 +750,11 @@ export default function App() {
     })();
     return {
       ...look,
+      // Stable identity for the rendered card. The list key used to be the
+      // joined item ids, but the in-place editor (swap/remove/add) changes
+      // those — an id-based key would remount the card mid-edit and close
+      // the editor after every swap. Edits preserve _uid via spread.
+      _uid: look._uid || Math.random().toString(36).slice(2),
       items: (look.items || []).map(item =>
         typeof item === "object" ? item.id : String(item).replace(/^ID:/i, "").trim()
       ),
@@ -824,16 +829,36 @@ export default function App() {
       // final set. For "fresh", normalizedLooks is the whole thing; for
       // "append", we need to keep prior looks and replace only the tail.
       setOutfits(prev => {
-        if (mode === "append") {
-          // Discard the (possibly partial) tail streamed in this batch and
-          // splice in the validated final looks. Trim by the count actually
-          // streamed — salvage can make the final set larger or smaller than
-          // what streamed, and trimming by final size would eat prior looks.
-          const priorCount = (prev?.length || 0) - streamedCount;
-          const head = (prev || []).slice(0, Math.max(0, priorCount));
-          return [...head, ...normalizedLooks];
-        }
-        return normalizedLooks;
+        // For "append", only the streamed tail of THIS batch is replaced —
+        // trim by the count actually streamed, since salvage can make the
+        // final set larger or smaller than what streamed, and trimming by
+        // final size would eat prior looks. Reconciliation below must only
+        // see that tail, or an edited PRIOR look would be re-adopted into
+        // the new batch and rendered twice.
+        const priorCount = mode === "append" ? Math.max(0, (prev?.length || 0) - streamedCount) : 0;
+        const head = (prev || []).slice(0, priorCount);
+        const tail = (prev || []).slice(priorCount);
+        // The final set gets fresh _uids from normalizeLooks, but the streamed
+        // version of the same look is already on screen (possibly hearted, or
+        // being edited). Re-adopt the prior _uid when the item set is
+        // unchanged so the card doesn't remount; if the user already swapped
+        // pieces on the streamed copy (user_edited), keep HER version — her
+        // edit beats a revalidation of the very look she just changed.
+        const tailByIds = new Map(tail.map(lk => [(lk.items || []).join(","), lk]));
+        const consumed = new Set();
+        const reconciled = normalizedLooks.map(lk => {
+          const match = tailByIds.get((lk.items || []).join(","));
+          if (match && !consumed.has(match._uid)) {
+            consumed.add(match._uid);
+            return { ...lk, _uid: match._uid, user_edited: match.user_edited };
+          }
+          // Same look, edited on screen while validation finished: the edited
+          // copy's ids no longer match, so pair by generation order instead.
+          const edited = tail.find(t => t.user_edited && !consumed.has(t._uid));
+          if (edited) { consumed.add(edited._uid); return edited; }
+          return lk;
+        });
+        return [...head, ...reconciled];
       });
       setAllLooks(prev => [...prev, ...normalizedLooks].slice(-30));
     } catch(e) {
@@ -1616,8 +1641,11 @@ export default function App() {
             </div>
           )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={`${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={items}
+            <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={items}
               onEditItem={handleEditItemCard}
+              onUpdateLook={(updated) => {
+                setOutfits(prev => (prev || []).map((lk, idx) => idx === i ? updated : lk));
+              }}
               onRate={async (lk, rating) => {
                 try {
                   const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
