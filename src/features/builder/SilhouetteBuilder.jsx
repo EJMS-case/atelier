@@ -13,6 +13,7 @@ import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
+import { normalizeBoxToContent, aspectLockedResize } from "./boxMath.js";
 import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
 
 const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
@@ -244,17 +245,8 @@ export default function SilhouetteBuilder({
       setPositions(prev => {
         const cur = prev[key];
         if (!cur?.w || !cur?.h) return prev;
-        const wPx = (cur.w / 100) * rect.width;
-        const hPx = (cur.h / 100) * rect.height;
-        const boxAR = wPx / hPx;
-        if (Math.abs(boxAR / imgAR - 1) < 0.02) return prev; // already hugging
-        let cw = wPx, ch = hPx, cx = (cur.x / 100) * rect.width, cy = (cur.y / 100) * rect.height;
-        if (boxAR > imgAR) { cw = hPx * imgAR; cx += (wPx - cw) / 2; }
-        else               { ch = wPx / imgAR; cy += (hPx - ch) / 2; }
-        return { ...prev, [key]: {
-          x: (cx / rect.width) * 100,  y: (cy / rect.height) * 100,
-          w: (cw / rect.width) * 100,  h: (ch / rect.height) * 100,
-        } };
+        const next = normalizeBoxToContent(cur, rect.width, rect.height, imgAR);
+        return next === cur ? prev : { ...prev, [key]: next };
       });
       return;
     }
@@ -694,32 +686,17 @@ export default function SilhouetteBuilder({
                   // ratio. The old free-form handle grew w/h independently,
                   // which letterboxed the piece inside its own box — dead
                   // space came right back after the auto-fit had removed it.
-                  const { startPos, cW, cH } = dragState;
-                  const w0 = (startPos.w / 100) * cW;
-                  const h0 = (startPos.h / 100) * cH;
-                  if (!w0 || !h0) return;
+                  // Math lives in boxMath.js so the hug invariant is node-tested.
                   const dims = imgDims.current[key];
-                  const imgAR = dims?.w && dims?.h ? dims.w / dims.h : w0 / h0;
-                  // Base = the rect the contained image occupies at drag start
-                  // (equals the box once it hugs; safe either way).
-                  const bw = Math.min(w0, h0 * imgAR);
-                  const bh = bw / imgAR;
-                  const dxPx = e.clientX - dragState.startX;
-                  const dyPx = e.clientY - dragState.startY;
-                  let s = ((bw + dxPx) / bw + (bh + dyPx) / bh) / 2;
-                  // Clamp the SCALE so both dimensions respect the 8% floor and
-                  // the canvas edges — clamping w/h separately would break AR.
-                  const sMin = Math.max(0.08 * cW / bw, 0.08 * cH / bh);
-                  const sMax = Math.min(((100 - startPos.x) / 100) * cW / bw, ((100 - startPos.y) / 100) * cH / bh);
-                  s = Math.max(sMin, Math.min(sMax, s));
-                  setPositions(prev => ({
-                    ...prev,
-                    [key]: {
-                      ...startPos,
-                      w: (bw * s / cW) * 100,
-                      h: (bh * s / cH) * 100,
-                    }
-                  }));
+                  const next = aspectLockedResize({
+                    startPos: dragState.startPos,
+                    cW: dragState.cW,
+                    cH: dragState.cH,
+                    imgAR: dims?.w && dims?.h ? dims.w / dims.h : 0,
+                    dx: e.clientX - dragState.startX,
+                    dy: e.clientY - dragState.startY,
+                  });
+                  setPositions(prev => ({ ...prev, [key]: next }));
                 }}
                 onPointerUp={() => setDragState(null)}
               >
