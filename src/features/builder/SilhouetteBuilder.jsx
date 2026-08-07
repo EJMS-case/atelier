@@ -200,6 +200,10 @@ export default function SilhouetteBuilder({
   // controls so they know which item to raise/lower. Key = posKey(slot, itemId).
   const [activeCanvasKey, setActiveCanvasKey] = useState(null);
   const canvasRef = useRef(null);
+  // Trimmed natural dimensions per (slot,itemId), recorded when each
+  // TrimmedImage decodes. The resize handler locks the box to this aspect
+  // ratio so resizing can't reintroduce letterbox dead space around the piece.
+  const imgDims = useRef({});
 
   // Default position for an item, with a per-instance offset for multi-slots
   // so stacking items don't perfectly overlap on first render.
@@ -225,7 +229,35 @@ export default function SilhouetteBuilder({
   function fitBoxToImage(slot, itemId, naturalW, naturalH) {
     if (!naturalW || !naturalH) return;
     const key = posKey(slot, itemId);
-    if (autoFitted.has(key)) return;
+    if (autoFitted.has(key)) {
+      // Already placed (restored from a saved layout, or user-touched). Don't
+      // re-fit — but DO shrink the box to the rect the contained image actually
+      // occupies. Layouts saved before boxes hugged (or resized by the old
+      // free-form handle) carry letterbox dead space; because objectFit:contain
+      // centers the piece, collapsing the box to the content rect leaves the
+      // rendered garment pixel-identical — only the outline and the resize
+      // handle move in to hug it. Skip mid-drag so we don't fight the pointer.
+      if (dragState?.key === key) return;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect?.width || !rect?.height) return;
+      const imgAR = naturalW / naturalH;
+      setPositions(prev => {
+        const cur = prev[key];
+        if (!cur?.w || !cur?.h) return prev;
+        const wPx = (cur.w / 100) * rect.width;
+        const hPx = (cur.h / 100) * rect.height;
+        const boxAR = wPx / hPx;
+        if (Math.abs(boxAR / imgAR - 1) < 0.02) return prev; // already hugging
+        let cw = wPx, ch = hPx, cx = (cur.x / 100) * rect.width, cy = (cur.y / 100) * rect.height;
+        if (boxAR > imgAR) { cw = hPx * imgAR; cx += (wPx - cw) / 2; }
+        else               { ch = wPx / imgAR; cy += (hPx - ch) / 2; }
+        return { ...prev, [key]: {
+          x: (cx / rect.width) * 100,  y: (cy / rect.height) * 100,
+          w: (cw / rect.width) * 100,  h: (ch / rect.height) * 100,
+        } };
+      });
+      return;
+    }
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect?.width) return;
     const imgAR = naturalW / naturalH;
@@ -635,7 +667,10 @@ export default function SilhouetteBuilder({
                 <TrimmedImage
                   src={item.image}
                   alt=""
-                  onLoad={(meta) => fitBoxToImage(slot, item.id, meta.naturalWidth, meta.naturalHeight)}
+                  onLoad={(meta) => {
+                    imgDims.current[key] = { w: meta.naturalWidth, h: meta.naturalHeight };
+                    fitBoxToImage(slot, item.id, meta.naturalWidth, meta.naturalHeight);
+                  }}
                   style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}
                 />
               )}
@@ -654,14 +689,35 @@ export default function SilhouetteBuilder({
                 }}
                 onPointerMove={(e) => {
                   if (!dragState || dragState.key !== key || dragState.type !== "resize") return;
-                  const dx = (e.clientX - dragState.startX) / dragState.cW * 100;
-                  const dy = (e.clientY - dragState.startY) / dragState.cH * 100;
+                  // Aspect-locked resize: scale the box uniformly from the
+                  // pointer's diagonal pull, holding the trimmed image's aspect
+                  // ratio. The old free-form handle grew w/h independently,
+                  // which letterboxed the piece inside its own box — dead
+                  // space came right back after the auto-fit had removed it.
+                  const { startPos, cW, cH } = dragState;
+                  const w0 = (startPos.w / 100) * cW;
+                  const h0 = (startPos.h / 100) * cH;
+                  if (!w0 || !h0) return;
+                  const dims = imgDims.current[key];
+                  const imgAR = dims?.w && dims?.h ? dims.w / dims.h : w0 / h0;
+                  // Base = the rect the contained image occupies at drag start
+                  // (equals the box once it hugs; safe either way).
+                  const bw = Math.min(w0, h0 * imgAR);
+                  const bh = bw / imgAR;
+                  const dxPx = e.clientX - dragState.startX;
+                  const dyPx = e.clientY - dragState.startY;
+                  let s = ((bw + dxPx) / bw + (bh + dyPx) / bh) / 2;
+                  // Clamp the SCALE so both dimensions respect the 8% floor and
+                  // the canvas edges — clamping w/h separately would break AR.
+                  const sMin = Math.max(0.08 * cW / bw, 0.08 * cH / bh);
+                  const sMax = Math.min(((100 - startPos.x) / 100) * cW / bw, ((100 - startPos.y) / 100) * cH / bh);
+                  s = Math.max(sMin, Math.min(sMax, s));
                   setPositions(prev => ({
                     ...prev,
                     [key]: {
-                      ...dragState.startPos,
-                      w: Math.max(8, Math.min(100 - dragState.startPos.x, dragState.startPos.w + dx)),
-                      h: Math.max(8, Math.min(100 - dragState.startPos.y, dragState.startPos.h + dy)),
+                      ...startPos,
+                      w: (bw * s / cW) * 100,
+                      h: (bh * s / cH) * 100,
                     }
                   }));
                 }}
