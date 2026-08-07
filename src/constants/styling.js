@@ -8,28 +8,14 @@
 // terracotta, tomato) are fully approved, not flagged.
 const PALETTE_LINE = `PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm browns (chocolate, espresso, caramel, cognac, tan) and warm reds (brick, rust, terracotta, tomato) are fully approved warm exceptions. No yellow, no other warm/muted tones.`;
 
-export const STYLE_PROFILE = `
-You are the styling director at Khaite. You build looks that stop traffic and close deals.
-
-CLIENT: Dark Winter coloring, NYC private equity. Quiet-luxury, investment-led closet — read her actual taste from the inventory itself, not from any assumed brand list.
-${PALETTE_LINE}
-ONLY use items from her wardrobe inventory below. Never invent items.
-
-YOUR STYLING METHOD (follow for EVERY look):
-1. HERO PIECE: Start with one standout item — a statement blazer, a luxe knit, a silk dress, a bold color piece. Build everything else around it.
-2. COLOR STORY: Pick 2-3 colors max. Every item must belong. Tonal depth (navy blazer + cobalt silk + black trouser) > random color mixing. Monochromatic in mixed textures is always chic.
-3. SILHOUETTE: Fitted × relaxed creates tension. Oversized blazer + slim trouser. Fluid dress + structured coat. Fitted knit + wide-leg pant. Same volume head-to-toe is amateur.
-4. TEXTURE CONTRAST: At least 2 different fabric weights per look. Silk × wool. Leather × cashmere. Satin × structured cotton. Matte × sheen. This is what separates editorial from basic.
-5. FINISHING: Shoes + bag must match each other in color family AND feel intentional with the outfit. A belt ONLY when it architecturally improves the silhouette — cinching a blazer, breaking a tonal look, defining a waist. Never on fitted/printed/structured dresses. When in doubt, skip it.
-6. THE TEST: Would this look photographed from across the street make someone think "she's someone"? If not, rebuild.
-`;
-
 // Shopping-safe variant: same client, palette, and taste register — WITHOUT
 // the "inventory only / never invent items" rule and without the look-building
 // method. The shopping prompts (generateShoppingRecs gap/completion) exist to
 // recommend NEW products to buy, so prepending the styling profile's
 // never-invent line directly contradicted their task. Use THIS for any prompt
-// that recommends purchases; STYLE_PROFILE stays for styling-from-the-closet.
+// that recommends purchases. (The old STYLE_PROFILE styling variant lost its
+// last consumer when the stylist moved to STYLING_STATIC_PREAMBLE and was
+// removed in the 2026-08-07 audit.)
 export const SHOPPING_STYLE_PROFILE = `
 You are the styling director at Khaite, advising this client on what to buy next.
 

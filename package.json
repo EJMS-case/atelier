@@ -11,11 +11,12 @@
     "test:matrix-live": "node scripts/style-me-matrix-live.mjs",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "test:coerce": "node scripts/coerce-looks-shapes.test.mjs",
+    "test:boxmath": "node scripts/box-math.test.mjs",
     "test:validator": "node scripts/styling-validator.test.mjs",
     "test:filters": "node scripts/style-filters.test.mjs",
     "test:rotation": "node scripts/rotation.test.mjs",
     "test:weather": "node scripts/weather.test.mjs",
-    "test": "npm run test:coerce && npm run test:validator && npm run test:filters && npm run test:freetext && npm run test:rotation && npm run test:weather && npm run test:matrix",
+    "test": "npm run test:coerce && npm run test:boxmath && npm run test:validator && npm run test:filters && npm run test:freetext && npm run test:rotation && npm run test:weather && npm run test:matrix",
     "test:freetext": "node scripts/free-text-rescue.test.mjs"
   },
   "dependencies": {

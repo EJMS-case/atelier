@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect } from "react";
+import RouteFallback from "./RouteFallback.jsx";
 import { s } from "../ui/styles.js";
 import { HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
@@ -8,18 +9,12 @@ import { tagsFor, joinTags } from "../lib/multitag.js";
 import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatDate } from "../lib/lookFilters.js";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
+import { nyToday } from "../lib/time.js";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
 // opened, even if the user never tapped Edit on a logged outfit.
 const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuilder.jsx"));
-
-// Minimal placeholder while the builder chunk loads — mirrors App's RouteFallback.
-const BuilderFallback = () => (
-  <div style={{ padding: "40px 16px", display: "flex", justifyContent: "center" }}>
-    <span style={s.spinner}/>
-  </div>
-);
 
 export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
@@ -46,7 +41,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   };
   useEffect(() => { loadLogs(); }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = nyToday(); // NYC date — the past/future merge boundary must not shift at 8pm ET
 
   // Merge real wear logs with past/today planner outfits into one history. A log
   // and a planner pin for the same day + same pieces are the same wear, so we
@@ -136,7 +131,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   // (which routes to sb.updateOutfitLog when editing_log_id is set).
   if (editingLog && onSaveLook) {
     return (
-      <Suspense fallback={<BuilderFallback/>}>
+      <Suspense fallback={<RouteFallback/>}>
         <SilhouetteBuilder
           items={items}
           apiKey={apiKey}

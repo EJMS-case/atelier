@@ -18,7 +18,7 @@
 // the original <img> source so the piece still renders, just not trimmed.
 
 import { useEffect, useRef, useState } from "react";
-import { getAlphaBbox } from "../utils/images.js";
+import { getAlphaBbox, PHOTO_MAX_DIM } from "../utils/images.js";
 
 // Cropped transparent PNGs are cached as data URLs; cap their dimension so a
 // 2000px source doesn't sit in memory at full size (collage slots are ≤ ~300px).
@@ -26,7 +26,7 @@ import { getAlphaBbox } from "../utils/images.js";
 // time (720 here would have thrown away the extra detail the 1000px upload cap
 // now keeps). MAX_CACHE drops in step so total cached pixels stay flat:
 // 300 × 720² ≈ 155M px before, 150 × 1000² = 150M px now.
-const MAX_DIM = 1000;
+const MAX_DIM = PHOTO_MAX_DIM;
 const MAX_CACHE = 150;
 const cache = new Map();     // src -> { url, nw, nh }
 const inflight = new Map();  // src -> Promise<{ url, nw, nh }>

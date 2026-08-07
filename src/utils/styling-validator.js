@@ -2,8 +2,9 @@
 // Wraps the Anthropic API call with structured validation and auto-retry.
 // Ensures every generated look meets hard constraints before reaching the UI.
 // Structured output comes via Anthropic tool-use + a Zod shape check, then
-// runs through the 9 semantic validators below (item-ID resolution, exclusion
-// compliance, lower-half coverage, etc.).
+// runs through the semantic validators below (see runAllChecks for the full
+// hard/soft roster — item-ID resolution, exclusions, coverage, weather, sets,
+// hosiery, and friends).
 
 import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
@@ -1448,12 +1449,28 @@ export async function generateValidatedLooks({
                 // can still ship a completed version of a held-back look.
                 ...checkShoes(candidate, idMap, allItems, occasion),
                 ...checkWeatherCompliance(candidate, idMap, allItems, weather),
+                // 2026-08-07: the gate must cover every NON-NEGOTIABLE hard
+                // check, because a streamed look survives even a terminal
+                // validation failure (App keeps shown looks instead of an
+                // error wall). Without these, a look violating the user's own
+                // "No …" filter, an occasion ban, tights-with-trousers, bare
+                // shoulders at Work in the cold, or a 2-item non-look could
+                // reach the screen and be saveable. Taste-level checks stay
+                // out — soft failures never gate.
+                ...checkExclusions(candidate, idMap, allItems, activeExclusions),
+                ...checkOccasion(candidate, idMap, allItems, occasionSlots, [...forceIncludeIds, ...onlyRescueIds]),
+                ...checkNoDuplicates(candidate),
+                ...checkCoordSets(candidate, idMap, allItems),
+                ...checkCompleteSets(candidate, idMap, allItems),
+                ...checkHosieryPairing(candidate, idMap, allItems),
+                ...checkShoulderCoverage(candidate, idMap, allItems, occasion, weather),
+                ...checkItemCount(candidate, idMap, allItems).filter(f => f.includes("minimum")),
               ];
               // Also guard against duplicating items already shown.
               const newIds = (candidate.looks[0]?.items || []).map(cleanLookItemId);
               const hasDupe = newIds.some(id => streamedIds.has(id));
               if (cFailures.length === 0 && !hasDupe) {
-                const resolved = resolveIds(candidate, idMap, allItems, occasion);
+                const resolved = resolveIds(candidate, idMap, occasion);
                 newIds.forEach(id => streamedIds.add(id)); // short IDs for cross-look dupe check
                 onLook(resolved.looks[0]);
               }
@@ -1534,7 +1551,7 @@ export async function generateValidatedLooks({
 
     if (hardFailures.length === 0) {
       // Passed all hard checks — resolve IDs and return
-      return resolveIds(parsed, idMap, allItems, occasion);
+      return resolveIds(parsed, idMap, occasion);
     }
 
     lastFailures = failures;
@@ -1600,7 +1617,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:item_swap",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by swapping offending items for eligible ones");
-        return resolveIds(swapped, idMap, allItems, occasion);
+        return resolveIds(swapped, idMap, occasion);
       }
       // Swapping helped but didn't fully clear the board — carry the swapped
       // looks + fresh failures into the drop salvage below.
@@ -1624,7 +1641,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:item_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by dropping offending items");
-        return resolveIds(trimmed, idMap, allItems, occasion);
+        return resolveIds(trimmed, idMap, occasion);
       }
       // Item-dropping helped but didn't fully clear the board — hand the
       // trimmed looks + fresh failure list to the salvage steps below.
@@ -1650,7 +1667,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:shoe_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by adding an eligible shoe to a shoe-less look");
-        return resolveIds(completed, idMap, allItems, occasion);
+        return resolveIds(completed, idMap, occasion);
       }
       // Shoes were added but other hard failures remain — hand the completed
       // looks + fresh failure list to the look-drop salvage below.
@@ -1684,7 +1701,7 @@ export async function generateValidatedLooks({
         const salvaged = { ...lastParsed, looks: surviving };
         delete salvaged.notes;
         console.warn(`[Atelier Validator] Salvaging response — dropped ${dropped} look(s):`, dropReasons);
-        return resolveIds(salvaged, idMap, allItems, occasion);
+        return resolveIds(salvaged, idMap, occasion);
       }
     }
   }
@@ -1714,7 +1731,7 @@ export async function generateValidatedLooks({
 /**
  * Resolve short IDs to real Supabase UUIDs and attach item metadata.
  */
-function resolveIds(parsed, idMap, allItems, occasion) {
+function resolveIds(parsed, idMap, occasion) {
   if (!parsed.looks) return parsed;
 
   parsed.looks.forEach(look => {

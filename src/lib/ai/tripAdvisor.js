@@ -8,6 +8,7 @@
 //      picks items from the wardrobe and returns a single structured look.
 
 import { z } from "zod";
+import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
 import { filterByWeather } from "../../utils/item-helpers.js";
@@ -124,7 +125,6 @@ const TripLooksTool = {
 export async function generateTripDayLook(items, occasion, weather, destination, apiKey, opts = {}) {
   if (!apiKey || !items?.length) return null;
 
-  const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
   const highF = WEATHER_HIGH[weather] || 60;
 
   // Beach / Resort days explicitly want swim + cover-ups in the inventory.

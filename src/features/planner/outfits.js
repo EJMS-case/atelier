@@ -75,6 +75,15 @@ export function outfitCoverageGaps(items) {
   return gaps;
 }
 
+// Union of tag arrays/scalars, deduped, falsy dropped. Every plan-day write
+// path that touches an existing row should pass
+// occasions/weathers through this with the row's stored plurals FIRST — the
+// stored arrays can carry builder-authored multi-tags that outfit-derived
+// values would silently collapse (production drift, fixed 2026-08-07).
+export function unionTags(...lists) {
+  return [...new Set(lists.flat().filter(Boolean))];
+}
+
 // When saving, we serialize the working outfits array AND mirror outfit #0 into
 // the legacy fields so anything still reading plan.items / plan.occasion keeps
 // rendering the "primary" look for the day. Calendar grid, DayModal, weekly

@@ -119,13 +119,10 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
       try {
         let base64 = null;
         try {
-          const resp = await fetch(imageUrl);
-          const blob = await resp.blob();
-          base64 = await new Promise(resolve => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result.split(",")[1]);
-            reader.readAsDataURL(blob);
-          });
+          // Shared helper (utils/images.js) — the old inline FileReader had no
+          // onerror handler, so a failed read hung the Promise forever.
+          const dataUrl = await imageToBase64(imageUrl);
+          base64 = dataUrl ? dataUrl.split(",")[1] : null;
         } catch { /* skip if image can't be fetched */ }
         if (!base64) continue;
         const aiRes = await anthropicFetch({
@@ -253,9 +250,11 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         const trimmed = await trimTransparentBorders(result.image);
         const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
         const url = await sb.uploadImage(item.id, compressed);
-        // BG removal pipeline already trims as its last step, so the trim
-        // flag is set here too — no need for a second pass in handleBatchTrim.
-        if (onUpdateItem) await onUpdateItem(item.id, { image: url, has_bg: false, is_trimmed: true });
+        // The trim just ran (trimTransparentBorders above), so write BOTH flags.
+        // is_recut is the honest gate every consumer checks (handleBatchTrim,
+        // the drip, the Settings counter) — omitting it here made freshly
+        // bg-removed items re-enter the trim queue and re-do finished work.
+        if (onUpdateItem) await onUpdateItem(item.id, { image: url, has_bg: false, is_trimmed: true, is_recut: true });
       } catch { errors++; }
       setBatchProgress({ done: i + 1, total: toProcess.length, errors });
     }
@@ -582,9 +581,10 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         )}
 
         {/* Trim pass — tightly crop already-transparent items that haven't
-            been trimmed yet. Items mark themselves is_trimmed: true after a
-            successful pass so re-running this is a no-op when there's
-            nothing new to do. */}
+            been re-cut yet. Items mark themselves is_recut: true after a
+            successful pass (that's the gate itemsNeedingTrim checks — never
+            trust is_trimmed, see #150) so re-running this is a no-op when
+            there's nothing new to do. */}
         {itemsNeedingTrim.length > 0 && !trimRunning && !trimDone && (
           <div style={{padding:"6px 0"}}>
             <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:6}}>

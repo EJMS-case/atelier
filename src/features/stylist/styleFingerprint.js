@@ -12,6 +12,7 @@
 // Output: a plain-text block of 4–8 short bullet observations.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { asArray } from "../../lib/multitag.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
 
 // Compact one-line representation of an outfit. Resolves garment_ids to the
@@ -55,18 +56,14 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], a
   // that also lives on the calendar isn't double-counted in the pattern math.
   const seen = new Set();
   const rows = [];
-  // Local copy of the array-normalizer so this module stays callable from
-  // any context without importing the multitag helper (kept independent so
-  // a misconfigured bundler doesn't break fingerprint generation).
-  const asArr = v => Array.isArray(v) ? v.filter(Boolean) : (v ? [v] : []);
   const push = (r, dateField) => {
     const idsKey = (r.garment_ids || r.items || []).slice().sort().join(",");
     const date = r[dateField];
     const key = `${date || ""}|${idsKey}`;
     if (idsKey && !seen.has(key)) {
       seen.add(key);
-      const occList = asArr(r.occasions).length ? asArr(r.occasions) : asArr(r.occasion);
-      const wxList  = asArr(r.weathers).length  ? asArr(r.weathers)  : asArr(r.weather);
+      const occList = asArray(r.occasions).length ? asArray(r.occasions) : asArray(r.occasion);
+      const wxList  = asArray(r.weathers).length  ? asArray(r.weathers)  : asArray(r.weather);
       rows.push({
         date,
         // Join multi-tagged contexts with "+" so the AI sees "Work+Travel"

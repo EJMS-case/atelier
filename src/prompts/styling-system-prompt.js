@@ -265,7 +265,7 @@ ${closetItems}
 
 CRITICAL ID RULE: every \`items[].id\` in your response MUST be a W-ID from the inventory above in EXACT 3-digit padded format (W001, W014, W092). NEVER drop leading zeros — "W51" is wrong, "W051" is correct. Never invent IDs, never use timestamps, never use UUIDs. If you can't satisfy a constraint with the inventory, choose the closest match — don't fabricate.
 
-CRITICAL OUTPUT RULE: pass \`looks\` to the tool as a RAW JSON ARRAY value — NOT as a JSON-encoded string. \`"looks": [{...}]\` is correct; \`"looks": "[{\\"vibe\\"...}]"\` is wrong and will be rejected.
+CRITICAL OUTPUT RULE: pass \`looks\` to the tool as a RAW JSON ARRAY value — NOT as a JSON-encoded string. \`"looks": [{...}]\` is the correct shape.
 
 Seed: ${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 

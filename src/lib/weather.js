@@ -22,6 +22,13 @@ export const FORECAST_HORIZON_DAYS = 16;
 
 // Map a Fahrenheit high to one of the chips. Thresholds match the
 // existing weather labels in App.jsx (85 / 70 / 55 / 40).
+// Inverse of bucketFromHigh: a representative high (°F) per bucket, for code
+// that needs a number from a label (trip-day prompts, climate overrides).
+// Was duplicated verbatim in CalendarView + tripAdvisor — the forward mapping
+// already drifted once when copied (see tripAdvisor's tempToBucket note), so
+// the reverse now lives here with it.
+export const WEATHER_HIGH = { Hot: 88, Warm: 76, Mild: 60, Cool: 48, Cold: 34 };
+
 export function bucketFromHigh(highF) {
   if (highF == null) return "";
   if (highF >= 85) return "Hot";

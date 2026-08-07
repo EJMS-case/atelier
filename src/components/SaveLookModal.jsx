@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
 import { OCCASIONS } from "../constants/taxonomy.js";
+import { nyToday } from "../lib/time.js";
 
 export default function SaveLookModal({ look, lookItems, onSave, onClose }) {
-  const today = new Date().toISOString().slice(0, 10);
+  // NYC today — toISOString() is UTC, which from ~8pm ET reads as tomorrow
+  // and would stamp an evening log with the wrong date.
+  const today = nyToday();
   const [logAsWorn, setLogAsWorn] = useState(false);
   const [dateWorn,  setDateWorn]  = useState(today);
   const [occasion,  setOccasion]  = useState(look.occasion || "Work");

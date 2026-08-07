@@ -4,6 +4,8 @@
 // the lib is installed. On any failure we return the original image and flag
 // has_bg: true so the UI can surface a TODO to the user.
 
+import { blobToDataUrl } from "../utils/images.js";
+
 const REMOVE_BG_URL = "https://api.remove.bg/v1.0/removebg";
 
 /**
@@ -80,11 +82,3 @@ async function imglyStrip(base64DataUrl) {
   return await blobToDataUrl(blob);
 }
 
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}

@@ -122,7 +122,11 @@ const OCCASION_PREFILTERS = {
     // their full pools so the AI can build occasion-appropriate separates
     // when no qualifying dress exists.
     removeCategories: new Set(["Athleisure", "Loungewear", "Swim"]),
-    removeSubcategories: new Set(["Jeans", "T-Shirts", "Tanks", "Shorts", "Sneakers"]),
+    // "Tanks" deliberately absent (2026-08-07): the owner's standing rule is
+    // tanks are layering bases, never banned — #156 removed them from
+    // OCCASION_SLOTS.banned but this prefilter still stripped them from the
+    // Occasion pool, so the promptNote advertised pieces the model never saw.
+    removeSubcategories: new Set(["Jeans", "T-Shirts", "Shorts", "Sneakers"]),
     removeKeywords: ["ripped", "distressed", "athletic", "sneakers", "casual only", "weekend only"],
     // Category-specific KEEP gate: dresses outside Occasionwear must explicitly
     // be flagged as event-appropriate in their notes/name/subcategory.
@@ -136,9 +140,10 @@ const OCCASION_PREFILTERS = {
   },
   Dinner: {
     // Evening out (dinner/date/drinks). The OCCASION_SLOTS.Dinner.banned list
-    // already drops athleisure/lounge/swim + tees/tanks/shorts/sandals; this
-    // light prefilter just strips anything explicitly tagged athletic or
-    // strictly-casual so those don't slip into an elevated evening look.
+    // already drops athleisure/lounge/swim + tees/shorts/sandals (tanks were
+    // un-banned in #156 — they layer); this light prefilter just strips
+    // anything explicitly tagged athletic or strictly-casual so those don't
+    // slip into an elevated evening look.
     removeCategories: new Set(),
     removeSubcategories: new Set(),
     removeKeywords: ["athletic", "gym", "workout", "sporty", "weekend only", "casual only"],
@@ -505,9 +510,48 @@ export function sampleClosetItems({
   // boots out lets the floor backfill the least-recently-used real options.
   if (hotOrWarm) pool = pool.filter(it => !isBootItem(it));
   if (coolOrCold) pool = pool.filter(it => !(it.subcategory === "Sandals" || /sandal/i.test(it.name || "")));
+  // Same principle, remaining buckets (2026-08-07): everything below mirrors a
+  // rule checkWeatherCompliance rejects 100% of the time — no taste involved —
+  // so keeping these in the pool is retry-bait, and (the 0y starvation lesson)
+  // never-suggestible pieces stay eternally "fresh" and crowd the KEEP_FLOOR
+  // backfill out of their bucket: knits in Hot could starve the TOPS bucket
+  // exactly the way boots starved shoes. Regexes are copied from
+  // checkWeatherCompliance — keep them in sync with the validator, not vice
+  // versa (the validator stays authoritative; this gate may only be equal or
+  // NARROWER, never wider, or the pool loses pieces the validator would pass).
+  const wxText = (it) => ((it.name || "") + " " + (it.notes || "") + " " + (it.subcategory || "") + " " + (it.material || "")).toLowerCase();
+  const HEAVY_RE = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i;
+  const WINTER_ONLY_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted/i;
+  const isHotBucket = weatherMatches(wRaw, "Hot");
+  if (hotOrWarm) {
+    pool = pool.filter(it => {
+      if ((it.season_weight || "").toLowerCase() === "winter") return false;
+      if (it.category === "Knits") {
+        if (isHotBucket) return false; // Hot: every knit hard-fails
+        if (it.knit_weight === "Chunky/Winter" || it.subcategory === "Pullovers" || HEAVY_RE.test(wxText(it))) return false;
+      }
+      // Heavy fabric on-body (non-Outerwear) is an unconditional fail in both
+      // Hot and Warm; Outerwear has its own conditional rules — leave those
+      // to the validator.
+      if (it.category !== "Outerwear" && HEAVY_RE.test(wxText(it))) return false;
+      return true;
+    });
+  }
+  if (weatherMatches(wRaw, "Mild")) {
+    pool = pool.filter(it =>
+      !WINTER_ONLY_RE.test(wxText(it)) && (it.season_weight || "").toLowerCase() !== "winter");
+  }
+  if (coolOrCold) {
+    pool = pool.filter(it => {
+      if ((it.season_weight || "").toLowerCase() === "summer") return false;
+      // lightOnly mirror: sandals handled above; swim/shorts can't layer warm.
+      if (/bikini|swim|shorts/i.test(wxText(it))) return false;
+      return true;
+    });
+  }
   // Boost applies only when the pool can actually use legwear (a skirt or
   // dress survived the filters): hosiery is exempted from the repeat-rotation
-  // drop in 3b and sorted to the front of the accessories bucket in 6 so the
+  // drop in 3b and sorted to the front of the accessories bucket in step 5 so the
   // stylist always sees it next to the skirts it enables.
   // Skirt detection delegates to the shared FILTER_TYPES.skirts matcher
   // (same L3-aware test the "No/Only Skirts" chips use); Dresses OR'd in

@@ -1,21 +1,24 @@
-// ── F4 — SILHOUETTE BUILDER ──────────────────────────────────────────────────
-// Blank figure with 4 slots (top/bottom/shoes/accessory). Swipe through the
-// closet per slot; tap to lock in. Live preview composites items on the
-// silhouette. On save the silhouette is stripped and only the items are
-// exported on a white background.
+// ── F4 — LOOK BUILDER ────────────────────────────────────────────────────────
+// Manual outfit collage on a white 3:4 canvas. Nine slots (top/bottom/dress/
+// set/swim/shoes/outerwear/bag/accessory) picked from a searchable bottom-
+// sheet grid; multi-slots stack. Pieces drag, aspect-locked resize, and
+// re-layer; boxes auto-fit each garment's trimmed image (boxMath.js). Save
+// composites the arrangement to a 600×800 JPEG and snapshots layout_data so
+// viewers and future edits rebuild the exact arrangement.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
-import { OCCASIONS } from "../../constants/taxonomy.js";
+import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
 import { slotForItem } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
+import { normalizeBoxToContent, aspectLockedResize } from "./boxMath.js";
 import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
 
-const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
+const WEATHERS = WEATHER_SHORTS;
 
 // Builder accent is the deep burgundy, not the brand gold.
 const PALETTE = { ...SHARED_PALETTE, accent: "var(--color-accent-strong)" };
@@ -210,7 +213,7 @@ export default function SilhouetteBuilder({
   function defaultPosFor(slot, itemId) {
     const base = DEFAULT_POSITIONS[slot] || { x: 10, y: 10, w: 40, h: 40 };
     if (!MULTI_SLOTS.has(slot)) return base;
-    const ids = Array.isArray(selections[slot]) ? selections[slot] : (selections[slot] ? [selections[slot]] : []);
+    const ids = asArray(selections[slot]);
     const idx = ids.indexOf(itemId);
     if (idx <= 0) return base;
     // Stagger each subsequent item by a small offset so they're individually grabbable.
@@ -244,17 +247,8 @@ export default function SilhouetteBuilder({
       setPositions(prev => {
         const cur = prev[key];
         if (!cur?.w || !cur?.h) return prev;
-        const wPx = (cur.w / 100) * rect.width;
-        const hPx = (cur.h / 100) * rect.height;
-        const boxAR = wPx / hPx;
-        if (Math.abs(boxAR / imgAR - 1) < 0.02) return prev; // already hugging
-        let cw = wPx, ch = hPx, cx = (cur.x / 100) * rect.width, cy = (cur.y / 100) * rect.height;
-        if (boxAR > imgAR) { cw = hPx * imgAR; cx += (wPx - cw) / 2; }
-        else               { ch = wPx / imgAR; cy += (hPx - ch) / 2; }
-        return { ...prev, [key]: {
-          x: (cx / rect.width) * 100,  y: (cy / rect.height) * 100,
-          w: (cw / rect.width) * 100,  h: (ch / rect.height) * 100,
-        } };
+        const next = normalizeBoxToContent(cur, rect.width, rect.height, imgAR);
+        return next === cur ? prev : { ...prev, [key]: next };
       });
       return;
     }
@@ -366,7 +360,7 @@ export default function SilhouetteBuilder({
     const members = entry.kind === "single" ? [entry.item] : entry.members;
     const pickedCount = members.filter(m => {
       const slot = entry.kind === "single" ? "set" : naturalSlotFor(m);
-      const cur = Array.isArray(selections[slot]) ? selections[slot] : (selections[slot] ? [selections[slot]] : []);
+      const cur = asArray(selections[slot]);
       return cur.includes(m.id);
     }).length;
     if (pickedCount === 0) return "none";
@@ -382,7 +376,7 @@ export default function SilhouetteBuilder({
       entry.members.forEach(m => {
         const slot = naturalSlotFor(m);
         const isMulti = MULTI_SLOTS.has(slot);
-        const cur = Array.isArray(next[slot]) ? [...next[slot]] : (next[slot] ? [next[slot]] : []);
+        const cur = [...asArray(next[slot])];
         if (removing) {
           const filtered = cur.filter(x => x !== m.id);
           if (filtered.length) next[slot] = filtered; else delete next[slot];
@@ -407,7 +401,7 @@ export default function SilhouetteBuilder({
   // Toggle helper. Multi-slots accumulate; single-slots replace.
   const togglePick = (slot, id) => {
     setSelections(prev => {
-      const cur = Array.isArray(prev[slot]) ? prev[slot] : (prev[slot] ? [prev[slot]] : []);
+      const cur = asArray(prev[slot]);
       const isMulti = MULTI_SLOTS.has(slot);
       if (cur.includes(id)) {
         const next = cur.filter(x => x !== id);
@@ -694,32 +688,17 @@ export default function SilhouetteBuilder({
                   // ratio. The old free-form handle grew w/h independently,
                   // which letterboxed the piece inside its own box — dead
                   // space came right back after the auto-fit had removed it.
-                  const { startPos, cW, cH } = dragState;
-                  const w0 = (startPos.w / 100) * cW;
-                  const h0 = (startPos.h / 100) * cH;
-                  if (!w0 || !h0) return;
+                  // Math lives in boxMath.js so the hug invariant is node-tested.
                   const dims = imgDims.current[key];
-                  const imgAR = dims?.w && dims?.h ? dims.w / dims.h : w0 / h0;
-                  // Base = the rect the contained image occupies at drag start
-                  // (equals the box once it hugs; safe either way).
-                  const bw = Math.min(w0, h0 * imgAR);
-                  const bh = bw / imgAR;
-                  const dxPx = e.clientX - dragState.startX;
-                  const dyPx = e.clientY - dragState.startY;
-                  let s = ((bw + dxPx) / bw + (bh + dyPx) / bh) / 2;
-                  // Clamp the SCALE so both dimensions respect the 8% floor and
-                  // the canvas edges — clamping w/h separately would break AR.
-                  const sMin = Math.max(0.08 * cW / bw, 0.08 * cH / bh);
-                  const sMax = Math.min(((100 - startPos.x) / 100) * cW / bw, ((100 - startPos.y) / 100) * cH / bh);
-                  s = Math.max(sMin, Math.min(sMax, s));
-                  setPositions(prev => ({
-                    ...prev,
-                    [key]: {
-                      ...startPos,
-                      w: (bw * s / cW) * 100,
-                      h: (bh * s / cH) * 100,
-                    }
-                  }));
+                  const next = aspectLockedResize({
+                    startPos: dragState.startPos,
+                    cW: dragState.cW,
+                    cH: dragState.cH,
+                    imgAR: dims?.w && dims?.h ? dims.w / dims.h : 0,
+                    dx: e.clientX - dragState.startX,
+                    dy: e.clientY - dragState.startY,
+                  });
+                  setPositions(prev => ({ ...prev, [key]: next }));
                 }}
                 onPointerUp={() => setDragState(null)}
               >
@@ -786,7 +765,7 @@ export default function SilhouetteBuilder({
       {/* Slot status bar — tap any slot to open the picker sheet */}
       <div style={{ display: "flex", gap: 5, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
         {SLOTS.map(s => {
-          const picked = Array.isArray(selections[s.key]) ? selections[s.key] : (selections[s.key] ? [selections[s.key]] : []);
+          const picked = asArray(selections[s.key]);
           const count = picked.length;
           const isActive = activeSlot === s.key && pickerOpen;
           return (
@@ -827,7 +806,7 @@ export default function SilhouetteBuilder({
             {/* Slot tabs inside sheet */}
             <div style={{ display: "flex", gap: 5, overflowX: "auto", padding: "0 16px 8px" }}>
               {SLOTS.map(s => {
-                const cnt = (Array.isArray(selections[s.key]) ? selections[s.key] : (selections[s.key] ? [selections[s.key]] : [])).length;
+                const cnt = (asArray(selections[s.key])).length;
                 return (
                   <button key={s.key} onClick={() => setActiveSlot(s.key)}
                     style={{ fontSize: 10, letterSpacing: "0.09em", padding: "5px 9px", borderRadius: 12, flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer",
@@ -891,7 +870,7 @@ export default function SilhouetteBuilder({
                 <div style={{ gridColumn: "1 / -1", fontSize: 12, color: PALETTE.muted, padding: "28px 0", textAlign: "center" }}>No items in this category.</div>
               )}
               {poolForSlot.map(it => {
-                const curIds = Array.isArray(selections[activeSlot]) ? selections[activeSlot] : (selections[activeSlot] ? [selections[activeSlot]] : []);
+                const curIds = asArray(selections[activeSlot]);
                 const isPicked = curIds.includes(it.id);
                 return (
                   <button key={it.id} onClick={() => togglePick(activeSlot, it.id)}

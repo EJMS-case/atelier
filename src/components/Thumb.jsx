@@ -40,6 +40,20 @@ function pump() {
     Promise.resolve().then(job).finally(() => { inflight--; pump(); });
   }
 }
+// Forget an item's thumb on THIS device — called when its image is replaced.
+// The old invalidation relied solely on a fire-and-forget server DELETE
+// (App.updateItem → sb.removeThumb); if that request failed, the fresh ?v=
+// cache-buster fetched the STALE server object with a 200, onError never
+// fired, and the grid showed the old garment forever. Clearing the local
+// memory forces this device to rebuild (and re-upload) the thumb from the
+// new image regardless of whether the DELETE landed.
+export function forgetThumb(id) {
+  if (!id) return;
+  known.delete(id);
+  attempted.delete(id);
+  persist();
+}
+
 function ensureThumb(item) {
   const id = item?.id;
   if (!id || known.has(id) || attempted.has(id)) return;

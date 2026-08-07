@@ -7,12 +7,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { s } from "../../ui/styles.js";
-import { OCCASIONS } from "../../constants/taxonomy.js";
+import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
 import { compressImage } from "../../utils/images.js";
 import { listInspirations, createInspiration, deleteInspiration, updateInspiration } from "./inspirationApi.js";
 import { summarizeInspiration } from "./summarize.js";
 
-const WEATHERS = ["Hot", "Warm", "Mild", "Cool", "Cold"];
+const WEATHERS = WEATHER_SHORTS;
 
 export default function InspirationView({ apiKey, onBack, items, setItems }) {
   const [loading, setLoading] = useState(items.length === 0);
