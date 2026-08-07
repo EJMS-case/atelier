@@ -205,22 +205,39 @@ export function coerceLooksShape(input, { onRecover } = {}) {
   let out = input;
   const cases = [];
 
-  // Cases 1 + 2: looks is a stringified value
+  // Cases 1 + 2: looks is a stringified value.
+  //
+  // String-mode is FIRST-CLASS as of 2026-08-07. Three escalating levers — the
+  // LooksTool description (#145), the schema property note, and a prompt line
+  // in the dynamic body (#154) — all failed to stop the model double-encoding
+  // the array: every generation from 08-05 onward still arrived stringified
+  // (11/11 `looks_string_parsed` rows, including post-#155 taps). So a string
+  // that JSON.parses CLEANLY is treated as a valid input shape: normalized
+  // without recording a case, which keeps onRecover (and the ai_errors log)
+  // quiet. Only a string that needs tolerant REPAIR — truncation, trailing
+  // garbage, skipped prefixes — still counts as a recovery worth logging.
   if (typeof out.looks === "string") {
-    let parsed = parseLooseJson(out.looks);
-    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.looks)) parsed = parsed.looks;
-    if (Array.isArray(parsed)) {
-      out = { ...out, looks: parsed };
-      cases.push("looks_string_parsed");
-    } else if (parsed === null) {
-      // Case 5: not JSON at all — mine `<parameter>` fragments for the trapped
-      // fields (e.g. vibe) and drop the dead string so case 4 can wrap the
-      // flat look. Real top-level siblings win over fragment values.
-      const fragments = extractParameterFragments(out.looks);
-      if (Object.keys(fragments).length > 0) {
-        const { looks: _dead, ...rest } = out;
-        out = { ...fragments, ...rest };
-        cases.push("looks_fragments");
+    let strict = null;
+    try { strict = JSON.parse(out.looks); } catch { /* needs the loose path */ }
+    if (strict && !Array.isArray(strict) && Array.isArray(strict.looks)) strict = strict.looks;
+    if (Array.isArray(strict)) {
+      out = { ...out, looks: strict };
+    } else {
+      let parsed = parseLooseJson(out.looks);
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.looks)) parsed = parsed.looks;
+      if (Array.isArray(parsed)) {
+        out = { ...out, looks: parsed };
+        cases.push("looks_string_parsed");
+      } else if (parsed === null) {
+        // Case 5: not JSON at all — mine `<parameter>` fragments for the
+        // trapped fields (e.g. vibe) and drop the dead string so case 4 can
+        // wrap the flat look. Real top-level siblings win over fragment values.
+        const fragments = extractParameterFragments(out.looks);
+        if (Object.keys(fragments).length > 0) {
+          const { looks: _dead, ...rest } = out;
+          out = { ...fragments, ...rest };
+          cases.push("looks_fragments");
+        }
       }
     }
   }
