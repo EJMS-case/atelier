@@ -387,6 +387,24 @@ test("onRecover: fires with (original, coerced, cases) only when something chang
   assert.strictEqual(calls.length, 1, "pass-through must not report a recovery");
 });
 
+test("onRecover: CLEAN string-mode is first-class — coerced but not reported (2026-08-07)", () => {
+  // Every lever to stop the model double-encoding the looks array failed
+  // (tool description #145, prompt line #154 — 11/11 taps still stringified),
+  // so a cleanly-parsing string is a valid input shape: normalize silently.
+  const calls = [];
+  const onRecover = (_o, _c, cases) => calls.push(cases);
+
+  const r1 = coerceLooksShape(CASE_1, { onRecover }); // clean {"looks":[…]} wrapper string
+  const r2 = coerceLooksShape(CASE_2, { onRecover }); // clean array string
+  assert.ok(Array.isArray(r1.looks) && r1.looks[0].vibe === "Quiet Luxury");
+  assert.ok(Array.isArray(r2.looks) && r2.looks[0].vibe === "Polished Classic");
+  assert.strictEqual(calls.length, 0, "clean string-mode must not fire onRecover");
+
+  // A string that needed tolerant REPAIR still reports — that's a real anomaly.
+  coerceLooksShape(CASE_B, { onRecover });
+  assert.deepStrictEqual(calls, [["looks_string_parsed"]]);
+});
+
 test("onRecover: case D reports every repair applied, in order", () => {
   const calls = [];
   coerceLooksShape(CASE_D, { onRecover: (_o, _c, cases) => calls.push(cases) });

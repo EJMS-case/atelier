@@ -2,6 +2,16 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — String-mode looks are a first-class shape — 2026-08-07
+
+### Why
+The `looks_string_parsed` watch item is settled: after three escalating levers (LooksTool description in #145, schema property note, prompt line in the dynamic body in #154), the model still double-encodes the looks array as a JSON string on essentially every tap — all 11 `stylist_outfit:recovered` rows since 08-05 are `looks_string_parsed`, including taps after the #155 deploy. The handoff's named next step for that outcome was server-side acceptance.
+
+### Changed — `src/utils/coerce-shapes.js`
+- A `looks` string that `JSON.parse`s cleanly (array, or `{looks:[…]}` wrapper) is now normalized **without recording a case** — `onRecover` stays quiet, so these taps stop writing `stylist_outfit:recovered` rows to `ai_errors`. The table goes back to meaning "something actually went wrong."
+- Strings that need tolerant repair (truncation, trailing garbage, skipped prefixes) still log `looks_string_parsed` — those are genuine anomalies. Fragment mining, items coercion, and all other cases unchanged.
+- Coerce tests 45 → 46: clean string-mode fires no recovery; repaired string still reports.
+
 ## [Unreleased] — Builder boxes hug the garment through resize and reopen — 2026-08-06
 
 ### Why
