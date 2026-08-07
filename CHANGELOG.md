@@ -2,6 +2,20 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Edit a Style Me look in place before saving — 2026-08-07
+
+### Why
+Owner request: when Style Me produces an outfit, she wants to change out a garment or piece **directly on that screen** — keep the look's bones, swap the one piece that's off, then save or schedule it — instead of regenerating the whole look or rebuilding it manually.
+
+### Added
+- **Edit mode on LookCard** (Style Me results): an Edit toggle opens a per-piece list under the collage — Swap any piece, Remove it (guarded at two pieces minimum), or Add a piece. The header shows a subtle `· EDITED` tag once a look has been changed; Save and the ♥ rating both operate on the edited item set.
+- **`SwapItemSheet`** (new component): searchable closet picker for swap/add. Swaps default to same-slot candidates (`slotForItem` — tops for tops, shoes for shoes) with a one-tap "Everything" escape; nothing is banned, only ordered — weather-mismatched pieces sort into a clearly labeled "off-weather" band but stay pickable (no error walls, per the standing rule).
+- **`resolveItemIds(items, ids)`** in item-helpers (deferred-audit item 5, picked up opportunistically): Map-backed id→item resolution tolerant of string/number/`{id}` shapes; LookCard now uses it instead of its inline double-`find`.
+
+### Changed
+- **Looks carry a stable `_uid`** (stamped in `normalizeLooks`): the Style Me list key was the joined item ids, which would remount the card — and close the editor — after every swap. The final-validation splice re-adopts the streamed copy's `_uid` when the item set is unchanged (so a heart on a streamed look no longer resets when validation lands), and if the user edited a streamed look while validation was still finishing, her edited copy wins over the revalidated original.
+- **Swap keeps the composition**: a swapped piece inherits the outgoing piece's collage box (`layout_data` id remap); a removed piece's box is dropped; an added piece has no box, so the collage's existing auto-append path places it.
+
 ## [Unreleased] — Box-math invariants + full code audit — 2026-08-07
 
 ### Why
