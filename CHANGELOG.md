@@ -2,6 +2,15 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trips can be deleted (and rebuilt) — 2026-08-08
+
+### Why
+Owner request: no way to delete a trip, so a plan that went wrong couldn't be regenerated — the old trip chip and its day looks were permanent. `sb.deleteTrip` existed in the API layer but nothing in the UI called it.
+
+### Added
+- **"Delete Trip"** in the trip view header (opposite "← Back to Calendar"): confirm dialog states how many planned days will be cleared, then deletes the trip row first (if that fails nothing else is touched), best-effort clears the trip's day-plan rows so no orphan outfits strand on the calendar and a re-created trip starts clean, and returns to the calendar — which re-fetches, so the chip disappears immediately.
+- `deleteTrip` re-exported through `plannerApi.js` like the other trip calls.
+
 ## [Unreleased] — Style Me filters know her wardrobe — 2026-08-08
 
 ### Why
