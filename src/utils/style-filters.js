@@ -29,6 +29,7 @@ const TROUSER_SUBS = new Set(["Trousers", "Pants", "Wide Leg", "Straight", "Sati
 
 const SNEAKER_RE = /\b(sneaker|trainer|runner)s?\b/i;
 const FLAT_RE = /\b(flat|loafer|ballet|ballerina)s?\b/i;
+const SANDAL_RE = /\b(sandal|slide)s?\b|\bflip[ -]?flops?\b/i;
 
 const itemText = (it) => (it.name || "") + " " + (it.notes || "");
 
@@ -72,15 +73,23 @@ export const FILTER_TYPES = {
     match: isBootItem,
   },
   flats: {
-    // Sneakers sometimes get filed under the Flats subcategory — carve them
-    // out by name so "No Flats" spares them and "Only Flats" doesn't smuggle
-    // them in (they have their own chip).
+    // Sneakers/sandals sometimes get filed under the Flats subcategory (or
+    // carry "flat" in the name, e.g. "flat sandals") — carve both out by name
+    // so "No Flats" spares them and "Only Flats" doesn't smuggle them in
+    // (each has its own chip).
     label: "Flats",
     group: "shoes",
     match: (it) =>
       it.category === "Shoes" &&
       (["Flats", "Loafers"].includes(it.subcategory) || FLAT_RE.test(it.name || "")) &&
-      !SNEAKER_RE.test(it.name || ""),
+      !SNEAKER_RE.test(it.name || "") &&
+      !SANDAL_RE.test(it.name || ""),
+  },
+  sandals: {
+    label: "Sandals",
+    group: "shoes",
+    match: (it) =>
+      it.category === "Shoes" && (it.subcategory === "Sandals" || SANDAL_RE.test(it.name || "")),
   },
   sneakers: {
     label: "Sneakers",
@@ -95,12 +104,51 @@ export const FILTER_TYPES = {
   },
 };
 
-// Chip list for the Style Me panel, in FILTER_TYPES order.
+// Full static chip list, in FILTER_TYPES order. Kept as the fallback for a
+// cold start (no wardrobe loaded yet); the Style Me panel renders
+// computeFilterChips() so the chips reflect what she actually OWNS.
 export const STYLE_FILTER_CHIPS = Object.entries(FILTER_TYPES).map(([key, t]) => ({
   key,
   label: t.label,
   group: t.group,
 }));
+
+// ── Wardrobe-aware chips ─────────────────────────────────────────────────────
+// The chip row should describe HER closet, not the taxonomy: a type she owns
+// zero of (e.g. Sneakers) is noise — "No Sneakers" is a no-op and
+// "Only Sneakers" is an instant error wall — so it doesn't render. Within each
+// structural group, the types she actually WEARS lead (wear-days from the
+// derived wear stats, owned count as tiebreaker), so the chips she reaches for
+// come first and owned-but-never-worn types sink to the back of their group.
+// Groups keep their FILTER_TYPES order (lower → shoes → upper).
+//
+// Self-healing both ways: buy sneakers and the chip reappears; sell the last
+// pair of sandals and it goes. `activeKeys` guards the mid-session edge — a
+// type whose toggle is currently ON stays visible even at zero owned, so an
+// active filter can never become invisible/un-clearable.
+export function computeFilterChips(items, wearStats = {}, activeKeys = null) {
+  if (!items || items.length === 0) return STYLE_FILTER_CHIPS;
+  const active = new Set([...(activeKeys || [])].map(normalizeFilterKey));
+  const groupRank = {};
+  const rows = Object.entries(FILTER_TYPES).map(([key, t], idx) => {
+    groupRank[t.group] ??= idx;
+    let owned = 0, wears = 0;
+    for (const it of items) {
+      if (!t.match(it)) continue;
+      owned++;
+      wears += wearStats?.[it.id]?.wears ?? (Number(it.wear_count) || 0);
+    }
+    return { key, label: t.label, group: t.group, owned, wears, idx };
+  });
+  return rows
+    .filter(r => r.owned > 0 || active.has(`no-${r.key}`) || active.has(`only-${r.key}`))
+    .sort((a, b) =>
+      groupRank[a.group] - groupRank[b.group] ||
+      b.wears - a.wears ||
+      b.owned - a.owned ||
+      a.idx - b.idx)
+    .map(({ key, label, group, owned, wears }) => ({ key, label, group, owned, wears }));
+}
 
 // ── Group domains ────────────────────────────────────────────────────────────
 // The set of items an "only" constraint in a group applies to. Items OUTSIDE

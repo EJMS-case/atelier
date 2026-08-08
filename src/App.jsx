@@ -13,7 +13,7 @@ import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, STYLE_ME_OCCASIONS } from "./constants/taxonomy.js";
 import { effectiveColorFamily } from "./constants/color.js";
 import { defaultSortComparator, mergeItems } from "./utils/item-helpers.js";
-import { STYLE_FILTER_CHIPS } from "./utils/style-filters.js";
+import { computeFilterChips } from "./utils/style-filters.js";
 import {
   RECENT_LOOKS_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
@@ -1041,6 +1041,15 @@ export default function App() {
   const syncColor = syncStatus === "error" ? "var(--color-danger)"
     : syncStatus === "synced" ? "var(--color-success)" : "var(--color-accent)";
 
+  // Filter chips reflect the actual wardrobe: types she owns none of are
+  // hidden (a "No Sneakers" chip with zero sneakers is noise), and within
+  // each group the most-worn types lead. Falls back to the full static list
+  // until items load. activeKeys keeps a toggled chip visible regardless.
+  const filterChips = useMemo(
+    () => computeFilterChips(items, wearData.stats || {}, styleExcludes),
+    [items, wearData.stats, styleExcludes],
+  );
+
   // Style Me generator — rendered on both Closet and Style views via
   // `{stylePanelNode}` below. Position:fixed, so DOM location doesn't
   // matter. Extracted so the Style view has a panel to open (previously
@@ -1129,13 +1138,15 @@ export default function App() {
               "Only" within a group is a union (Only Jeans + Only Skirts = the
               lower half must be jeans OR a skirt); per-type tri-state makes a
               No/Only contradiction on the same type impossible. Matching logic
-              lives in utils/style-filters.js, shared with sampler + validator. */}
+              lives in utils/style-filters.js, shared with sampler + validator.
+              Chips are wardrobe-aware (computeFilterChips): unowned types are
+              hidden, most-worn types lead within their group. */}
           <div style={{fontSize:9, letterSpacing:"0.18em", color:"var(--color-text-muted)", marginBottom:3}}>FILTERS</div>
           <div style={{fontSize:9, color:"var(--color-text-muted)", marginBottom:6, fontStyle:"italic"}}>
             tap once = never &nbsp;·&nbsp; tap twice = only &nbsp;·&nbsp; tap again = off
           </div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-            {STYLE_FILTER_CHIPS.map(({key, label}) => {
+            {filterChips.map(({key, label}) => {
               const noKey = `no-${key}`, onlyKey = `only-${key}`;
               const state = styleExcludes.has(noKey) ? "no" : styleExcludes.has(onlyKey) ? "only" : "off";
               const chipStyle = state === "no"

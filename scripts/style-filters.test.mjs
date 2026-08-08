@@ -15,6 +15,7 @@ import {
   describeStyleFilters,
   explainFilterViolation,
   STYLE_FILTER_CHIPS,
+  computeFilterChips,
 } from "../src/utils/style-filters.js";
 import { slotForItem } from "../src/utils/item-helpers.js";
 
@@ -189,4 +190,84 @@ test("chip list exposes every type exactly once with a label", () => {
   for (const c of STYLE_FILTER_CHIPS) {
     assert.ok(c.label && c.group, `${c.key} needs label + group`);
   }
+});
+
+// ── Sandals type ─────────────────────────────────────────────────────────────
+const sandals     = { id: "sandals",  category: "Shoes", subcategory: "Sandals", name: "Strappy Sandals" };
+const slidesName  = { id: "slides",   category: "Shoes", subcategory: "Flats",   name: "Leather Slides" };
+const flatSandals = { id: "flatsand", category: "Shoes", subcategory: "Flats",   name: "Tan Flat Sandals" };
+
+test("no-sandals excludes sandals by subcategory and by name", () => {
+  assert.equal(excluded(["no-sandals"], sandals), true);
+  assert.equal(excluded(["no-sandals"], slidesName), true);
+  assert.equal(excluded(["no-sandals"], flatSandals), true);
+  assert.equal(excluded(["no-sandals"], heels), false);
+  assert.equal(excluded(["no-sandals"], flats), false);
+});
+
+test("only-sandals bans all other footwear, nothing outside shoes", () => {
+  assert.equal(excluded(["only-sandals"], sandals), false);
+  assert.equal(excluded(["only-sandals"], heels), true);
+  assert.equal(excluded(["only-sandals"], flats), true);
+  assert.equal(excluded(["only-sandals"], jeans), false);
+});
+
+test("no-flats spares sandals filed under Flats or named 'flat sandals'", () => {
+  assert.equal(excluded(["no-flats"], slidesName), false);
+  assert.equal(excluded(["no-flats"], flatSandals), false);
+  assert.equal(excluded(["no-flats"], flats), true);
+});
+
+// ── Wardrobe-aware chips (computeFilterChips) ────────────────────────────────
+// A closet with jeans, a skirt, heels, boots, sandals, and a knit — but NO
+// sneakers, flats, trousers, or dresses.
+const closet = [jeans, skirtL3, heels, boots, sandals, knit, bag, blouse];
+
+test("computeFilterChips hides types with zero owned items (the sneaker case)", () => {
+  const keys = computeFilterChips(closet).map(c => c.key);
+  assert.ok(keys.includes("jeans"));
+  assert.ok(keys.includes("skirts"));
+  assert.ok(keys.includes("heels"));
+  assert.ok(keys.includes("sandals"));
+  assert.ok(!keys.includes("sneakers"), "no sneakers owned → no Sneakers chip");
+  assert.ok(!keys.includes("trousers"), "no trousers owned → no Trousers chip");
+  assert.ok(!keys.includes("dresses"), "no dresses owned → no Dresses chip");
+  assert.ok(!keys.includes("flats"), "no flats owned → no Flats chip");
+});
+
+test("computeFilterChips falls back to the full static list before items load", () => {
+  assert.deepEqual(computeFilterChips([]), STYLE_FILTER_CHIPS);
+  assert.deepEqual(computeFilterChips(null), STYLE_FILTER_CHIPS);
+});
+
+test("an active toggle keeps its chip visible even at zero owned", () => {
+  const keys = computeFilterChips(closet, {}, new Set(["no-sneakers"])).map(c => c.key);
+  assert.ok(keys.includes("sneakers"), "active no-sneakers must stay clearable");
+  const legacy = computeFilterChips(closet, {}, new Set(["trousers-only"])).map(c => c.key);
+  assert.ok(legacy.includes("trousers"), "legacy key forms normalize before the visibility check");
+});
+
+test("most-worn types lead within their group; group order is preserved", () => {
+  const stats = {
+    [skirtL3.id]: { wears: 9, lastWorn: "2026-08-01" },
+    [jeans.id]:   { wears: 2, lastWorn: "2026-07-01" },
+    [boots.id]:   { wears: 5, lastWorn: "2026-03-01" },
+    [heels.id]:   { wears: 1, lastWorn: "2026-06-01" },
+  };
+  const chips = computeFilterChips(closet, stats);
+  const keys = chips.map(c => c.key);
+  assert.ok(keys.indexOf("skirts") < keys.indexOf("jeans"), "skirts out-worn jeans");
+  assert.ok(keys.indexOf("boots") < keys.indexOf("heels"), "boots out-worn heels");
+  // Structural group blocks stay in order: all lower before all shoes before upper.
+  const groups = chips.map(c => c.group);
+  assert.deepEqual(groups, [...groups].sort((a, b) =>
+    ["lower", "shoes", "upper"].indexOf(a) - ["lower", "shoes", "upper"].indexOf(b)));
+});
+
+test("wear stats fall back to the item's stored wear_count", () => {
+  const wornJeans = { ...jeans, wear_count: 7 };
+  const chips = computeFilterChips([wornJeans, skirtL3, heels], {});
+  const jeansChip = chips.find(c => c.key === "jeans");
+  assert.equal(jeansChip.wears, 7);
+  assert.ok(chips.map(c => c.key).indexOf("jeans") < chips.map(c => c.key).indexOf("skirts"));
 });
