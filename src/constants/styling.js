@@ -78,7 +78,7 @@ export const OCCASION_SLOTS = {
     // pass will surface shorts only when it's warm). The banned list is
     // intentionally minimal — only occasionwear-formal stuff is out.
     banned: { categories: ["Occasionwear","Swim"], subcategories: ["Cocktail Dresses","Gowns","Formal Separates","Stiletto"], keywords: ["cocktail only","evening only","boardroom only"] },
-    promptNote: "CASUAL: Daytime out — brunch, lunch, hanging with friends, errands, weekend wandering. Every look needs a top + bottom (or a dress). Polished but never trying: the thrown-on look where one piece is a little elevated (a great knit, a sharp flat, one real accessory) and the rest stays easy. Denim — pants AND shorts — fully welcome. Skirts and shorts surface naturally in warm weather. Athleisure and lounge pieces (hoodies, joggers, sport tops paired with denim) work great here. Loafers, flats, low boots, sneakers, sandals when warm. The vibe is real life, not a costume.",
+    promptNote: "CASUAL: Daytime out — brunch, lunch, friends, errands, weekend wandering; every look needs a top + bottom (or a dress). Polished but never trying: one piece a little elevated (a sharp flat or great sandal, one real accessory, a structured bag, an interesting texture) while the rest stays easy — save the good knits and low boots for cooler days. Denim — pants AND shorts — fully welcome, and athleisure and lounge pieces (hoodies, joggers, sport tops paired with denim) work great here; skirts and shorts surface naturally in warm weather. The vibe is real life, not a costume.",
   },
   Active: {
     // Athleisure + sneakers only. The OCCASION_PREFILTERS.Active keepCategories

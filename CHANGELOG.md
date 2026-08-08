@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Casual + Hot/Warm styles like a stylist — 2026-08-08
+
+### Why
+Owner report: "not thrilled with the way casual + hot and warm are producing outfits." Production evidence (13 morning taps, zero validation errors — a taste problem, not an error problem): business-register ponte (curated formality 6) kept landing in casual heat looks, a formality-6 top was styled over formality-2 lounge pants, a suede bomber rode over denim shorts in Hot, and nearly every look repeated the same top+bottom+sandals+bag formula. Root causes were all pipeline contradictions, not wardrobe gaps (14 sandals, 11 shorts, 12 minis, 13 light Day Sets survived the pool).
+
+### Fixed
+- **Casual promptNote no longer advertises pool-gated pieces.** It told the model to elevate with "a great knit" and "low boots" — but step-3a removes ALL boots in Hot/Warm and ALL knits in Hot before the model reads it, so it reached for the nearest surviving "elevated knit-like" thing: ponte. Elevation examples are now season-proof (sharp flat/sandal, one real accessory, structured bag, interesting texture); knits/boots appear only behind a "cooler days" qualifier.
+- **Preamble/promptNote contradiction**: the cached preamble said "Casual: … NOT athleisure" while the occasion brief says athleisure works great (owner rule). Now "elevated athleisure welcome, never sloppy." (One-time prompt-cache invalidation, accepted.)
+- **WARM block got the #145 parity pass HOT got**: positive footwear guidance (sandals, flats, loafers, fine heels) and the "NEVER omit shoes: every look still needs exactly one pair" line — previously the shoe-omission failure mode was only salvage-guarded in Warm.
+- **Ponte/double-knit heat steer**: HOT and WARM blocks now say dense double-knits (ponte, scuba, heavy jersey) read hot and corporate — prefer breathable weaves. Deliberately preference-phrased, not "NO ponte": the validator doesn't enforce it, and a hard-sounding prompt rule the validator won't back is the exact shape of the old no-shoes incident.
+
+### Added
+- **Curated formality reaches the stylist.** `wardrobe_items.formality` (1 Active … 8 Black Tie, 171 items tagged, comment: "CONTEXT for the stylist, never a hard filter") never reached the prompt — the only formality signal was `vision_data.formality`, which zero items have. `formatInventory` now appends a compact ` f6` token to the category segment, and the preamble documents the scale plus a soft register rule (keep a look's pieces within ~2 steps, Casual ≈ 3–4, Lounge ≈ 2, Work ≈ 5–6, Dinner ≈ 4–6). ~40–70 tokens per generation.
+- **Always-on distinctness ask**: multi-look generations without a free-text request previously carried no "make them different" instruction (it only rendered inside the free-text branch) — hence the repeated 4-piece formula. A DISTINCTNESS line (different hero, different silhouette or texture story) now rides on every lookCount>1 generation.
+
 ## [Unreleased] — Trips can be deleted (and rebuilt) — 2026-08-08
 
 ### Why

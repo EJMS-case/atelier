@@ -26,7 +26,7 @@ WHO YOU'RE DRESSING: Elyce dresses effortlessly, elegantly, with feminine flare 
 OCCASION TONE (register only — the REQUEST block carries the detailed occasion brief):
 • Work: Polished, taken seriously, never stiff or corporate. Chic, effortless, powerful.
 • Work Dinner: Work-appropriate but elevated — desk to restaurant without changing.
-• Casual: Polished but easy. NOT athleisure.
+• Casual: Polished but easy — elevated athleisure welcome, never sloppy.
 • Dinner: Show silhouette. Feminine, considered, a little sharp.
 • Occasion: Event-level polish — dress-led when the closet allows.
 • Vacation: WEATHER drives the look; comfort outranks polish here.
@@ -73,7 +73,8 @@ VIBE: pick ONE per look from this list, matching what the look actually feels li
 
 VISUAL REFERENCE: contact-sheet images (W001, W002…) are attached when available. Trust photos over text when they conflict.
 
-INVENTORY FORMAT (in REQUEST): each line leads with \`W### [Color, pattern?]\` — the color name is the user's own description, use it for color reasoning. Then category>subcategory, name, optional knit/sleeve tags (knit \`[weight,fit]\`; sleeve \`[L]\`/\`[S]\`/\`[3Q]\`/\`[N]\`), optional brand, optional notes, optional \`RESTING\` tag, optional \`seen:\` note. Notes are the primary styling description — they take precedence over the item name. A \`seen: …\` segment is a Visual-AI read of the garment's photo (fabric/drape, formality, vibe) — trust it for texture and formality pairing; her colour tag still rules colour.
+INVENTORY FORMAT (in REQUEST): each line leads with \`W### [Color, pattern?]\` — the color name is the user's own description, use it for color reasoning. Then category>subcategory (with an optional formality token \`f1\`–\`f8\`), name, optional knit/sleeve tags (knit \`[weight,fit]\`; sleeve \`[L]\`/\`[S]\`/\`[3Q]\`/\`[N]\`), optional brand, optional notes, optional \`RESTING\` tag, optional \`seen:\` note. Notes are the primary styling description — they take precedence over the item name. A \`seen: …\` segment is a Visual-AI read of the garment's photo (fabric/drape, formality, vibe) — trust it for texture and formality pairing; her colour tag still rules colour.
+FORMALITY (\`f#\`): her curated register — 1 Active, 2 Lounge, 3 Casual, 4 Smart Casual, 5 Business Casual, 6 Business Professional, 7 Cocktail, 8 Black Tie. Soft guidance, never a hard filter: keep a look's pieces within about 2 steps of each other and matched to the occasion (Casual ≈ 3–4, Lounge ≈ 2, Work ≈ 5–6, Dinner ≈ 4–6); missing \`f\` = unknown — judge from the piece itself.
 
 ★ NOTES — TWO LAYERS OF MEANING ★
 Notes do TWO jobs and you must read them for both:
@@ -162,9 +163,15 @@ export function buildStylingPrompt({
 
   const countWord = lookCount === 1 ? "ONE" : lookCount === 2 ? "BOTH" : "ALL THREE";
   const countNoun = lookCount === 1 ? "the look" : `${lookCount === 2 ? "both" : "the three"} looks`;
+  // Distinctness is a standing ask on every multi-look generation, not just
+  // free-text ones — without it the model settles into one 4-piece formula
+  // repeated across all three looks. The free-text variant folds the same ask
+  // into its brief with the extra "resolve the same brief" wording.
   const requestBlock = freeTextRequest
     ? `\nHER SPECIFIC REQUEST: "${freeTextRequest}"\nThis is the THEME for ${countWord} look${lookCount === 1 ? "" : "s"} — ${lookCount === 1 ? "the look must honor it" : "every look must honor it, not just the first"}. Read it as a styling brief: if she says "all black", ${countNoun} ${lookCount === 1 ? "is" : "are"} black; if she says "navy and brown", ${countNoun} use that palette; if she says "include my red blazer", at least one look features the blazer.${lookCount > 1 ? ` ${countNoun.charAt(0).toUpperCase() + countNoun.slice(1)} should still feel distinct (different hero piece, different proportion, different texture story) but each one resolves the same brief in its own way.` : ""}\n`
-    : "";
+    : (lookCount > 1
+        ? `\nDISTINCTNESS: ${countNoun.charAt(0).toUpperCase() + countNoun.slice(1)} must each feel distinct — a different hero piece and a different silhouette or texture story per look, never the same formula ${lookCount === 2 ? "twice" : "three times"} over.\n`
+        : "");
 
   // Items the sampler matched against the free-text request. The AI tends to
   // ignore "include my red blazer" — pinning the matched IDs explicitly fixes
@@ -316,8 +323,8 @@ function formatWeather(weather) {
   if (!weather) return "";
   const w = weather.toLowerCase();
   const parts = [];
-  if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Footwear must be light/breathable — sandals or open shoes where the occasion allows; otherwise light flats, fine heels, or loafers. NEVER omit shoes: every look still needs exactly one pair. No outerwear in this heat unless it is genuinely lightweight and unlined — linen/cotton only; if no such piece exists in the inventory, skip the layer entirely.");
-  if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers only. NO heavy knits, NO heavy or winter coats (wool overcoat, puffer, parka, shearling), NO boots. Short sleeves, sleeveless, or light long sleeves. A regular blazer or a light trench worn over a blouse is fine at this temperature — only genuinely heavy/winter outerwear is wrong; when in doubt, skip the layer.");
+  if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Dense double-knits (ponte, scuba, heavy jersey) read hot and corporate in this weather — reach for breathable weaves (cotton, linen, silk) instead. Footwear must be light/breathable — sandals or open shoes where the occasion allows; otherwise light flats, fine heels, or loafers. NEVER omit shoes: every look still needs exactly one pair. No outerwear in this heat unless it is genuinely lightweight and unlined — linen/cotton only; if no such piece exists in the inventory, skip the layer entirely.");
+  if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers only. NO heavy knits, NO heavy or winter coats (wool overcoat, puffer, parka, shearling), NO boots. Short sleeves, sleeveless, or light long sleeves. Dense double-knits (ponte, scuba, heavy jersey) read hot and corporate in this weather — prefer breathable weaves (cotton, linen, silk). Footwear has full range here — sandals, flats, loafers, and fine heels all work in Warm; pick for the occasion. NEVER omit shoes: every look still needs exactly one pair. A regular blazer or a light trench worn over a blouse is fine at this temperature — only genuinely heavy/winter outerwear is wrong; when in doubt, skip the layer.");
   if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — HARD CONSTRAINT. Spring/fall layering. Light outerwear welcome (trench, blazer, leather jacket, denim jacket, lightweight wool blazer). NO parkas, NO puffers, NO sherpa, NO shearling, NO fleece, NO chunky/cable knits, NO heavy floor-length wool coats — those belong to Cool/Cold. Both short and long sleeves acceptable; sheer hosiery is available if a skirt or dress look wants it.");
   if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes. Skirts, minis, and dresses ARE cool-weather-viable — she wears them with tights/stockings (opaque for daytime cold, sheer/semi for evening). Never reject a skirt for bare legs; add hosiery from the inventory instead.");
   if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected. Skirts, minis, and dresses ARE winter-viable — she wears them with tights/stockings (opaque grounds a daytime mini, sheer/semi for evening). Never reject a skirt for bare legs; add hosiery from the inventory instead.");
