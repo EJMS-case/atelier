@@ -192,6 +192,191 @@ section("swim alternatives");
   assert(alts.length === 1 && alts[0].category === "Swim", "swim swaps offer the other suit");
 }
 
+// ── Swim-suit fixtures ───────────────────────────────────────────────────────
+// Hot-weather basics for the swim tests (105°F Arizona trip — no knits, no
+// boots, tees + light bottoms + sandals survive the Hot filter). Swim rows are
+// modeled on the owner's real closet: all subcategory "Swimsuits", no set_id,
+// so only the NAME distinguishes a separate from a complete suit.
+function hotBasics() {
+  nextId = 0;
+  return [
+    ...Array.from({ length: 9 }, (_, i) => mk("Tops", "T-Shirts", `Linen Tee ${i + 1}`)),
+    mk("Bottoms", "Shorts", "Denim Short"),
+    mk("Bottoms", "Trousers", "Linen Trouser"),
+    mk("Bottoms", "Trousers", "Cotton Palazzo"),
+    mk("Bottoms", "Midi", "Poplin Midi Skirt"),
+    mk("Shoes", "Sneakers", "White Leather Sneaker"),
+    mk("Shoes", "Sandals", "Strappy Flat Sandal"),
+    mk("Bags", "", "Canvas Tote"),
+  ];
+}
+// Mirrors the packer's name-based swimPieceKind() for assertions.
+const swimKind = (it) =>
+  /one.?piece|maillot/i.test(it.name) ? "one-piece"
+  : /\btop\b/i.test(it.name) ? "top"
+  : /\bbottoms?\b|\bbrief\b/i.test(it.name) ? "bottom"
+  : "one-piece";
+const firstWord = (it) => it.name.trim().split(/\s+/)[0].toLowerCase();
+
+// ── 8. Swim separates pack complete suits, on a bounded number of days ───────
+section("swim separates → complete suits");
+{
+  const basics = hotBasics();
+  const items = [
+    ...basics,
+    mk("Swim", "Swimsuits", "Aluka Top", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Aluka Bottom", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Mako Bikini Top", { color: "Tobacco" }),
+    mk("Swim", "Swimsuits", "Rocky Bikini Bottom", { color: "Tobacco" }),
+    mk("Swim", "Swimsuits", "Dreamer Top", { color: "White" }),
+    mk("Swim", "Swimsuits", "Dreamer High Waist Bottom", { color: "White" }),
+  ];
+  // The exact reported-bug shape: 8-day all-Casual Family Visit, Hot (105°).
+  const { dailyOutfits } = buildDailyOutfits(items, Array(8).fill(105), {
+    occasions: defaultOccasions(8),
+    activities: Array(8).fill("Family Visit"),
+  });
+
+  // (a) Never a lone separate: on any day, swim tops and bottoms pair up.
+  const loneSeparate = dailyOutfits.some(day => {
+    const sw = day.filter(it => it.category === "Swim");
+    return sw.filter(it => swimKind(it) === "top").length !==
+           sw.filter(it => swimKind(it) === "bottom").length;
+  });
+  assert(!loneSeparate, "no day has a swim top without a bottom (or vice versa)");
+
+  // (b) Swim rides on at most the suit-target number of days, not all 8.
+  const swimDayIdx = dailyOutfits
+    .map((day, d) => day.some(it => it.category === "Swim") ? d : -1)
+    .filter(d => d >= 0);
+  assert(swimDayIdx.length >= 1 && swimDayIdx.length <= capsuleTargets(8).swim,
+    `swim appears on 1-${capsuleTargets(8).swim} days, not all 8 (got ${swimDayIdx.length})`);
+  assert(swimDayIdx[0] === 0, "suit #1 lands on the first swim-eligible day");
+  assert(swimDayIdx.slice(1).every(d => d >= Math.floor(8 / 2)),
+    "suit #2 waits for the back half of the trip");
+
+  // (c) Each placed pair actually matches: same color or same name prefix.
+  const mismatched = dailyOutfits.some(day => {
+    const top = day.find(it => it.category === "Swim" && swimKind(it) === "top");
+    const bottom = day.find(it => it.category === "Swim" && swimKind(it) === "bottom");
+    if (!top || !bottom) return false;
+    const sameColor = (top.color || "").toLowerCase() === (bottom.color || "").toLowerCase();
+    return !(sameColor || firstWord(top) === firstWord(bottom));
+  });
+  assert(!mismatched, "paired top+bottom share a color or a name prefix");
+
+  // Dinner day never gets swim, separates included.
+  const { dailyOutfits: dd } = buildDailyOutfits(items, Array(4).fill(105), {
+    occasions: ["Casual", "Dinner", "Casual", "Casual"],
+    activities: Array(4).fill("Family Visit"),
+  });
+  assert(!dd[1].some(it => it.category === "Swim"), "dinner day gets no swim (separates wardrobe)");
+}
+
+// ── 9. One-piece wardrobe: single-item suits, still bounded ──────────────────
+section("one-piece suits");
+{
+  const items = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Full coverage one-piece", { color: "Deep Teal" }),
+    mk("Swim", "Swimsuits", "Black One-Piece", { color: "Black" }),
+  ];
+  const { dailyOutfits } = buildDailyOutfits(items, Array(8).fill(105), {
+    occasions: defaultOccasions(8),
+    activities: Array(8).fill("Family Visit"),
+  });
+  const swimDays = dailyOutfits.filter(day => day.some(it => it.category === "Swim"));
+  assert(swimDays.length >= 1 && swimDays.length <= capsuleTargets(8).swim,
+    `one-piece suits stay within target placements (got ${swimDays.length})`);
+  assert(swimDays.every(day => day.filter(it => it.category === "Swim").length === 1),
+    "a one-piece suit is a single swim item");
+}
+
+// ── 10. Separates without counterparts ───────────────────────────────────────
+section("separates with no counterpart");
+{
+  // Tops only, but a one-piece exists → the one-piece is the suit; a lone top
+  // never ships. (5-day trip targets 2 suits, but suit #2 would need unworn
+  // counterpartless tops — so only the one-piece day happens.)
+  const items = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Bri Top", { color: "Black" }),
+    mk("Swim", "Swimsuits", "Aluka Top", { color: "White" }),
+    mk("Swim", "Swimsuits", "Full coverage one-piece", { color: "Deep Teal" }),
+  ];
+  const { dailyOutfits } = buildDailyOutfits(items, Array(5).fill(105), {
+    occasions: defaultOccasions(5),
+    activities: Array(5).fill("Family Visit"),
+  });
+  const swimWorn = dailyOutfits.flat().filter(it => it.category === "Swim");
+  assert(swimWorn.length >= 1, "a suit still gets packed");
+  assert(swimWorn.every(it => /one.?piece/i.test(it.name)),
+    "counterpartless tops fall back to the one-piece, never a lone top");
+
+  // Classifier edge: "Eliza Full Coverage Bottom" is a BOTTOM despite "Full
+  // Coverage" — with no top around, only the true one-piece may appear.
+  const items2 = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Eliza Full Coverage Bottom", { color: "Black" }),
+    mk("Swim", "Swimsuits", "Full coverage one-piece", { color: "Deep Teal" }),
+  ];
+  const { dailyOutfits: d2 } = buildDailyOutfits(items2, Array(4).fill(105), {
+    occasions: defaultOccasions(4),
+    activities: Array(4).fill("Family Visit"),
+  });
+  const swim2 = d2.flat().filter(it => it.category === "Swim");
+  assert(swim2.length >= 1 && swim2.every(it => it.name === "Full coverage one-piece"),
+    "Eliza Full Coverage Bottom never ships alone; the one-piece does");
+
+  // Tops only, NO one-piece → no swim at all (never a lone separate).
+  const items3 = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Bri Top", { color: "Black" }),
+    mk("Swim", "Swimsuits", "Dreamer Top", { color: "White" }),
+  ];
+  const { dailyOutfits: d3 } = buildDailyOutfits(items3, Array(5).fill(105), {
+    occasions: defaultOccasions(5),
+    activities: Array(5).fill("Family Visit"),
+  });
+  assert(!d3.flat().some(it => it.category === "Swim"),
+    "tops-only wardrobe with no one-piece packs no swim");
+}
+
+// ── 11. Rebuild guard: a reshuffled day doesn't re-add swim ──────────────────
+section("swim rebuild guard");
+{
+  const items = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Aluka Top", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Aluka Bottom", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Mako Bikini Top", { color: "Tobacco" }),
+    mk("Swim", "Swimsuits", "Rocky Bikini Bottom", { color: "Tobacco" }),
+  ];
+  const top = items.find(it => it.name === "Aluka Top");
+  const bottom = items.find(it => it.name === "Aluka Bottom");
+  // Single-day rebuild of an 8-day trip that already wears a suit elsewhere.
+  const { dailyOutfits } = buildDailyOutfits(items, [105], {
+    occasions: ["Casual"],
+    activities: ["Family Visit"],
+    priorUse: { [top.id]: 1, [bottom.id]: 1 },
+    tripDayCount: 8,
+  });
+  assert(!dailyOutfits[0].some(it => it.category === "Swim"),
+    "single-day rebuild doesn't re-add swim when the trip already packs a suit");
+
+  // Sanity: with NO prior swim, the same single-day rebuild still gets suit #1
+  // (the midpoint rule must not block day 0 when dayCount=1).
+  const { dailyOutfits: fresh } = buildDailyOutfits(items, [105], {
+    occasions: ["Casual"],
+    activities: ["Family Visit"],
+    tripDayCount: 8,
+  });
+  const sw = fresh[0].filter(it => it.category === "Swim");
+  assert(sw.length === 2 &&
+    sw.some(it => swimKind(it) === "top") && sw.some(it => swimKind(it) === "bottom"),
+    "single-day build with no prior swim places one complete pair");
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\ntrip-packer: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

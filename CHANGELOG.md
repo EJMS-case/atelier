@@ -2,6 +2,20 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trip swim packs as a complete suit, not a daily bikini bottom — 2026-08-08
+
+### Why
+Owner screenshot report: reloading the Arizona "Family Visit" trip put a single swim BOTTOM (no top) in every Casual day's outfit card. Two design flaws from the #163 capsule work: swim was picked as ONE item per day (her swim rows are separates — "Rocky Bikini Bottom" has nothing linking it to "Mako Bikini Top", so a lone bottom won the pick), and the capsule reuse bonus repeated that same lone bottom on all 8 days.
+
+### Fixed
+- **A packed swimsuit is now a COMPLETE suit**: a one-piece, or a top+bottom pair matched by color (exact, case-insensitive) then shared name prefix ("Mako Bikini Top — Tobacco" pairs with "Rocky Bikini Bottom — Tobacco"). A separate with no counterpart falls back to a one-piece; if none exists, the day gets no swim at all — never a lone separate.
+- **Suits place 1–2 times per trip, not daily**: `capsuleTargets().swim` now counts SUITS — suit #1 lands on the first swim-eligible casual day, suit #2 (trips > 4 days) waits for the back half and uses not-yet-worn pieces only. The suits still reach the packing list (it derives from day items); the other day cards go back to being outfits.
+- **Rebuild guard**: a single-day reshuffle of a trip that already packs a suit (any swim item in `priorUse`) won't re-add swim.
+- The AI day-look path (`tripAdvisor`) gets the matching rule for swim-allowed activities: a swimsuit means a complete suit, 1–2 per trip, reused.
+- 14 new packer tests (38 total, `npm run test:packer`): no-lone-separate, ≤-target placement, color/prefix pairing, one-piece fallbacks, the "Eliza Full Coverage Bottom" naming edge, rebuild guard.
+
+Note: already-saved trip days keep their old lone-bottom rows until the trip is rebuilt — delete + recreate the trip (or reshuffle its days) to pick up the fix.
+
 ## [Unreleased] — Casual + Hot/Warm styles like a stylist — 2026-08-08
 
 ### Why
