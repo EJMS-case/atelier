@@ -179,7 +179,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
       )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading outfit history…</p></div>}
       {!loading && allWorn.length === 0 && (
-        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No outfits worn yet. Pin a look to a day on the Planner, or tap “Log as worn,” and it'll appear here.</p></div>
+        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>No outfits worn yet — log a look as worn or pin one to a Planner day.</p></div>
       )}
       {!loading && Object.keys(grouped).map(month => (
         <div key={month} style={{ marginBottom:28 }}>
