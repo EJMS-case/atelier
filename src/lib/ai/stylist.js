@@ -15,6 +15,7 @@ import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSu
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
+import { summarizeLookEdits } from "../../features/stylist/lookEdits.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_STRONG } from "../../constants/models.js";
 import {
@@ -37,7 +38,7 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
-  const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], favoriteItemIds = [], count = 3 } = extras;
+  const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], favoriteItemIds = [], count = 3 } = extras;
   // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
   // classic 3-up generation. Values outside this range fall back to 3.
   const lookCount = (count >= 1 && count <= 3) ? count : 3;
@@ -190,6 +191,10 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     .filter(Boolean)
     .slice(0, 8);
 
+  // Her in-place editor corrections → SWAP LESSONS lines. Pure text (no
+  // W-IDs); repeats collapse with a ×N count. See features/stylist/lookEdits.js.
+  const swapLessons = summarizeLookEdits(lookEdits, items);
+
   // Season/date context — the weather bands say how hot it is, not WHEN it is.
   // July and October can share a "Warm" band yet call for different fabrics
   // (linen and raffia vs suede and light wool), so the prompt gets one line of
@@ -223,6 +228,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     lovedLooks: lovedLookLines,
     dislikedLooks: dislikedLookLines,
     recentCombos,
+    swapLessons,
     comfortMode,
   });
 

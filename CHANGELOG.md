@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The stylist learns from her edits (roadmap A1) — 2026-08-08
+
+### Why
+Roadmap item A1 (the highest-leverage item): the #161 in-place editor produces the purest taste data the app collects — "for Work + Cool, she swapped the suggested boot for the kitten heel" — but nothing was recording it. A stylist who never re-makes a rejected choice is what "acclaimed" feels like.
+
+### Added
+- **`look_edits` table** (migration 0016, applied): one row per swap/remove/add made in the Style Me editor — action, occasion, weather, out-item, in-item, timestamp. Writes are fire-and-forget (`sb.saveLookEdit`) so logging can never block or break an edit.
+- **SWAP LESSONS prompt block** ("✂️ HER EDITS"): `summarizeLookEdits` (new pure module `features/stylist/lookEdits.js`) collapses repeated corrections into compact lines — `[Work · Cool] swapped out the black Ankle boot → in the burgundy Kitten heel (×3)` — most-frequent first, capped at 8, text-only (no W-IDs, same register as LOOKS SHE LOVED, so lessons steer composition without polluting item selection). The block frames them as standing lessons with soft-bias language: one edit is a data point, a repeated edit is a rule of taste; nothing is banned.
+- **Fingerprint fold-in**: `generateStyleFingerprint` now accepts the edits and appends a corrections section + an instruction bullet, so the auto-refreshing PERSONAL PATTERNS read absorbs her corrections too (both callers — auto-refresh and the Settings button — pass them).
+- **Same-session learning**: App prepends each new edit to local state, so the very next generation already carries the lesson without waiting for a refetch.
+- `scripts/look-edits.test.mjs` (13 tests, `npm run test:edits`, in the battery): collapse + ×N counts, weather bucketing, all three actions, frequency-over-recency ordering, deleted-item and id-leak guards, maxLines cap.
+
 ## [Unreleased] — Trip planner: capsule packing, Family Visit trips, honest Auto climate — 2026-08-08
 
 ### Why

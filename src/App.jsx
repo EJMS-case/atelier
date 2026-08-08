@@ -202,6 +202,9 @@ export default function App() {
   // as elevated exemplars ("the bar"). Text-only in the prompt, so no W-IDs.
   const [lovedLooks, setLovedLooks] = useState([]);
   const [dislikedLooks, setDislikedLooks] = useState([]);
+  // Her in-place editor corrections (look_edits rows, newest first) — fed to
+  // the stylist as the SWAP LESSONS block and folded into the fingerprint.
+  const [lookEdits, setLookEdits] = useState([]);
   const [inspirations, setInspirations] = useState([]);
   // { text, source_count, generated_at } | null — loaded from user_settings
   // and refreshed via the Settings → Update Style Fingerprint button.
@@ -368,7 +371,8 @@ export default function App() {
         const have = fp?.source_count || 0;
         if (fp && count - have < 10) return;   // still fresh enough
         const { generateStyleFingerprint } = await import("./features/stylist/styleFingerprint.js");
-        const fresh = await generateStyleFingerprint({ items, logs, plans, apiKey });
+        const edits = await sb.fetchLookEdits().catch(() => []);
+        const fresh = await generateStyleFingerprint({ items, logs, plans, edits, apiKey });
         if (fresh?.text) { setStyleFingerprint(fresh); sb.saveStyleFingerprint(fresh).catch(() => {}); }
       } catch { /* non-fatal — regenerate next session */ }
     };
@@ -400,6 +404,9 @@ export default function App() {
 
       // Disliked looks = thumbs-down look_feedback rows (newest first, capped).
       sb.fetchDislikedLooks().then(rows => setDislikedLooks(rows || [])).catch(() => {});
+
+      // Editor corrections → SWAP LESSONS (newest first, capped in the client).
+      sb.fetchLookEdits().then(rows => setLookEdits(rows || [])).catch(() => {});
 
       maybeRefreshFingerprint(logs || [], plans || []);
     }).catch(() => {});
@@ -812,7 +819,7 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
-        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks,
+        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
           // Hearted pieces — a tiny within-band sampler tiebreaker (see closet-sampler.js).
           favoriteItemIds: favorites.filter(f => f.type === "piece").map(f => f.reference_id),
           count }
@@ -1640,6 +1647,20 @@ export default function App() {
               onEditItem={handleEditItemCard}
               onUpdateLook={(updated) => {
                 setOutfits(prev => (prev || []).map((lk, idx) => idx === i ? updated : lk));
+              }}
+              onLogEdit={(edit) => {
+                // Persist the correction (fire-and-forget) and fold it into
+                // this session's SWAP LESSONS immediately — the very next
+                // generation already knows.
+                sb.saveLookEdit(edit);
+                setLookEdits(prev => [{
+                  action: edit.action,
+                  occasion: edit.occasion,
+                  weather: edit.weather,
+                  out_item_id: edit.outItemId,
+                  in_item_id: edit.inItemId,
+                  created_at: new Date().toISOString(),
+                }, ...prev].slice(0, 120));
               }}
               onRate={async (lk, rating) => {
                 try {
