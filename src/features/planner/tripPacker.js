@@ -2,6 +2,15 @@
 // Local (no-AI) packing planner. Given a date range, daily forecast highs,
 // and a per-day occasion list, produce one outfit per trip day plus the
 // derived packing list (union of items actually used).
+//
+// CAPSULE PACKING (2026-08-08): the packer packs like a stylist packs a
+// suitcase — a small capsule of shoes/bags/outerwear reused across days,
+// bottoms repeating up to 3 wears (never back-to-back), fresh tops each day,
+// and statement garments appearing at most once per trip. Reuse is bounded
+// by per-slot targets that scale with trip length, with an escape hatch: a
+// day whose occasion the capsule can't serve (dinner needing a heel on an
+// all-sneaker trip) is still allowed to add the right new piece. See
+// capsuleTargets() + the scoring notes inside pick().
 
 import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
@@ -22,12 +31,14 @@ export function defaultOccasions(dayCount) {
 // we degrade gracefully if the wardrobe is too small.
 function occasionPriorityRegex(occasion) {
   const o = (occasion || "").toLowerCase();
-  if (/work\s*dinner|date|dinner/.test(o)) {
+  if (/work\s*dinner|date|dinner|occasion/.test(o)) {
     return {
       preferShoeSub: /heel|pump|mule|loafer|ballet|flat/i,
       avoidShoeSub:  /sneaker|sandal/i,
       preferTopName: /silk|satin|lace|cami|blouse|wrap/i,
       avoidName:     /sweatshirt|hoodie|denim|cargo|track/i,
+      preferBagName: /clutch|evening|mini\b|shoulder|baguette/i,
+      avoidBagName:  /tote|backpack|canvas|beach/i,
     };
   }
   if (/work/.test(o)) {
@@ -36,6 +47,7 @@ function occasionPriorityRegex(occasion) {
       avoidShoeSub:  /sneaker|sandal|flip/i,
       preferTopName: /blouse|button|silk|knit|blazer/i,
       avoidName:     /sweatshirt|hoodie|graphic|crop/i,
+      preferBagName: /tote|satchel|structured|work/i,
     };
   }
   if (/lounge|sleep/.test(o)) {
@@ -51,6 +63,8 @@ function occasionPriorityRegex(occasion) {
     avoidShoeSub:  /heel|pump/i,
     preferTopName: /tee|t.?shirt|tank|blouse|knit|button/i,
     avoidName:     /silk.?gown|sequin/i,
+    preferBagName: /tote|crossbody|shoulder|hobo|bucket/i,
+    avoidBagName:  /clutch|evening/i,
   };
 }
 
@@ -65,6 +79,10 @@ function scoreForOccasion(item, occasion) {
   }
   if (item.category === "Tops" || item.category === "Knits" || item.category === "Dresses") {
     if (rules.preferTopName?.test(name)) s += 2;
+  }
+  if (item.category === "Bags") {
+    if (rules.preferBagName?.test(name)) s += 2;
+    if (rules.avoidBagName?.test(name))  s -= 2;
   }
   if (rules.avoidName?.test(name)) s -= 4;
   // Occasion field on the item itself, if user tagged it. `occasion` may be
@@ -87,8 +105,9 @@ function scoreForOccasion(item, occasion) {
 // semantics kept on top of it:
 //   · a COMPLETE set (one indivisible two-piece) packs like a dress — it's a
 //     full outfit base. A HALF of a set is not a base, so it fills no slot.
-//   · swim never fills a packing slot (Beach/Resort re-admit it to the pool,
-//     but it isn't picked as a core piece).
+//   · swim is its own capsule slot: pool/beach activities pick one or two
+//     suits and reuse them across the trip (they never substitute for a
+//     core garment slot — the composer adds swim ON TOP of a day look).
 // This also fixes the old drift where Athleisure/Loungewear returned null and
 // could never pack — slotForItem routes them to top/bottom/dress by sub.
 function itemSlot(it) {
@@ -101,7 +120,8 @@ function itemSlot(it) {
     case "shoes":     return "shoes";
     case "bag":       return "bags";
     case "accessory": return "accessories";
-    default:          return null; // swim
+    case "swim":      return "swim";
+    default:          return null;
   }
 }
 
@@ -124,7 +144,7 @@ function itemSlot(it) {
 // that don't make sense for the activity regardless of how they score
 // for the day's occasion. Without this layer Hot+Casual at Disney was
 // returning heels and silk maxis because nothing was hard-banning them.
-export const TRIP_ACTIVITIES = ["Sightseeing", "Theme Park", "Beach", "Resort", "Active", "City Walking"];
+export const TRIP_ACTIVITIES = ["Sightseeing", "Theme Park", "Beach", "Resort", "Family Visit", "Active", "City Walking"];
 
 // Heel / boot bans go through the shared HEEL_SUBS / isBootItem helpers
 // (utils/item-helpers) instead of per-activity subcategory lists — the local
@@ -160,6 +180,16 @@ const ACTIVITY_FILTERS = {
     bannedRegex: /\b(wool|cashmere|chunky)\b/i,
     allowSwim: true,
   },
+  "Family Visit": {
+    // Staying at family's home: pool afternoons, remote-work days, casual
+    // dinners out, time on the floor with young kids. Swim is first-class
+    // (the pool!); stilettos and precious dry-clean pieces are out — a
+    // kitten heel or wedge is still fine for dinner out.
+    bannedCategories: [],
+    bannedSubcategories: new Set(["Stiletto", "Gowns", "Cocktail Dresses"]),
+    bannedRegex: /\b(stiletto|sequin|silk.?gown|dry.?clean|delicate)\b/i,
+    allowSwim: true,
+  },
   "Active": {
     // Hiking, sports, gym, anything that demands range of motion.
     bannedCategories: ["Occasionwear"],
@@ -185,6 +215,26 @@ const ACTIVITY_FILTERS = {
     allowSwim: false,
   },
 };
+
+// ── Capsule targets ──────────────────────────────────────────────────────────
+// How many DISTINCT items each capsule slot should need for a trip of N days.
+// These are soft ceilings, not hard caps: a day whose occasion the packed
+// capsule genuinely can't serve is still allowed to add the right piece (see
+// the "escape hatch" note in pick()). Tuned to how a stylist actually packs:
+// 2-3 shoes, 1-2 bags, 1-2 layers, bottoms worn ~2-3 times each.
+export function capsuleTargets(dayCount) {
+  return {
+    shoes:     dayCount <= 2 ? 1 : dayCount <= 5 ? 2 : 3,
+    bags:      dayCount <= 3 ? 1 : 2,
+    outerwear: dayCount <= 5 ? 1 : 2,
+    swim:      dayCount <= 4 ? 1 : 2,
+    bottoms:   Math.min(4, Math.max(1, Math.ceil(dayCount / 2.5))),
+  };
+}
+
+// Slots where reuse across days is the POINT (wear the same loafers all
+// trip). Everything else (tops/dresses) stays fresh day to day.
+const CAPSULE_SLOTS = new Set(["shoes", "bags", "outerwear", "swim"]);
 
 export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const dayCount = dailyHighsF.length;
@@ -227,11 +277,38 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     return { pool, occasion: occasions[d], wxBucket, hi };
   });
 
-  // Track usage across days for variety. We want different combinations even
-  // when the wardrobe is small — so we lightly penalise items the more days
-  // they've already been picked.
+  // ── Capsule state ──────────────────────────────────────────────────────────
+  // useCount: how many days each item has been worn so far this build.
+  // lastWorn: the most recent day index an item was worn (for the no-back-to-
+  // back bottoms rule). distinctBySlot: which distinct items each capsule slot
+  // has committed to (measured against capsuleTargets).
+  //
+  // Single-day rebuild calls (shuffle / add outfit / change occasion in the
+  // trip preview) seed this state from the REST of the trip via opts.priorUse
+  // ({ itemId: wearCount }) + opts.prevDayIds, and pass opts.tripDayCount so
+  // targets reflect the whole trip, not the one day being rebuilt. That's what
+  // keeps a reshuffled day inside the same capsule instead of inventing new
+  // shoes and bags every tap.
   const useCount = new Map();
-  const wearScore = (id) => useCount.get(id) || 0;
+  const lastWorn = new Map();
+  const distinctBySlot = new Map();
+  const targets = capsuleTargets(opts.tripDayCount || dayCount);
+  const byId = new Map(items.map(it => [it.id, it]));
+  if (opts.priorUse) {
+    for (const [id, count] of Object.entries(opts.priorUse)) {
+      if (!count) continue;
+      useCount.set(id, count);
+      const it = byId.get(id);
+      const slot = it ? itemSlot(it) : null;
+      if (slot) {
+        if (!distinctBySlot.has(slot)) distinctBySlot.set(slot, new Set());
+        distinctBySlot.get(slot).add(id);
+      }
+    }
+  }
+  // Items worn the day BEFORE the first day being built (index -1) — lets the
+  // consecutive-bottoms rule work across a single-day rebuild.
+  for (const id of (opts.prevDayIds || [])) lastWorn.set(id, -1);
 
   // Statement-piece detector — mirrors the Style Me HC8 rule. Used to make
   // sure each day's outfit has AT MOST ONE statement piece (fringe bag +
@@ -249,25 +326,66 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const isStatement = (item) =>
     !!item && !isHosieryItem(item) && isStatementPiece(item, { fringeCounts: true });
 
-  // Pick one best item from a list for this day, factoring in occasion +
-  // variety + a statement-stacking penalty: if there's already a statement
-  // piece in the day's outfit, candidates that ARE statements get heavily
-  // penalized so we don't end up with a fringe bag + argyle skirt combo.
-  const pick = (candidates, occasion, currentOutfit = []) => {
+  // Pick one best item from a list for this day. Scoring layers, in order:
+  //   · occasion fit (scoreForOccasion) — always dominant when it matters
+  //   · statement stacking — a day that already holds a statement piece
+  //     heavily penalizes further statements (fringe bag + argyle skirt)
+  //   · slot-aware capsule policy:
+  //       tops/dresses  → fresh every day (-6 per prior wear); a statement
+  //                       garment appears at most ONCE per trip (extra -6)
+  //       bottoms       → reuse encouraged up to 3 wears (+1.5), never on
+  //                       consecutive days (-4), tired after 3 (-6)
+  //       shoes/bags/outerwear/swim → reuse-first (+1.5 once worn). When the
+  //                       slot has already committed to its target count of
+  //                       distinct items, NEW items take -7 — but ONLY if an
+  //                       already-packed item serves this day nearly as well
+  //                       (within 1.5). That's the escape hatch: a dinner
+  //                       day on an all-sneaker trip still gets its heel,
+  //                       because no reused candidate comes close.
+  // All margins comfortably exceed the 0.6 tie-break jitter, so the capsule
+  // behaviour is deterministic; jitter only varies genuinely tied choices.
+  const pick = (candidates, occasion, currentOutfit = [], slot = null, dayIdx = 0) => {
     if (!candidates.length) return null;
     const alreadyHasStatement = currentOutfit.some(isStatement);
+    const scored = candidates.map(c => {
+      const wears = useCount.get(c.id) || 0;
+      let s = scoreForOccasion(c, occasion);
+      if (alreadyHasStatement && isStatement(c)) s -= 15;
+      if (CAPSULE_SLOTS.has(slot)) {
+        if (wears > 0) s += 1.5;
+      } else if (slot === "bottoms") {
+        if (wears >= 3) s -= 6;
+        else if (wears > 0) s += 1.5;
+        if (wears > 0 && lastWorn.get(c.id) === dayIdx - 1) s -= 4;
+        if (wears > 0 && isStatement(c)) s -= 6;
+      } else { // tops / dresses — fresh each day
+        s -= 6 * wears;
+        if (wears > 0 && isStatement(c)) s -= 6;
+      }
+      return { c, s, wears };
+    });
+    // Capsule ceiling: once the slot holds its target count of distinct items,
+    // block comparable new ones (see escape-hatch note above).
+    const distinct = distinctBySlot.get(slot)?.size || 0;
+    const target = targets[slot];
+    if (target != null && distinct >= target) {
+      const margin = CAPSULE_SLOTS.has(slot) ? 7 : 3.5;
+      const bestReused = scored.reduce((m, x) => x.wears > 0 && x.s > m ? x.s : m, -Infinity);
+      if (bestReused > -Infinity) {
+        for (const x of scored) {
+          if (x.wears === 0 && bestReused >= x.s - 1.5) x.s -= margin;
+        }
+      }
+    }
     let best = null, bestScore = -Infinity;
-    for (const c of candidates) {
-      const occScore = scoreForOccasion(c, occasion);
-      const variety  = -3 * wearScore(c.id);   // 0 → no penalty; 1 wear → -3; 2 → -6
-      const stackPen = (alreadyHasStatement && isStatement(c)) ? -15 : 0;
-      const total    = occScore + variety + stackPen + Math.random() * 0.6;
-      if (total > bestScore) { bestScore = total; best = c; }
+    for (const x of scored) {
+      const total = x.s + Math.random() * 0.6;
+      if (total > bestScore) { bestScore = total; best = x.c; }
     }
     return best;
   };
 
-  const dailyOutfits = dayPools.map(({ pool, occasion, hi }) => {
+  const dailyOutfits = dayPools.map(({ pool, occasion, hi }, d) => {
     const inSlot = (slot) => pool.filter(it => itemSlot(it) === slot);
 
     const dresses   = inSlot("dresses");
@@ -276,6 +394,7 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     const shoes     = inSlot("shoes");
     const outerwear = inSlot("outerwear");
     const bags      = inSlot("bags");
+    const swim      = inSlot("swim");
 
     const day = [];
 
@@ -284,33 +403,50 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     // if the preferred path has no candidates. Each subsequent pick sees
     // the day's running outfit so the statement-stacking penalty applies.
     const preferDress = /dinner|date|occasion/i.test(occasion);
-    const dressCandidate = pick(dresses, occasion, day);
+    const dressCandidate = pick(dresses, occasion, day, "dresses", d);
 
     if (preferDress && dressCandidate) {
       day.push(dressCandidate);
     } else {
-      const topCandidate = pick(tops, occasion, day);
+      const topCandidate = pick(tops, occasion, day, "tops", d);
       if (topCandidate) day.push(topCandidate);
-      const bottomCandidate = pick(bottoms, occasion, day);
+      const bottomCandidate = pick(bottoms, occasion, day, "bottoms", d);
       if (bottomCandidate) day.push(bottomCandidate);
       // Fallback to dress if we couldn't get a top+bottom pair.
       if (day.length === 0 && dressCandidate) day.push(dressCandidate);
     }
 
-    const shoe = pick(shoes, occasion, day);
+    const shoe = pick(shoes, occasion, day, "shoes", d);
     if (shoe) day.push(shoe);
 
     // Outerwear only when it's cold enough to want a layer.
     if (hi < 68 && outerwear.length) {
-      const o = pick(outerwear, occasion, day);
+      const o = pick(outerwear, occasion, day, "outerwear", d);
       if (o) day.push(o);
     }
 
-    const bag = pick(bags, occasion, day);
+    const bag = pick(bags, occasion, day, "bags", d);
     if (bag) day.push(bag);
 
-    // Bump usage counts so the next day's picks tilt away from these.
-    day.forEach(it => useCount.set(it.id, (useCount.get(it.id) || 0) + 1));
+    // Swim rides along on pool/beach days (the activity filter already gates
+    // which days see swim in their pool) — but only for casual daytime looks,
+    // never inside a Dinner/Work/Occasion outfit. Capsule slot: the same one
+    // or two suits rotate across the trip.
+    if (swim.length && !/work|dinner|occasion/i.test(occasion)) {
+      const suit = pick(swim, occasion, day, "swim", d);
+      if (suit) day.push(suit);
+    }
+
+    // Bump capsule state so the next day's picks see today's wears.
+    day.forEach(it => {
+      useCount.set(it.id, (useCount.get(it.id) || 0) + 1);
+      lastWorn.set(it.id, d);
+      const slot = itemSlot(it);
+      if (slot) {
+        if (!distinctBySlot.has(slot)) distinctBySlot.set(slot, new Set());
+        distinctBySlot.get(slot).add(it.id);
+      }
+    });
 
     return day;
   });
@@ -348,10 +484,11 @@ export function alternativesFor(items, currentItem, opts = {}) {
   const exclude = new Set(opts.exclude || []);
   exclude.add(currentItem.id);
 
+  // Swim swaps to swim; every other slot excludes swim/loungewear as before.
   const pool = filterByWeather(items, wxBucket).filter(it =>
     !exclude.has(it.id) &&
     itemSlot(it) === slot &&
-    it.category !== "Swim" && it.category !== "Loungewear"
+    (slot === "swim" || (it.category !== "Swim" && it.category !== "Loungewear"))
   );
 
   return pool

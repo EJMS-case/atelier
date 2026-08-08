@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trip planner: capsule packing, Family Visit trips, honest Auto climate — 2026-08-08
+
+### Why
+Owner feedback on a real Arizona trip plan: (1) the activity dropdown had no fit for her actual trip — staying at family's house, pool swims, remote work, dinners out, young nieces; (2) "Auto" climate was unexplained, and a manual climate pick didn't visibly change anything; (3) the packer produced 4 fresh pieces every day (8 days → 32 items, "+17 over" carry-on) — she wants smart reuse of shoes/bags/garments across the trip, "within reason." This is also roadmap item A6 (trip capsule coherence).
+
+### Added
+- **"Family Visit" trip activity** (packer filters + AI activity notes + both activity dropdowns): swim is first-class (the pool), stilettos/sequins/fragile dry-clean pieces are out (floor time with small kids), a kitten heel or wedge stays fine for dinner out. No migration needed — `activity` columns are free text.
+- **Capsule packing** in `tripPacker.buildDailyOutfits`: per-slot distinct-item targets that scale with trip length (`capsuleTargets`: 2–3 shoes, 1–2 bags, 1–2 layers, 1–2 swimsuits, bottoms worn ~2–3×). Shoes/bags/outerwear/swim are reuse-first; once a slot hits its target, comparable NEW items are blocked — with an escape hatch: a day the capsule genuinely can't serve (Dinner on an all-sneaker trip) still gets the right new piece, and the second dinner then reuses it. Bottoms repeat up to 3 wears, never back-to-back; tops/dresses stay fresh; a statement garment appears at most once per trip (the per-day one-statement rule stays too).
+- **Swim actually packs now**: pool/beach/family days pick a suit into casual day looks (never Dinner/Work/Occasion outfits) and rotate the same one or two suits — previously `allowSwim` admitted swim to the pool but no slot could ever select it, so a pool trip packed zero swimsuits.
+- **Occasion-aware bags**: dinner days prefer a clutch/evening bag, work days a structured tote, casual days a tote/crossbody — so the second bag in the capsule is the *right* second bag.
+- **Single-day rebuilds stay in the capsule**: shuffle / add-outfit / change-occasion / change-activity in the trip preview seed the packer with the rest of the trip's wear counts (`priorUse`/`prevDayIds`/`tripDayCount`), so a reshuffle restyles the day without inventing new shoes and bags.
+- **Packing preview reuse line**: "N pieces re-worn across days" next to the category breakdown.
+- `scripts/trip-packer.test.mjs` (24 tests, `npm run test:packer`, in the battery) — capsule ceilings, escape hatch + dinner-shoe reuse, statement discipline, Family Visit swim/stiletto rules, priorUse seeding, Theme Park bans, swim swaps. All assertions sit on margins above the 0.6 tie-break jitter, so they're deterministic.
+- **AI trip looks pack light too**: `generateTripDayLook`'s variety block is now capsule-first — reuse shoes/bags from other days, bottoms ≤3 wears never consecutive, hero once, tops don't repeat, "re-wearing a piece is good packing; re-wearing a whole look is not."
+
+### Fixed
+- **Manual Climate override now actually wins**: per-day building previously preferred the live forecast over an explicit override, so picking "Hot" changed nothing within the 16-day horizon — exactly the "I'm not sure it works" confusion. Override now sets every day's packing bucket; the day cards still display the real forecast temps (the override changes what you pack, not the sky).
+- **Auto climate uses the destination's real typical high** from the AI brief (Arizona 105°) instead of the generic bucket stand-in (88°) for days beyond the forecast horizon — affects the outerwear threshold and the displayed "(est)" temps.
+- Day cards now lead with the day's packing bucket ("Hot · ☀ 105° (est)"), so what the packer is dressing for is always visible.
+- Swap picker filters candidates by the *day's* weather bucket, not the trip-level one; swim pieces can be swapped for other swim.
+
+### Changed
+- **"Auto" is explained in place**: the hint under the Climate select now says what Auto does (real per-day forecast within 16 days, else the destination's typical climate for the dates) and flips to "every day packs for X, ignoring the forecast" when overridden. Activity hint updated: "Beach, Resort & Family Visit pack for the pool · Theme Park & Active skip heels & delicate fabrics."
+
 ## [Unreleased] — Style Me declutter + app-wide copy audit + stylist roadmap — 2026-08-08
 
 ### Why

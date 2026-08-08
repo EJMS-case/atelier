@@ -720,6 +720,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     return tempToBucket(SEASONAL_HIGHS[month]);
   }
   function effectiveHigh() {
+    // In Auto, trust the destination brief's real typical high (82–105° in
+    // Arizona reads very differently from the generic 88° "Hot" stand-in).
+    // A manual override maps to its representative bucket temperature.
+    if (weather === "auto" && brief?.tempHighF != null) return brief.tempHighF;
     const w = effectiveWeather();
     return WEATHER_HIGH[w] ?? 60;
   }
@@ -738,24 +742,54 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     }
   }
 
-  // Compute the per-day high temp. Priority: real Open-Meteo forecast →
-  // AI-brief typical-high → climate-bucket fallback. Mirrors TripDetailView.
+  // Per-day PACKING temperature. A manual Climate override wins outright —
+  // "pack every day for Hot" means exactly that, forecast or not (previously
+  // a live forecast silently beat the override, which read as "the selector
+  // doesn't work"). In Auto: real Open-Meteo forecast → AI-brief typical
+  // high → seasonal fallback. Mirrors TripDetailView.
   const perDayHigh = (iso) => {
+    if (weather !== "auto") return WEATHER_HIGH[weather] ?? 60;
     if (perDayForecast?.[iso]?.high != null) return perDayForecast[iso].high;
     return effectiveHigh();
   };
   const perDayLow = (iso) => perDayForecast?.[iso]?.low ?? null;
   const perDayBucket = (iso) => {
+    if (weather !== "auto") return weather;
     const h = perDayHigh(iso);
     return h != null ? bucketFromHigh(h) : effectiveWeather();
   };
+  // DISPLAY temperature: always the real forecast when we have one (even
+  // under an override — the override changes what we pack, not the sky).
+  const displayHigh = (iso) =>
+    perDayForecast?.[iso]?.high ?? (weather === "auto" ? effectiveHigh() : (brief?.tempHighF ?? effectiveHigh()));
+
+  // Wear counts across the current working copy, excluding one outfit (the
+  // one being rebuilt) or a whole day (excludeOutfitIdx === "*"). Seeds the
+  // packer's capsule state so single-day rebuilds reuse the trip's existing
+  // shoes/bags instead of inventing new ones on every shuffle.
+  function usageExcluding(excludeDayIdx, excludeOutfitIdx) {
+    const use = {};
+    (dayLooks || []).forEach((day, di) => (day || []).forEach((o, oi) => {
+      if (di === excludeDayIdx && (excludeOutfitIdx === "*" || oi === excludeOutfitIdx)) return;
+      (o.items || []).forEach(it => { use[it.id] = (use[it.id] || 0) + 1; });
+    }));
+    return use;
+  }
 
   // Build a single OutfitDraft for one day + one occasion. Returns null if the
   // tripPacker produced no items (e.g. no weather-appropriate pieces).
-  function buildOneOutfit({ dayIso, dayAct, occasion, label = "" }) {
+  // dayIdx/excludeOutfitIdx feed the capsule seeding above; omit them to build
+  // against the whole working copy (e.g. a brand-new outfit on a day).
+  function buildOneOutfit({ dayIso, dayAct, occasion, label = "", dayIdx = null, excludeOutfitIdx = null }) {
+    const prevDayIds = dayIdx != null && dayIdx > 0
+      ? (dayLooks?.[dayIdx - 1] || []).flatMap(o => (o.items || []).map(it => it.id))
+      : [];
     const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
       occasions: [occasion],
       activities: [dayAct],
+      priorUse: usageExcluding(dayIdx, excludeOutfitIdx),
+      prevDayIds,
+      tripDayCount: dayCount,
     });
     const outfitItems = single.dailyOutfits?.[0] || [];
     if (!outfitItems.length) return null;
@@ -823,7 +857,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     const dayAct = dayActivities?.[dayIdx] || activity;
     const target = dayLooks[dayIdx]?.[outfitIdx];
     if (!target) return;
-    const built = buildOneOutfit({ dayIso, dayAct, occasion: target.occasion, label: target.label });
+    const built = buildOneOutfit({ dayIso, dayAct, occasion: target.occasion, label: target.label, dayIdx, excludeOutfitIdx: outfitIdx });
     if (!built) return;
     mutateOutfit(dayIdx, outfitIdx, prev => ({ ...prev, items: built.items }));
   }
@@ -836,7 +870,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     // Reshuffle every outfit on the day so the new activity filter applies.
     const dayIso = isoDate(addDays(new Date(start), dayIdx));
     const rebuilt = (dayLooks[dayIdx] || []).map(o => {
-      const fresh = buildOneOutfit({ dayIso, dayAct: act, occasion: o.occasion, label: o.label });
+      const fresh = buildOneOutfit({ dayIso, dayAct: act, occasion: o.occasion, label: o.label, dayIdx, excludeOutfitIdx: "*" });
       return fresh ? { ...o, items: fresh.items } : o;
     });
     mutateDay(dayIdx, () => rebuilt);
@@ -845,7 +879,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   function changeOccasion(dayIdx, outfitIdx, occ) {
     const dayIso = isoDate(addDays(new Date(start), dayIdx));
     const dayAct = dayActivities?.[dayIdx] || activity;
-    const built = buildOneOutfit({ dayIso, dayAct, occasion: occ });
+    const built = buildOneOutfit({ dayIso, dayAct, occasion: occ, dayIdx, excludeOutfitIdx: outfitIdx });
     mutateOutfit(dayIdx, outfitIdx, prev => ({
       ...prev,
       occasion: occ,
@@ -867,7 +901,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     const used = new Set(existing.map(o => o.occasion).filter(Boolean));
     const fallbacks = ["Dinner", "Occasion", "Lounge", "Casual"];
     const occ = fallbacks.find(o => !used.has(o)) || "Dinner";
-    const built = buildOneOutfit({ dayIso, dayAct, occasion: occ });
+    const built = buildOneOutfit({ dayIso, dayAct, occasion: occ, dayIdx });
     if (!built) {
       // Empty outfit still gets added so the user can swap pieces in manually.
       mutateDay(dayIdx, looks => [...looks, { id: newOutfitId(), label: "", occasion: occ, items: [] }]);
@@ -1035,8 +1069,13 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
             </select>
           </label>
         </div>
-        <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic" }}>
-          Theme Park bans heels &amp; delicate fabrics · Beach unbans swim · Active bans silk &amp; heels. Per-day overrides below.
+        <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic", lineHeight: 1.5 }}>
+          {weather === "auto"
+            ? <>Auto climate = each day's real {destination.trim() ? `${destination.trim().split(",")[0]} ` : ""}forecast (up to 16 days out); further out, the destination's typical climate for your dates.</>
+            : <>Climate override: every day packs for {weather}, ignoring the forecast.</>}
+        </div>
+        <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 2, fontStyle: "italic", lineHeight: 1.5 }}>
+          Beach, Resort &amp; Family Visit pack for the pool · Theme Park &amp; Active skip heels &amp; delicate fabrics. Per-day overrides below.
         </div>
 
         {/* Climate brief — only shown once a destination + brief exists. */}
@@ -1085,9 +1124,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
                   weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
                 });
                 const dayAct = dayActivities?.[dayIdx] || activity;
-                const dayHi = perDayHigh(dayIso);
+                const dayHi = displayHigh(dayIso);
                 const dayLo = perDayLow(dayIso);
                 const hasRealForecast = perDayForecast?.[dayIso]?.high != null;
+                const dayBucket = perDayBucket(dayIso);
                 return (
                   <div key={dayIdx} style={{
                     marginBottom: 10,
@@ -1101,6 +1141,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
                       <div style={{ fontSize: 11, fontWeight: 600, color: PALETTE.ink, minWidth: 88 }}>{dateLabel}</div>
                       {dayHi != null && (
                         <div style={{ fontSize: 10, color: PALETTE.muted, whiteSpace: "nowrap" }}>
+                          {dayBucket && <>{dayBucket} · </>}
                           ☀ {dayHi}°
                           {dayLo != null && <> · ☾ {dayLo}°</>}
                           {hasRealForecast && isNotableCondition(perDayForecast[dayIso].condition) &&
@@ -1208,6 +1249,13 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
               const CAT_ORDER = ["Outerwear","Dresses","Jumpsuits","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Occasionwear","Swim","Loungewear"];
               const cats = [...CAT_ORDER.filter(c => byCat[c]), ...Object.keys(byCat).filter(c => !CAT_ORDER.includes(c))];
               const carryOnOk = packingList.length <= 15;
+              // How many packed pieces work more than one day — the visible
+              // payoff of capsule packing ("your loafers cover 5 days").
+              const wearCounts = {};
+              dayLooks.forEach(day => day.forEach(o => (o.items || []).forEach(it => {
+                wearCounts[it.id] = (wearCounts[it.id] || 0) + 1;
+              })));
+              const reusedCount = packingList.filter(it => (wearCounts[it.id] || 0) > 1).length;
               return (
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -1218,6 +1266,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
                   </div>
                   <div style={{ fontSize: 10, color: PALETTE.muted, marginBottom: 6, lineHeight: 1.5 }}>
                     {cats.map(c => `${c} ${byCat[c].length}`).join(" · ")}
+                    {reusedCount > 0 && <> · {reusedCount} piece{reusedCount === 1 ? "" : "s"} re-worn across days</>}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, maxHeight: 160, overflowY: "auto" }}>
                     {packingList.map(it => (
@@ -1244,7 +1293,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
             target={swapTarget}
             items={items}
             currentDayItems={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.items || []}
-            weather={effW}
+            weather={perDayBucket(isoDate(addDays(new Date(start), swapTarget.dayIdx)))}
             occasion={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.occasion}
             onPick={(newItem) => swapItem(swapTarget.dayIdx, swapTarget.outfitIdx, swapTarget.item.id, newItem)}
             onClose={() => setSwapTarget(null)}
