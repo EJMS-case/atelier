@@ -2,6 +2,19 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Me filters know her wardrobe — 2026-08-08
+
+### Why
+Owner request: the Style Me filter chips were the static taxonomy, not her closet — a "Sneakers" chip rendered forever even though she owns zero sneakers ("No Sneakers" was a no-op, "Only Sneakers" an instant dead end), while Sandals — her single biggest shoe class, 14 pairs — had no chip at all. Filters should describe what she owns and wears, not what garments exist in the world.
+
+### Added
+- **`computeFilterChips(items, wearStats, activeKeys)`** in `style-filters.js`: the chip row is computed from the actual wardrobe. Types she owns zero of are hidden (goodbye Sneakers chip — it self-heals back if she ever adds a pair); within each structural group (lower half → shoes → tops), the types she actually *wears* lead, using derived wear-days with owned count as tiebreaker, so owned-but-never-worn types sink to the back of their group. Falls back to the full static list until items load, and a type whose toggle is currently ON stays visible even at zero owned so an active filter can never become invisible.
+- **Sandals filter chip** (shoes group): matches the `Sandals` subcategory plus sandal/slide/flip-flop names. Flows through the whole shared pipeline automatically — sampler pre-filter, validator compliance, prompt lines, and the "Only" occasion-ban rescue (Only Sandals is a direct instruction, same principle as Only Jeans on Work Dinner).
+- 10 new tests in `scripts/style-filters.test.mjs` (28 total): sandal matching both directions, the flats/sandals carve-out, zero-owned hiding, cold-start fallback, active-toggle visibility guard, wear-frequency ordering with preserved group order, `wear_count` fallback.
+
+### Fixed
+- The Flats matcher now carves out sandal-named shoes ("Tan Flat Sandals", "Leather Slides" filed under Flats) the same way it already carved out sneakers — "No Flats" spares them, "Only Flats" can't smuggle them in; they belong to the Sandals chip.
+
 ## [Unreleased] — The stylist learns from her edits (roadmap A1) — 2026-08-08
 
 ### Why
