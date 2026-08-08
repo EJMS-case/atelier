@@ -11,3 +11,4 @@ export const deletePlan = sb.deletePlan.bind(sb);
 export const saveTrip = sb.saveTrip.bind(sb);
 export const fetchTripsBetween = sb.fetchTripsBetween.bind(sb);
 export const updateTrip = sb.updateTrip.bind(sb);
+export const deleteTrip = sb.deleteTrip.bind(sb);

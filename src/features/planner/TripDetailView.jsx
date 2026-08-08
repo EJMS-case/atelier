@@ -4,7 +4,7 @@
 // counts and coverage warnings.
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchPlansBetween, savePlan, deletePlan, updateTrip } from "./plannerApi.js";
+import { fetchPlansBetween, savePlan, deletePlan, updateTrip, deleteTrip } from "./plannerApi.js";
 import { analyzeTripDestination, generateTripDayLook } from "../../lib/ai/tripAdvisor.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
@@ -446,6 +446,32 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
     }
   };
 
+  // Delete the whole trip so it can be rebuilt from scratch. The trip row goes
+  // first — if that fails, nothing else is touched. Day-plan rows for the
+  // trip's dates are then cleared best-effort (they hold the trip's looks;
+  // leaving them would strand orphan outfits on the calendar and pre-fill any
+  // re-created trip with the old plan). onBack() re-fetches plans + trips, so
+  // the calendar reflects the deletion immediately.
+  const [deleting, setDeleting] = useState(false);
+  const handleDeleteTrip = async () => {
+    if (deleting) return;
+    const plannedDays = days.filter(iso => outfitsOf(plans[iso]).length > 0);
+    const msg = plannedDays.length > 0
+      ? `Delete this trip? Its ${plannedDays.length} planned day${plannedDays.length === 1 ? "" : "s"} will be cleared from the calendar too. This can't be undone.`
+      : "Delete this trip? This can't be undone.";
+    if (!window.confirm(msg)) return;
+    setDeleting(true);
+    try {
+      const ok = await deleteTrip(trip.id);
+      if (!ok) throw new Error("Couldn't delete the trip — check your connection and try again.");
+      await Promise.all(plannedDays.map(iso => deletePlan(iso).catch(() => {})));
+      onBack();
+    } catch (e) {
+      setError(e.message || "Couldn't delete the trip.");
+      setDeleting(false);
+    }
+  };
+
   // ── Derived packing data ──────────────────────────────────────────────────
   // Flattens every outfit on every day, then groups items by category with
   // per-item worn-day counts. Coverage warnings now run per OUTFIT — a day
@@ -509,10 +535,16 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
 
       {/* ── Header ── */}
       <div style={{ padding: "14px 16px 0", borderBottom: `1px solid ${PALETTE.line}` }}>
-        <button onClick={onBack}
-          style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", padding: 0, marginBottom: 10 }}>
-          ← Back to Calendar
-        </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <button onClick={onBack}
+            style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", padding: 0 }}>
+            ← Back to Calendar
+          </button>
+          <button onClick={handleDeleteTrip} disabled={deleting}
+            style={{ background: "none", border: "none", color: "var(--color-danger)", fontSize: 11, cursor: deleting ? "default" : "pointer", letterSpacing: "0.06em", padding: 0, opacity: deleting ? 0.5 : 1 }}>
+            {deleting ? "Deleting…" : "Delete Trip"}
+          </button>
+        </div>
 
         <div style={{ marginBottom: 4 }}>
           <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted }}>TRIP</div>
