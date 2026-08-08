@@ -127,13 +127,13 @@ export async function generateTripDayLook(items, occasion, weather, destination,
 
   const highF = WEATHER_HIGH[weather] || 60;
 
-  // Beach / Resort days explicitly want swim + cover-ups in the inventory.
-  // Everything else excludes Swim / Loungewear so the AI doesn't propose a
-  // bikini for City Walking. Without this branch the brief said "swim and
-  // cover-ups are first-class" but the AI never saw any swimwear and would
-  // fall back to a knit maxi skirt.
+  // Beach / Resort / Family Visit days explicitly want swim + cover-ups in the
+  // inventory. Everything else excludes Swim / Loungewear so the AI doesn't
+  // propose a bikini for City Walking. Without this branch the brief said
+  // "swim and cover-ups are first-class" but the AI never saw any swimwear
+  // and would fall back to a knit maxi skirt.
   const activity = opts.activity || "Sightseeing";
-  const allowSwim = activity === "Beach" || activity === "Resort";
+  const allowSwim = activity === "Beach" || activity === "Resort" || activity === "Family Visit";
 
   const eligible = items.filter(it => {
     if (!it.category) return false;
@@ -184,6 +184,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     "Theme Park": "All-day walking and standing. PRIORITIZE sneakers / comfortable flats / sturdy sandals. NO heels, pumps, stilettos, mules, cocktail dresses, gowns, or silk gowns. NO jeans (too restrictive for ride lines and long days). Lean into breathable cotton, athletic-leaning silhouettes, and casual layered pieces. Bag should be a crossbody or backpack.",
     "Beach": "Pool / beach / waterfront day. Swim, cover-ups, sundresses, sandals, and lightweight sun-protective layers are first-class. NO wool, cashmere, chunky knits, boots, or heels. Raffia / canvas bag.",
     "Resort": "Pool + poolside dinner. Mix swim / cover-ups with elevated easy pieces (linen, silk, flowy fabrics). NO boots, NO stilettos.",
+    "Family Visit": "Staying at family's home — pool swims, remote-work days, casual dinners out, playing with young kids. Comfortable, washable, low-fuss pieces; swim + cover-ups welcome. NO stilettos, sequins, or fragile dry-clean-only pieces — a kitten heel or wedge is fine for dinner out.",
     "Active": "Hiking, sport, gym, or city walking. Range of motion is mandatory. NO heels, pumps, stilettos, cocktail dresses, gowns, formal separates, silk, satin, lace, or sequin. Sneakers + athleisure + technical fabrics.",
     "City Walking": "Sightseeing in a city — walking 5-10 miles. Polished but practical. NO heels, NO stilettos. Jeans + blazers + comfortable boots/flats welcome.",
     "Sightseeing": "Default — minimal lifestyle constraints. Build for the occasion + weather + destination.",
@@ -207,7 +208,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
         .slice(0, 6);
       return `  · ${d.occasion || "?"} (${d.weather || "?"}): ${names.join(", ") || "(empty)"}`;
     }).join("\n");
-    varietyBlock = `\nALREADY WORN ON OTHER TRIP DAYS — DO NOT REPEAT:\n${summary}\n\nVARIETY RULES:\n- Rotate the hero/statement garment (the most distinctive top, dress, blazer, or layer). The hero must NOT appear in more than one day.\n- Basics like jeans, a black turtleneck, or a neutral cardigan may repeat at most twice across the trip.\n- Never produce the exact same outfit twice.\n- Shoes may repeat if the occasion calls for it, but vary them when possible.\n`;
+    varietyBlock = `\nALREADY WORN ON OTHER TRIP DAYS:\n${summary}\n\nCAPSULE + VARIETY RULES (this trip packs from ONE suitcase — pack light, style smart):\n- REUSE shoes and bags: whenever a pair of shoes or a bag from another day suits this occasion, pick THAT one instead of introducing a new one. The whole trip should need only 2-3 pairs of shoes and 1-2 bags.\n- Bottoms may repeat up to 3 wears across the trip, styled differently each time — but never two days running.\n- Rotate the hero/statement garment (the most distinctive top, dress, blazer, or print). The hero must NOT appear on more than one day.\n- Tops should not repeat.\n- Never produce the exact same outfit twice — re-wearing a piece is good packing; re-wearing a whole look is not.\n`;
   }
 
   const destNote = destination ? ` in ${destination}` : "";
