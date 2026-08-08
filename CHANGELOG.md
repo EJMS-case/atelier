@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Me declutter + app-wide copy audit + stylist roadmap — 2026-08-08
+
+### Why
+Owner screenshot request: the Style Me page carried two redundant affordances (a header "Build manually" button duplicating the empty-state one, and an "Open Style Me" button for a panel that already auto-opens) plus filler copy. She also asked for an app-wide audit of user-facing text and a handoff roadmap covering "act like a highly acclaimed stylist" and "move features out of Settings, make them smarter."
+
+### Changed
+- **Style Me page**: header "Build manually" button removed; empty state reduced to the single "Build a look manually" entry (the Style Me panel auto-opens via nav and has its own collapsed button, so "Ready when you are…" + "Open Style Me" were dead weight).
+- **Copy audit**: Favorites' stale "Thumbs-up a look" wording → ♥ (the control has been a heart since #132); "Remove — also forgets this thumbs-up" → "Remove from favorites"; wordy empty states trimmed in LooksView ("Nothing waiting to be worn — …" → one line), OutfitHistory, and Favorites. Everything else surveyed was doing real work (search placeholders, tri-state filter hint, error guidance) and stays.
+
+### Removed
+- **Favorites "Shopping — coming soon" tab**: a dead promise with no content behind it. Re-add when shopping favorites exist.
+
+### Docs
+- HANDOFF gains an "Owner-requested roadmap (2026-08-08)" section: learn-from-edits (log #161 editor swaps as taste signal), editorial rationale voice, forecast-defaulted weather chip, per-occasion hero-piece memory, About Me → structured prompt guidance, and a Settings decomposition plan (plumbing stays; Style Fingerprint / Preferences / About Me move to a first-class Style Profile surface; Shopping and Color Advisor promoted out of "More Tools").
+
 ## [Unreleased] — Edit a Style Me look in place before saving — 2026-08-07
 
 ### Why

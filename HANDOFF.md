@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed 2026-08-07 on branch `claude/atelier-outfit-editor-perf-jmsdtt` — this session shipped the in-place Style Me look editor (owner request: swap/remove/add a piece on the results screen before saving). Prior same-day work: PRs #158–#160 merged to `main` (builder crop-hug root cause + aspect-locked resize, string-mode looks first-class, and a FULL code audit: dead code, duplication, counteractive logic, stale docs). Previous phase: PRs #146–#157. The #145 deferred-audit list is closed (#146), three owner-reported production bugs were root-caused and fixed (#147, #148), and the closet-image pipeline was overhauled (#149, #150, #152). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
+Refreshed 2026-08-08 on branch `claude/atelier-outfit-editor-perf-jmsdtt`. Latest sessions shipped: the in-place Style Me look editor (#161 — swap/remove/add a piece on the results screen before saving), then a Style Me page declutter + app-wide copy audit (owner screenshot request 2026-08-08). Prior: PRs #158–#160 (builder crop-hug root cause + aspect-locked resize, string-mode looks first-class, FULL code audit). **NEW: see "Owner-requested roadmap (2026-08-08)" below — she asked for a plan to make the app act like a highly acclaimed stylist and to move features out of Settings; that section is the agreed direction for the next phases.** Previous phase: PRs #146–#157. The #145 deferred-audit list is closed (#146), three owner-reported production bugs were root-caused and fixed (#147, #148), and the closet-image pipeline was overhauled (#149, #150, #152). Read this before starting the next phase. The owner's standing brief: make the app better in any way necessary, go live without preview, keep it efficient/cheap in tokens, and improve **every** aspect.
 
 **Dark mode is REMOVED** (owner request, this phase): no theme toggle, no `THEME_KEY`, no `[data-theme]` CSS. Do not reintroduce. `migrateLocalStorage` strips the orphaned `atelier:theme` key.
 
@@ -76,6 +76,34 @@ Four parallel audit passes (dead code, duplication, counteractive logic, stale d
 6. **Dead schema candidates — ASK before dropping** (destructive): `moodboards` table (zero code refs), `look_feedback.mood` column (write-only-null, reads removed), `wardrobe_items.primary_color_hex/secondary_color/secondary_color_hex/thumbnail_url` (zero refs; may hold data).
 7. **Export-surface trim**: ~20 symbols carry `export` no other module imports (STORAGE_HEADERS, TZ, storage-key consts, etc.) — cosmetic; de-export opportunistically when editing those files.
 
+## Owner-requested roadmap (2026-08-08) — "best app that acts like a highly acclaimed stylist"
+
+The owner asked two direct questions: how do we make Atelier style like a top-tier human stylist, and can features move out of Settings and get smarter. This is the worked-out plan; pick items up top-down, each as its own PR. Nothing here is started unless marked.
+
+### A. Stylist-grade intelligence (highest leverage first)
+
+1. **Learn from her edits (new data source, highest signal).** The #161 in-place editor produces the purest taste data the app has ever had: "for Work + Cool, she swapped the suggested boot for the kitten heel." Log each swap/remove/add (a compact `look_edits` row: occasion, weather, out-item, in-item, timestamp — or extend `look_feedback`), then feed recurring patterns into the prompt as a SWAP LESSONS block next to PERSONAL PATTERNS, and into the style fingerprint when it refreshes. A stylist who never repeats a rejected choice is what "acclaimed" feels like. (Nothing logs yet — the editor is UI-only.)
+2. **Editorial voice.** The rationale reads competent but generic. Tune the prompt so every look's note reads like a stylist's card: what the look is doing (proportion, color story, texture), one styling gesture (cuff, tuck, knot), and why it suits HER (fingerprint/About Me reference). Keep it to 2 sentences — taste, not essay. The taste-calibration brands in `STYLING_STATIC_PREAMBLE` are the register.
+3. **Weather should default itself.** She picks a weather chip every tap; `geocode.js` + `weather.js` already fetch real forecasts for trips. Default the Style Me weather chip to today's forecast bucket for her home location (Settings-free: infer once, store in `user_settings`), keep the chips as a manual override. One less decision per tap = more like texting your stylist.
+4. **Occasion memory / hero pieces.** Pre-compute per-occasion signals from history + loves ("her Work Dinner looks center on the 3 silk skirts and the Khaite-register knits") and pass as a compact prompt block. The sampler already knows rotation; this is the opposite — what she RETURNS to, per context.
+5. **Silhouette / proportion awareness.** About Me fields are free text injected raw. Convert the stable ones (torso length, proportions, fit notes) into explicit prompt guidance ("prefers relaxed shoulders — avoid structured blazers over fitted tops") so looks are flattering by construction, not by luck.
+6. **Trip capsule coherence** (later): multi-day trips should re-wear anchor pieces across days like a stylist packs — the packer exists; coherence scoring doesn't.
+
+### B. Settings decomposition — move taste out, keep plumbing in
+
+Settings today mixes three unrelated things. Split:
+
+- **Stays in Settings (plumbing):** API keys, Photo Backgrounds / trim batches, orphan recovery, data tools. This is maintenance, not styling.
+- **Move OUT → a "Style Profile" surface** (new view or a section of Saved/Inspo — owner to pick placement): Style Fingerprint (currently buried; it's the single most stylist-like artifact the app has — surface it as "your stylist's read on you"), Style Preferences (color pairs, modes), About Me. **Make them smarter as they move:** suggest color pairs from her actual loved looks instead of free-text entry; auto-refresh fingerprint stays, but show WHAT changed since last read; About Me → structured chips where possible.
+- **Promote out of "More Tools":** Shopping and Color Advisor deserve first-class entry points (Shopping especially — it's rebuilt and brand-agnostic now). Style Intelligence can fold INTO the Style Profile surface (its wear-pattern content and the fingerprint are one story). Visual AI pilot stays tucked away until it graduates.
+- Nav is at capacity on the phone (the screenshot shows "Style Me" truncated by the count + saved chips) — any new surface must replace or nest, not append. Consider collapsing the item count + sync chip into one compact indicator before adding anything.
+
+### C. Session hygiene items shipped 2026-08-08 (this branch)
+
+- Style Me page decluttered per screenshot: header "Build manually" button and the empty-state copy + "Open Style Me" button removed; the single "Build a look manually" button remains (the panel already auto-opens via nav, and the collapsed fixed Style Me button covers the closed state).
+- Favorites' dead "Shopping — coming soon" tab removed (re-add only when shopping favorites actually exist; item 8 below updated).
+- Copy audit: stale "thumbs-up" wording → ♥ (the control changed in #132 but the copy never followed); wordy empty states in LooksView/OutfitHistory/Favorites trimmed. Remaining copy was checked and is doing work (search placeholders, tri-state filter hint, error guidance).
+
 ## Known open items (start here)
 
 0y. **2026-08-05 session — three owner reports, all root-caused (PRs #154, #155).** Read before touching the sampler, the schedule path, coercion, or EditorialCollage:
@@ -110,7 +138,7 @@ Four parallel audit passes (dead code, duplication, counteractive logic, stale d
    - **Belts** splits between `""` (11) and `null` (3) — Belts has no subcategories, so this is just an empty-value inconsistency.
    Nothing is broken (matchers accept both), so this is a simplification, not a bug fix. Real normalization = pick one convention, migrate, enforce on write. Do it as its own change with the full battery.
 7. **Trip planner**: verify live that `daily.weathercode` comes back for a real destination; sanity-check move-outfit-between-days on the phone. Trip days now store per-day weather buckets (this phase) — old rows keep the single trip-level bucket until re-saved.
-8. **Favorites follow-ups (optional)**: Shopping sub-tab is still "coming soon".
+8. **Favorites follow-ups (optional)**: the "coming soon" Shopping sub-tab was REMOVED 2026-08-08 (dead promise, owner-requested copy audit). If shopping favorites ship, add the tab back with real content.
 9. **Hosiery images & inventory** (adjusted 2026-08 per owner): the wardrobe has **17** Noosh hosiery items, 15 with real bg-removed product photos. Removed as not owned: opaque brown, opaque skin-tone, and 2 of the 3 seeded micro-fishnet rows — the single owned pair is the renamed "Noosh micro fishnet tights — black" (real photo). PNGs live in `scripts/assets/hosiery/`, applied via `scripts/apply-noosh-photos.mjs` (idempotent); `seed-hosiery.mjs` excludes the not-owned combos. All 17 rows (including skin-tone and brown semi-opaque) map to shipped `-v2` PNGs in `apply-noosh-photos.mjs`.
 
 ### Deferred-audit list — CLOSED this phase (PR #146), do not re-open
@@ -140,7 +168,7 @@ deliberately left alone. Don't re-audit these without a new symptom.
 - **Closet**: bulk re-categorization UX, better dedup, surfacing RESTING/neglected pieces.
 - **Crop / bg-removal / trim**: pipeline in `src/lib/bgRemoval.js`, `src/features/images/recutDrip.js`, `TrimmedImage.jsx`. Owner cares about isolation/trim quality; audit results on real items.
 - **Saved/History**: both searchable now (History 2026-08-02, Saved Looks + Favorites this phase via `LookSearchContext` — cards filter themselves since the lists own their data). Maybe collage regeneration for old looks.
-- **Shopping**: prompts are now brand-agnostic (taste inferred from the closet). Follow up on whether results feel smarter; the Favorites > Shopping sub-tab is still "coming soon".
+- **Shopping**: prompts are now brand-agnostic (taste inferred from the closet). Follow up on whether results feel smarter. (The Favorites > Shopping placeholder tab was removed 2026-08-08.)
 
 ## Working agreements
 

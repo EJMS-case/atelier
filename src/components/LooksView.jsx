@@ -174,7 +174,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
       {!loading && logs.length > 0 && displayed.length === 0 && (
         <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
           {filterStatus === "Ready to wear" && filterOcc === "All" && filterWx === "All"
-            ? "Nothing waiting to be worn — every saved look is already worn or scheduled. Save a new one and it'll show up here."
+            ? "Every saved look is already worn or scheduled."
             : "No saved looks match these filters."}
         </p></div>
       )}

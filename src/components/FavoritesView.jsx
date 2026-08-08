@@ -9,9 +9,9 @@ import Thumb from "./Thumb.jsx";
 
 // The Outfits tab merges TWO favorite signals into one occasion-grouped list:
 //   1. hearted outfit logs (the `favorites` table — heart buttons in History)
-//   2. loved looks — thumbs-ups given in Style Me (`look_feedback`, rating=1)
-// The thumbs-up is where her actual taste lives (the heart went unused for
-// weeks while loves accumulated), so the tab surfaces both automatically.
+//   2. loved looks — ♥ ratings given in Style Me (`look_feedback`, rating=1)
+// The Style Me ♥ is where her actual taste lives (the History heart went
+// unused for weeks while loves accumulated), so the tab surfaces both.
 // A loved look whose item set matches a hearted log is shown once, as the log
 // (it carries date/notes/layout; the feedback row doesn't).
 export default function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
@@ -53,7 +53,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
     })),
   ];
 
-  const tabs = [["outfits","Outfits",entries.length],["pieces","Pieces",favPieces.length],["shopping","Shopping",0]];
+  const tabs = [["outfits","Outfits",entries.length],["pieces","Pieces",favPieces.length]];
 
   // Group by occasion so the page is scannable instead of one long date-sorted
   // list. Occasions are normalized to their current bucket via aliases; groups
@@ -107,7 +107,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
     return (
       <SavedLookCard key={entry.id} log={{ garment_ids: fb.item_ids }} items={items} subtitle={subtitle} onEditItem={onEditItem}
         headerRight={
-          <button style={s.heartBtn} onClick={() => unlove(fb)} title="Remove — also forgets this thumbs-up" aria-label="Remove — also forgets this thumbs-up">
+          <button style={s.heartBtn} onClick={() => unlove(fb)} title="Remove from favorites" aria-label="Remove from favorites">
             {heartSvg}
           </button>
         }
@@ -129,7 +129,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading favorites…</p></div>}
       {!loading && tab === "outfits" && (
         entries.length === 0
-          ? <div style={s.empty}><p style={s.emptyText}>Nothing here yet. Thumbs-up a look in Style Me or tap the heart on any outfit in History and it will appear here.</p></div>
+          ? <div style={s.empty}><p style={s.emptyText}>Nothing here yet — tap ♥ on a look in Style Me or in History.</p></div>
           : groupedEntries.map(([occ, group]) => (
               <div key={occ}>
                 <div style={{ ...si.sectionLabel, textTransform:"uppercase", marginTop:8 }}>
@@ -161,9 +161,6 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
                 </div>
               ))}
             </div>
-      )}
-      {!loading && tab === "shopping" && (
-        <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>Shopping favorites coming soon.</p></div>
       )}
     </div>
   );

@@ -1622,11 +1622,6 @@ export default function App() {
           <div style={s.pageHeader}>
             <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
             <h2 style={s.pageTitle}>Your Looks</h2>
-            <button
-              onClick={() => setManualBuilderOpen(true)}
-              style={{...s.btnSecondary, padding:"6px 12px", fontSize:12, marginLeft:"auto"}}>
-              Build manually
-            </button>
           </div>
           {styling === true && (
             <div style={s.empty}>
@@ -1707,14 +1702,13 @@ export default function App() {
               <Icon path={icons.sparkle} size={14}/> Style {3 - outfits.length} more
             </button>
           )}
+          {/* Empty state: the Style Me panel is already open (or one tap away
+              via the fixed collapsed button), so the only affordance needed
+              here is the single manual-build entry (owner request 2026-08-08:
+              one manual build on this page, no redundant copy or buttons). */}
           {!outfits && !styling && (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
-              <p style={s.emptyText}>Ready when you are — pick an occasion and generate your first looks.</p>
-              <button style={{...s.btnPrimary, padding:"12px 24px"}}
-                onClick={() => setStylePanelOpen(true)}>
-                <Icon path={icons.sparkle} size={15}/> Open Style Me
-              </button>
               <button style={{...s.btnSecondary, padding:"10px 20px", marginTop:10}}
                 onClick={() => setManualBuilderOpen(true)}>
                 Build a look manually
