@@ -742,6 +742,12 @@ export function sampleClosetItems({
 
 /**
  * Format sampled items as an annotated inventory string for the prompt.
+ * When an item carries the curated `formality` smallint (1 Active … 8 Black
+ * Tie; "CONTEXT for the stylist, never a hard filter"), it's appended to the
+ * category segment as a compact ` f6`-style token — the cheapest placement
+ * that keeps the line format stable. The preamble's INVENTORY FORMAT +
+ * FORMALITY lines document the scale for the model; items without the column
+ * simply omit the token.
  * @param {Object[]} sampled - the sampled items
  * @param {function} getSleeveType - sleeve classification function from App
  * @returns {string}
@@ -800,9 +806,11 @@ export function formatInventory(sampled, getSleeveType) {
 
     const name = it.name || "";
     const nameLower = name.toLowerCase();
+    // Curated formality (1-8) — compact ` f6` token on the category segment.
+    const formalityTag = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
     const parts = [
       `${short} ${colorInfo}`,
-      `${it.category}${it.subcategory ? `>${it.subcategory}` : ""}`,
+      `${it.category}${it.subcategory ? `>${it.subcategory}` : ""}${formalityTag}`,
       `${name}${knitTag}${sleeveTag}${setTag}${restTag}`,
     ];
     // Brand only if it's not already in the item name (common pattern).

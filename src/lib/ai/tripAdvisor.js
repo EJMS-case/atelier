@@ -189,8 +189,14 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     "City Walking": "Sightseeing in a city — walking 5-10 miles. Polished but practical. NO heels, NO stilettos. Jeans + blazers + comfortable boots/flats welcome.",
     "Sightseeing": "Default — minimal lifestyle constraints. Build for the occasion + weather + destination.",
   };
+  // Swim-friendly activities get one extra packing rule: a "swimsuit" must be
+  // complete — a one-piece OR a matching top+bottom pair, never a lone
+  // separate — and 1-2 suits cover the whole trip, reused across pool days.
+  const swimNote = allowSwim
+    ? " A swimsuit means a complete suit — a one-piece OR a matching top + bottom pair, never a lone separate — and 1-2 suits cover the whole trip, reused."
+    : "";
   const activityBlock = activity && activity !== "Sightseeing"
-    ? `\nACTIVITY: ${activity}. ${ACTIVITY_NOTES[activity] || ""}\n`
+    ? `\nACTIVITY: ${activity}. ${ACTIVITY_NOTES[activity] || ""}${swimNote}\n`
     : "";
 
   // ── Variety block: show the AI what's already been worn on OTHER days so it

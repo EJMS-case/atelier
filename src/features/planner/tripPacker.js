@@ -105,9 +105,12 @@ function scoreForOccasion(item, occasion) {
 // semantics kept on top of it:
 //   · a COMPLETE set (one indivisible two-piece) packs like a dress — it's a
 //     full outfit base. A HALF of a set is not a base, so it fills no slot.
-//   · swim is its own capsule slot: pool/beach activities pick one or two
-//     suits and reuse them across the trip (they never substitute for a
-//     core garment slot — the composer adds swim ON TOP of a day look).
+//   · swim is its own capsule slot: pool/beach activities pack one or two
+//     complete SUITS — a one-piece, or a matching top+bottom pair composed
+//     by swimPieceKind()/composeSuit() — never a lone separate. A suit never
+//     substitutes for a core garment slot; it joins a day look only until
+//     the trip's suit target (capsuleTargets().swim) is met, then the packed
+//     suits are simply reused off-schedule.
 // This also fixes the old drift where Athleisure/Loungewear returned null and
 // could never pack — slotForItem routes them to top/bottom/dress by sub.
 function itemSlot(it) {
@@ -123,6 +126,22 @@ function itemSlot(it) {
     case "swim":      return "swim";
     default:          return null;
   }
+}
+
+// ── Swim piece classifier ────────────────────────────────────────────────────
+// Real swim rows are often all subcategory "Swimsuits" with no set_id, so the
+// NAME is the only signal separating a complete suit from half of one
+// ("Rocky Bikini Bottom" vs "Full coverage one-piece"). Order matters: the
+// one-piece test runs first so "Full coverage one-piece" never falls into the
+// top/bottom buckets, while "Eliza Full Coverage Bottom" (no "one-piece" in
+// the name) still classifies as a bottom. A row named just "Swimsuit" gives
+// no top/bottom signal and defaults to one-piece — i.e. complete on its own.
+function swimPieceKind(it) {
+  const name = it?.name || "";
+  if (/one.?piece|maillot/i.test(name)) return "one-piece";
+  if (/\btop\b/i.test(name)) return "top";
+  if (/\bbottoms?\b|\bbrief\b/i.test(name)) return "bottom";
+  return "one-piece";
 }
 
 // ── Per-day outfit composer ──────────────────────────────────────────────────
@@ -227,6 +246,8 @@ export function capsuleTargets(dayCount) {
     shoes:     dayCount <= 2 ? 1 : dayCount <= 5 ? 2 : 3,
     bags:      dayCount <= 3 ? 1 : 2,
     outerwear: dayCount <= 5 ? 1 : 2,
+    // swim counts SUITS, not pieces: a suit is one one-piece OR one matching
+    // top+bottom pair, so a 2-suit trip may pack up to 4 swim ITEMS.
     swim:      dayCount <= 4 ? 1 : 2,
     bottoms:   Math.min(4, Math.max(1, Math.ceil(dayCount / 2.5))),
   };
@@ -385,6 +406,68 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     return best;
   };
 
+  // ── Suit composer ──────────────────────────────────────────────────────────
+  // A packed swimsuit is a COMPLETE suit: a one-piece alone, or a matching
+  // top+bottom pair. Lead piece comes from the normal pick() scoring; if it's
+  // a separate, its counterpart is the opposite-kind piece ranked by same
+  // color (case-insensitive, +2), shared first-word name prefix (+1), and
+  // already-worn-this-trip (+0.5). A separate with NO counterpart in the pool
+  // falls back to a one-piece; if there's none, the day gets no swim at all —
+  // a lone bikini bottom on the schedule was exactly the reported bug.
+  // Returns [] or 1-2 items (never a lone separate).
+  const composeSuit = (swimPool, occasion, day, d, { unwornOnly = false } = {}) => {
+    const eligible = unwornOnly
+      ? swimPool.filter(it => !(useCount.get(it.id) > 0))
+      : swimPool;
+    if (!eligible.length) return [];
+    const pickOnePiece = () => {
+      const onePieces = eligible.filter(it => swimPieceKind(it) === "one-piece");
+      const op = onePieces.length ? pick(onePieces, occasion, day, "swim", d) : null;
+      return op ? [op] : [];
+    };
+    const lead = pick(eligible, occasion, day, "swim", d);
+    if (!lead) return [];
+    const kind = swimPieceKind(lead);
+    if (kind === "one-piece") return [lead];
+    const wantKind = kind === "top" ? "bottom" : "top";
+    const counterparts = eligible.filter(it => it.id !== lead.id && swimPieceKind(it) === wantKind);
+    if (!counterparts.length) return pickOnePiece();
+    const leadColor = (lead.color || "").trim().toLowerCase();
+    const leadPrefix = ((lead.name || "").trim().split(/\s+/)[0] || "").toLowerCase();
+    let mate = null, mateScore = -Infinity;
+    for (const c of counterparts) {
+      let s = 0;
+      if (leadColor && (c.color || "").trim().toLowerCase() === leadColor) s += 2;
+      const cPrefix = ((c.name || "").trim().split(/\s+/)[0] || "").toLowerCase();
+      if (leadPrefix && cPrefix === leadPrefix) s += 1;
+      if ((useCount.get(c.id) || 0) > 0) s += 0.5;
+      if (s > mateScore) { mateScore = s; mate = c; }
+    }
+    return [lead, mate];
+  };
+
+  // ── Suit placement policy ──────────────────────────────────────────────────
+  // capsuleTargets().swim is the number of SUITS the trip packs — swim does
+  // not ride on every casual day (the old behavior that put the same lone
+  // bikini bottom on all 8 days). Suit #1 lands on the first swim-eligible
+  // day; suit #2 (long trips only) waits for the back half and must be made
+  // of not-yet-worn pieces, otherwise it would just duplicate suit #1.
+  // Rebuild guard: a single-day reshuffle (opts.priorUse) of a trip that
+  // already packs a suit must not re-add swim, so prior swim wears count as
+  // the target already met. (Single-day rebuilds pass dayCount=1 with
+  // tripDayCount set; Math.floor(1/2)=0, so the midpoint check below can't
+  // block day 0 there.)
+  const swimTarget = targets.swim;
+  let suitsPlaced = 0;
+  if (opts.priorUse) {
+    const priorSwim = Object.entries(opts.priorUse).some(([id, count]) => {
+      if (!count) return false;
+      const it = byId.get(id);
+      return !!it && itemSlot(it) === "swim";
+    });
+    if (priorSwim) suitsPlaced = swimTarget;
+  }
+
   const dailyOutfits = dayPools.map(({ pool, occasion, hi }, d) => {
     const inSlot = (slot) => pool.filter(it => itemSlot(it) === slot);
 
@@ -428,13 +511,18 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     const bag = pick(bags, occasion, day, "bags", d);
     if (bag) day.push(bag);
 
-    // Swim rides along on pool/beach days (the activity filter already gates
-    // which days see swim in their pool) — but only for casual daytime looks,
-    // never inside a Dinner/Work/Occasion outfit. Capsule slot: the same one
-    // or two suits rotate across the trip.
-    if (swim.length && !/work|dinner|occasion/i.test(occasion)) {
-      const suit = pick(swim, occasion, day, "swim", d);
-      if (suit) day.push(suit);
+    // Swim joins the day look only until the trip's suit target is met (the
+    // activity filter already gates which days see swim in their pool), and
+    // only for casual daytime looks — never inside a Dinner/Work/Occasion
+    // outfit. Each placement is a COMPLETE suit from composeSuit(); suit #2
+    // waits for the back half of the trip and uses fresh pieces only.
+    if (swim.length && !/work|dinner|occasion/i.test(occasion) && suitsPlaced < swimTarget) {
+      const wantsSecond = suitsPlaced >= 1;
+      const midpointOk = !wantsSecond || (swimTarget === 2 && d >= Math.floor(dayCount / 2));
+      if (midpointOk) {
+        const suit = composeSuit(swim, occasion, day, d, { unwornOnly: wantsSecond });
+        if (suit.length) { day.push(...suit); suitsPlaced++; }
+      }
     }
 
     // Bump capsule state so the next day's picks see today's wears.

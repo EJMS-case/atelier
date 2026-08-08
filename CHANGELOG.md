@@ -2,6 +2,35 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trip swim packs as a complete suit, not a daily bikini bottom — 2026-08-08
+
+### Why
+Owner screenshot report: reloading the Arizona "Family Visit" trip put a single swim BOTTOM (no top) in every Casual day's outfit card. Two design flaws from the #163 capsule work: swim was picked as ONE item per day (her swim rows are separates — "Rocky Bikini Bottom" has nothing linking it to "Mako Bikini Top", so a lone bottom won the pick), and the capsule reuse bonus repeated that same lone bottom on all 8 days.
+
+### Fixed
+- **A packed swimsuit is now a COMPLETE suit**: a one-piece, or a top+bottom pair matched by color (exact, case-insensitive) then shared name prefix ("Mako Bikini Top — Tobacco" pairs with "Rocky Bikini Bottom — Tobacco"). A separate with no counterpart falls back to a one-piece; if none exists, the day gets no swim at all — never a lone separate.
+- **Suits place 1–2 times per trip, not daily**: `capsuleTargets().swim` now counts SUITS — suit #1 lands on the first swim-eligible casual day, suit #2 (trips > 4 days) waits for the back half and uses not-yet-worn pieces only. The suits still reach the packing list (it derives from day items); the other day cards go back to being outfits.
+- **Rebuild guard**: a single-day reshuffle of a trip that already packs a suit (any swim item in `priorUse`) won't re-add swim.
+- The AI day-look path (`tripAdvisor`) gets the matching rule for swim-allowed activities: a swimsuit means a complete suit, 1–2 per trip, reused.
+- 14 new packer tests (38 total, `npm run test:packer`): no-lone-separate, ≤-target placement, color/prefix pairing, one-piece fallbacks, the "Eliza Full Coverage Bottom" naming edge, rebuild guard.
+
+Note: already-saved trip days keep their old lone-bottom rows until the trip is rebuilt — delete + recreate the trip (or reshuffle its days) to pick up the fix.
+
+## [Unreleased] — Casual + Hot/Warm styles like a stylist — 2026-08-08
+
+### Why
+Owner report: "not thrilled with the way casual + hot and warm are producing outfits." Production evidence (13 morning taps, zero validation errors — a taste problem, not an error problem): business-register ponte (curated formality 6) kept landing in casual heat looks, a formality-6 top was styled over formality-2 lounge pants, a suede bomber rode over denim shorts in Hot, and nearly every look repeated the same top+bottom+sandals+bag formula. Root causes were all pipeline contradictions, not wardrobe gaps (14 sandals, 11 shorts, 12 minis, 13 light Day Sets survived the pool).
+
+### Fixed
+- **Casual promptNote no longer advertises pool-gated pieces.** It told the model to elevate with "a great knit" and "low boots" — but step-3a removes ALL boots in Hot/Warm and ALL knits in Hot before the model reads it, so it reached for the nearest surviving "elevated knit-like" thing: ponte. Elevation examples are now season-proof (sharp flat/sandal, one real accessory, structured bag, interesting texture); knits/boots appear only behind a "cooler days" qualifier.
+- **Preamble/promptNote contradiction**: the cached preamble said "Casual: … NOT athleisure" while the occasion brief says athleisure works great (owner rule). Now "elevated athleisure welcome, never sloppy." (One-time prompt-cache invalidation, accepted.)
+- **WARM block got the #145 parity pass HOT got**: positive footwear guidance (sandals, flats, loafers, fine heels) and the "NEVER omit shoes: every look still needs exactly one pair" line — previously the shoe-omission failure mode was only salvage-guarded in Warm.
+- **Ponte/double-knit heat steer**: HOT and WARM blocks now say dense double-knits (ponte, scuba, heavy jersey) read hot and corporate — prefer breathable weaves. Deliberately preference-phrased, not "NO ponte": the validator doesn't enforce it, and a hard-sounding prompt rule the validator won't back is the exact shape of the old no-shoes incident.
+
+### Added
+- **Curated formality reaches the stylist.** `wardrobe_items.formality` (1 Active … 8 Black Tie, 171 items tagged, comment: "CONTEXT for the stylist, never a hard filter") never reached the prompt — the only formality signal was `vision_data.formality`, which zero items have. `formatInventory` now appends a compact ` f6` token to the category segment, and the preamble documents the scale plus a soft register rule (keep a look's pieces within ~2 steps, Casual ≈ 3–4, Lounge ≈ 2, Work ≈ 5–6, Dinner ≈ 4–6). ~40–70 tokens per generation.
+- **Always-on distinctness ask**: multi-look generations without a free-text request previously carried no "make them different" instruction (it only rendered inside the free-text branch) — hence the repeated 4-piece formula. A DISTINCTNESS line (different hero, different silhouette or texture story) now rides on every lookCount>1 generation.
+
 ## [Unreleased] — Trips can be deleted (and rebuilt) — 2026-08-08
 
 ### Why
