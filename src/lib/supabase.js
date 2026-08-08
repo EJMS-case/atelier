@@ -641,6 +641,38 @@ export const sb = {
     } catch { return []; }
   },
 
+  // ── Look edits (in-place editor corrections — the SWAP LESSONS signal) ──
+  // One row per swap/remove/add she makes on a suggested look. Fire-and-forget
+  // on the write path (never block or break the editor); the read path feeds
+  // the stylist prompt + the style fingerprint.
+  async saveLookEdit({ action, occasion, weather, outItemId, inItemId }) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/look_edits`, {
+        method: "POST",
+        headers: SB_HEADERS,
+        body: JSON.stringify({
+          action,
+          occasion: occasion || null,
+          weather: weather || null,
+          out_item_id: outItemId || null,
+          in_item_id: inItemId || null,
+        }),
+      });
+    } catch { /* best-effort — an unlogged edit costs one lesson, not the edit */ }
+  },
+  // Newest first, capped — the aggregator collapses repeats so 120 rows is
+  // months of signal.
+  async fetchLookEdits(limit = 120) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/look_edits?select=action,occasion,weather,out_item_id,in_item_id,created_at&order=created_at.desc&limit=${limit}`,
+        { headers: SB_HEADERS },
+      );
+      if (!res.ok) return [];
+      return (await res.json().catch(() => [])) || [];
+    } catch { return []; }
+  },
+
   // ── Sets ──
   async fetchSets() {
     try {

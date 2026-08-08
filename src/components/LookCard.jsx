@@ -7,7 +7,7 @@ import SaveLookModal from "./SaveLookModal.jsx";
 import SwapItemSheet from "./SwapItemSheet.jsx";
 import Thumb from "./Thumb.jsx";
 
-export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem, onEditItem, onUpdateLook }) {
+export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem, onEditItem, onUpdateLook, onLogEdit }) {
   const [expanded,      setExpanded]      = useState(false);
   const [showSave,      setShowSave]      = useState(false);
   const [rated,         setRated]         = useState(0);
@@ -30,6 +30,18 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
   // path places it.
   const emitEdit = (patch) => onUpdateLook?.({ ...look, ...patch, user_edited: true });
 
+  // Each edit is also reported upward as a taste signal (A1 "learn from her
+  // edits"): occasion + weather + what went out / what came in. Fire-and-
+  // forget — the edit itself never waits on it.
+  const logEdit = (action, outItem, inItem) =>
+    onLogEdit?.({
+      action,
+      occasion: look.occasion || null,
+      weather: look.weather || null,
+      outItemId: outItem?.id ?? null,
+      inItemId: inItem?.id ?? null,
+    });
+
   const swapItem = (oldItem, newItem) => {
     const same = (id) => String(id) === String(oldItem.id);
     emitEdit({
@@ -38,6 +50,7 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
         ? look.layout_data.map(e => same(e.id) ? { ...e, id: newItem.id } : e)
         : look.layout_data,
     });
+    logEdit("swap", oldItem, newItem);
     setPicker(null);
   };
 
@@ -49,10 +62,12 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
         ? look.layout_data.filter(e => !same(e.id))
         : look.layout_data,
     });
+    logEdit("remove", item, null);
   };
 
   const addItem = (newItem) => {
     emitEdit({ items: [...(look.items || []), newItem.id] });
+    logEdit("add", null, newItem);
     setPicker(null);
   };
 

@@ -14,6 +14,7 @@
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { asArray } from "../../lib/multitag.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
+import { summarizeLookEdits } from "./lookEdits.js";
 
 // Compact one-line representation of an outfit. Resolves garment_ids to the
 // minimum metadata Claude needs to spot patterns: category, color, brand,
@@ -43,10 +44,13 @@ function compactOutfit({ date, occasionLabel, weatherLabel, garment_ids = [] }, 
  * @param {Object[]} params.items   - full wardrobe (used to resolve garment_ids)
  * @param {Object[]} params.logs    - every row from `outfit_logs`
  * @param {Object[]} params.plans   - every row from `planned_outfits`
+ * @param {Object[]} params.edits   - `look_edits` rows (her in-place editor
+ *                                    corrections) — optional; adds a
+ *                                    corrections section to the read
  * @param {string}   params.apiKey  - Anthropic key
  * @returns {Promise<{ text: string, source_count: number, generated_at: string }>}
  */
-export async function generateStyleFingerprint({ items, logs = [], plans = [], apiKey }) {
+export async function generateStyleFingerprint({ items, logs = [], plans = [], edits = [], apiKey }) {
   if (!apiKey) throw new Error("Anthropic API key required");
 
   const itemMap = {};
@@ -82,6 +86,14 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], a
     throw new Error(`Not enough outfit history yet — log or plan at least 5 outfits first (currently ${lines.length}).`);
   }
 
+  // Her direct corrections to suggested looks — the highest-signal data the
+  // app has. Capped tighter than the outfit lines: 12 collapsed lessons is
+  // plenty for the model to read a correction pattern.
+  const editLines = summarizeLookEdits(edits, items, { maxLines: 12 });
+  const editsSection = editLines.length > 0
+    ? `\n\nHer direct corrections to suggested looks (swap = what she took out → what she chose instead; ×N = same correction N times):\n${editLines.join("\n")}`
+    : "";
+
   const prompt = `You are summarizing this client's personal style patterns from her actual outfit history. Output 4-8 short observations as plain prose — one per line, prefixed with "•". Each observation should be one sentence, ≤22 words. Focus on:
 
 - Color TECHNIQUE she defaults to (tonal layering, monochrome, complementary, color-blocking, neutral-plus-one-pop) — describe the METHOD, not just the pair. Every color in her closet is approved; the signal is HOW she combines them.
@@ -89,7 +101,7 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], a
 - Fabric and texture pairings she gravitates toward (matte × sheen, leather × knit, etc.)
 - Finishing choices she repeats (heels vs flats, bag style, belt usage)
 - Pieces she returns to often, or sets she always wears together
-- Notable absences (what she NEVER pairs)
+- Notable absences (what she NEVER pairs)${editLines.length > 0 ? `\n- Corrections she keeps making to suggestions (what she consistently swaps out or in, per occasion) — a repeated correction is a strong taste rule` : ""}
 
 Do NOT:
 - Treat any color as "her favorite" — the whole closet is chosen and approved. Describe pairing technique only.
@@ -99,7 +111,7 @@ Do NOT:
 - Use bullets beyond "•" or any numbered list
 
 Outfits (${lines.length} total — date | occasion | weather — pieces):
-${lines.join("\n")}`;
+${lines.join("\n")}${editsSection}`;
 
   const res = await anthropicFetch({
     model: MODEL_STANDARD,

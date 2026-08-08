@@ -75,11 +75,12 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
     if (!apiKey) { setFpError("Add your Anthropic API key above first."); return; }
     setFpRunning(true); setFpError("");
     try {
-      const [logs, plans] = await Promise.all([
+      const [logs, plans, edits] = await Promise.all([
         sb.fetchOutfitLogs().catch(() => []),
         fetchAllPlans().catch(() => []),
+        sb.fetchLookEdits().catch(() => []),
       ]);
-      const fp = await generateStyleFingerprint({ items, logs, plans, apiKey });
+      const fp = await generateStyleFingerprint({ items, logs, plans, edits, apiKey });
       await sb.saveStyleFingerprint(fp);
       setStyleFingerprint?.(fp);
     } catch (e) {

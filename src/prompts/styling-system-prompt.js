@@ -126,6 +126,7 @@ export function buildStylingPrompt({
   lovedLooks = [],
   dislikedLooks = [],
   recentCombos = [],
+  swapLessons = [],
   comfortMode = false,
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
@@ -210,6 +211,16 @@ Weather still governs fabric weight and coverage.\n`
     ? `\n👎 COMBINATIONS SHE DISLIKED — these are anti-patterns to actively avoid. Don't recreate these pairings or aesthetics.\n${dislikedLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
     : "";
 
+  // Swap lessons — her direct corrections to previous suggestions, from the
+  // in-place look editor. The strongest per-context taste signal the app has:
+  // a swap is her saying "not this piece, THAT piece" for a specific occasion
+  // + weather. Text-only like loved/disliked looks — no W-IDs, so lessons
+  // steer choices without polluting item selection. Soft bias by design: a
+  // piece she removed once is not banned.
+  const swapLessonsBlock = (swapLessons && swapLessons.length > 0)
+    ? `\n✂️ HER EDITS — direct corrections she made to previously suggested looks (swap = what she took OUT → what she chose INSTEAD; ×N = made the same correction N times). This is the strongest signal of her taste per context.\n${swapLessons.map((l, i) => `${i + 1}. ${l}`).join("\n")}\nRead these as standing lessons: for a similar occasion and weather, don't re-make a choice she has already un-made — reach for the KIND of piece she swapped in, and stop centering pieces she repeatedly swaps out or removes. Gentle bias, not a ban: one edit is a data point, a repeated edit (×2+) is a rule of taste.\n`
+    : "";
+
   // Recent combinations — the LOOK-level anti-repeat, complementing the
   // item-level rotation memory (which keeps pieces fresh but can't stop them
   // recombining into the same recipe). Text-only like loved/disliked looks —
@@ -255,7 +266,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${recentCombosBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${recentCombosBlock}${honestyBlock}
 ${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
