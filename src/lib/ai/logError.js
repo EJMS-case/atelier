@@ -5,6 +5,12 @@
 
 import { SUPABASE_URL, SB_HEADERS } from "../supabase.js";
 
+// Injected by vite.config.js `define` (7-char commit SHA, or "dev"). Every
+// payload carries it as `bv` so a row can be tied to the bundle that produced
+// it — the recurring "is this a stale PWA or a real bug?" question was
+// undecidable without it (two sessions burned on that ambiguity, 2026-08-08/10).
+const BUILD = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev";
+
 /**
  * @param {string} kind     - short tag like "stylist_outfit" or "color_analyze"
  * @param {unknown} payload - the request/response snapshot that failed
@@ -20,9 +26,15 @@ export function logAiError(kind, payload, error) {
       ? (error.stack || error.message || String(error))
       : typeof error === "string" ? error : (JSON.stringify(error) ?? "unknown");
 
+  // Stamp the build id onto every payload. Non-object payloads (raw strings,
+  // arrays) get wrapped so the stamp always lands in the same place.
+  const stamped = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? { bv: BUILD, ...payload }
+    : { bv: BUILD, data: payload ?? null };
+
   const body = JSON.stringify({
     kind: String(kind).slice(0, 100),
-    payload: payload ?? null,
+    payload: stamped,
     error: errorText.slice(0, 4000),
   });
 
