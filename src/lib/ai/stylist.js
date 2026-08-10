@@ -16,6 +16,7 @@ import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { summarizeLookEdits } from "../../features/stylist/lookEdits.js";
+import { summarizeOccasionMemory } from "../../features/stylist/occasionMemory.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_STRONG } from "../../constants/models.js";
 import {
@@ -38,7 +39,7 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
-  const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], favoriteItemIds = [], count = 3 } = extras;
+  const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], outfitLogs = [], lovedFeedback = [], favoriteItemIds = [], count = 3 } = extras;
   // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
   // classic 3-up generation. Values outside this range fall back to 3.
   const lookCount = (count >= 1 && count <= 3) ? count : 3;
@@ -199,6 +200,12 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // W-IDs); repeats collapse with a ×N count. See features/stylist/lookEdits.js.
   const swapLessons = summarizeLookEdits(lookEdits, items);
 
+  // Roadmap A4 — per-occasion hero pieces ("what she RETURNS to"), distilled
+  // from raw outfit_logs rows + loved look_feedback rows already fetched by
+  // App (no extra network call here). Pure/sync like summarizeLookEdits;
+  // text-only lines, [] on thin data → the prompt block simply doesn't render.
+  const occasionMemory = summarizeOccasionMemory({ logs: outfitLogs, lovedLooks: lovedFeedback, items });
+
   // Season/date context — the weather bands say how hot it is, not WHEN it is.
   // July and October can share a "Warm" band yet call for different fabrics
   // (linen and raffia vs suede and light wool), so the prompt gets one line of
@@ -233,6 +240,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     dislikedLooks: dislikedLookLines,
     recentCombos,
     swapLessons,
+    occasionMemory,
     comfortMode,
   });
 
