@@ -202,6 +202,10 @@ export default function App() {
   // as elevated exemplars ("the bar"). Text-only in the prompt, so no W-IDs.
   const [lovedLooks, setLovedLooks] = useState([]);
   const [dislikedLooks, setDislikedLooks] = useState([]);
+  // Raw look_feedback rating=1 rows (item_ids/occasion/created_at) — feeds
+  // summarizeOccasionMemory in the stylist alongside the raw outfit logs.
+  // Distinct from lovedLooks above (hearted outfit_logs, a different table).
+  const [lovedFeedback, setLovedFeedback] = useState([]);
   // Her in-place editor corrections (look_edits rows, newest first) — fed to
   // the stylist as the SWAP LESSONS block and folded into the fingerprint.
   const [lookEdits, setLookEdits] = useState([]);
@@ -243,8 +247,10 @@ export default function App() {
   // stats down as props. HomeView still asks for a refresh on every mount —
   // so a just-logged outfit or freshly saved plan shows up when returning
   // Home — but concurrent callers share one in-flight request.
-  const [wearData, setWearData] = useState({ plans: null, stats: null });
+  const [wearData, setWearData] = useState({ plans: null, logs: null, stats: null });
   const wearFetchRef = useRef(null);
+  // True while a Style Me generation is in flight — see generateAndAppendLooks.
+  const generationBusyRef = useRef(false);
   const refreshWearData = useCallback(() => {
     if (wearFetchRef.current) return wearFetchRef.current;
     const p = Promise.all([
@@ -253,7 +259,10 @@ export default function App() {
     ]).then(([plans, logs]) => {
       const stats = deriveWearStats(plans || [], logs || []);
       wearStatsRef.current = stats;
-      setWearData({ plans: plans || [], stats });
+      // Raw logs ride along in state so the stylist's occasion-memory block
+      // (summarizeOccasionMemory) reads already-fetched rows — never a
+      // per-tap network call. Refreshes with every Home-mount refresh.
+      setWearData({ plans: plans || [], logs: logs || [], stats });
       return { plans: plans || [], logs: logs || [] };
     }).finally(() => { wearFetchRef.current = null; });
     wearFetchRef.current = p;
@@ -407,6 +416,11 @@ export default function App() {
 
       // Editor corrections → SWAP LESSONS (newest first, capped in the client).
       sb.fetchLookEdits().then(rows => setLookEdits(rows || [])).catch(() => {});
+
+      // Loved look_feedback rows → OCCASION MEMORY (with the raw logs above).
+      // Fetched once here alongside the wearData refresh so generation never
+      // pays a per-tap network call.
+      sb.fetchLovedLooks().then(rows => setLovedFeedback(rows || [])).catch(() => {});
 
       maybeRefreshFingerprint(logs || [], plans || []);
     }).catch(() => {});
@@ -792,6 +806,12 @@ export default function App() {
   const generateAndAppendLooks = async (count, mode) => {
     // mode === "fresh" replaces outfits; mode === "append" keeps existing
     // looks and adds new ones (used by "Style 2 more").
+    // Synchronous re-entrancy guard (a ref, because `styling` state lags a
+    // render): two overlapping generations sample the SAME rotation snapshot
+    // and re-suggest the same pieces — the production 2026-08-08 repetition
+    // window shows exactly that burst signature. One generation at a time.
+    if (generationBusyRef.current) return;
+    generationBusyRef.current = true;
     let streamedAny = false;
     let streamedCount = 0; // looks streamed in THIS batch — the final splice below trims exactly these
     try {
@@ -820,6 +840,9 @@ export default function App() {
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         loadStylePrefs(), loadAboutMe(), styleExcludes,
         { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
+          // Occasion memory inputs (roadmap A4) — raw rows already in state,
+          // summarized to text lines inside generateOutfit (occasionMemory.js).
+          outfitLogs: wearData.logs || [], lovedFeedback,
           // Hearted pieces — a tiny within-band sampler tiebreaker (see closet-sampler.js).
           favoriteItemIds: favorites.filter(f => f.type === "piece").map(f => f.reference_id),
           count }
@@ -883,6 +906,7 @@ export default function App() {
         setStyleErr(e.message || "Styling failed — try again in a moment.");
       }
     } finally {
+      generationBusyRef.current = false;
       // Fire-and-forget: mirror this device's updated anti-repeat memory to
       // user_settings so her other devices rotate around these looks too.
       // Merge the remote copy first — a blind push was last-writer-wins, so

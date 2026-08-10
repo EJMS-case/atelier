@@ -16,6 +16,7 @@ import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { summarizeLookEdits } from "../../features/stylist/lookEdits.js";
+import { summarizeOccasionMemory } from "../../features/stylist/occasionMemory.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_STRONG } from "../../constants/models.js";
 import {
@@ -38,7 +39,7 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
-  const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], favoriteItemIds = [], count = 3 } = extras;
+  const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], outfitLogs = [], lovedFeedback = [], favoriteItemIds = [], count = 3 } = extras;
   // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
   // classic 3-up generation. Values outside this range fall back to 3.
   const lookCount = (count >= 1 && count <= 3) ? count : 3;
@@ -77,7 +78,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const itemSuggestionCounts = loadSuggestionCounts();
   const recencyRank = getRecencyRank();
 
-  const { sampled, idMap, reverseMap, forceIncludeIds = [], onlyRescueIds = [], occasionNoteIds = [] } = sampleClosetItems({
+  const { sampled, idMap, reverseMap, forceIncludeIds = [], onlyRescueIds = [], occasionNoteIds = [], recentRepeatIds = [] } = sampleClosetItems({
     items,
     occasion,
     styleExcludes,
@@ -103,7 +104,11 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     throw new Error(`Only ${sampled.length} items available after filtering. Try a different occasion or add more items.`);
   }
 
-  const inventory = formatInventory(sampled, getSleeveType);
+  // Rotation-floor survivors get a soft "[JUST SHOWN…]" tag on their inventory
+  // line — without it the model has no signal that a backfilled repeat was on
+  // screen minutes ago (the recent-combos block explicitly allows individual
+  // piece reuse, and freshness-band ordering is position-only).
+  const inventory = formatInventory(sampled, getSleeveType, { recentRepeatIds });
 
   // Lower-half availability via the shared slotForItem classifier so athleisure
   // bottoms (leggings/skorts) count too — previously an Active pool reported
@@ -195,6 +200,12 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // W-IDs); repeats collapse with a ×N count. See features/stylist/lookEdits.js.
   const swapLessons = summarizeLookEdits(lookEdits, items);
 
+  // Roadmap A4 — per-occasion hero pieces ("what she RETURNS to"), distilled
+  // from raw outfit_logs rows + loved look_feedback rows already fetched by
+  // App (no extra network call here). Pure/sync like summarizeLookEdits;
+  // text-only lines, [] on thin data → the prompt block simply doesn't render.
+  const occasionMemory = summarizeOccasionMemory({ logs: outfitLogs, lovedLooks: lovedFeedback, items });
+
   // Season/date context — the weather bands say how hot it is, not WHEN it is.
   // July and October can share a "Warm" band yet call for different fabrics
   // (linen and raffia vs suede and light wool), so the prompt gets one line of
@@ -229,6 +240,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     dislikedLooks: dislikedLookLines,
     recentCombos,
     swapLessons,
+    occasionMemory,
     comfortMode,
   });
 
@@ -239,18 +251,25 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     console.warn("[Atelier] Contact sheet generation failed, falling back to text-only:", e.message);
   }
 
-  // Rotation memory must reflect what the user actually SAW. Streamed looks
-  // stay on screen even when the final validation pass throws (App keeps
-  // them rather than replacing real looks with an error wall) — if they were
-  // only recorded on success, a failed generation re-offered its own pieces
-  // on the very next tap. Collect streamed looks here; on success record the
-  // final set plus any streamed look it replaced, on failure record whatever
-  // streamed before rethrowing.
+  // Rotation memory must reflect what the user actually SAW — and reflect it
+  // the moment she saw it. Streamed looks stay on screen even when the final
+  // validation pass throws (App keeps them rather than replacing real looks
+  // with an error wall), so each streamed look is recorded AT STREAM TIME:
+  // recording only at generation end left a ~10-60s gap during which a rapid
+  // re-roll tap sampled a pool that still contained the piece she was looking
+  // at (the production 2026-08-08 re-roll session generated a look every
+  // 8-30s). On success the final set records only the looks that differ from
+  // what already streamed, so nothing double-counts.
   const lookIds = (look) =>
     (look?.items || []).map(item => (typeof item === "object" ? item.id : item)).filter(Boolean);
   const streamedLooks = [];
   const wrappedOnLook = onLook
-    ? (look) => { streamedLooks.push(lookIds(look)); onLook(look); }
+    ? (look) => {
+        const ids = lookIds(look);
+        streamedLooks.push(ids);
+        recordSuggestedLooks([ids]);
+        onLook(look);
+      }
     : undefined;
 
   let result;
@@ -274,17 +293,20 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
       onLook: wrappedOnLook,
     });
   } catch (e) {
-    if (streamedLooks.length > 0) recordSuggestedLooks(streamedLooks);
+    // Streamed looks were already recorded live at stream time — nothing
+    // more to record on failure.
     throw e;
   }
 
   if (result.looks) {
-    const finalLooks = result.looks.map(lookIds);
-    const finalKeys = new Set(finalLooks.map(ids => [...ids].sort().join(",")));
-    const replacedStreams = streamedLooks.filter(ids => !finalKeys.has([...ids].sort().join(",")));
-    recordSuggestedLooks([...finalLooks, ...replacedStreams]);
-  } else if (streamedLooks.length > 0) {
-    recordSuggestedLooks(streamedLooks);
+    // Streamed looks are already in the rotation memory (recorded live);
+    // add only final looks whose item set differs — i.e. validation/salvage
+    // replaced a streamed look, or this caller didn't stream at all.
+    const streamedKeys = new Set(streamedLooks.map(ids => [...ids].sort().join(",")));
+    const newFinals = result.looks
+      .map(lookIds)
+      .filter(ids => !streamedKeys.has([...ids].sort().join(",")));
+    if (newFinals.length > 0) recordSuggestedLooks(newFinals);
   }
 
   return result;

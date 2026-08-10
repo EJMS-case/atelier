@@ -2,6 +2,40 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Editorial voice (A2), occasion memory (A4), shirts freed in Hot/Warm — 2026-08-10
+
+### Why
+The owner's survey set the roadmap order (A2 → A4) and asked "why are shirts hardly ever pulled in?" Data answer: in the live rotation window Shirts got 1 and T-Shirts 0 of ~22 top slots, against a 32-of-99 share of the tops closet — and her Shirts are largely summer-viable (linen, eyelet cotton, satin/silk, crops). The gate check proved no sampler filter drops them and the validator has NO long-sleeve rule in Hot: the HOT block's "NO long sleeves" was pure prompt overreach.
+
+### Added
+- **A2 — stylist's-card rationale** (cached preamble): every look's note must say what the look is DOING (proportion / color story / texture), give exactly ONE wearable gesture (cuff, half-tuck, knot, worn-open), and tie it to HER patterns — max 2 sentences. One-time prompt-cache invalidation, batched with the rest of this pass.
+- **A4 — OCCASION MEMORY prompt block**: `summarizeOccasionMemory` (new pure module `src/features/stylist/occasionMemory.js`, `npm run test:memory`, 32 asserts) digests outfit logs + loved looks (loves ×2 weight, twins deduped by name stem, 180-day window, ≤6 lines ≈ ≤110 tokens) into "what she returns to, per occasion" — rendered next to HER EDITS as soft steering, nothing on thin data. Wired through App state with zero per-tap fetches. Deliberately NOT fed to the fingerprint generator, which already reads the same raw logs.
+
+### Fixed
+- **HOT: "NO long sleeves" → "NO heavy long sleeves"**, plus (HOT and WARM) the light-woven-shirt steer: linen/poplin/eyelet/satin worn open over a tank, cuffed, or knotted is a legitimate heat move. Permissive-only prompt change — the prompt→validator gap narrowed, zero error-wall risk.
+
+## [Unreleased] — Rotation understands twin families; just-shown repeats flagged — 2026-08-10
+
+### Why
+Survey question 2: "why does it keep giving me the same items over and over?" Data answer, three stacked mechanisms: (1) the window's 8×-ponte streak was the **sticky free-text request** — "style this item" pre-fills `include my Teal Ponte "Ponte Knit Pant"` and the request box persists across generations, hard-requiring the pant in every single-look re-roll; (2) re-roll marathons saturate small Work-eligible shoe/bag buckets, and KEEP_FLOOR backfill re-offered just-shown items with **no signal** to the model (band ordering is lifetime-count based; the DISTINCTNESS ask only fires for multi-look taps); (3) identical-name twins (Ponte Knit Top ×2, Javier flats ×3, Caroline Bag ×2…) rotate as independent ids, so families alternated while looking rotation-compliant.
+
+### Fixed
+- **Style families**: `familyKey(name)` (rotation-tracker.js) stems identical-name twins into one family. Step-3b staleness, LRU backfill recency, and step-5 band ordering are all family-aware — suggesting one twin ages the whole family, and a fresh twin inherits its hero sibling's band instead of leading the bucket. Small-pool degradation is starvation-safe (per-bucket `min(size, floor)` guarantee unchanged; step-3a weather gates still pre-drop never-validating items).
+- **`[JUST SHOWN …]` inventory tag**: floor-backfilled repeats (`recentRepeatIds`) are labeled in the inventory so the model knows which pieces were just on screen — soft steer, never an exclusion.
+- **Stream-time rotation recording** (stylist.js): looks record as they stream, not at generation end, closing the 10–60 s window where a rapid re-roll sampled a pool still containing the on-screen look. Final-look accounting unchanged.
+- **Re-entrancy guard** in `generateAndAppendLooks` (App.jsx): overlapping taps can no longer sample the same rotation snapshot.
+- `npm run test:rotation` 14 → 22 (families, band inheritance, no-immediate-repeat end-to-end, small-pool no-starvation, tag rendering).
+
+Note: the sticky request box is deliberately unchanged (documented "applied as the theme" behavior) — recorded in HANDOFF as the next lever if repetition complaints persist.
+
+## [Unreleased] — ai_errors rows carry the build id — 2026-08-10
+
+### Why
+Fresh `looks_string_parsed` rows on 08-08 19:40–19:51 UTC despite her force-quits re-opened the "stale PWA or real bug?" question, which has now burned diagnosis time in two sessions and was undecidable from the table.
+
+### Added
+- Every `logAiError` payload is stamped with `bv` — the 7-char commit SHA injected at build time by vite.config.js (`VERCEL_GIT_COMMIT_SHA` on Vercel, `git rev-parse` locally, "dev" fallback). Non-object payloads are wrapped as `{bv, data}`. From the next deploy, any row can be tied to the bundle that produced it.
+
 ## [Unreleased] — Manual builder reachable again after Style Me results — 2026-08-08
 
 ### Why

@@ -29,9 +29,10 @@ const {
   loadSuggestionCounts,
   exportRotationState,
   mergeRemoteRotationState,
+  familyKey,
 } = await import("../src/utils/rotation-tracker.js");
 const { RECENT_ITEMS_KEY } = await import("../src/utils/storage.js");
-const { sampleClosetItems } = await import("../src/utils/closet-sampler.js");
+const { sampleClosetItems, formatInventory } = await import("../src/utils/closet-sampler.js");
 
 beforeEach(() => store.clear());
 
@@ -185,6 +186,148 @@ test("a positive feedback score lifts an over-suggested piece a band forward", (
   const tops = sampled.filter(it => it.category === "Tops").map(it => it.id);
   assert.ok(tops.indexOf("top0") < tops.indexOf("top1"),
     "loved top0 should sort ahead of equally-suggested top1");
+});
+
+// ── Style families (near-twin items share rotation freshness) ─────────────────
+// Her wardrobe holds many twins with IDENTICAL names differing only in the
+// color column (Ponte Knit Top ×2, Javier Slingback Flat ×3, Caroline Bag ×2…).
+// Rotation is id-based, so before family grouping the untouched twin stayed
+// "fresh" and the family alternated tap after tap.
+
+test("familyKey: identical names normalize to one stem", () => {
+  assert.equal(familyKey("Ponte Knit Top"), familyKey("ponte knit top"));
+  assert.equal(familyKey("  Hazel   Slingback Pump "), familyKey("Hazel Slingback Pump"));
+  // Spaced-dash color suffix (the Noosh hosiery naming) is stripped…
+  assert.equal(familyKey("Noosh sheer tights — Black"), familyKey("Noosh sheer tights — Espresso"));
+  // …but an in-word hyphen is not a color separator, just punctuation.
+  assert.equal(familyKey("Lace-trimmed Camisole"), familyKey("Lace trimmed Camisole"));
+  // Different stems never merge, even when one contains the other.
+  assert.notEqual(familyKey("Mini Bucket Bag"), familyKey("Mini Mini Bucket Bag"));
+  assert.equal(familyKey(""), "");
+  assert.equal(familyKey(null), "");
+});
+
+test("suggesting one twin makes the whole family recently-suggested", () => {
+  const twins = [
+    mkItem("twinA", "Tops", "Blouses", "Cece Blouse"),
+    mkItem("twinB", "Tops", "Blouses", "Cece Blouse"),
+  ];
+  const { sampled } = sample({
+    items: [...closet, ...twins],
+    recentlySuggestedItems: ["twinA"], // only twinA was actually shown
+  });
+  const ids = new Set(sampled.map(it => it.id));
+  assert.equal(ids.has("twinA"), false, "the shown twin rotates out");
+  assert.equal(ids.has("twinB"), false, "its identical-name twin rotates out with it");
+  assert.equal(ids.has("top2"), true, "fresh cover is untouched");
+});
+
+test("family banding: a never-suggested twin inherits its hero sibling's band", () => {
+  const twins = [
+    mkItem("heroTwin", "Tops", "Blouses", "Ponte Knit Top"),
+    mkItem("freshTwin", "Tops", "Blouses", "Ponte Knit Top"),
+  ];
+  const { sampled } = sample({
+    items: [...closet, ...twins],
+    itemSuggestionCounts: { heroTwin: 9 }, // band 3; freshTwin has count 0
+  });
+  const tops = sampled.filter(it => it.category === "Tops").map(it => it.id);
+  // Both twins must trail the bucket — the fresh twin may NOT lead it as if new.
+  assert.deepEqual(new Set(tops.slice(-2)), new Set(["heroTwin", "freshTwin"]));
+});
+
+test("family-aware LRU backfill never resurrects a just-shown family via its twin", () => {
+  // Six Work shoes: family A is twins (a1 shown in the NEWEST look, a2 never
+  // itself shown), b–e distinct singles shown longer ago. All stale → the
+  // floor (4) backfills the LEAST-recently-shown; neither a1 nor its twin a2
+  // may ride back in on family A's just-shown freshness.
+  const shoes = [
+    mkItem("a1", "Shoes", "Flats", "Twin Flat"),
+    mkItem("a2", "Shoes", "Flats", "Twin Flat"),
+    mkItem("b1", "Shoes", "Flats", "Flat B"),
+    mkItem("c1", "Shoes", "Flats", "Flat C"),
+    mkItem("d1", "Shoes", "Flats", "Flat D"),
+    mkItem("e1", "Shoes", "Flats", "Flat E"),
+  ];
+  const base = closet.filter(it => it.category !== "Shoes");
+  const { sampled, recentRepeatIds } = sample({
+    items: [...base, ...shoes],
+    recentlySuggestedItems: ["a1", "b1", "c1", "d1", "e1"],
+    recencyRank: { a1: 0, e1: 2, d1: 3, c1: 4, b1: 5 },
+  });
+  const kept = sampled.filter(it => it.category === "Shoes").map(it => it.id).sort();
+  assert.deepEqual(kept, ["b1", "c1", "d1", "e1"]);
+  assert.deepEqual([...recentRepeatIds].sort(), ["b1", "c1", "d1", "e1"],
+    "floor survivors are surfaced for the [JUST SHOWN] inventory tag");
+});
+
+// ── No-immediate-repeat + graceful degradation ────────────────────────────────
+
+test("a generation's items AND their twins are absent from the next generation's pool", () => {
+  // End-to-end through the real tracker: record what gen N showed, then
+  // sample gen N+1 exactly the way stylist.js wires it.
+  const twin = mkItem("top0b", "Tops", "Blouses", "Blouse 0"); // twin of top0
+  recordSuggestedLooks([["top0", "bot0", "shoe0", "bag0"]]);
+  const { sampled } = sample({
+    items: [...closet, twin],
+    recentlySuggestedItems: getRecentlySuggestedItems(),
+    recencyRank: getRecencyRank(),
+    itemSuggestionCounts: loadSuggestionCounts(),
+  });
+  const ids = new Set(sampled.map(it => it.id));
+  for (const id of ["top0", "bot0", "shoe0", "bag0", "top0b"]) {
+    assert.equal(ids.has(id), false, `${id} must not reappear in the very next generation`);
+  }
+  // Plenty of fresh cover — nothing was floor-backfilled.
+  assert.equal(ids.has("top1"), true);
+  assert.equal(ids.has("shoe1"), true);
+});
+
+test("small-pool degradation: an all-stale single-family bucket keeps every item (no starvation)", () => {
+  // Hot shrinks shoes hard. Three shoes, ALL one family, ALL just suggested:
+  // family grouping must not empty the bucket — the floor keeps all three,
+  // and they're flagged as repeats so the prompt can steer, not exclude.
+  const shoes = [
+    mkItem("s1", "Shoes", "Flats", "Shiena Flat"),
+    mkItem("s2", "Shoes", "Flats", "Shiena Flat"),
+    mkItem("s3", "Shoes", "Flats", "Shiena Flat"),
+  ];
+  const base = closet.filter(it => it.category !== "Shoes");
+  const { sampled, recentRepeatIds } = sample({
+    items: [...base, ...shoes],
+    recentlySuggestedItems: ["s1", "s2", "s3"],
+    recencyRank: { s1: 0, s2: 1, s3: 2 },
+  });
+  const kept = sampled.filter(it => it.category === "Shoes").map(it => it.id).sort();
+  assert.deepEqual(kept, ["s1", "s2", "s3"], "the bucket survives intact");
+  assert.deepEqual([...recentRepeatIds].sort(), ["s1", "s2", "s3"]);
+});
+
+test("recentRepeatIds stays empty when fresh cover exists", () => {
+  const { recentRepeatIds } = sample({
+    recentlySuggestedItems: ["top0", "shoe0"],
+    recencyRank: { top0: 0, shoe0: 0 },
+  });
+  assert.deepEqual(recentRepeatIds, []);
+});
+
+test("formatInventory tags floor-kept repeats and leaves fresh lines clean", () => {
+  const shoes = [
+    mkItem("s1", "Shoes", "Flats", "Shiena Flat"),
+    mkItem("s2", "Shoes", "Flats", "Shiena Flat"),
+  ];
+  const base = closet.filter(it => it.category !== "Shoes");
+  const { sampled, recentRepeatIds } = sample({
+    items: [...base, ...shoes],
+    recentlySuggestedItems: ["s1", "s2"],
+  });
+  const inventory = formatInventory(sampled, () => "unknown", { recentRepeatIds });
+  const lines = inventory.split("\n");
+  const shoeLines = lines.filter(l => l.includes("Shiena Flat"));
+  assert.equal(shoeLines.length, 2);
+  assert.ok(shoeLines.every(l => l.includes("[JUST SHOWN")), "repeat lines carry the steer tag");
+  const freshLine = lines.find(l => l.includes("Blouse 1"));
+  assert.ok(freshLine && !freshLine.includes("[JUST SHOWN"), "fresh lines are untagged");
 });
 
 test("a hearted piece is a within-band tiebreaker only — it never jumps a band", () => {

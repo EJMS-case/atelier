@@ -90,7 +90,7 @@ Notes do TWO jobs and you must read them for both:
 Notes tell you WHAT each piece is; combine them with the restraint of the brand register above. The PERSONAL PATTERNS block (when present) shows what she actually reaches for — lean into those proportions, color stories, and finishing choices; they're already proven on her. When notes and personal patterns both point at a combination, that's the elevated move. When they conflict, personal patterns win for COMPOSITION; notes win for INDIVIDUAL PIECE SELECTION.
 
 ★ RATIONALE WRITING STYLE ★
-\`rationale\` is the caption shown to the client — write like a stylist's text, not a debug log. 2–3 short sentences of plain prose. NO all-caps labels (no "TEXTURE HERO:", "TONAL", "LOOK 1", etc.), NO "Look N:" prefix, NO bullet/numbered lists, NO W-IDs in the prose, NO meta-narration ("respects warm weather"). Refer to pieces by what they are ("the sapphire skort"). Put the analytical breakdown in \`silhouette\` / \`focal_point\` / \`color_strategy\` / \`texture_story\`.
+\`rationale\` is the caption shown to the client — a stylist's card, not a debug log. MAX 2 sentences of plain prose carrying three things: (1) what the look is DOING — the proportion play, color story, or texture tension; (2) exactly ONE wearable styling gesture that's physically possible with these pieces (a cuff, a half-tuck, a knot at the waist, sleeves pushed up, a shirt worn open); (3) why it suits HER — when PERSONAL PATTERNS or her About Me give you a hook, echo it ("your tonal-navy habit", "the column line you keep reaching for"); otherwise her standing register (effortless, feminine, a subtle edge). Taste, not essay. NO all-caps labels (no "TEXTURE HERO:", "TONAL", "LOOK 1", etc.), NO "Look N:" prefix, NO bullet/numbered lists, NO W-IDs in the prose, NO meta-narration ("respects warm weather"). Refer to pieces by what they are ("the sapphire skort"). Put the analytical breakdown in \`silhouette\` / \`focal_point\` / \`color_strategy\` / \`texture_story\`.
 
 ★ GROUND EVERY PIECE — ZERO INVENTION ★
 The rationale may name ONLY the pieces you actually placed in THIS look, and every colour, material, and shoe/bag TYPE must match that exact item from the inventory line you chose. NEVER invent, guess, or "upgrade" an attribute. If your shoe pick is a brown suede ballet flat, write "the brown suede flat" — NEVER "a navy pump". If your bag is a fringed suede bucket bag, call it that — not "a sleek clutch". Before finalizing, re-read your own item list and confirm every noun in the rationale maps to one of those exact pieces with its REAL colour and type. A caption that describes pieces the look doesn't contain is a hard failure — rewrite it.
@@ -128,6 +128,7 @@ export function buildStylingPrompt({
   dislikedLooks = [],
   recentCombos = [],
   swapLessons = [],
+  occasionMemory = [],
   comfortMode = false,
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
@@ -228,6 +229,15 @@ Weather still governs fabric weight and coverage.\n`
     ? `\n✂️ HER EDITS — direct corrections she made to previously suggested looks (swap = what she took OUT → what she chose INSTEAD; ×N = made the same correction N times). This is the strongest signal of her taste per context.\n${swapLessons.map((l, i) => `${i + 1}. ${l}`).join("\n")}\nRead these as standing lessons: for a similar occasion and weather, don't re-make a choice she has already un-made — reach for the KIND of piece she swapped in, and stop centering pieces she repeatedly swaps out or removes. Gentle bias, not a ban: one edit is a data point, a repeated edit (×2+) is a rule of taste.\n`
     : "";
 
+  // Occasion memory — per-occasion hero-piece lines (features/stylist/
+  // occasionMemory.js): what she RETURNS to per context, the opposite signal
+  // of rotation freshness. Text-only like SWAP LESSONS (no W-IDs), so it
+  // steers register without forcing item selection. Soft by design — the
+  // header carries the whole steer, so no footer prose is spent on it.
+  const occasionMemoryBlock = (occasionMemory && occasionMemory.length > 0)
+    ? `\n📒 OCCASION MEMORY (what she returns to — favor these registers, don't force the exact pieces):\n${occasionMemory.map(l => `• ${l}`).join("\n")}\n`
+    : "";
+
   // Recent combinations — the LOOK-level anti-repeat, complementing the
   // item-level rotation memory (which keeps pieces fresh but can't stop them
   // recombining into the same recipe). Text-only like loved/disliked looks —
@@ -273,7 +283,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${recentCombosBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${recentCombosBlock}${honestyBlock}
 ${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
@@ -323,8 +333,8 @@ function formatWeather(weather) {
   if (!weather) return "";
   const w = weather.toLowerCase();
   const parts = [];
-  if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. NO long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). Dense double-knits (ponte, scuba, heavy jersey) read hot and corporate in this weather — reach for breathable weaves (cotton, linen, silk) instead. Footwear must be light/breathable — sandals or open shoes where the occasion allows; otherwise light flats, fine heels, or loafers. NEVER omit shoes: every look still needs exactly one pair. No outerwear in this heat unless it is genuinely lightweight and unlined — linen/cotton only; if no such piece exists in the inventory, skip the layer entirely.");
-  if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers only. NO heavy knits, NO heavy or winter coats (wool overcoat, puffer, parka, shearling), NO boots. Short sleeves, sleeveless, or light long sleeves. Dense double-knits (ponte, scuba, heavy jersey) read hot and corporate in this weather — prefer breathable weaves (cotton, linen, silk). Footwear has full range here — sandals, flats, loafers, and fine heels all work in Warm; pick for the occasion. NEVER omit shoes: every look still needs exactly one pair. A regular blazer or a light trench worn over a blouse is fine at this temperature — only genuinely heavy/winter outerwear is wrong; when in doubt, skip the layer.");
+  if (/hot|85/.test(w)) parts.push("⚠️ WEATHER: HOT — HARD CONSTRAINT. NO heavy long sleeves, NO knits, NO boots, NO wool, NO cashmere. Lightweight breathable fabrics ONLY (silk, linen, cotton). A LIGHT woven shirt — linen, cotton poplin, eyelet, or satin/silk — worn open over a tank, sleeves cuffed, or knotted is a real stylist move in this heat: it's fabric weight that's off-limits, not the button-down. Dense double-knits (ponte, scuba, heavy jersey) read hot and corporate in this weather — reach for breathable weaves (cotton, linen, silk) instead. Footwear must be light/breathable — sandals or open shoes where the occasion allows; otherwise light flats, fine heels, or loafers. NEVER omit shoes: every look still needs exactly one pair. No outerwear in this heat unless it is genuinely lightweight and unlined — linen/cotton only; if no such piece exists in the inventory, skip the layer entirely.");
+  if (/warm|70-84/.test(w)) parts.push("⚠️ WEATHER: WARM — HARD CONSTRAINT. Light layers only. NO heavy knits, NO heavy or winter coats (wool overcoat, puffer, parka, shearling), NO boots. Short sleeves, sleeveless, or light long sleeves — a light woven shirt (linen, poplin, satin/silk) worn open, cuffed, or knotted sits squarely in range here. Dense double-knits (ponte, scuba, heavy jersey) read hot and corporate in this weather — prefer breathable weaves (cotton, linen, silk). Footwear has full range here — sandals, flats, loafers, and fine heels all work in Warm; pick for the occasion. NEVER omit shoes: every look still needs exactly one pair. A regular blazer or a light trench worn over a blouse is fine at this temperature — only genuinely heavy/winter outerwear is wrong; when in doubt, skip the layer.");
   if (/mild|55-69/.test(w)) parts.push("⚠️ WEATHER: MILD — HARD CONSTRAINT. Spring/fall layering. Light outerwear welcome (trench, blazer, leather jacket, denim jacket, lightweight wool blazer). NO parkas, NO puffers, NO sherpa, NO shearling, NO fleece, NO chunky/cable knits, NO heavy floor-length wool coats — those belong to Cool/Cold. Both short and long sleeves acceptable; sheer hosiery is available if a skirt or dress look wants it.");
   if (/cool|40-54/.test(w)) parts.push("⚠️ WEATHER: COOL — HARD CONSTRAINT. Long sleeves REQUIRED on every look. Layer up. NO sleeveless, NO sandals, NO open-toe shoes. Skirts, minis, and dresses ARE cool-weather-viable — she wears them with tights/stockings (opaque for daytime cold, sheer/semi for evening). Never reject a skirt for bare legs; add hosiery from the inventory instead.");
   if (/cold|below 40/.test(w)) parts.push("⚠️ WEATHER: COLD — HARD CONSTRAINT. Heavy layers REQUIRED. NO sleeveless, NO short sleeves, NO sandals, NO open-toe. Coats, boots, and substantial knits expected. Skirts, minis, and dresses ARE winter-viable — she wears them with tights/stockings (opaque grounds a daytime mini, sheer/semi for evening). Never reject a skirt for bare legs; add hosiery from the inventory instead.");
