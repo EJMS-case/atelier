@@ -161,6 +161,10 @@ export function isStatementPiece(item, { fringeCounts = false } = {}) {
 }
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
+// Categories where leather/suede is fine even in extreme heat — the ban below
+// is about leather ON the body, not leather you carry or step in.
+const LEATHER_OK_IN_HEAT = new Set(["Shoes", "Bags", "Belts", "Accessories", "Swim"]);
+
 export function filterByWeather(items, weather) {
   const raw = (weather || "").toLowerCase();
   if (!raw || raw === "any") return items;
@@ -207,6 +211,17 @@ export function filterByWeather(items, weather) {
       if (it.category === "Dresses" && /long.?sleeve/i.test(nameNotes)) return false;
       if (isHeavyFabric) return false;
       if (seasonTag === "winter") return false;
+      // On-body leather/suede is out in HOT only (leather mini skirts were
+      // sailing into 105° day looks). Hot-only on purpose — a leather skirt at
+      // 78° (Warm) is normal styling. Body-only on purpose — leather sandals,
+      // bags, belts, and small accessories are fine in heat; it's leather
+      // garments (skirts, pants, tops, jackets) that don't work at 100°+.
+      // "Faux leather" / "vegan leather" match too — intended: they wear just
+      // as hot as the real thing.
+      if (!LEATHER_OK_IN_HEAT.has(it.category) &&
+          /\b(leather|suede)\b/i.test(nameNotes + " " + (it.subcategory || "").toLowerCase())) {
+        return false;
+      }
     }
     if (isWarm) {
       if (it.category === "Knits" && it.subcategory === "Pullovers") return false;

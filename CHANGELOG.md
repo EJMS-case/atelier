@@ -2,6 +2,28 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Manual builder reachable again after Style Me results — 2026-08-08
+
+### Why
+Owner report: "because we removed the manual builder duplicates, I can't access it once I've used the style me builder. That's why I've been force quitting." The declutter (#168 session) kept the single "Build a look manually" button only in the empty state (`!outfits && !styling`), so the moment results rendered there was no path back into the manual builder short of force-quitting the PWA.
+
+### Fixed
+- A compact "⊞ Build manually" button now sits in the Your Looks page header whenever results or the styling spinner are on screen (`outfits || styling`). The empty state keeps its existing single button — the two conditions are mutually exclusive, so the page still shows exactly one manual-build affordance in every state, preserving the declutter's intent.
+
+## [Unreleased] — Trip round 2: pool looks stand alone, no leather at 105°, occasion-true packing — 2026-08-08
+
+### Why
+Owner report on the rebuilt Arizona trip: "extremely poor for both the occasion and the weather… a bathing suit with a skirt and several leather skirts. It's over 100° there. If a bathing suit is offered it should be a separate outfit from a dinner outfit (same day fine)."
+
+### Fixed
+- **A swimsuit is now its OWN pool look.** `buildDailyOutfits` returns `poolSuits[d]` (null or a complete suit) alongside `dailyOutfits` and NEVER injects swim into a regular outfit. The trip preview renders a placed suit as a second OutfitDraft on the day (label "Pool") — it saves, reshuffles, and feeds the packing list like any user-added look. Reshuffling an all-swim look rebuilds through the suit path (`rebuildSuit` bypasses the no-re-add guard, prefers trip-fresh pieces); a day-activity change leaves pool looks untouched (the regular composer can no longer produce swim, so rebuilding one would destroy it).
+- **On-body leather/suede is out in Hot.** `filterByWeather` (Hot bucket only) drops leather/suede garments — Shoes, Bags, Belts, Accessories, and Swim stay exempt (leather sandals and bags are fine at 105°; leather skirts are not). "Faux/vegan leather" matches too, on purpose. Warm is deliberately untouched — a leather skirt at 78° is normal styling. This gate serves the trip/swap/recap paths; Style Me has its own step-3a/validator machinery, unchanged.
+- **The packer now reads her curated formality.** `scoreForOccasion` subtracts 1.5/step (capped 4.5) when an item's `formality` sits outside the occasion's band (Casual 3–4, Dinner/Occasion 4–6, Work 5–6, Lounge/Active 1–2) — a formality-6 ponte pant now sinks below a formality-3 short on a Casual day, softly (strong explicit signals can still win; margins clear the 0.6 jitter).
+- The AI trip path (`tripAdvisor`) gets the matching line: a swimsuit is its own pool look, never mixed into a daytime or dinner outfit.
+- 26 new packer tests (64 total): poolSuits shape/packing-list flow, no-swim-in-regular-outfits, leather-in-Hot matrix (body banned / carried exempt / Warm allowed / end-to-end), formality-band scoring, pool-look reshuffle. Also fixed a test-harness id-collision (hotBasics() resets the id counter; mint colliding fixtures after it).
+
+Note: the Arizona trip needs one more rebuild after this deploys to pick up all of today's fixes.
+
 ## [Unreleased] — Trip swim packs as a complete suit, not a daily bikini bottom — 2026-08-08
 
 ### Why

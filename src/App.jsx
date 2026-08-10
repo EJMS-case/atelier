@@ -1640,6 +1640,19 @@ export default function App() {
           <div style={s.pageHeader}>
             <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
             <h2 style={s.pageTitle}>Your Looks</h2>
+            {/* Manual-builder entry for the loading + results states. The
+                empty state renders its own (single) button below, so this
+                only appears when that one can't — keeping exactly one
+                manual-build affordance on the page in every state
+                (regression 2026-08-08: with results on screen there was
+                no way back into the manual builder without force-quitting). */}
+            {(outfits || styling) && (
+              <button
+                style={{...s.backBtn, marginLeft:"auto", fontSize:12, letterSpacing:"0.04em"}}
+                onClick={() => setManualBuilderOpen(true)}>
+                ⊞ Build manually
+              </button>
+            )}
           </div>
           {styling === true && (
             <div style={s.empty}>

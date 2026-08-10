@@ -68,7 +68,22 @@ function occasionPriorityRegex(occasion) {
   };
 }
 
-function scoreForOccasion(item, occasion) {
+// Target band on the curated formality scale (wardrobe_items.formality:
+// 1 Active … 8 Black Tie) for each occasion the packer knows. Follows the
+// same occasion-string matching as occasionPriorityRegex above. Unknown or
+// missing occasion → null → no formality term at all.
+function formalityBand(occasion) {
+  const o = (occasion || "").toLowerCase();
+  if (!o) return null;
+  if (/work\s*dinner|date|dinner|occasion/.test(o)) return [4, 6];
+  if (/work/.test(o)) return [5, 6];
+  if (/lounge|sleep/.test(o)) return [1, 2];
+  if (/active|gym|athletic/.test(o)) return [1, 2];
+  if (/casual|travel/.test(o)) return [3, 4];
+  return null;
+}
+
+export function scoreForOccasion(item, occasion) {
   const rules = occasionPriorityRegex(occasion);
   const name = ((item.name || "") + " " + (item.subcategory || "")).toLowerCase();
   const sub = item.subcategory || "";
@@ -95,6 +110,20 @@ function scoreForOccasion(item, occasion) {
     : (typeof item.occasion === "string" ? [item.occasion] : []);
   if (itemOccs.some(o => typeof o === "string" && o.toLowerCase().includes(occLc))) s += 4;
   if (Array.isArray(item.occasions) && item.occasions.some(o => typeof o === "string" && o.toLowerCase() === occLc)) s += 4;
+  // Curated formality signal — SOFT distance penalty, not a ban. 1.5 per step
+  // outside the occasion's band, capped at 4.5, so a formality-6 ponte pant
+  // sinks below a formality-3 short on a Casual day (-3 vs 0 — well above the
+  // packer's 0.6 jitter) while a strong explicit signal (user occasion tag +4,
+  // preferred shoe sub +3) can still outweigh it when the wardrobe is thin.
+  if (Number.isFinite(item.formality)) {
+    const band = formalityBand(occasion);
+    if (band) {
+      const dist = item.formality < band[0] ? band[0] - item.formality
+                 : item.formality > band[1] ? item.formality - band[1]
+                 : 0;
+      if (dist > 0) s -= Math.min(4.5, 1.5 * dist);
+    }
+  }
   return s;
 }
 
@@ -108,8 +137,9 @@ function scoreForOccasion(item, occasion) {
 //   · swim is its own capsule slot: pool/beach activities pack one or two
 //     complete SUITS — a one-piece, or a matching top+bottom pair composed
 //     by swimPieceKind()/composeSuit() — never a lone separate. A suit never
-//     substitutes for a core garment slot; it joins a day look only until
-//     the trip's suit target (capsuleTargets().swim) is met, then the packed
+//     substitutes for a core garment slot; it ships as its OWN pool look
+//     (poolSuits[d], separate from the day's regular outfit) only until the
+//     trip's suit target (capsuleTargets().swim) is met, then the packed
 //     suits are simply reused off-schedule.
 // This also fixes the old drift where Athleisure/Loungewear returned null and
 // could never pack — slotForItem routes them to top/bottom/dress by sub.
@@ -155,7 +185,10 @@ function swimPieceKind(it) {
  * @param {string[]} [opts.occasions]   - per-day occasion (e.g. ["Casual","Dinner",...])
  * @param {string}   [opts.weather]     - optional explicit weather bucket override
  *                                        (applied to every day if set)
- * @returns {{ dailyOutfits: Object[][], packingList: Object[], uncovered: number[] }}
+ * @returns {{ dailyOutfits: Object[][], poolSuits: (Object[]|null)[], packingList: Object[], uncovered: number[] }}
+ *   `poolSuits[d]` is null for most days; on the 1-2 suit-placement days it
+ *   holds the COMPLETE suit (one one-piece, or a matched top+bottom pair) as
+ *   its own separate look — swim is never mixed into `dailyOutfits[d]`.
  */
 // ── Activity-based filters ────────────────────────────────────────────────────
 // Activity is a trip-level intent (Theme Park / Beach / Resort / Active /
@@ -457,9 +490,13 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   // the target already met. (Single-day rebuilds pass dayCount=1 with
   // tripDayCount set; Math.floor(1/2)=0, so the midpoint check below can't
   // block day 0 there.)
+  // Exception — opts.rebuildSuit: the caller is deliberately reshuffling an
+  // existing all-swim "Pool" look, so the guard must not zero it out. The
+  // rebuild prefers pieces the rest of the trip hasn't worn (variety), then
+  // falls back to the full pool when everything is already placed elsewhere.
   const swimTarget = targets.swim;
   let suitsPlaced = 0;
-  if (opts.priorUse) {
+  if (opts.priorUse && !opts.rebuildSuit) {
     const priorSwim = Object.entries(opts.priorUse).some(([id, count]) => {
       if (!count) return false;
       const it = byId.get(id);
@@ -467,6 +504,11 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     });
     if (priorSwim) suitsPlaced = swimTarget;
   }
+
+  // Per-day pool suit — the suit is its OWN look on the day, never merged
+  // into the regular outfit (owner report: "if a bathing suit is offered it
+  // should be a separate outfit from a dinner outfit — same day fine").
+  const poolSuits = dayPools.map(() => null);
 
   const dailyOutfits = dayPools.map(({ pool, occasion, hi }, d) => {
     const inSlot = (slot) => pool.filter(it => itemSlot(it) === slot);
@@ -511,22 +553,27 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     const bag = pick(bags, occasion, day, "bags", d);
     if (bag) day.push(bag);
 
-    // Swim joins the day look only until the trip's suit target is met (the
-    // activity filter already gates which days see swim in their pool), and
-    // only for casual daytime looks — never inside a Dinner/Work/Occasion
-    // outfit. Each placement is a COMPLETE suit from composeSuit(); suit #2
+    // Swim lands only until the trip's suit target is met (the activity
+    // filter already gates which days see swim in their pool), and only on
+    // casual daytime days — never a Dinner/Work/Occasion day. Each placement
+    // is a COMPLETE suit from composeSuit(), stored in poolSuits[d] as its
+    // own separate look — NEVER pushed into the day's regular outfit. Suit #2
     // waits for the back half of the trip and uses fresh pieces only.
     if (swim.length && !/work|dinner|occasion/i.test(occasion) && suitsPlaced < swimTarget) {
       const wantsSecond = suitsPlaced >= 1;
       const midpointOk = !wantsSecond || (swimTarget === 2 && d >= Math.floor(dayCount / 2));
       if (midpointOk) {
-        const suit = composeSuit(swim, occasion, day, d, { unwornOnly: wantsSecond });
-        if (suit.length) { day.push(...suit); suitsPlaced++; }
+        // A pool look stands alone, so the statement-stacking check sees an
+        // empty outfit ([]), not the day look it no longer shares a card with.
+        let suit = composeSuit(swim, occasion, [], d, { unwornOnly: wantsSecond || !!opts.rebuildSuit });
+        if (!suit.length && opts.rebuildSuit) suit = composeSuit(swim, occasion, [], d);
+        if (suit.length) { poolSuits[d] = suit; suitsPlaced++; }
       }
     }
 
-    // Bump capsule state so the next day's picks see today's wears.
-    day.forEach(it => {
+    // Bump capsule state so the next day's picks see today's wears — the
+    // pool suit counts too (it drives the rebuild guard + suit #2 freshness).
+    [...day, ...(poolSuits[d] || [])].forEach(it => {
       useCount.set(it.id, (useCount.get(it.id) || 0) + 1);
       lastWorn.set(it.id, d);
       const slot = itemSlot(it);
@@ -539,11 +586,17 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     return day;
   });
 
-  // Packing list = unique items actually used across all day outfits.
+  // Packing list = unique items actually used across all day outfits AND the
+  // placed pool suits (a suit that ships as its own look still gets packed).
   const seen = new Set();
   const packingList = [];
   for (const day of dailyOutfits) {
     for (const it of day) {
+      if (!seen.has(it.id)) { seen.add(it.id); packingList.push(it); }
+    }
+  }
+  for (const suit of poolSuits) {
+    for (const it of (suit || [])) {
       if (!seen.has(it.id)) { seen.add(it.id); packingList.push(it); }
     }
   }
@@ -554,7 +607,7 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     if (outfitCoverageGaps(day).length > 0) uncovered.push(d);
   });
 
-  return { dailyOutfits, packingList, uncovered };
+  return { dailyOutfits, poolSuits, packingList, uncovered };
 }
 
 // ── Swap helper ──────────────────────────────────────────────────────────────

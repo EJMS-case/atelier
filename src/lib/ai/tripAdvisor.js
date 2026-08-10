@@ -192,8 +192,10 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // Swim-friendly activities get one extra packing rule: a "swimsuit" must be
   // complete — a one-piece OR a matching top+bottom pair, never a lone
   // separate — and 1-2 suits cover the whole trip, reused across pool days.
+  // A suit is also its OWN pool look: it never rides inside a daytime or
+  // dinner outfit (same day is fine, same look is not).
   const swimNote = allowSwim
-    ? " A swimsuit means a complete suit — a one-piece OR a matching top + bottom pair, never a lone separate — and 1-2 suits cover the whole trip, reused."
+    ? " A swimsuit means a complete suit — a one-piece OR a matching top + bottom pair, never a lone separate — and 1-2 suits cover the whole trip, reused. A swimsuit is its own pool look, never mixed into a daytime or dinner outfit."
     : "";
   const activityBlock = activity && activity !== "Sightseeing"
     ? `\nACTIVITY: ${activity}. ${ACTIVITY_NOTES[activity] || ""}${swimNote}\n`
@@ -217,11 +219,20 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     varietyBlock = `\nALREADY WORN ON OTHER TRIP DAYS:\n${summary}\n\nCAPSULE + VARIETY RULES (this trip packs from ONE suitcase — pack light, style smart):\n- REUSE shoes and bags: whenever a pair of shoes or a bag from another day suits this occasion, pick THAT one instead of introducing a new one. The whole trip should need only 2-3 pairs of shoes and 1-2 bags.\n- Bottoms may repeat up to 3 wears across the trip, styled differently each time — but never two days running.\n- Rotate the hero/statement garment (the most distinctive top, dress, blazer, or print). The hero must NOT appear on more than one day.\n- Tops should not repeat.\n- Never produce the exact same outfit twice — re-wearing a piece is good packing; re-wearing a whole look is not.\n`;
   }
 
+  // Extreme heat: on-body leather/suede (skirts, pants, tops, jackets) is
+  // miserable above ~95° — leather sandals and bags are still fine. The
+  // bucket stand-in tops out at 88°, so the ~95° test needs the destination
+  // brief's REAL typical high (105° in Arizona) when we have one.
+  const realHigh = Number.isFinite(opts.brief?.tempHighF) ? opts.brief.tempHighF : highF;
+  const heatNote = realHigh >= 95
+    ? " Avoid on-body leather and suede (skirts, pants, tops, jackets) in this heat — leather shoes and bags are fine."
+    : "";
+
   const destNote = destination ? ` in ${destination}` : "";
   const prompt = `You are a stylist building ONE complete outfit for a trip day${destNote}.
 
 OCCASION: ${occasion}
-WEATHER: ${weather} (around ${highF}°F)
+WEATHER: ${weather} (around ${highF}°F)${heatNote}
 ${destBlock}${activityBlock}${varietyBlock}
 WARDROBE (use ONLY these IDs):
 ${inventory}
