@@ -811,7 +811,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       // Per-day activity defaults to the trip-level activity for every day.
       // The user can override individual days from the preview cards.
       const activities = Array.from({ length: dayCount }, () => activity);
-      const { dailyOutfits } = buildDailyOutfits(items, highs, {
+      const { dailyOutfits, poolSuits } = buildDailyOutfits(items, highs, {
         occasions,
         activity,
         activities,
@@ -823,12 +823,22 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       }
       // Wrap each day's items as a single OutfitDraft. The user can add
       // more looks (dinner, evening) from the per-day card afterwards.
-      setDayLooks(dailyOutfits.map((dayItems, i) => [{
-        id: newOutfitId(),
-        label: "",
-        occasion: occasions[i],
-        items: dayItems,
-      }]));
+      // A placed pool suit becomes its OWN second look on the day (never
+      // merged into the daytime outfit) — it saves, reshuffles, and feeds
+      // the packing list like any user-added outfit.
+      setDayLooks(dailyOutfits.map((dayItems, i) => {
+        const looks = [{
+          id: newOutfitId(),
+          label: "",
+          occasion: occasions[i],
+          items: dayItems,
+        }];
+        const suit = poolSuits?.[i];
+        if (suit?.length) {
+          looks.push({ id: newOutfitId(), label: "Pool", occasion: "Casual", items: suit });
+        }
+        return looks;
+      }));
       setDayActivities(activities);
     } catch (e) {
       console.error("[Trip Preview] failed:", e);
@@ -857,6 +867,23 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     const dayAct = dayActivities?.[dayIdx] || activity;
     const target = dayLooks[dayIdx]?.[outfitIdx];
     if (!target) return;
+    // An all-swim "Pool" look reshuffles through the packer's suit-composition
+    // path (rebuildSuit bypasses the no-re-add-swim guard and prefers pieces
+    // the rest of the trip hasn't worn), never the regular composer — a
+    // regular rebuild can no longer produce swim at all.
+    const isPool = (target.items || []).length > 0 && target.items.every(it => it.category === "Swim");
+    if (isPool) {
+      const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
+        occasions: [target.occasion || "Casual"],
+        activities: [dayAct],
+        priorUse: usageExcluding(dayIdx, outfitIdx),
+        tripDayCount: dayCount,
+        rebuildSuit: true,
+      });
+      const suit = single.poolSuits?.[0];
+      if (suit?.length) mutateOutfit(dayIdx, outfitIdx, prev => ({ ...prev, items: suit }));
+      return;
+    }
     const built = buildOneOutfit({ dayIso, dayAct, occasion: target.occasion, label: target.label, dayIdx, excludeOutfitIdx: outfitIdx });
     if (!built) return;
     mutateOutfit(dayIdx, outfitIdx, prev => ({ ...prev, items: built.items }));
@@ -868,8 +895,13 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     setDayActivities(next);
     if (!dayLooks) return;
     // Reshuffle every outfit on the day so the new activity filter applies.
+    // All-swim "Pool" looks are left as-is — the regular composer can never
+    // produce swim, so rebuilding one here would silently destroy the suit.
+    // The user can remove or reshuffle the pool look explicitly.
     const dayIso = isoDate(addDays(new Date(start), dayIdx));
     const rebuilt = (dayLooks[dayIdx] || []).map(o => {
+      const isPool = (o.items || []).length > 0 && o.items.every(it => it.category === "Swim");
+      if (isPool) return o;
       const fresh = buildOneOutfit({ dayIso, dayAct: act, occasion: o.occasion, label: o.label, dayIdx, excludeOutfitIdx: "*" });
       return fresh ? { ...o, items: fresh.items } : o;
     });

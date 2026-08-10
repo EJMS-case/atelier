@@ -9,7 +9,9 @@
 
 import {
   buildDailyOutfits, capsuleTargets, defaultOccasions, alternativesFor, TRIP_ACTIVITIES,
+  scoreForOccasion,
 } from "../src/features/planner/tripPacker.js";
+import { filterByWeather } from "../src/utils/item-helpers.js";
 
 let passed = 0, failed = 0;
 function assert(cond, label) {
@@ -136,7 +138,7 @@ section("Family Visit activity");
 {
   assert(TRIP_ACTIVITIES.includes("Family Visit"), "Family Visit is a trip activity");
   const items = wardrobe();
-  const { dailyOutfits, packingList } = buildDailyOutfits(items, Array(4).fill(76), {
+  const { dailyOutfits, poolSuits, packingList } = buildDailyOutfits(items, Array(4).fill(76), {
     occasions: ["Casual", "Casual", "Dinner", "Casual"],
     activities: Array(4).fill("Family Visit"),
   });
@@ -144,8 +146,8 @@ section("Family Visit activity");
   assert(swimPacked.length >= 1 && swimPacked.length <= capsuleTargets(4).swim,
     `packs ${capsuleTargets(4).swim} or fewer swimsuits, at least one (got ${swimPacked.length})`);
   assert(!dailyOutfits.flat().some(it => it.subcategory === "Stiletto"), "no stilettos on a family visit");
-  const dinnerHasSwim = dailyOutfits[2].some(it => it.category === "Swim");
-  assert(!dinnerHasSwim, "the dinner outfit doesn't include swim");
+  assert(!dailyOutfits.flat().some(it => it.category === "Swim"), "swim never rides inside a regular outfit");
+  assert(poolSuits[2] == null, "the dinner day gets no pool suit");
   const kittenOk = dailyOutfits[2].find(it => it.category === "Shoes");
   assert(kittenOk && !/Sneaker|Sandal/i.test(kittenOk.subcategory), "dinner out still gets a dressier shoe (kitten heel fine)");
 }
@@ -232,22 +234,31 @@ section("swim separates → complete suits");
     mk("Swim", "Swimsuits", "Dreamer High Waist Bottom", { color: "White" }),
   ];
   // The exact reported-bug shape: 8-day all-Casual Family Visit, Hot (105°).
-  const { dailyOutfits } = buildDailyOutfits(items, Array(8).fill(105), {
+  const { dailyOutfits, poolSuits, packingList } = buildDailyOutfits(items, Array(8).fill(105), {
     occasions: defaultOccasions(8),
     activities: Array(8).fill("Family Visit"),
   });
 
-  // (a) Never a lone separate: on any day, swim tops and bottoms pair up.
-  const loneSeparate = dailyOutfits.some(day => {
-    const sw = day.filter(it => it.category === "Swim");
+  // (0) The suit is its OWN look: no swim item ever inside a regular outfit,
+  // pool looks are ALL swim, and placed suit pieces still get packed.
+  assert(!dailyOutfits.flat().some(it => it.category === "Swim"),
+    "no swim item inside any regular day outfit");
+  assert(poolSuits.every(s => s == null || (s.length >= 1 && s.every(it => it.category === "Swim"))),
+    "each poolSuits entry is null or an all-swim suit");
+  assert(poolSuits.flat().filter(Boolean).every(it => packingList.some(p => p.id === it.id)),
+    "placed suit pieces appear in the packing list");
+
+  // (a) Never a lone separate: on any pool day, swim tops and bottoms pair up.
+  const loneSeparate = poolSuits.some(suit => {
+    const sw = suit || [];
     return sw.filter(it => swimKind(it) === "top").length !==
            sw.filter(it => swimKind(it) === "bottom").length;
   });
   assert(!loneSeparate, "no day has a swim top without a bottom (or vice versa)");
 
   // (b) Swim rides on at most the suit-target number of days, not all 8.
-  const swimDayIdx = dailyOutfits
-    .map((day, d) => day.some(it => it.category === "Swim") ? d : -1)
+  const swimDayIdx = poolSuits
+    .map((suit, d) => suit?.length ? d : -1)
     .filter(d => d >= 0);
   assert(swimDayIdx.length >= 1 && swimDayIdx.length <= capsuleTargets(8).swim,
     `swim appears on 1-${capsuleTargets(8).swim} days, not all 8 (got ${swimDayIdx.length})`);
@@ -256,9 +267,9 @@ section("swim separates → complete suits");
     "suit #2 waits for the back half of the trip");
 
   // (c) Each placed pair actually matches: same color or same name prefix.
-  const mismatched = dailyOutfits.some(day => {
-    const top = day.find(it => it.category === "Swim" && swimKind(it) === "top");
-    const bottom = day.find(it => it.category === "Swim" && swimKind(it) === "bottom");
+  const mismatched = poolSuits.some(suit => {
+    const top = (suit || []).find(it => swimKind(it) === "top");
+    const bottom = (suit || []).find(it => swimKind(it) === "bottom");
     if (!top || !bottom) return false;
     const sameColor = (top.color || "").toLowerCase() === (bottom.color || "").toLowerCase();
     return !(sameColor || firstWord(top) === firstWord(bottom));
@@ -266,11 +277,12 @@ section("swim separates → complete suits");
   assert(!mismatched, "paired top+bottom share a color or a name prefix");
 
   // Dinner day never gets swim, separates included.
-  const { dailyOutfits: dd } = buildDailyOutfits(items, Array(4).fill(105), {
+  const { dailyOutfits: dd, poolSuits: pp } = buildDailyOutfits(items, Array(4).fill(105), {
     occasions: ["Casual", "Dinner", "Casual", "Casual"],
     activities: Array(4).fill("Family Visit"),
   });
-  assert(!dd[1].some(it => it.category === "Swim"), "dinner day gets no swim (separates wardrobe)");
+  assert(!dd[1].some(it => it.category === "Swim") && pp[1] == null,
+    "dinner day gets no swim (separates wardrobe)");
 }
 
 // ── 9. One-piece wardrobe: single-item suits, still bounded ──────────────────
@@ -281,14 +293,14 @@ section("one-piece suits");
     mk("Swim", "Swimsuits", "Full coverage one-piece", { color: "Deep Teal" }),
     mk("Swim", "Swimsuits", "Black One-Piece", { color: "Black" }),
   ];
-  const { dailyOutfits } = buildDailyOutfits(items, Array(8).fill(105), {
+  const { poolSuits } = buildDailyOutfits(items, Array(8).fill(105), {
     occasions: defaultOccasions(8),
     activities: Array(8).fill("Family Visit"),
   });
-  const swimDays = dailyOutfits.filter(day => day.some(it => it.category === "Swim"));
+  const swimDays = poolSuits.filter(suit => suit?.length);
   assert(swimDays.length >= 1 && swimDays.length <= capsuleTargets(8).swim,
     `one-piece suits stay within target placements (got ${swimDays.length})`);
-  assert(swimDays.every(day => day.filter(it => it.category === "Swim").length === 1),
+  assert(swimDays.every(suit => suit.length === 1),
     "a one-piece suit is a single swim item");
 }
 
@@ -304,11 +316,11 @@ section("separates with no counterpart");
     mk("Swim", "Swimsuits", "Aluka Top", { color: "White" }),
     mk("Swim", "Swimsuits", "Full coverage one-piece", { color: "Deep Teal" }),
   ];
-  const { dailyOutfits } = buildDailyOutfits(items, Array(5).fill(105), {
+  const { poolSuits } = buildDailyOutfits(items, Array(5).fill(105), {
     occasions: defaultOccasions(5),
     activities: Array(5).fill("Family Visit"),
   });
-  const swimWorn = dailyOutfits.flat().filter(it => it.category === "Swim");
+  const swimWorn = poolSuits.flat().filter(Boolean);
   assert(swimWorn.length >= 1, "a suit still gets packed");
   assert(swimWorn.every(it => /one.?piece/i.test(it.name)),
     "counterpartless tops fall back to the one-piece, never a lone top");
@@ -320,11 +332,11 @@ section("separates with no counterpart");
     mk("Swim", "Swimsuits", "Eliza Full Coverage Bottom", { color: "Black" }),
     mk("Swim", "Swimsuits", "Full coverage one-piece", { color: "Deep Teal" }),
   ];
-  const { dailyOutfits: d2 } = buildDailyOutfits(items2, Array(4).fill(105), {
+  const { poolSuits: p2 } = buildDailyOutfits(items2, Array(4).fill(105), {
     occasions: defaultOccasions(4),
     activities: Array(4).fill("Family Visit"),
   });
-  const swim2 = d2.flat().filter(it => it.category === "Swim");
+  const swim2 = p2.flat().filter(Boolean);
   assert(swim2.length >= 1 && swim2.every(it => it.name === "Full coverage one-piece"),
     "Eliza Full Coverage Bottom never ships alone; the one-piece does");
 
@@ -334,11 +346,11 @@ section("separates with no counterpart");
     mk("Swim", "Swimsuits", "Bri Top", { color: "Black" }),
     mk("Swim", "Swimsuits", "Dreamer Top", { color: "White" }),
   ];
-  const { dailyOutfits: d3 } = buildDailyOutfits(items3, Array(5).fill(105), {
+  const { poolSuits: p3 } = buildDailyOutfits(items3, Array(5).fill(105), {
     occasions: defaultOccasions(5),
     activities: Array(5).fill("Family Visit"),
   });
-  assert(!d3.flat().some(it => it.category === "Swim"),
+  assert(!p3.some(suit => suit?.length),
     "tops-only wardrobe with no one-piece packs no swim");
 }
 
@@ -355,26 +367,158 @@ section("swim rebuild guard");
   const top = items.find(it => it.name === "Aluka Top");
   const bottom = items.find(it => it.name === "Aluka Bottom");
   // Single-day rebuild of an 8-day trip that already wears a suit elsewhere.
-  const { dailyOutfits } = buildDailyOutfits(items, [105], {
+  const { dailyOutfits, poolSuits } = buildDailyOutfits(items, [105], {
     occasions: ["Casual"],
     activities: ["Family Visit"],
     priorUse: { [top.id]: 1, [bottom.id]: 1 },
     tripDayCount: 8,
   });
-  assert(!dailyOutfits[0].some(it => it.category === "Swim"),
+  assert(!dailyOutfits[0].some(it => it.category === "Swim") && poolSuits[0] == null,
     "single-day rebuild doesn't re-add swim when the trip already packs a suit");
 
   // Sanity: with NO prior swim, the same single-day rebuild still gets suit #1
   // (the midpoint rule must not block day 0 when dayCount=1).
-  const { dailyOutfits: fresh } = buildDailyOutfits(items, [105], {
+  const { dailyOutfits: fresh, poolSuits: freshSuits } = buildDailyOutfits(items, [105], {
     occasions: ["Casual"],
     activities: ["Family Visit"],
     tripDayCount: 8,
   });
-  const sw = fresh[0].filter(it => it.category === "Swim");
+  const sw = freshSuits[0] || [];
   assert(sw.length === 2 &&
     sw.some(it => swimKind(it) === "top") && sw.some(it => swimKind(it) === "bottom"),
     "single-day build with no prior swim places one complete pair");
+  assert(!fresh[0].some(it => it.category === "Swim"),
+    "even suit #1 never lands inside the regular outfit");
+}
+
+// ── 12. rebuildSuit: reshuffling a Pool look composes a fresh suit ───────────
+section("pool-look reshuffle (rebuildSuit)");
+{
+  const items = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Aluka Top", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Aluka Bottom", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Mako Bikini Top", { color: "Tobacco" }),
+    mk("Swim", "Swimsuits", "Mako Bikini Bottom", { color: "Tobacco" }),
+  ];
+  const top = items.find(it => it.name === "Aluka Top");
+  const bottom = items.find(it => it.name === "Aluka Bottom");
+  // Reshuffle of the day's Pool outfit: the guard is bypassed, and the new
+  // suit prefers pieces the rest of the trip hasn't worn (here: the Makos,
+  // since the Alukas are worn elsewhere per priorUse).
+  const { poolSuits } = buildDailyOutfits(items, [105], {
+    occasions: ["Casual"],
+    activities: ["Family Visit"],
+    priorUse: { [top.id]: 1, [bottom.id]: 1 },
+    tripDayCount: 8,
+    rebuildSuit: true,
+  });
+  const suit = poolSuits[0] || [];
+  assert(suit.length === 2, "rebuildSuit still places a complete suit despite prior swim");
+  assert(suit.every(it => /Mako/.test(it.name)),
+    "rebuilt suit prefers the not-yet-worn pair");
+
+  // When every suit is already worn elsewhere, fall back to re-wearing one
+  // rather than returning nothing.
+  const allWorn = Object.fromEntries(items.filter(it => it.category === "Swim").map(it => [it.id, 1]));
+  const { poolSuits: p2 } = buildDailyOutfits(items, [105], {
+    occasions: ["Casual"],
+    activities: ["Family Visit"],
+    priorUse: allWorn,
+    tripDayCount: 8,
+    rebuildSuit: true,
+  });
+  const suit2 = p2[0] || [];
+  assert(suit2.length === 2 &&
+    suit2.some(it => swimKind(it) === "top") && suit2.some(it => swimKind(it) === "bottom"),
+    "all-worn pool falls back to re-wearing a complete suit");
+}
+
+// ── 13. Hot bans on-body leather/suede; carried leather survives ─────────────
+section("filterByWeather: leather in heat");
+{
+  nextId = 0;
+  const leatherSkirt   = mk("Bottoms", "Mini", "Leather Mini Skirt", { material: "Leather" });
+  const fauxSkirt      = mk("Bottoms", "Mini", "Vegan Leather Skirt");
+  const suedePant      = mk("Bottoms", "Trousers", "Suede Trouser");
+  const ponteNoLeather = mk("Bottoms", "Trousers", "Ponte Pant");
+  const leatherJacket  = mk("Outerwear", "Jackets", "Leather Moto Jacket", { material: "Leather" });
+  const leatherSandal  = mk("Shoes", "Sandals", "Leather Flat Sandal", { material: "Leather" });
+  const suedeLoafer    = mk("Shoes", "Flats", "Suede Loafer");
+  const leatherBag     = mk("Bags", "", "Leather Crossbody", { material: "Leather" });
+  const leatherBelt    = mk("Belts", "", "Leather Waist Belt", { material: "Leather" });
+  const pool = [leatherSkirt, fauxSkirt, suedePant, ponteNoLeather, leatherJacket,
+                leatherSandal, suedeLoafer, leatherBag, leatherBelt];
+
+  const hot = filterByWeather(pool, "Hot");
+  const hotIds = new Set(hot.map(it => it.id));
+  assert(!hotIds.has(leatherSkirt.id),  "Hot: leather mini skirt excluded");
+  assert(!hotIds.has(fauxSkirt.id),     "Hot: vegan-leather skirt excluded (faux matches too)");
+  assert(!hotIds.has(suedePant.id),     "Hot: suede trouser excluded");
+  assert(!hotIds.has(leatherJacket.id), "Hot: leather jacket excluded");
+  assert(hotIds.has(ponteNoLeather.id), "Hot: non-leather bottom kept");
+  assert(hotIds.has(leatherSandal.id),  "Hot: leather sandal kept (Shoes exempt)");
+  assert(hotIds.has(suedeLoafer.id),    "Hot: suede loafer kept (Shoes exempt)");
+  assert(hotIds.has(leatherBag.id),     "Hot: leather bag kept (Bags exempt)");
+  assert(hotIds.has(leatherBelt.id),    "Hot: leather belt kept (Belts exempt)");
+
+  // The ban is Hot-only: the same leather skirt is fine in Warm.
+  const warmIds = new Set(filterByWeather(pool, "Warm").map(it => it.id));
+  assert(warmIds.has(leatherSkirt.id), "Warm: leather skirt still allowed");
+
+  // End-to-end: a Hot Family Visit day never wears the leather skirt.
+  // hotBasics() resets nextId, so mint the skirt AFTER it — otherwise the
+  // skirt shares an id with a basic and the id-based assertion lies.
+  const basics = hotBasics();
+  const e2eSkirt = mk("Bottoms", "Mini", "Leather Mini Skirt", { material: "Leather" });
+  const items = [...basics, e2eSkirt];
+  const { dailyOutfits } = buildDailyOutfits(items, Array(3).fill(105), {
+    occasions: defaultOccasions(3),
+    activities: Array(3).fill("Family Visit"),
+  });
+  assert(!dailyOutfits.flat().some(it => it.id === e2eSkirt.id),
+    "packed Hot days never include the leather skirt");
+}
+
+// ── 14. Formality band term in scoreForOccasion ──────────────────────────────
+section("formality-band scoring");
+{
+  nextId = 0;
+  // Identical items except formality, so the delta isolates the new term.
+  const short6 = mk("Bottoms", "Shorts", "Tailored Short", { formality: 6 });
+  const short3 = mk("Bottoms", "Shorts", "Tailored Short", { formality: 3 });
+  const short4 = mk("Bottoms", "Shorts", "Tailored Short", { formality: 4 });
+  const shortNone = mk("Bottoms", "Shorts", "Tailored Short");
+  // Casual band is [3,4]: f3/f4 in-band, f6 two steps out → -3.
+  assert(scoreForOccasion(short3, "Casual") - scoreForOccasion(short6, "Casual") === 3,
+    "Casual: formality 6 sits 1.5/step (=3) below formality 3");
+  assert(scoreForOccasion(short3, "Casual") === scoreForOccasion(short4, "Casual"),
+    "Casual: both in-band formalities score identically");
+  assert(scoreForOccasion(shortNone, "Casual") === scoreForOccasion(short3, "Casual"),
+    "missing formality → no term (matches in-band score)");
+  // Dinner band is [4,6]: f6 in-band, f3 one step under → -1.5.
+  assert(scoreForOccasion(short6, "Dinner") - scoreForOccasion(short3, "Dinner") === 1.5,
+    "Dinner: formality 3 penalized 1.5, formality 6 in-band");
+  // Penalty caps at 4.5: Lounge band [1,2] vs formality 8 is 6 steps out.
+  const gown8 = mk("Bottoms", "Shorts", "Tailored Short", { formality: 8 });
+  assert(scoreForOccasion(shortNone, "Lounge") - scoreForOccasion(gown8, "Lounge") === 4.5,
+    "penalty caps at 4.5 even 6 steps outside the band");
+  // Unknown occasion → no band, no term.
+  assert(scoreForOccasion(short6, "Snorkeling") === scoreForOccasion(short3, "Snorkeling"),
+    "unknown occasion applies no formality term");
+
+  // End-to-end: on a Warm Casual day a formality-6 ponte pant loses to a
+  // formality-3 short (margin 3 > the 0.6 jitter), without being banned.
+  const items = [
+    ...Array.from({ length: 4 }, (_, i) => mk("Tops", "T-Shirts", `Tee ${i + 1}`)),
+    mk("Bottoms", "Trousers", "Ponte Pant", { formality: 6 }),
+    mk("Bottoms", "Shorts", "Twill Short", { formality: 3 }),
+    mk("Shoes", "Sneakers", "Canvas Sneaker"),
+    mk("Bags", "", "Canvas Tote"),
+  ];
+  const { dailyOutfits } = buildDailyOutfits(items, [76], { occasions: ["Casual"] });
+  const bottom = dailyOutfits[0].find(it => it.category === "Bottoms");
+  assert(bottom?.name === "Twill Short", "Casual day picks the formality-3 short over the formality-6 ponte");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
