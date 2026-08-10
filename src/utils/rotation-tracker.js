@@ -18,6 +18,31 @@ import { RECENT_ITEMS_KEY, SUGGESTION_COUNTS_KEY } from "./storage.js";
 
 const MAX_RECENT_LOOKS = 24;
 
+// ── Style families ───────────────────────────────────────────────────────────
+// The owner owns many near-twin items (two "Ponte Knit Top"s, three "Javier
+// Slingback Flat" colors, black + brown "Caroline Bag"…). Rotation is id-based,
+// so suggesting one twin left the other "fresh" — the family alternated tap
+// after tap while looking rotation-compliant (verified in the production
+// rotation_state window, 2026-08-08 → 08-10). familyKey collapses twins into
+// one family so freshness can be shared at the family level.
+//
+// Data shape (verified against the live wardrobe 2026-08-10): twins carry
+// IDENTICAL names and differ only in the `color` column (sometimes also
+// subcategory — Hazel Slingback Pump is Heels + Stiletto). The only in-name
+// variant is a "— <shade>" suffix (the Noosh hosiery rows), so the stem is:
+// lowercase, strip a spaced-dash suffix, collapse punctuation/whitespace.
+// Deliberately conservative — different stems NEVER merge ("Mini Bucket Bag"
+// vs "Mini Mini Bucket Bag" stay distinct). Pure function; node-tested.
+export function familyKey(name) {
+  if (!name) return "";
+  return String(name)
+    .toLowerCase()
+    .split(/\s+[—–-]\s+/)[0]        // "noosh sheer tights — black" → "noosh sheer tights"
+    .replace(/[^a-z0-9]+/g, " ")    // punctuation-insensitive
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeEntry(entry) {
   if (Array.isArray(entry)) return { ids: entry, at: 0 };
   if (entry && Array.isArray(entry.ids)) return { ids: entry.ids, at: entry.at || 0 };

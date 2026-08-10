@@ -9,6 +9,7 @@
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
 import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, FILTER_TYPES } from "./style-filters.js";
+import { familyKey } from "./rotation-tracker.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -573,6 +574,51 @@ export function sampleClosetItems({
     ...(recentlyWornItems || []),
     ...(recentlySuggestedItems || []),
   ]);
+
+  // ── Style families (2026-08-10, "same items over and over" round 2) ──
+  // Twin items share rotation freshness: suggesting the teal "Ponte Knit Top"
+  // makes the sapphire one recently-suggested too, both for the 3b drop and
+  // for the step-5 freshness band. Derived from name stems (see familyKey);
+  // an unnamed item falls back to its own id so it never merges with others.
+  // Maps are built from the FULL closet, not the filtered pool, so a blocked
+  // id whose item was weather/occasion-filtered still stales its family.
+  const famOf = (it) => familyKey(it.name) || `#${it.id}`;
+  const itemById = new Map(items.map(it => [it.id, it]));
+  // Families with any recently-worn/suggested member.
+  const staleFamilies = new Set();
+  for (const id of norepeatBlocked) {
+    const it = itemById.get(id);
+    if (it) staleFamilies.add(famOf(it));
+  }
+  // Family recency = the FRESHEST member's looksAgo, so a twin of a
+  // just-shown piece backfills as if it were just shown itself.
+  const famRank = {};
+  for (const [id, r] of Object.entries(recencyRank)) {
+    const it = itemById.get(id);
+    if (!it) continue;
+    const f = famOf(it);
+    if (!(f in famRank) || r < famRank[f]) famRank[f] = r;
+  }
+  // Family familiarity = MAX lifetime suggestion count across members (max,
+  // not sum — a 4-twin family shouldn't be over-penalized). Feeds the step-5
+  // band so a rarely-suggested twin inherits its hero sibling's band instead
+  // of leading the bucket. TUNING KNOB: switching max → sum makes families
+  // age faster; don't without re-reading the starvation notes below.
+  const famCount = {};
+  for (const it of items) {
+    const c = itemSuggestionCounts[it.id] || 0;
+    const f = famOf(it);
+    if (c > (famCount[f] || 0)) famCount[f] = c;
+  }
+
+  // Recently-suggested repeats that survived into the pool anyway (floor
+  // backfill below). Surfaced to the caller so the prompt inventory can carry
+  // a soft "[JUST SHOWN]" steer on exactly these lines — the model otherwise
+  // has NO signal that a backfilled piece was on screen minutes ago (band
+  // ordering is position-only and lifetime-based, and the prompt's combo
+  // block explicitly allows individual-piece reuse).
+  const repeatIds = new Set();
+
   if (norepeatBlocked.size > 0) {
     // Per-category floor — how many options each bucket must retain so the
     // validator can still assemble three non-overlapping looks (1 shoe + 1 bag
@@ -595,19 +641,34 @@ export function sampleClosetItems({
         // for (freeTextOverrideIds was matched against the unfiltered closet).
         // Hosiery is also spared in cool/cold skirt pools (see 3a) — rotating
         // the tights out is what used to make winter skirts unstyleable.
-        if (!norepeatBlocked.has(it.id) || freeTextOverrideIds.has(it.id) ||
+        // Family staleness counts: an untouched twin of a just-suggested item
+        // is stale too, or the family alternates while looking fresh.
+        const isStale = norepeatBlocked.has(it.id) || staleFamilies.has(famOf(it));
+        if (!isStale || freeTextOverrideIds.has(it.id) ||
             (boostHosiery && isHosieryItem(it))) fresh.push(it);
         else stale.push(it);
       }
       // Backfill with the LEAST-RECENTLY-suggested repeats first (highest
       // looksAgo), so a floor never resurrects the piece from the tap before
-      // last when an older repeat exists. Lifetime count breaks ties.
+      // last when an older repeat exists. Recency is family-level (freshest
+      // member wins) so a twin can't sneak its family straight back in.
+      // Lifetime count breaks ties. Starvation-safe by construction: family
+      // grouping only reclassifies fresh → stale, and the floor always
+      // refills from stale, so every bucket keeps min(size, floor) items no
+      // matter how stale the pool is (the 0y lesson: rotation must never
+      // empty a slot the validator requires).
+      const recOf = (it) => Math.min(
+        recencyRank[it.id] ?? Infinity,
+        famRank[famOf(it)] ?? Infinity
+      );
       stale.sort((a, b) =>
-        ((recencyRank[b.id] ?? Infinity) - (recencyRank[a.id] ?? Infinity)) ||
+        (recOf(b) - recOf(a)) ||
         ((itemSuggestionCounts[a.id] || 0) - (itemSuggestionCounts[b.id] || 0))
       );
       const need = Math.max(0, floor - fresh.length);
-      rotated.push(...fresh, ...stale.slice(0, need));
+      const kept = stale.slice(0, need);
+      for (const it of kept) repeatIds.add(it.id);
+      rotated.push(...fresh, ...kept);
     }
     pool = rotated;
   }
@@ -655,8 +716,11 @@ export function sampleClosetItems({
   // can, and it never touches the recent-look drop or LRU floors above:
   // favorites must not reintroduce the repetition the rotation work removed.
   const heartedIds = favoriteItemIds instanceof Set ? favoriteItemIds : new Set(favoriteItemIds);
+  // Band from the FAMILY's max lifetime count (see famCount above): a
+  // rarely-suggested twin of a hero piece sorts with the hero instead of
+  // leading the bucket as if it were new. Feedback and hearts stay per-item.
   const bandOf = (it) =>
-    Math.max(0, freshnessBand(itemSuggestionCounts[it.id] || 0) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0);
+    Math.max(0, freshnessBand(famCount[famOf(it)] ?? (itemSuggestionCounts[it.id] || 0)) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0);
   for (const key of Object.keys(buckets)) {
     buckets[key] = seededShuffle(buckets[key], rng);
     // Precompute each item's band once — recomputing inside the comparator
@@ -737,7 +801,10 @@ export function sampleClosetItems({
   // rescued look burns a retry.
   // occasionNoteIds = comfort-occasion pieces rescued by the user's own notes
   // (step 0) — surfaced so the validator can exempt them the same way.
-  return { sampled, idMap, reverseMap, forceIncludeIds: [...forceIds], onlyRescueIds: [...onlyRescueIds], occasionNoteIds: [...occasionNoteIds] };
+  // recentRepeatIds = recently-suggested items the KEEP_FLOOR backfill kept in
+  // the pool anyway — formatInventory tags these lines so the model prefers a
+  // fresher piece when one works (soft steer, never an exclusion).
+  return { sampled, idMap, reverseMap, forceIncludeIds: [...forceIds], onlyRescueIds: [...onlyRescueIds], occasionNoteIds: [...occasionNoteIds], recentRepeatIds: [...repeatIds] };
 }
 
 /**
@@ -750,10 +817,20 @@ export function sampleClosetItems({
  * simply omit the token.
  * @param {Object[]} sampled - the sampled items
  * @param {function} getSleeveType - sleeve classification function from App
+ * @param {Object}   [opts]
+ * @param {string[]|Set} [opts.recentRepeatIds] - recently-suggested items the
+ *   rotation floor kept in the pool (see sampleClosetItems). Their lines get
+ *   a short "[JUST SHOWN…]" tag — a soft steer, self-explanatory so it needs
+ *   no preamble support, and cheap (~8 tokens × at most a floor's worth of
+ *   items per bucket). Never a ban: on a small pool the model may still use
+ *   them, which is exactly the graceful degradation we want.
  * @returns {string}
  */
-export function formatInventory(sampled, getSleeveType) {
+export function formatInventory(sampled, getSleeveType, opts = {}) {
   const SLEEVE_SHORT = { long: "L", short: "S", sleeveless: "N", threeQuarter: "3Q", unknown: "?" };
+  const repeatIds = opts.recentRepeatIds instanceof Set
+    ? opts.recentRepeatIds
+    : new Set(opts.recentRepeatIds || []);
 
   const shortById = {};
   sampled.forEach((it, i) => { shortById[it.id] = `W${String(i + 1).padStart(3, "0")}`; });
@@ -808,10 +885,15 @@ export function formatInventory(sampled, getSleeveType) {
     const nameLower = name.toLowerCase();
     // Curated formality (1-8) — compact ` f6` token on the category segment.
     const formalityTag = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
+    // Rotation floor survivor — steer the model to fresher options when they
+    // exist without banning the piece (small pools NEED these to stay usable).
+    const repeatTag = repeatIds.has(it.id)
+      ? " [JUST SHOWN in her last few looks — prefer a fresher alternative when one works]"
+      : "";
     const parts = [
       `${short} ${colorInfo}`,
       `${it.category}${it.subcategory ? `>${it.subcategory}` : ""}${formalityTag}`,
-      `${name}${knitTag}${sleeveTag}${setTag}${restTag}`,
+      `${name}${knitTag}${sleeveTag}${setTag}${restTag}${repeatTag}`,
     ];
     // Brand only if it's not already in the item name (common pattern).
     if (it.brand && !nameLower.includes(it.brand.toLowerCase())) parts.push(it.brand);

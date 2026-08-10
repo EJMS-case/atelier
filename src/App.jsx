@@ -245,6 +245,8 @@ export default function App() {
   // Home — but concurrent callers share one in-flight request.
   const [wearData, setWearData] = useState({ plans: null, stats: null });
   const wearFetchRef = useRef(null);
+  // True while a Style Me generation is in flight — see generateAndAppendLooks.
+  const generationBusyRef = useRef(false);
   const refreshWearData = useCallback(() => {
     if (wearFetchRef.current) return wearFetchRef.current;
     const p = Promise.all([
@@ -792,6 +794,12 @@ export default function App() {
   const generateAndAppendLooks = async (count, mode) => {
     // mode === "fresh" replaces outfits; mode === "append" keeps existing
     // looks and adds new ones (used by "Style 2 more").
+    // Synchronous re-entrancy guard (a ref, because `styling` state lags a
+    // render): two overlapping generations sample the SAME rotation snapshot
+    // and re-suggest the same pieces — the production 2026-08-08 repetition
+    // window shows exactly that burst signature. One generation at a time.
+    if (generationBusyRef.current) return;
+    generationBusyRef.current = true;
     let streamedAny = false;
     let streamedCount = 0; // looks streamed in THIS batch — the final splice below trims exactly these
     try {
@@ -883,6 +891,7 @@ export default function App() {
         setStyleErr(e.message || "Styling failed — try again in a moment.");
       }
     } finally {
+      generationBusyRef.current = false;
       // Fire-and-forget: mirror this device's updated anti-repeat memory to
       // user_settings so her other devices rotate around these looks too.
       // Merge the remote copy first — a blind push was last-writer-wins, so
