@@ -2,6 +2,14 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Closet notes clamp to two lines with "read more" — 2026-08-11
+
+### Why
+Owner request: her newest item descriptions run 400–900 characters (product-copy style), and full-length notes on every card made the closet grid a scroll slog. Display-only change — the EditItemView notes textarea stays big for editing, and nothing about what the stylist reads changes.
+
+### Changed
+- ItemCard notes render clamped to 2 lines (`-webkit-line-clamp`) with a "read more"/"less" toggle when the text is long enough to overflow (>60 chars — conservative so hidden text always gets a toggle; a rare dead toggle on text that happens to fit beats silently swallowed words). Short notes render exactly as before. ItemDetailSheet still shows full notes.
+
 ## [Unreleased] — Silhouette awareness (A5): About Me finally reaches the stylist — 2026-08-11
 
 ### Why

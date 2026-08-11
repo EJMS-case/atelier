@@ -7,10 +7,19 @@ import Thumb from "./Thumb.jsx";
 // memo'd so the 400-item grid doesn't re-render every card on unrelated App
 // state changes (sync-status flash, search typing). onEdit/onToggleFav
 // take the item so the parent can pass STABLE useCallback handlers.
+// Notes at or under this length can't overflow the 2-line clamp at any grid
+// width (≥180px column, 10px italic ≈ 30+ chars/line), so the more/less
+// toggle only renders past it. Slightly conservative on purpose: a toggle on
+// text that happens to fit is a dead click; hidden text with NO toggle would
+// lose her words.
+const NOTES_CLAMP_CHARS = 60;
+
 function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, onStyleItem }) {
-  const [confirm,  setConfirm]  = useState(false);
-  const [showSet,  setShowSet]  = useState(false);
+  const [confirm,   setConfirm]   = useState(false);
+  const [showSet,   setShowSet]   = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const isPartOfSet = item.set_id && item.is_separable;
+  const clampNotes = (item.notes || "").length > NOTES_CLAMP_CHARS;
   return (
     <div style={s.card}>
       <div style={s.cardImg} onClick={() => onEdit(item)}>
@@ -32,7 +41,20 @@ function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, 
         <div style={s.cardName}>{item.name}</div>
         {item.brand && <div style={{...s.cardColor,fontStyle:"italic"}}>{item.brand}</div>}
         {item.color && <div style={s.cardColor}>{item.color}</div>}
-        {item.notes && <div style={s.cardNotes}>{item.notes}</div>}
+        {item.notes && (
+          <>
+            <div style={clampNotes && !notesOpen ? { ...s.cardNotes, ...s.cardNotesClamp } : s.cardNotes}>
+              {item.notes}
+            </div>
+            {clampNotes && (
+              <button style={s.cardNotesToggle}
+                onClick={() => setNotesOpen(v => !v)}
+                aria-expanded={notesOpen}>
+                {notesOpen ? "less" : "read more"}
+              </button>
+            )}
+          </>
+        )}
       </div>
       <div style={s.cardActions}>
         {onStyleItem && (
