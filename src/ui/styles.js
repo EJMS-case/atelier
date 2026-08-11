@@ -47,6 +47,11 @@ export const s = {
   cardName: { fontSize:13, lineHeight:1.3, marginBottom:3 },
   cardColor: { fontSize:11, color:"var(--color-text-2)" },
   cardNotes: { fontSize:10, color:"var(--color-text-muted)", fontStyle:"italic", marginTop:2 },
+  // Collapsed notes clamp to 2 lines so long notes don't stretch the closet
+  // grid; ItemCard pairs this with a more/less toggle. Editing surfaces
+  // (EditItemView textarea) are unaffected — this is display-only.
+  cardNotesClamp: { display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" },
+  cardNotesToggle: { background:"none", border:"none", padding:0, marginTop:1, fontSize:10, fontStyle:"italic", color:"var(--color-accent-strong)", cursor:"pointer" },
   cardActions: { display:"flex", gap:4, padding:"0 8px 8px", justifyContent:"flex-end" },
   iconBtn: { background:"none", border:"none", cursor:"pointer", color:"var(--color-border-muted)", padding:4, display:"flex", alignItems:"center" },
 
