@@ -129,6 +129,7 @@ export function buildStylingPrompt({
   recentCombos = [],
   swapLessons = [],
   occasionMemory = [],
+  silhouette = [],
   comfortMode = false,
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
@@ -238,6 +239,15 @@ Weather still governs fabric weight and coverage.\n`
     ? `\n📒 OCCASION MEMORY (what she returns to — favor these registers, don't force the exact pieces):\n${occasionMemory.map(l => `• ${l}`).join("\n")}\n`
     : "";
 
+  // Her body & fit — silhouette/proportion guidance distilled from her About
+  // Me (features/stylist/silhouette.js). Soft steering only: it shapes rises,
+  // lengths, necklines, and proportion choices — never a rule the validator
+  // enforces, and never a reason to refuse a look. This is also the hook the
+  // preamble's rationale guidance refers to as "her About Me".
+  const silhouetteBlock = (silhouette && silhouette.length > 0)
+    ? `\n💃 HER BODY & FIT — dress to flatter (soft guidance, not hard rules):\n${silhouette.map(l => `• ${l}`).join("\n")}\nLet this steer rises, hem lengths, necklines, tuck choices, and proportion play toward what flatters HER frame. Gentle bias only — never refuse or downgrade a look over it.\n`
+    : "";
+
   // Recent combinations — the LOOK-level anti-repeat, complementing the
   // item-level rotation memory (which keeps pieces fresh but can't stop them
   // recombining into the same recipe). Text-only like loved/disliked looks —
@@ -283,7 +293,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${recentCombosBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${recentCombosBlock}${honestyBlock}
 ${stylePrefsBlock}${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}

@@ -17,6 +17,7 @@ import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { summarizeLookEdits } from "../../features/stylist/lookEdits.js";
 import { summarizeOccasionMemory } from "../../features/stylist/occasionMemory.js";
+import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_STRONG } from "../../constants/models.js";
 import {
@@ -206,6 +207,11 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // text-only lines, [] on thin data → the prompt block simply doesn't render.
   const occasionMemory = summarizeOccasionMemory({ logs: outfitLogs, lovedLooks: lovedFeedback, items });
 
+  // Roadmap A5 — her About Me (Settings) → compact silhouette/proportion
+  // guidance for the HER BODY & FIT block. Pure/sync like summarizeLookEdits;
+  // [] when About Me is empty → the prompt block simply doesn't render.
+  const silhouetteLines = summarizeSilhouette(aboutMe);
+
   // Season/date context — the weather bands say how hot it is, not WHEN it is.
   // July and October can share a "Warm" band yet call for different fabrics
   // (linen and raffia vs suede and light wool), so the prompt gets one line of
@@ -241,6 +247,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     recentCombos,
     swapLessons,
     occasionMemory,
+    silhouette: silhouetteLines,
     comfortMode,
   });
 

@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Silhouette awareness (A5): About Me finally reaches the stylist — 2026-08-11
+
+### Why
+Roadmap A5, next in the survey-agreed order (A2 → A4 → **A5** → B). Scoping found the gap was bigger than the roadmap framed it: `generateOutfit` accepted `aboutMe` (Settings → About Me: height, torso length, fit notes, proportions, age range, professional context) but never used it — the fields reached the function and stopped. The cached preamble's rationale guidance even referenced "her About Me" as a hook; that reference was dangling. Looks were flattering by luck, not construction.
+
+### Added
+- **`summarizeSilhouette(aboutMe)`** (new pure module `src/features/stylist/silhouette.js`, `npm run test:silhouette`, 47 asserts): translates her free-text About Me into explicit dress-to-flatter guidance. Recognized cues become reasoned proportion directives — petite (parsed from 5'2" / 5 ft 2 / 157cm / "petite", plausibility-bounded) → crop/tuck + high-rise + column lines; short torso → lengthen the torso (mid/lower rises, un/half-tucked, tonal dressing); long torso → raise the visual waist (high-rise, cropped layers); broad/narrow shoulders, hourglass/pear/soft-middle, fuller bust each get their own line. Unmatched text passes through labeled in her own words (fitNotes always); ageRange + professionalContext collapse to one context line. Hard caps: ≤6 lines, per-line clip, ~80–100 tokens flat.
+- **`💃 HER BODY & FIT` prompt block** (dynamic body only — the cached preamble is byte-identical): rendered next to OCCASION MEMORY when lines exist, silent when About Me is empty. Soft steering by construction — every line is favor/lean/skip phrasing, no validator changes, and the block itself says "never refuse or downgrade a look over it."
+
+### Fixed
+- The dangling `aboutMe` parameter is wired: stylist.js builds the lines and passes `silhouette` into `buildStylingPrompt`. About Me is per-device (localStorage) — the block appears once fields exist on the device she styles from.
+
 ## [Unreleased] — Editorial voice (A2), occasion memory (A4), shirts freed in Hot/Warm — 2026-08-10
 
 ### Why
