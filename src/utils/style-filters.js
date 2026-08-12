@@ -16,7 +16,7 @@
 // every retry burns).
 
 import { getSubcatL2 } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isCompleteSetItem, HEEL_SUBS } from "./item-helpers.js";
+import { slotForItem, isBootItem, isCompleteSetItem, HEEL_SUBS, classifierNotes } from "./item-helpers.js";
 
 // Trouser-family allow-list carried over from the legacy "trousers-only"
 // toggle — includes the L3 labels rows actually store ("Satin/Silk", "Ponte",
@@ -31,7 +31,9 @@ const SNEAKER_RE = /\b(sneaker|trainer|runner)s?\b/i;
 const FLAT_RE = /\b(flat|loafer|ballet|ballerina)s?\b/i;
 const SANDAL_RE = /\b(sandal|slide)s?\b|\bflip[ -]?flops?\b/i;
 
-const itemText = (it) => (it.name || "") + " " + (it.notes || "");
+// Curated notes only (item-helpers NOTES POLICY): a "No Sandals" chip must not
+// exclude a silk cami whose pasted product copy says "pairs with sandals".
+const itemText = (it) => (it.name || "") + " " + classifierNotes(it);
 
 // Each type: chip label, structural group, and the item matcher used for BOTH
 // directions ("no-X" excludes matches; "only-X" excludes group non-matches).

@@ -2,6 +2,23 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Notes policy: product copy stops tripping classifiers, prompt cost bounded — 2026-08-12
+
+### Why
+HANDOFF open item 11, verified against live rows this session: 58 items now carry 400–1300-char pasted product copy (69% of all note characters), and copy talks about OTHER garments ("pairs with shorts or sandals") and marketing textures ("metallic hardware", "lace-up detail"). Keyword classifiers reading raw notes produced real failures: a silk cami, both Eyelet shirts, ~18 more items — even a raffia tote — hard-failed Cool/Cold as "too light" and were step-3a-gated out of cold pools; wide-leg trousers were statement-flagged into the HC8 one-per-look cap; free-text force-include widened over every word of copy (the 0a "navy tights" trap, amplified); and long copy rode the UNCACHED prompt body in full (token cost is the owner's explicit priority). Content stays: full text is untouched for display and search.
+
+### Added
+- **NOTES POLICY** (`src/utils/item-helpers.js`): `classifierNotes(item)` — notes ≤200 chars (`CURATED_NOTES_MAX`) are her curated tags and keep full regex power; longer notes are product copy and return `""` for classification (name/subcategory/material/season_weight/pattern still classify). `stylistNotes(notes)` — prompt-side digest: curated notes pass through whole; copy is condensed to its stylist-relevant sentences (fabric/silhouette/fit/styling, original order, ≤320 chars `PROMPT_NOTES_MAX`), with a word-boundary head-trim fallback so an item never loses its notes entirely. Measured on all 58 live copy rows: 51,208 → 13,714 chars (−73%), zero fallbacks, digests keep the garment-description sentences.
+- `npm run test:notes` (scripts/notes-policy.test.mjs, 21 asserts) — in the `npm test` battery.
+
+### Fixed
+- **Weather false positives** (the failing path): validator `checkWeatherCompliance` (lightOnly/heavy/winterOnly/isLightOuter/isHeavyCoat/isHeavyOuter), the step-3a sampler mirror (`wxText`), and `filterByWeather` all read `classifierNotes` — copy saying "shorts"/"sandal" no longer hard-fails or pool-drops items in Cool/Cold; "trench"/"heavy"/"leather" mentions no longer exclude from Hot/Warm. Curated tags ("heavy wool — winter only") still gate, verified by test.
+- **Statement false positives**: `isStatementPiece` notes scan is policy-gated — "metallic hardware"/"lace-up" copy no longer flags plain trousers/jeans; curated "sequin trim" and real pattern fields still count.
+- **Sleeve classification**: `getSleeveType` now reads the item NAME + curated notes (was: raw notes only) — "Ponte Short-Sleeve Top" keeps its sleeve signal with copy gated, and copy's "layer it over a tank" no longer classifies a pullover as sleeveless. Side benefit: the Eyelet shirts' copy-driven "long sleeve" read no longer excludes them from Hot pools (aligns with the #171 shirts-in-heat fix).
+- **Free-text amplification**: `matchesFreeText`'s priority-1 notes match uses curated notes only — the rationale ("the user authored the notes themselves") was false for pasted copy. Copy-described items still match via name/brand/color/material/subcategory.
+- **Occasion scans**: `noteSaysOccasion` ("everyday" copy no longer vouches silk into Lounge — this rescue also clears category bans), the Occasion dresses keep-gate ("perfect for any occasion" ≠ an event flag), banned-keyword scans, `tooDressyForComfort`, trip-packer activity bans, and the filter chips' name/notes matcher ("No Sandals" no longer excludes the cami) — all policy-gated.
+- **Prompt cost bounded**: `formatInventory` and builder-chat item lines send `stylistNotes` digests. Closet-wide note chars drop ~74.4k → ~36.9k today, and the cap holds as she pastes more copy (the projected ~5× inventory blow-up can no longer happen).
+
 ## [Unreleased] — Closet notes clamp to two lines with "read more" — 2026-08-11
 
 ### Why

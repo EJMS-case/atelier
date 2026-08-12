@@ -10,19 +10,105 @@ import {
   COLOR_FAMILY_RANGES, familyForColorString,
 } from "../constants/color.js";
 
+// ── NOTES POLICY ────────────────────────────────────────────────────────────
+// Notes come in two very different registers and the pipeline must tell them
+// apart (owner data, 2026-08-11: 58 items carry 400-1300-char pasted product
+// copy; the closet average is ~160 chars of curated tags):
+//   · SHORT notes (≤ CURATED_NOTES_MAX) are her own curated tags ("good for
+//     athleisure", "long sleeve", "sequin trim") — the strongest signal the
+//     classifiers have. They keep full regex power.
+//   · LONG notes are product copy. Copy talks about OTHER garments ("pairs
+//     beautifully with shorts or sandals") and marketing textures ("metallic
+//     hardware", "lace-up detail"), so keyword classifiers reading it produce
+//     false positives: a silk cami hard-failed in Cold as "too light" because
+//     its copy said "shorts", a tote flagged the same way via "sandal", wide-
+//     leg trousers flagged as statement pieces via "metallic hardware".
+// classifierNotes() is what every keyword CLASSIFIER must read: curated notes
+// verbatim, empty string for product copy (structured fields — name,
+// subcategory, material, season_weight, pattern — still classify the item).
+// Display surfaces, closet search, and the free-form swap-sheet search keep
+// reading full notes: matching copy is what a *search* should do.
+// stylistNotes() below is the PROMPT-side counterpart: a bounded digest so
+// long copy doesn't ride the uncached prompt body at full length.
+export const CURATED_NOTES_MAX = 200;
+export function classifierNotes(item) {
+  const notes = item && item.notes ? String(item.notes) : "";
+  return notes.length <= CURATED_NOTES_MAX ? notes : "";
+}
+
+// Prompt digest for long notes. Curated notes (and anything ≤ maxLen) pass
+// through untouched. Product copy is condensed to the sentences a stylist
+// actually uses — fabric, silhouette, fit, construction, styling advice — in
+// original order, capped at maxLen. Copy with no such sentence (pure marketing
+// fluff / care instructions / model-size lines) falls back to a word-boundary
+// head trim, so an item never loses its notes entirely.
+export const PROMPT_NOTES_MAX = 320;
+const STYLIST_LINE_RE = new RegExp(
+  "\\b(?:" + [
+    // fabric / material
+    "silk|satin|cotton|linen|wool|cashmere|ponte|crepe|jersey|knits?|knitted|denim|leather|suede",
+    "chiffon|tweed|viscose|rayon|lyocell|tencel|modal|nylon|spandex|elastane|stretchy?|ribbed?",
+    "eyelet|boucl[eé]|poplin|twill|gauze|velvet|sheer|lightweight|midweight|heavyweight",
+    // silhouette / fit / construction
+    "drapes?|draped|drapey|silhouette|fits?|fitted|relaxed|oversized|slouchy|cropped?",
+    "high[- ]?rise|mid[- ]?rise|low[- ]?rise|high[- ]?waisted?|wide[- ]?leg|straight[- ]?leg|slim|a[- ]?line",
+    "flowy|fluid|tailor(?:ed|ing)|structured|unstructured|unlined|hem(?:line)?|neckline",
+    "v[- ]?neck|crew[- ]?neck|scoop|boat[- ]?neck|square[- ]?neck|collar(?:ed)?|waist(?:band|line)?",
+    "inseam|sleeves?|sleeveless|strapless|halter|midi|maxi|mini",
+    // styling advice
+    "pairs?|layer(?:s|ed|ing)?|tuck(?:s|ed)?|dress(?:es)?\\s+(?:up|down)|day[- ]?to[- ]?night",
+    "wears?\\s+(?:with|under|over)",
+  ].join("|") + ")\\b", "i"
+);
+function wordTrim(s, maxLen) {
+  if (s.length <= maxLen) return s;
+  const cut = s.slice(0, maxLen - 1);
+  const sp = cut.lastIndexOf(" ");
+  return (sp > maxLen * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s,;:]+$/, "") + "…";
+}
+export function stylistNotes(notes, { maxLen = PROMPT_NOTES_MAX } = {}) {
+  const text = (notes ? String(notes) : "").trim();
+  if (text.length <= maxLen) return text;
+  // Sentence-ish units: split on bullets/newlines/pipes first, then on
+  // sentence enders (kept attached). No lookbehind — old-Safari PWA safe.
+  const units = text
+    .split(/\s*[\n•|]+\s*/)
+    .flatMap(chunk => chunk.match(/[^.!?;]+[.!?;]*/g) || [])
+    .map(s => s.trim())
+    .filter(Boolean);
+  const picked = [];
+  let len = 0;
+  for (const u of units) {
+    if (!STYLIST_LINE_RE.test(u)) continue;
+    const add = u.length + (picked.length ? 1 : 0);
+    if (len + add > maxLen) {
+      if (!picked.length) picked.push(wordTrim(u, maxLen));
+      break;
+    }
+    picked.push(u);
+    len += add;
+  }
+  return picked.length ? picked.join(" ") : wordTrim(text, maxLen);
+}
+
 // ── SLEEVE CLASSIFICATION ───────────────────────────────────────────────────
 export function getSleeveType(item) {
-  // Notes-driven only (no dropdown — the user relies on her own notes). Returns
-  // "unknown" when nothing signals a sleeve length, and "unknown" is NEVER
-  // weather-excluded — she layers, so any sleeve works. Only a piece she has
-  // explicitly noted as long-sleeve is treated as long (kept out of hot).
+  // Sleeve signal: subcategory first, then the item NAME + curated notes (no
+  // dropdown — she relies on her own words; "Ponte Short-Sleeve Top" carries
+  // the signal in its name). Long product copy is excluded per the NOTES
+  // POLICY above — "layer it over a tank" / "pairs with long sleeves" in
+  // pasted copy was misclassifying sleeves, and both HC_SHOULDER and the hot-
+  // weather top gate consume this. Returns "unknown" when nothing signals a
+  // sleeve length, and "unknown" is NEVER weather-excluded — she layers, so
+  // any sleeve works. Only a piece she has explicitly named/noted as
+  // long-sleeve is treated as long (kept out of hot).
   const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeve":"short", "Bra/Crop Top":"sleeveless" };
   if (item.category === "Tops" && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
-  const notes = (item.notes || "").toLowerCase();
-  if (/\b(sleeveless|tank|strap|strappy|strapless|halter|tube)\b/.test(notes)) return "sleeveless";
-  if (/\b(short.?sleeve|cap.?sleeve)\b/.test(notes)) return "short";
-  if (/\b(3\/4|three.?quarter)\b/.test(notes)) return "threeQuarter";
-  if (/\blong.?sleeve\b/.test(notes)) return "long";
+  const text = ((item.name || "") + " " + classifierNotes(item)).toLowerCase();
+  if (/\b(sleeveless|tank|strap|strappy|strapless|halter|tube)\b/.test(text)) return "sleeveless";
+  if (/\b(short.?sleeve|cap.?sleeve)\b/.test(text)) return "short";
+  if (/\b(3\/4|three.?quarter)\b/.test(text)) return "threeQuarter";
+  if (/\blong.?sleeve\b/.test(text)) return "long";
   return "unknown";
 }
 
@@ -152,7 +238,10 @@ export function isStatementPiece(item, { fringeCounts = false } = {}) {
   // ("solid"/"colourblock" aren't in STATEMENT_PATTERNS, so they never trip it.)
   const vpattern = (item.vision_data?.pattern || "").toLowerCase().trim();
   if (STATEMENT_PATTERNS.has(vpattern)) return true;
-  const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
+  // Notes are gated per NOTES POLICY: product copy's "metallic hardware" /
+  // "lace-up detail" was statement-flagging plain trousers and jeans into the
+  // HC8 one-statement cap. Curated notes ("sequin trim") still count.
+  const text = ((item.name || "") + " " + classifierNotes(item) + " " + (item.material || "")).toLowerCase();
   if (/\b(sequin|sequined|embroidered|embroider|beaded|brocade|jacquard|metallic|paillette|crystal|rhinestone|feather|featherwork|lace)\b/i.test(text)) return true;
   if (fringeCounts && /\bfringe\b/i.test(text)) return true;
   // Bold prints in the name even when pattern field is unset (sparse metadata).
@@ -177,7 +266,10 @@ export function filterByWeather(items, weather) {
 
   return items.filter(it => {
     const sleeve = getSleeveType(it);
-    const nameNotes = ((it.name || "") + " " + (it.notes || "") + " " + (it.knit_weight || "") + " " + (it.material || "")).toLowerCase();
+    // classifierNotes, not raw notes (NOTES POLICY): product copy mentioning
+    // "wool" / "leather" / "trench" was weather-excluding pieces the copy was
+    // only styling against, not describing.
+    const nameNotes = ((it.name || "") + " " + classifierNotes(it) + " " + (it.knit_weight || "") + " " + (it.material || "")).toLowerCase();
     const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit/i.test(nameNotes);
     const isWinterOuter = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(nameNotes);
     const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(nameNotes);

@@ -7,6 +7,10 @@
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
+// stylistNotes: long pasted product copy is condensed to its stylist-relevant
+// sentences before riding the chat context (up to 40 items per category ×
+// ~1 kB of copy each is real token money); curated notes pass through whole.
+import { stylistNotes } from "../../utils/item-helpers.js";
 
 const SLOT_CATEGORIES = {
   shoes:     ["Shoes"],
@@ -26,7 +30,7 @@ function formatItem(it) {
     it.material  ? `material: ${it.material}` : null,
     it.pattern && it.pattern !== "solid" ? `pattern: ${it.pattern}` : null,
     it.brand     ? `brand: ${it.brand}`       : null,
-    it.notes     ? `notes: ${it.notes}`       : null,
+    it.notes     ? `notes: ${stylistNotes(it.notes)}` : null,
   ].filter(Boolean).join(" | ");
 }
 

@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem, isStatementPiece } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem, isStatementPiece, classifierNotes } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -412,7 +412,12 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
       const resolved = resolveLookItem(item, idMap, allItems);
       if (!resolved) return;
 
-      const text = ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.subcategory || "") + " " + (resolved.material || "")).toLowerCase();
+      // classifierNotes, not raw notes (see item-helpers NOTES POLICY):
+      // pasted product copy saying "pairs with shorts/sandals" was hard-
+      // failing winter-layerable camis and shirts — and even a raffia tote —
+      // as "too light" in Cool/Cold, and copy mentioning "trench"/"heavy" was
+      // failing bottoms out of Hot/Warm. Curated notes keep full power.
+      const text = ((resolved.name || "") + " " + classifierNotes(resolved) + " " + (resolved.subcategory || "") + " " + (resolved.material || "")).toLowerCase();
       const sw = (resolved.season_weight || "").toLowerCase();
       const heavy = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i.test(text);
       const winterOnly = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(text);
@@ -464,7 +469,7 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
         // sampler kept offering these pieces and the prompt banned them — a
         // three-way contradiction that burned retries.
         const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(
-          ((resolved.name || "") + " " + (resolved.notes || "") + " " + (resolved.material || "")).toLowerCase()
+          ((resolved.name || "") + " " + classifierNotes(resolved) + " " + (resolved.material || "")).toLowerCase()
         );
         if (resolved.subcategory === "Coats") {
           const isHeavyCoat = /wool|cashmere|shearling|sherpa|puffer|parka|down|quilted|long|heavy/i.test(text);
