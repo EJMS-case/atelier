@@ -12,7 +12,7 @@
 // all-sneaker trip) is still allowed to add the right new piece. See
 // capsuleTargets() + the scoring notes inside pick().
 
-import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, classifierNotes } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 
@@ -323,7 +323,9 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
       if (actFilter.banBoots && isBootItem(it)) return false;
       if (actFilter.bannedSubcategories.has(it.subcategory)) return false;
       if (actFilter.bannedRegex) {
-        const text = ((it.name || "") + " " + (it.notes || "") + " " + (it.material || "")).toLowerCase();
+        // classifierNotes (item-helpers NOTES POLICY): activity bans read her
+        // curated tags, not pasted product copy.
+        const text = ((it.name || "") + " " + classifierNotes(it) + " " + (it.material || "")).toLowerCase();
         if (actFilter.bannedRegex.test(text)) return false;
       }
       return true;

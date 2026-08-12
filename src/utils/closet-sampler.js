@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, classifierNotes, stylistNotes } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 
@@ -135,7 +135,9 @@ const OCCASION_PREFILTERS = {
       if (item.category !== "Dresses") return true;
       const sub = (item.subcategory || "").toLowerCase();
       if (/cocktail|gown|formal|evening/.test(sub)) return true;
-      const text = ((item.name || "") + " " + (item.notes || "")).toLowerCase();
+      // Curated notes only ("wedding guest dress" is her tag; "perfect for any
+      // occasion" in pasted product copy is not an event flag).
+      const text = ((item.name || "") + " " + classifierNotes(item)).toLowerCase();
       return /\b(cocktail|evening|gown|formal|black.?tie|wedding|gala|event|occasion|black.?tie.?optional|red.?carpet)\b/.test(text);
     },
   },
@@ -168,7 +170,11 @@ const OCCASION_NOTE_HINTS = {
 export function noteSaysOccasion(item, occasion) {
   const rx = OCCASION_NOTE_HINTS[occasion];
   if (!rx) return false;
-  return rx.test(((item.name || "") + " " + (item.notes || "")).toLowerCase());
+  // "The user's OWN notes are honored" — which is exactly why product copy is
+  // excluded (NOTES POLICY): "effortless everyday" in pasted copy is not her
+  // vouching a silk blouse into Lounge, and this rescue also clears category
+  // bans upstream.
+  return rx.test(((item.name || "") + " " + classifierNotes(item)).toLowerCase());
 }
 
 // Garments (not shoes/bags/accessories — a leather sneaker is fine for Lounge)
@@ -180,7 +186,7 @@ function tooDressyForComfort(item, occasion) {
   if (!DRESSY_COMFORT_CATS.has(item.category)) return false;
   if (noteSaysOccasion(item, occasion)) return false; // she vouched for it
   if (DRESSY_COMFORT_SUBS.has(item.subcategory)) return true;
-  const text = ((item.name || "") + " " + (item.notes || "") + " " + (item.material || "")).toLowerCase();
+  const text = ((item.name || "") + " " + classifierNotes(item) + " " + (item.material || "")).toLowerCase();
   return DRESSY_COMFORT_MATERIAL.test(text);
 }
 
@@ -277,7 +283,12 @@ function matchesFreeText(item, freeText) {
   if (tokens.length === 0) return false;
 
   const fields = {
-    notes:       (item.notes || "").toLowerCase(),
+    // Curated notes only (NOTES POLICY): the priority-1 rationale — "the user
+    // authored the notes themselves" — is false for pasted product copy, and
+    // 900 chars of copy turns every second word into an accidental
+    // force-include (the "navy tights" trap, amplified). Copy-described pieces
+    // still match via name/brand/color/material/subcategory below.
+    notes:       classifierNotes(item).toLowerCase(),
     name:        (item.name || "").toLowerCase(),
     brand:       (item.brand || "").toLowerCase(),
     color:       (item.color || "").toLowerCase(),
@@ -437,7 +448,9 @@ export function sampleClosetItems({
     if (bannedSubs.has(it.subcategory) && !onlyRescueIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
     if (bannedSubs.has("Jeans") && isDenim(it) && !onlyRescueIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
     if (bannedKeywords.length > 0) {
-      const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
+      // classifierNotes: "sporty edge" / "casual Friday" in product copy must
+      // not ban a piece the way her own "casual only" tag deliberately does.
+      const text = ((it.name || "") + " " + classifierNotes(it)).toLowerCase();
       if (bannedKeywords.some(kw => text.includes(kw.toLowerCase()))) return false;
     }
     return true;
@@ -456,7 +469,7 @@ export function sampleClosetItems({
       if (preFilter.removeCategories.has(it.category) && !catRescued(it)) return false;
       if (preFilter.removeSubcategories.has(it.subcategory) && !onlyRescueIds.has(it.id)) return false;
       if (preFilter.removeKeywords.length > 0) {
-        const text = ((it.name || "") + " " + (it.notes || "")).toLowerCase();
+        const text = ((it.name || "") + " " + classifierNotes(it)).toLowerCase();
         if (preFilter.removeKeywords.some(kw => text.includes(kw))) return false;
       }
       // Optional category-specific keep gate (e.g. Occasion: dresses must be
@@ -520,7 +533,11 @@ export function sampleClosetItems({
   // checkWeatherCompliance — keep them in sync with the validator, not vice
   // versa (the validator stays authoritative; this gate may only be equal or
   // NARROWER, never wider, or the pool loses pieces the validator would pass).
-  const wxText = (it) => ((it.name || "") + " " + (it.notes || "") + " " + (it.subcategory || "") + " " + (it.material || "")).toLowerCase();
+  // classifierNotes, not raw notes (item-helpers NOTES POLICY): this gate must
+  // stay a mirror of checkWeatherCompliance, which reads classifierNotes too —
+  // product copy saying "pairs with shorts" must not empty an item out of the
+  // pool any more than it may hard-fail the look.
+  const wxText = (it) => ((it.name || "") + " " + classifierNotes(it) + " " + (it.subcategory || "") + " " + (it.material || "")).toLowerCase();
   const HEAVY_RE = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i;
   const WINTER_ONLY_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted/i;
   const isHotBucket = weatherMatches(wRaw, "Hot");
@@ -897,8 +914,16 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
     ];
     // Brand only if it's not already in the item name (common pattern).
     if (it.brand && !nameLower.includes(it.brand.toLowerCase())) parts.push(it.brand);
-    // Notes are the primary description — pass in full, no truncation.
-    if (it.notes) parts.push(it.notes);
+    // Notes are the primary description. Curated notes pass in full; long
+    // pasted product copy is condensed to its stylist-relevant sentences
+    // (fabric/silhouette/fit/styling) via stylistNotes — these lines ride the
+    // UNCACHED dynamic body, and closet-wide copy at full length was ~5× the
+    // whole inventory's token cost (owner's explicit priority is token cost).
+    // Full text stays on the item for display/search surfaces.
+    if (it.notes) {
+      const pn = stylistNotes(it.notes);
+      if (pn) parts.push(pn);
+    }
     // Visual-AI read (when the closet has been enriched): a compact fabric /
     // drape / formality / vibe signal the model reads straight off the garment's
     // photo. Supplements her notes — never overrides her colour. Kept short so
