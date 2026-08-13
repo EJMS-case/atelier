@@ -329,3 +329,37 @@ test("blazers chip renders when owned, hides at zero owned", () => {
   const without = computeFilterChips(closet, {});
   assert.ok(!without.map(c => c.key).includes("blazers"), "zero-owned blazers chip must hide");
 });
+
+// ── Stockings chip (owner request 2026-08-13) ────────────────────────────────
+const sheerTights  = { id: "tights",  category: "Accessories", subcategory: "Hosiery", name: "Noosh sheer tights — black" };
+const fishnets     = { id: "fish",    category: "Accessories", subcategory: "Fishnet", name: "Noosh micro fishnet tights — black" };
+const fishnetTop   = { id: "fishtop", category: "Tops", subcategory: "Tops",           name: "Fishnet Mesh Top" };
+const leggings     = { id: "legg",    category: "Athleisure", subcategory: "Leggings", name: "Align Legging" };
+
+test("no-stockings strips hosiery, spares garments that only sound like hosiery", () => {
+  assert.equal(excluded(["no-stockings"], sheerTights), true);
+  assert.equal(excluded(["no-stockings"], fishnets), true);
+  assert.equal(excluded(["no-stockings"], fishnetTop), false, "a fishnet TOP is not hosiery");
+  assert.equal(excluded(["no-stockings"], leggings), false, "athleisure leggings are a bottom, not hosiery");
+  assert.equal(excluded(["no-stockings"], skirtL3), false);
+});
+
+test("only-stockings hard-bans nothing (single-type legwear domain) — it's a steer + rescue", () => {
+  for (const it of [sheerTights, fishnets, skirtL3, heels, blouse, bag, leggings]) {
+    assert.equal(excluded(["only-stockings"], it), false, `${it.name} must never be banned by only-stockings`);
+  }
+  assert.equal(matchesActiveOnly(sheerTights, ["only-stockings"]), true, "hosiery is rescued past occasion bans");
+});
+
+test("describeStyleFilters renders every group's Only line without throwing (outer + legwear included)", () => {
+  const lines = describeStyleFilters(["only-blazers", "only-stockings", "only-heels", "no-jeans"]);
+  assert.equal(lines.length, 4);
+  assert.ok(lines.some(l => /Blazers ONLY for the outer layer/.test(l)), "outer group line (was a crash pre-2026-08-13)");
+  assert.ok(lines.some(l => /Stockings requested/.test(l) && /weather/i.test(l)), "legwear steer stays weather-safe");
+});
+
+test("stockings chip renders when hosiery is owned, hides otherwise", () => {
+  const withTights = computeFilterChips([...closet, sheerTights], {});
+  assert.ok(withTights.map(c => c.key).includes("stockings"));
+  assert.ok(!computeFilterChips(closet, {}).map(c => c.key).includes("stockings"));
+});

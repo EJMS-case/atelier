@@ -16,7 +16,7 @@
 // every retry burns).
 
 import { getSubcatL2 } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isCompleteSetItem, classifierNotes } from "./item-helpers.js";
+import { slotForItem, isBootItem, isCompleteSetItem, isHosieryItem, classifierNotes } from "./item-helpers.js";
 
 // Trouser-family allow-list carried over from the legacy "trousers-only"
 // toggle — includes the L3 labels rows actually store ("Satin/Silk", "Ponte",
@@ -132,6 +132,19 @@ export const FILTER_TYPES = {
     group: "outer",
     match: (it) => it.category === "Outerwear" && (it.subcategory === "Blazers" || /\bblazers?\b/i.test(it.name || "")),
   },
+  stockings: {
+    // Owner request 2026-08-13. Rides on isHosieryItem (Accessories-gated —
+    // a "fishnet top" or "tight fit" garment note can never match). Hosiery
+    // is the only member of its "legwear" group, so "No Stockings" strips
+    // tights from the pool while "Only Stockings" hard-bans nothing — its
+    // value is the rescue past occasion bans plus a prompt steer toward
+    // hosiery-built looks. Hosiery is an OPTIONAL layer validator-side, so
+    // neither direction can produce an error wall, and the weather gate
+    // (hosiery out in Hot/Warm) still wins over an Only toggle.
+    label: "Stockings",
+    group: "legwear",
+    match: isHosieryItem,
+  },
 };
 
 // Full static chip list, in FILTER_TYPES order. Kept as the fallback for a
@@ -212,9 +225,10 @@ const GROUP_DOMAINS = {
   shoes: (it) => it.category === "Shoes",
   upper: (it) => slotForItem(it) === "top",
   outer: (it) => it.category === "Outerwear",
+  legwear: isHosieryItem,
 };
 
-const GROUP_NOUN = { lower: "the lower half", shoes: "footwear", upper: "tops", outer: "outerwear layers" };
+const GROUP_NOUN = { lower: "the lower half", shoes: "footwear", upper: "tops", outer: "outerwear layers", legwear: "legwear" };
 
 // ── Key normalization ────────────────────────────────────────────────────────
 // Accepts the pre-2026-08 toggle keys AND the display labels the validator
@@ -322,9 +336,17 @@ export function describeStyleFilters(filterKeys) {
       `${names.join(" or ")} ONLY for shoes — every look's footwear must be ${names.length > 1 ? `one of: ${names.join(", ")}` : names[0]}. All other shoe types are OFF-LIMITS.`,
     upper: (names) =>
       `${names.join(" or ")} ONLY for tops — every look's upper half must be ${names.length > 1 ? `one of: ${names.join(", ")}` : `a ${names[0].replace(/s$/, "").toLowerCase()}`}. All other tops are OFF-LIMITS.`,
+    outer: (names) =>
+      `${names.join(" or ")} ONLY for the outer layer — when a look carries outerwear it must be ${names.length > 1 ? `one of: ${names.join(", ")}` : `a ${names[0].replace(/s$/, "").toLowerCase()}`}. All other outerwear is OFF-LIMITS (skipping the layer is fine).`,
+    legwear: (names) =>
+      `${names.join(" or ")} requested — build looks that showcase her hosiery: favor skirt/dress silhouettes layered over ${names.join(" or ").toLowerCase()} wherever the weather allows. Never force hosiery into a look the weather rules out.`,
   };
   for (const [group, types] of Object.entries(onlyByGroup)) {
-    lines.push(GROUP_ONLY_LINES[group](types.map((t) => t.label)));
+    const render = GROUP_ONLY_LINES[group]
+      // Safety net for future groups: a missing template must degrade to a
+      // generic line, never throw mid-generation.
+      || ((names) => `${names.join(" or ")} ONLY within ${GROUP_NOUN[group] || "their group"} — everything else of that type is OFF-LIMITS.`);
+    lines.push(render(types.map((t) => t.label)));
   }
   return lines;
 }
