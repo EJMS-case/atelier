@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Builder: comfortwear tucked to the end, BELT slot, evaluator gets context — 2026-08-12
+
+### Why
+Owner requests: (1) in the builder she wants lounge/active/athleisure/swim available but "not the first thing I see when I expand each category" — lumped at the end, expandable, searchable as needed; (2) belts deserve their own picker category; (3) "how does the evaluator work and can it be smarter and better?" — it worked, but blind: no occasion, no weather, no item notes, no her-body/fit context, no taste memory, on the cheapest model tier.
+
+### Added
+- **BELT slot** in the builder (builder-local carve-out — `slotForItem` untouched, so sampler/validator/rotation still bucket Belts as accessories): its own picker chip between BAG and ACCESSORY, multi-pick like shoes/bags, waist-zone default position, z above tops. The ACCESSORY slot now excludes Belts so each piece lives in exactly one slot. Old saved looks migrate transparently — restore re-matches items against the slot table, and layout entries are keyed by item id, not slot.
+- **Comfort section in every slot picker**: Athleisure + Loungewear pieces render behind a collapsed `LOUNGE · ACTIVE · ATHLEISURE (N)` divider at the END of the grid — present, never leading. Auto-expands while a search is active or when the chosen subcategory chip's matches are all comfortwear (so "Leggings" never lands on a seemingly-empty grid). Collapses again on slot change.
+- **Evaluator `works` line**: one specific thing the look already does best, rendered above the tips (stylist's-card ethos: affirm, then elevate).
+
+### Changed
+- **SWIM slot moved to the end of the slot bar** (was 5th of 9) — still one tap away, no longer leading.
+- **Evaluator context** (`evaluateLook.js`): now sends the builder's occasion + weather chips as the brief ("a beautiful look that's wrong for the room is not a 9"), item `notes` digests (`stylistNotes`, 160-char cap) + pattern + curated formality `f#` (with a one-line f1–f8 legend), HER BODY & FIT lines (About Me → `summarizeSilhouette`, device-local, silent when empty), and the style fingerprint (fetched once per session, soft-fail to empty). Model FAST → STANDARD (same tier as builder chat); tips now steer toward adjusting what's on the canvas (tuck/cuff/layer-order/drop/belt-it) instead of presuming unseen items, and are told one good tip beats three reaches. Still a single on-demand call per explicit tap.
+- Builder chat's slot→category map gains `belt: ["Belts"]` (accessory no longer covers belts).
+
 ## [Unreleased] — Notes policy: product copy stops tripping classifiers, prompt cost bounded — 2026-08-12
 
 ### Why
