@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Winter blazer-under-coat layering; stockings render at legwear size — 2026-08-13
+
+### Why
+Two owner reports (with screenshot): "I can wear a blazer with a jacket in the winter though" — the pipeline had a one-outerwear worldview: the category cap nagged every second layer regardless of season, the COOL/COLD prompt blocks never taught the combination, and "Only Blazers" stripped her 7 overcoats from the pool. And "stockings are still coming up really small in Style Me" — hosiery classified as a generic accessory in the collage, landing in a jewelry-sized corner box that shrank the tall leg-shaped cutouts to a sliver.
+
+### Changed
+- **Validator (`checkCategoryBalance`, now weather-aware)**: in Cool/Cold, exactly one blazer + one coat/jacket over it is a clean two-layer look — no nag. Two blazers, two coats, or a third layer still nag; other weather keeps the one-layer cap with a message teaching that the pair is a Cool/Cold move. All outerwear stacking stays SOFT (never an error wall; only Shoes/Bottoms stacking is hard). New shared `isBlazerItem` in item-helpers — the Blazers chip and the pairing rule use one definition.
+- **COOL + COLD prompt blocks** (dynamic body, no cache impact): teach the blazer-under-coat move explicitly, with the same one-blazer-one-coat bound.
+- **"Only Blazers" domain exempts Coats**: an overcoat layers OVER the blazer rather than competing with it, so the toggle now bans only jacket-weight rivals (leather/denim jackets); her coats stay in winter pools. Prompt line updated to say so.
+- **Collage hosiery slot** (`EditorialCollage`): hosiery gets its own tall legwear slot (~26×44% desktop, ~32×46% mobile, occupancy-aware placement beside the garment column, z between bag and belt) instead of a 20×18% accessory chip — the straight-leg cutouts now fill a leg-shaped box. Auto-to-builder z remap covers the new layer.
+- `test:validator` 29 → 32 (blazer+coat clean in Cold, two-blazers nags soft, pair nags outside Cool/Cold).
+
 ## [Unreleased] — Stockings filter chip; Only-Blazers crash fixed — 2026-08-13
 
 ### Why

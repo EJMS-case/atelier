@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { s } from "../ui/styles.js";
 import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
-import { sortByCategoryOrder } from "../utils/item-helpers.js";
+import { sortByCategoryOrder, isHosieryItem } from "../utils/item-helpers.js";
 import TrimmedImage from "./TrimmedImage.jsx";
 
 // Mobile gets a portrait canvas (4:5 recipes; manual layouts render at the
@@ -94,6 +94,11 @@ function buildCollageLayout(items, isMobile) {
     if (cat === "Belts") return "belt";
     if (cat === "Accessories" && (BAG_SUBCATEGORIES.has(sub) || BAG_NAME_RE.test(name))) return "bag";
     if (cat === "Accessories" && /\bbelt\b/i.test(name)) return "belt";
+    // Hosiery gets its own tall slot (owner report 2026-08-13: "stockings are
+    // still coming up really small") — the -v2 hosiery PNGs are full
+    // straight-leg cutouts, and a jewelry-sized accessory corner box shrank
+    // them to a sliver under objectFit:contain.
+    if (cat === "Accessories" && isHosieryItem(item)) return "hosiery";
     if (cat === "Accessories") return "accessory";
     // Athleisure / Loungewear / Swim live in their own category but the role
     // (upper vs lower vs dress) is encoded in the subcategory. Without this
@@ -116,18 +121,21 @@ function buildCollageLayout(items, isMobile) {
     return "top";
   };
 
-  // Deduplicate: keep only the first item per singleton role.
-  const seenRoles = new Set();
+  // Deduplicate: cap items per role. `layer` allows 2 since a Cool/Cold look
+  // can legitimately carry blazer + coat (2026-08-13) — dropping the second
+  // silently hid a listed item from the collage.
+  const ROLE_CAPS = { shoes: 1, bag: 1, belt: 1, bottom: 1, dress: 1, layer: 2, hosiery: 1 };
+  const roleCounts = {};
   const deduped = [];
   all.forEach(item => {
     const role = getRole(item);
-    const singletonRoles = new Set(["shoes", "bag", "belt", "bottom", "dress", "layer"]);
-    if (singletonRoles.has(role) && seenRoles.has(role)) return;
-    seenRoles.add(role);
+    const n = roleCounts[role] || 0;
+    if (ROLE_CAPS[role] !== undefined && n >= ROLE_CAPS[role]) return;
+    roleCounts[role] = n + 1;
     deduped.push(item);
   });
 
-  const g = { layer:[], top:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], accessory:[] };
+  const g = { layer:[], top:[], dress:[], bottom:[], shoes:[], bag:[], belt:[], hosiery:[], accessory:[] };
   deduped.forEach(item => { const r = getRole(item); if (g[r]) g[r].push(item); });
 
   const hasDress  = g.dress.length > 0;
@@ -155,7 +163,7 @@ function buildCollageLayout(items, isMobile) {
   const slots = [];
   // Z-order: garments back, accessories front. Top crosses the jacket; bag
   // sits in front of pants; shoes ground the composition; jewelry/belt on top.
-  const zMap = { layer:2, top:5, dress:4, bottom:3, shoes:6, bag:7, belt:9, accessory:10 };
+  const zMap = { layer:2, top:5, dress:4, bottom:3, shoes:6, bag:7, hosiery:8, belt:9, accessory:10 };
   const place = (role, pos) => {
     if (g[role][0] && pos) {
       slots.push({ ...g[role][0], x:pos.x, y:pos.y, w:pos.w, h:pos.h, rotate:0, zIndex: zMap[role] || 6 });
@@ -166,6 +174,44 @@ function buildCollageLayout(items, isMobile) {
     // Place in z-order so back-most garments render first and overlapping
     // accessories layer on top correctly.
     ["layer", "top", "dress", "bottom", "shoes", "bag", "belt"].forEach(role => place(role, recipe[role]));
+  }
+
+  // Second outer layer (winter blazer-under-coat pair): the recipes carry one
+  // layer zone, so the coat's companion gets its own tall side slot, placed
+  // BEHIND the primary layer (z 1) — both pieces stay visible.
+  if (g.layer[1]) {
+    const layer2Candidates = isMobile
+      ? [{ x: 60, y: 4, w: 38, h: 52 }, { x: 0, y: 4, w: 38, h: 52 }]
+      : [{ x: 60, y: 4, w: 36, h: 54 }, { x: 0, y: 4, w: 36, h: 54 }];
+    const taken2 = (pos) => slots.some(sl =>
+      Math.abs(sl.x - pos.x) < 18 && Math.abs(sl.y - pos.y) < 18
+    );
+    const spot = layer2Candidates.find(pos => !taken2(pos)) || layer2Candidates[0];
+    slots.push({ ...g.layer[1], ...spot, rotate: 0, zIndex: 1 });
+  }
+
+  // ── Hosiery: a TALL legwear slot beside the garment column, not a jewelry
+  // corner chip. The -v2 hosiery cutouts are leg-shaped (tall/narrow), so the
+  // box's aspect roughly matches and contain-fit fills it instead of
+  // shrinking. Placed before generic accessories so jewelry's occupancy
+  // check sees it and floats to a free corner.
+  if (g.hosiery.length > 0) {
+    const hosieryCandidates = isMobile
+      ? [
+          { x: 64, y: 4,  w: 32, h: 46 },
+          { x: 2,  y: 4,  w: 32, h: 46 },
+          { x: 62, y: 32, w: 30, h: 42 },
+        ]
+      : [
+          { x: 70, y: 6,  w: 26, h: 44 },
+          { x: 2,  y: 6,  w: 26, h: 44 },
+          { x: 70, y: 38, w: 24, h: 40 },
+        ];
+    const taken = (pos) => slots.some(sl =>
+      Math.abs(sl.x - pos.x) < 18 && Math.abs(sl.y - pos.y) < 18
+    );
+    const spot = hosieryCandidates.find(pos => !taken(pos)) || hosieryCandidates[0];
+    slots.push({ ...g.hosiery[0], ...spot, rotate: 0, zIndex: zMap.hosiery });
   }
 
   // ── Accessories: drape ON the garment cluster, not at canvas corners.
@@ -225,7 +271,7 @@ function buildFromLayout(items, layout, isMobile) {
     // of a builder-placed shoe (5) even though both scales agree shoes go in
     // front of bags. Remap appended items onto the builder scale so the two
     // populations interleave by MEANING, not raw number.
-    const AUTO_TO_BUILDER_Z = { 2: 1, 3: 2, 4: 2, 5: 3, 6: 5, 7: 4, 9: 6, 10: 6 };
+    const AUTO_TO_BUILDER_Z = { 1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 5, 7: 4, 8: 4, 9: 6, 10: 6 };
     positioned.push(...buildCollageLayout(missing, isMobile).map(slot => ({
       ...slot,
       zIndex: AUTO_TO_BUILDER_Z[slot.zIndex] ?? (slot.zIndex > 10 ? 6 : 3),

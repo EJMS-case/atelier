@@ -16,7 +16,7 @@
 // every retry burns).
 
 import { getSubcatL2 } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isCompleteSetItem, isHosieryItem, classifierNotes } from "./item-helpers.js";
+import { slotForItem, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, classifierNotes } from "./item-helpers.js";
 
 // Trouser-family allow-list carried over from the legacy "trousers-only"
 // toggle — includes the L3 labels rows actually store ("Satin/Silk", "Ponte",
@@ -130,7 +130,7 @@ export const FILTER_TYPES = {
     // optional slot, so an Only toggle here can't starve a look.
     label: "Blazers",
     group: "outer",
-    match: (it) => it.category === "Outerwear" && (it.subcategory === "Blazers" || /\bblazers?\b/i.test(it.name || "")),
+    match: isBlazerItem,
   },
   stockings: {
     // Owner request 2026-08-13. Rides on isHosieryItem (Accessories-gated —
@@ -224,7 +224,13 @@ const GROUP_DOMAINS = {
   lower: coversLowerHalf,
   shoes: (it) => it.category === "Shoes",
   upper: (it) => slotForItem(it) === "top",
-  outer: (it) => it.category === "Outerwear",
+  // Coats are exempt from the "outer" domain (owner, 2026-08-13: "I can wear
+  // a blazer with a jacket in the winter") — an overcoat layers OVER the
+  // blazer, it doesn't compete with it, so "Only Blazers" must never strip
+  // her coats from a winter pool. Jacket-weight pieces (leather/denim
+  // jackets, trenches under "Jackets") DO compete for the same layer and
+  // stay in the domain.
+  outer: (it) => it.category === "Outerwear" && it.subcategory !== "Coats",
   legwear: isHosieryItem,
 };
 
@@ -337,7 +343,7 @@ export function describeStyleFilters(filterKeys) {
     upper: (names) =>
       `${names.join(" or ")} ONLY for tops — every look's upper half must be ${names.length > 1 ? `one of: ${names.join(", ")}` : `a ${names[0].replace(/s$/, "").toLowerCase()}`}. All other tops are OFF-LIMITS.`,
     outer: (names) =>
-      `${names.join(" or ")} ONLY for the outer layer — when a look carries outerwear it must be ${names.length > 1 ? `one of: ${names.join(", ")}` : `a ${names[0].replace(/s$/, "").toLowerCase()}`}. All other outerwear is OFF-LIMITS (skipping the layer is fine).`,
+      `${names.join(" or ")} ONLY for the outer layer — when a look carries a jacket-weight layer it must be ${names.length > 1 ? `one of: ${names.join(", ")}` : `a ${names[0].replace(/s$/, "").toLowerCase()}`}. Other jacket-weight layers are OFF-LIMITS; skipping the layer is fine, and in Cool/Cold an overcoat worn OVER it is fine too.`,
     legwear: (names) =>
       `${names.join(" or ")} requested — build looks that showcase her hosiery: favor skirt/dress silhouettes layered over ${names.join(" or ").toLowerCase()} wherever the weather allows. Never force hosiery into a look the weather rules out.`,
   };

@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isCompleteSetItem, isHosieryItem, isStatementPiece, classifierNotes } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isStatementPiece, classifierNotes } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -358,24 +358,39 @@ function checkHeroDiversity(response, idMap, allItems) {
 /**
  * Check 9: Category balance — max items per category to prevent stacking (e.g. 4 shoes).
  */
-function checkCategoryBalance(response, idMap, allItems) {
+function checkCategoryBalance(response, idMap, allItems, weather) {
   const failures = [];
-  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Outerwear: 1, Knits: 1, Tops: 1, Bottoms: 1 };
+  // Outerwear is handled separately below: capped at 1 like before, EXCEPT the
+  // winter layering pair (owner, 2026-08-13: "I can wear a blazer with a
+  // jacket in the winter") — in Cool/Cold exactly one blazer + one coat/jacket
+  // over it is a legitimate two-layer look, not stacking.
+  const MAX_PER_CAT = { Shoes: 1, Bags: 1, Belts: 1, Accessories: 2, Knits: 1, Tops: 1, Bottoms: 1 };
+  const w = (weather || "").toLowerCase();
+  const coolOrCold = !!w && (weatherMatches(w, "Cool") || weatherMatches(w, "Cold"));
 
   response.looks.forEach((look, i) => {
-    const catCounts = {};
-    (look.items || []).forEach((item) => {
-      const resolved = resolveLookItem(item, idMap, allItems);
-      if (!resolved) return;
+    const resolvedItems = (look.items || [])
+      .map((item) => resolveLookItem(item, idMap, allItems))
       // Hosiery is a legwear layer, not a "real" accessory — it must not
       // consume the Accessories cap (earrings + necklace + tights is fine).
-      if (isHosieryItem(resolved)) return;
-      catCounts[resolved.category] = (catCounts[resolved.category] || 0) + 1;
-    });
+      .filter(Boolean)
+      .filter((it) => !isHosieryItem(it));
+    const catCounts = {};
+    resolvedItems.forEach((it) => { catCounts[it.category] = (catCounts[it.category] || 0) + 1; });
 
     for (const [cat, max] of Object.entries(MAX_PER_CAT)) {
       if ((catCounts[cat] || 0) > max) {
         failures.push(`Look ${i + 1} has ${catCounts[cat]} ${cat} items (max ${max} allowed). Remove extras.`);
+      }
+    }
+    const outer = resolvedItems.filter((it) => it.category === "Outerwear");
+    if (outer.length > 1) {
+      const blazerCount = outer.filter(isBlazerItem).length;
+      const validWinterPair = coolOrCold && outer.length === 2 && blazerCount === 1;
+      if (!validWinterPair) {
+        failures.push(coolOrCold
+          ? `Look ${i + 1} has ${outer.length} Outerwear items — layered outerwear here means exactly ONE blazer under ONE coat/jacket, not ${blazerCount === outer.length ? "two blazers" : blazerCount === 0 ? "two coats/jackets" : "a third layer"}. Remove extras.`
+          : `Look ${i + 1} has ${outer.length} Outerwear items (max 1 in this weather — a blazer under a coat is a Cool/Cold move only). Remove extras.`);
       }
     }
     // NOTE: a single Top + a single Knit together is NOT flagged here — a woven
@@ -853,7 +868,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   // error, so those demote to soft (owner request — stop forcing errors over
   // aesthetics). Soft failures never trigger retries; they only inform the
   // corrective prompt when a retry happens for a hard reason.
-  checkCategoryBalance(response, idMap, allItems).forEach(f => {
+  checkCategoryBalance(response, idMap, allItems, weather).forEach(f => {
     const structural = /\d+ (Shoes|Bottoms) items/.test(f);
     allFailures.push({ type: "category_balance", message: f, hard: structural });
   });

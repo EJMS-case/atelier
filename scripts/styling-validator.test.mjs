@@ -413,3 +413,49 @@ test("tank layering: dress looks are exempt (tank under a dress is the dress's b
   const failures = runAllChecks(tankLook("W006", "W001", "W005"), TANK_MAP, TANK_ITEMS, [], {}, "Work", "");
   assert.equal(failures.filter(f => f.type === "tank_layering").length, 0);
 });
+
+// ── Winter outerwear layering (owner, 2026-08-13) ────────────────────────────
+// "I can wear a blazer with a jacket in the winter though." In Cool/Cold,
+// exactly one blazer + one coat/jacket over it is a legitimate two-layer look
+// and must produce NO category-balance nag (soft failures still steer retries
+// away from the combo). Two blazers / two coats still nag, and outside
+// Cool/Cold the old one-layer cap stands. All outerwear stacking stays SOFT —
+// never an error wall.
+const WINTER_ITEMS = [
+  { id: "w1", name: "Silk blouse", category: "Tops", subcategory: "Blouses", notes: "long sleeve" },
+  { id: "w2", name: "Wool trouser", category: "Bottoms", subcategory: "Trousers" },
+  { id: "w3", name: "Classic Short Boot", category: "Shoes", subcategory: "Boots" },
+  { id: "w4", name: "The Favorite Blazer", category: "Outerwear", subcategory: "Blazers" },
+  { id: "w5", name: "Tailored Overcoat", category: "Outerwear", subcategory: "Coats" },
+  { id: "w6", name: "Staple Admiral Crepe Blazer", category: "Outerwear", subcategory: "Blazers" },
+];
+const WINTER_MAP = { V001: "w1", V002: "w2", V003: "w3", V004: "w4", V005: "w5", V006: "w6" };
+const winterLook = (...ids) => ({
+  looks: [{
+    vibe: "Quiet Luxury",
+    items: ids.map(id => ({ id, role: "supporting" })),
+    silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "",
+  }],
+});
+const catBalance = (failures) => failures.filter(f => f.type === "category_balance");
+
+test("cold: blazer under coat is a clean two-layer look — no category-balance nag", () => {
+  const failures = runAllChecks(winterLook("V001", "V002", "V003", "V004", "V005"), WINTER_MAP, WINTER_ITEMS, [], {}, "Work", "Cold (below 40°F)");
+  assert.deepEqual(catBalance(failures), [], `expected no outerwear nag, got: ${catBalance(failures).map(f => f.message)}`);
+});
+
+test("cold: two blazers still nag (soft), naming the mistake", () => {
+  const failures = runAllChecks(winterLook("V001", "V002", "V003", "V004", "V006"), WINTER_MAP, WINTER_ITEMS, [], {}, "Work", "Cold (below 40°F)");
+  const cb = catBalance(failures);
+  assert.equal(cb.length, 1);
+  assert.ok(/two blazers/.test(cb[0].message));
+  assert.equal(cb[0].hard, false, "outerwear stacking must stay soft — never an error wall");
+});
+
+test("warm: blazer + coat keeps the one-layer nag (the pair is a Cool/Cold move)", () => {
+  const failures = runAllChecks(winterLook("V001", "V002", "V003", "V004", "V005"), WINTER_MAP, WINTER_ITEMS, [], {}, "Work", "Warm (70-84°F)");
+  const cb = catBalance(failures);
+  assert.equal(cb.length, 1);
+  assert.ok(/Cool\/Cold/.test(cb[0].message));
+  assert.equal(cb[0].hard, false);
+});

@@ -315,9 +315,13 @@ test("no-blazers excludes blazers (by subcategory or name), spares other outerwe
   assert.equal(excluded(["no-blazers"], blouse), false);
 });
 
-test("only-blazers bans other outerwear, touches nothing outside the outer group", () => {
+test("only-blazers bans competing jacket-weight layers but SPARES coats (they layer over)", () => {
+  const leatherJacket = { id: "moto", category: "Outerwear", subcategory: "Jackets", name: "Leather Moto" };
   assert.equal(excluded(["only-blazers"], blazer), false);
-  assert.equal(excluded(["only-blazers"], woolCoat), true);
+  assert.equal(excluded(["only-blazers"], leatherJacket), true, "a jacket competes for the blazer's layer");
+  // Owner 2026-08-13: "I can wear a blazer with a jacket in the winter" — an
+  // overcoat goes OVER the blazer, so Only Blazers must never strip coats.
+  assert.equal(excluded(["only-blazers"], woolCoat), false, "coats are exempt from the outer domain");
   for (const it of [blouse, knit, jeans, heels, bag]) {
     assert.equal(excluded(["only-blazers"], it), false, `${it.name} is outside the outerwear domain`);
   }
