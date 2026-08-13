@@ -40,18 +40,6 @@ Respond in strict JSON, no prose, no code fences:
   ]
 }`;
 
-// Style fingerprint, fetched at most once per session (module-level memo).
-// Soft-fail: evaluation must work offline-from-Supabase / with no fingerprint.
-let fpMemo = null; // Promise<string> once requested
-function fingerprintText() {
-  if (!fpMemo) {
-    fpMemo = sb.getStyleFingerprint()
-      .then(fp => String(fp?.text || "").slice(0, 1200))
-      .catch(() => "");
-  }
-  return fpMemo;
-}
-
 function formatItemLine(it) {
   const formalityTag = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
   const parts = [
@@ -88,7 +76,7 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   if (Array.isArray(silhouette) && silhouette.length) {
     context.push(`HER BODY & FIT (dress to flatter):\n${silhouette.join("\n")}`);
   }
-  const fp = await fingerprintText();
+  const fp = await sb.fingerprintTextCached(1200);
   if (fp) context.push(`HER STYLE FINGERPRINT (your read on her taste — judge against it):\n${fp}`);
 
   const res = await anthropicFetch({
