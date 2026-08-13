@@ -179,7 +179,7 @@ export function buildStylingPrompt({
   // ignore "include my red blazer" — pinning the matched IDs explicitly fixes
   // that. The validator also enforces ≥1 of these IDs appears in the output.
   const requiredItemsBlock = requestedShortIds.length > 0
-    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the look${lookCount === 1 ? "" : "s"} (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ${countWord} look${lookCount === 1 ? "" : "s"}.${lookCount > 1 ? " Do not substitute the named pieces; do not water down the theme on subsequent looks." : ""}\n\n⚠️ EXPLICIT-REQUEST OVERRIDE: these named pieces override the occasion's default item-type bans for this generation (e.g. if she asked for jeans on Work, jeans are allowed in the look that uses them — weather and toggled exclusions still apply). Build looks that flatter the named pieces; lean into a "polished casual" register if the named piece is more casual than the occasion's norm.\n`
+    ? `\n📌 MUST-INCLUDE ITEMS — non-negotiable:\nShe specifically asked for ${requestedShortIds.map(id => `\`${id}\``).join(" / ")}. At least one of these IDs must appear in the look${lookCount === 1 ? "" : "s"} (HC4 still applies — any single ID may only appear in ONE look). The broader theme of her request (palette / vibe / texture cues) still applies to ${countWord} look${lookCount === 1 ? "" : "s"}.${lookCount > 1 ? " Do not substitute the named pieces; do not water down the theme on subsequent looks." : ""}\n\n⚠️ EXPLICIT-REQUEST OVERRIDE: these named pieces override the occasion's default item-type bans for this generation (e.g. if she asked for jeans on Work, jeans are allowed in the look that uses them — weather and toggled exclusions still apply). Build looks that flatter the named pieces; lean into a "polished casual" register if the named piece is more casual than the occasion's norm.\n\n🎯 RESTYLE RANGE: re-styling the same piece across taps means she wants to see its RANGE — never re-serve a color story the RECENTLY SUGGESTED list already shows for it. If HER FAVORITE COLOR PAIRINGS are listed, at least one look should activate one around the named piece (a neutral hero takes a pair color on its partner piece — a navy blazer over a plain black dress is that move); give the other look${lookCount > 1 ? "s" : " on the next tap"} a genuinely different direction (tonal/monochrome, texture-led, or contrast-grounded).\n`
     : "";
 
   const occasionNote = occasionSlots?.promptNote || `${occasion}: Style appropriately for this occasion.`;
@@ -293,8 +293,8 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${recentCombosBlock}${honestyBlock}
-${stylePrefsBlock}${recentBlock}${varietyNote}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${stylePrefsBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${recentCombosBlock}${honestyBlock}
+${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
 ────────────────────────────────────────────────────────
@@ -320,10 +320,16 @@ function formatStylePrefs(prefs) {
   if (!prefs) return "";
   const parts = [];
   if (prefs.colorPairs?.length > 0) {
-    // These are observed pairing techniques from her history — not a palette
-    // restriction. The whole closet is approved; this teaches the AI HOW she
-    // combines colors (tonal, complementary, color-blocking), not WHICH ones.
-    parts.push(`COLOR TECHNIQUE SIGNAL (observed from her outfit history — use to understand her pairing method, not to restrict palette): ${prefs.colorPairs.join(", ")}`);
+    // She enters these BY HAND in Settings → Style Preferences — declared
+    // favorites, not history inference. The old framing ("use to understand
+    // her pairing method, not to restrict palette") told the model NOT to act
+    // on the pairs themselves, and she noticed: restyling a black dress never
+    // once reached for a navy blazer despite "Burgundy + Navy" sitting in the
+    // list (owner, 2026-08-13). Now the pairs are live styling tools; the
+    // never-force guard stays — a pair jammed in against occasion/weather
+    // would be worse than no pair at all.
+    parts.push(`🎨 HER FAVORITE COLOR PAIRINGS — she chose these herself in Settings; put them to WORK: ${prefs.colorPairs.join(", ")}.
+When a look anchors on a color from one of these pairs, reaching for its partner is a signature move she loves. Neutrals (black, white, cream, grey, camel) are ground for ANY pair — a neutral hero piece (a plain black dress, a cream trouser) WANTS one of these pair colors on the partner piece (the blazer, the shoe, the knit, the bag), and that is the elevated stylist move to reach for BEFORE defaulting to all-neutral safety. Never force a pair against the occasion or weather; the whole closet stays approved.`);
   }
   if (prefs.monochromaticMode) {
     parts.push("She frequently uses the monochrome technique — head-to-toe in one color family with texture variation. Apply this method broadly across the closet, not just for specific colors.");
@@ -334,8 +340,10 @@ function formatStylePrefs(prefs) {
   if (prefs.direction) {
     parts.push(`OVERALL DIRECTION: ${prefs.direction}`);
   }
+  // Leading/trailing newlines: this block now rides inside the personal-signal
+  // cluster (right after PERSONAL PATTERNS), whose blocks all self-delimit.
   return parts.length > 0
-    ? `STYLING TECHNIQUE SIGNAL (from her history — soft bias, not restriction):\n${parts.join("\n")}`
+    ? `\nSTYLE PREFERENCES (set by her, by hand, in Settings — act on them; soft bias, never a hard rule):\n${parts.join("\n")}\n`
     : "";
 }
 

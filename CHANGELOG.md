@@ -2,6 +2,16 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Preferences finally act; restyles show a piece's range — 2026-08-13
+
+### Why
+Owner (with screenshot): "Is this achieving anything? I have been styling and restyling a black dress and it hasn't put it with a navy blazer yet. If this is useless let's remove it." Verdict: not useless — self-neutering. Her hand-entered color pairs WERE injected every tap, but framed as "observed from her history — use to understand her pairing method, not to restrict palette": the model was explicitly told NOT to act on the pairs themselves. And since no pair contains black, nothing taught that a neutral hero (the plain black dress) should take a pair color on its partner piece. Kept and fixed, not removed.
+
+### Changed
+- **`formatStylePrefs` rewritten** (dynamic body, no cache impact): the pairs are now "she chose these herself in Settings; put them to WORK" — anchor on a pair color → reach for its partner; neutrals are ground for ANY pair, and a neutral hero piece *wants* a pair color on the blazer/shoe/knit/bag before defaulting to all-neutral safety. The never-force guard stays (occasion/weather win; whole closet approved). Monochrome/tonal mode lines unchanged.
+- **Block repositioned** into the personal-signal cluster, directly after PERSONAL PATTERNS (it trailed the whole signal stack before).
+- **🎯 RESTYLE RANGE** added to the must-include block: re-styling the same piece means she wants its range — never re-serve a color story the RECENTLY SUGGESTED list already shows; at least one look should activate a favorite pairing around the named piece (navy blazer over the plain black dress is the canonical move), with the other looks taking genuinely different directions (tonal, texture-led, contrast-grounded).
+
 ## [Unreleased] — Winter blazer-under-coat layering; stockings render at legwear size — 2026-08-13
 
 ### Why
