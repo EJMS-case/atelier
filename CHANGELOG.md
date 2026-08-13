@@ -2,6 +2,19 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Signal audit: trip-day AI was the last personality-blind generator — 2026-08-13
+
+### Why
+Owner asked for a sweep for more defects of the color-blocking class: signals she enters that are collected and displayed but weakened or dropped before they act. Every user-entered signal path was traced end-to-end. One real gap found: **`generateTripDayLook`** (the AI behind trip-day generation and the planner's generate-for-day) sent bare inventory lines (no notes, no formality, no pattern) and a prompt with no fingerprint, no color pairs, no About Me — the last AI generator that ignored everything she's taught the app. Her survey flagged trip dinner looks as a priority; this is why they styled generic.
+
+### Changed
+- **Trip-day inventory lines** now carry curated formality `f#` (with an f1–f8 legend), non-solid pattern, and the `stylistNotes` digest (tight 120-char cap for this single fast call).
+- **Personal-signal block** in the trip-day prompt: fingerprint (≤800 chars), her favorite color pairings (with the neutrals-ground-any-pair teaching from #179), and DRESS TO FLATTER silhouette lines — all soft-bias framed, all soft-fail (missing signals just omit their lines).
+- **`sb.fingerprintTextCached(maxLen)`**: session-memoized fingerprint text shared by `evaluateLook` and `generateTripDayLook` (one GET per session, soft-fails to empty) — replaces evaluateLook's private memo so the two callers can't drift.
+
+### Audit — verified clean (do not re-audit without a new symptom)
+Style Preferences keys match Settings↔storage↔prompt; inspiration vibes reach the 🎨 block (occasion/weather-scoped); loved looks → ✨ block; loves → occasion memory; piece hearts → sampler tiebreaker; About Me → silhouette (Style Me, evaluator, now trips); look edits → SWAP LESSONS + fingerprint; sets tags → Sets-view tag filter. Two deliberate non-issues, documented: the 👎 disliked-looks block only fires on historical rows (thumbs-down UI was removed on purpose — noise), and `prefs.direction` rides every prompt from its hardcoded default with no UI editor (a Style Profile surface candidate, roadmap B). Shopping recs deliberately keep their static curated profile (no fingerprint) — a future lever, not a defect.
+
 ## [Unreleased] — Subcategory chips go two-level; parent selection shows everything under it — 2026-08-13
 
 ### Why

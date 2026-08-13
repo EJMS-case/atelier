@@ -11,7 +11,10 @@ import { z } from "zod";
 import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
-import { filterByWeather } from "../../utils/item-helpers.js";
+import { filterByWeather, stylistNotes } from "../../utils/item-helpers.js";
+import { loadStylePrefs, loadAboutMe } from "../../utils/storage.js";
+import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
+import { sb } from "../supabase.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
 
@@ -159,9 +162,16 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     ...Object.keys(byCat).filter(cat => !CAT_ORDER.includes(cat)).flatMap(cat => byCat[cat].slice(0, 4)),
   ];
 
-  const inventory = sampled.map(it =>
-    `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""} | ${it.name}${it.color ? ` | ${it.color}` : ""}${it.brand ? ` | ${it.brand}` : ""}`
-  ).join("\n");
+  // Inventory lines carry the same signals Style Me sends (2026-08-13 audit:
+  // this path was signal-blind) — curated formality f#, non-solid pattern, and
+  // the stylist-relevant notes digest (tight 120-char cap; this is a single
+  // fast call, not the full pipeline).
+  const inventory = sampled.map(it => {
+    const f = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
+    const pat = it.pattern && it.pattern !== "solid" && it.pattern !== "" ? ` | ${it.pattern}` : "";
+    const pn = it.notes ? stylistNotes(it.notes, { maxLen: 120 }) : "";
+    return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}${f} | ${it.name}${it.color ? ` | ${it.color}` : ""}${pat}${it.brand ? ` | ${it.brand}` : ""}${pn ? ` | ${pn}` : ""}`;
+  }).join("\n");
 
   // ── Destination context block: feed the brief in so the AI weighs the city
   // beyond just "for a trip day in X". Climate notes + packing tip already
@@ -228,13 +238,31 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     ? " Avoid on-body leather and suede (skirts, pants, tops, jackets) in this heat — leather shoes and bags are fine."
     : "";
 
+  // ── Personal-signal block (2026-08-13 audit): this was the last AI
+  // generator that ignored every signal she gives the app — no fingerprint,
+  // no color pairs, no About Me. Same soft-bias framing as Style Me, kept
+  // compact for this single fast call. All soft-fail: a missing fingerprint
+  // or empty prefs just omit their lines.
+  const personalBits = [];
+  const fp = await sb.fingerprintTextCached(800);
+  if (fp) personalBits.push(`HER STYLE (distilled from her worn-outfit history — soft bias, never a hard rule):\n${fp}`);
+  const prefs = loadStylePrefs();
+  if (prefs?.colorPairs?.length) {
+    personalBits.push(`HER FAVORITE COLOR PAIRINGS (she chose these — neutrals ground any pair; reaching for a pair's partner is a signature move): ${prefs.colorPairs.join(", ")}`);
+  }
+  const silhouette = summarizeSilhouette(loadAboutMe());
+  if (Array.isArray(silhouette) && silhouette.length) {
+    personalBits.push(`DRESS TO FLATTER:\n${silhouette.join("\n")}`);
+  }
+  const personalBlock = personalBits.length ? `\n${personalBits.join("\n\n")}\n` : "";
+
   const destNote = destination ? ` in ${destination}` : "";
-  const prompt = `You are a stylist building ONE complete outfit for a trip day${destNote}.
+  const prompt = `You are her personal stylist building ONE complete outfit for a trip day${destNote}.
 
 OCCASION: ${occasion}
 WEATHER: ${weather} (around ${highF}°F)${heatNote}
-${destBlock}${activityBlock}${varietyBlock}
-WARDROBE (use ONLY these IDs):
+${destBlock}${activityBlock}${varietyBlock}${personalBlock}
+WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register):
 ${inventory}
 
 Build exactly 1 polished, complete outfit appropriate for ${occasion} in ${weather} weather.

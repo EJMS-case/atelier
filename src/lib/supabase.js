@@ -375,6 +375,19 @@ export const sb = {
   // ── Style Fingerprint (one row per user, key='style_fingerprint') ──
   // Stored as JSON: { text, source_count, generated_at }. Lives in
   // user_settings (which already exists) to avoid a separate migration.
+  //
+  // fingerprintTextCached: session-memoized text for on-demand prompt callers
+  // (evaluateLook, generateTripDayLook) — ONE GET per session, soft-fails to
+  // "" so those features work without a fingerprint or offline-from-Supabase.
+  _fpTextPromise: null,
+  fingerprintTextCached(maxLen = 1200) {
+    if (!this._fpTextPromise) {
+      this._fpTextPromise = this.getStyleFingerprint()
+        .then(fp => String(fp?.text || ""))
+        .catch(() => "");
+    }
+    return this._fpTextPromise.then(t => t.slice(0, maxLen));
+  },
   async getStyleFingerprint() {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
