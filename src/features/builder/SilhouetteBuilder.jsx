@@ -26,26 +26,44 @@ const PALETTE = { ...SHARED_PALETTE, accent: "var(--color-accent-strong)" };
 // Slots route through the shared slotForItem classifier (utils/item-helpers) so
 // the builder, the sampler, and the availability note agree on where every piece
 // belongs — including comfortwear (leggings/skorts/bras) which each used to
-// classify differently. slotForItem returns exactly these slot keys.
+// classify differently. slotForItem returns exactly these slot keys, except:
+//   · BELT is a builder-local carve-out of "accessory" (owner request
+//     2026-08-12: belts deserve their own picker) — the ACCESSORY match
+//     excludes Belts so a piece lives in exactly one slot. slotForItem itself
+//     is untouched: the sampler/validator/rotation still bucket Belts as
+//     accessories, and saved layouts restore by re-matching each item here,
+//     so old looks with belts under the accessory key migrate transparently.
+//   · SWIM sits LAST in the bar (owner request: swim/comfort shouldn't lead) —
+//     order here is also first-match-wins for initialSelections, but every
+//     match below is mutually exclusive, so display order is free.
 const SLOTS = [
   { key: "top",       label: "TOP",       match: (it) => slotForItem(it) === "top" },
   { key: "bottom",    label: "BOTTOM",    match: (it) => slotForItem(it) === "bottom" },
   { key: "dress",     label: "DRESS",     match: (it) => slotForItem(it) === "dress", optional: true },
   { key: "set",       label: "SET",       match: (it) => slotForItem(it) === "set", optional: true },
-  { key: "swim",      label: "SWIM",      match: (it) => slotForItem(it) === "swim", optional: true },
   { key: "shoes",     label: "SHOES",     match: (it) => slotForItem(it) === "shoes" },
   { key: "outerwear", label: "OUTER",     match: (it) => slotForItem(it) === "outerwear", optional: true },
   { key: "bag",       label: "BAG",       match: (it) => slotForItem(it) === "bag", optional: true },
-  { key: "accessory", label: "ACCESSORY", match: (it) => slotForItem(it) === "accessory", optional: true },
+  { key: "belt",      label: "BELT",      match: (it) => it.category === "Belts", optional: true },
+  { key: "accessory", label: "ACCESSORY", match: (it) => slotForItem(it) === "accessory" && it.category !== "Belts", optional: true },
+  { key: "swim",      label: "SWIM",      match: (it) => slotForItem(it) === "swim", optional: true },
 ];
+
+// Comfortwear categories (owner request 2026-08-12): available in every slot's
+// picker but grouped into a collapsed section at the END of the grid, so
+// opening TOP/BOTTOM/DRESS leads with the core wardrobe. The section
+// auto-expands while she's searching or has filtered to a comfort
+// subcategory — "search through as needed."
+const COMFORT_CATS = new Set(["Athleisure", "Loungewear"]);
+const isComfortItem = (it) => COMFORT_CATS.has(it?.category);
 
 // Slots that accept multiple items at once. Every slot except dress is
 // multi: tops layer (tank under blouse under cardigan), bottoms can stage
 // shorts-under-skirt or alternatives side-by-side, outerwear layers
 // (cardigan under coat), accessories stack (necklace + earrings +
-// bracelet + belt), shoes and bags read as "options to compare." Dress
+// bracelet), belts read as "options to compare" like shoes and bags. Dress
 // stays single because you can only wear one.
-const MULTI_SLOTS = new Set(["top", "bottom", "outerwear", "swim", "shoes", "bag", "accessory"]);
+const MULTI_SLOTS = new Set(["top", "bottom", "outerwear", "swim", "shoes", "bag", "belt", "accessory"]);
 
 // Stable key for per-instance state (positions, zOrders, autoFitted) so each
 // item in a multi-slot has its own canvas slot.
@@ -55,7 +73,7 @@ const posKey = (slot, itemId) => `${slot}__${itemId}`;
 // collage compositing, and the exported layout snapshot. Sets and swim wear
 // like a dress (full-body base layer), so they take the dress z. Unknown
 // slots fall back to 3 at each use site.
-const DEFAULT_Z = { outerwear: 1, dress: 2, set: 2, swim: 2, top: 3, bottom: 2, bag: 4, shoes: 5, accessory: 6 };
+const DEFAULT_Z = { outerwear: 1, dress: 2, set: 2, swim: 2, top: 3, bottom: 2, belt: 4, bag: 4, shoes: 5, accessory: 6 };
 
 // Item-label format under each picker thumb: "{brand} {color} {name}" all
 // lowercased. Empty parts are skipped, so an item with no brand still reads
@@ -86,6 +104,7 @@ const DEFAULT_POSITIONS = {
   bottom:    { x: 12, y: 42, w:  76, h: 48 },
   shoes:     { x: 20, y: 76, w:  60, h: 22 },
   bag:       { x: 68, y: 44, w:  28, h: 16 },
+  belt:      { x: 30, y: 40, w:  40, h: 12 },
   accessory: { x: 68, y: 14, w:  28, h: 16 },
 };
 
@@ -180,6 +199,7 @@ export default function SilhouetteBuilder({
   const [evalErr, setEvalErr] = useState("");
   const [search, setSearch] = useState("");
   const [subcatFilter, setSubcatFilter] = useState("");
+  const [comfortOpen, setComfortOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]); // [{role,content}]
@@ -287,8 +307,8 @@ export default function SilhouetteBuilder({
     });
   }
 
-  // Reset search + subcategory filter when the active slot changes
-  useEffect(() => { setSearch(""); setSubcatFilter(""); }, [activeSlot]);
+  // Reset search + subcategory filter + comfort section when the active slot changes
+  useEffect(() => { setSearch(""); setSubcatFilter(""); setComfortOpen(false); }, [activeSlot]);
 
   const slotDef = SLOTS.find(s => s.key === activeSlot);
 
@@ -298,6 +318,9 @@ export default function SilhouetteBuilder({
     return [...new Set(all.map(it => it.subcategory).filter(Boolean))].sort();
   }, [activeSlot, items]);
 
+  // Slot pool split into core wardrobe + comfortwear (Athleisure/Loungewear).
+  // Comfort pieces render behind a collapsed section at the end of the grid
+  // (owner request 2026-08-12) — present, never leading.
   const poolForSlot = useMemo(() => {
     const def = SLOTS.find(s => s.key === activeSlot);
     let pool = (items || []).filter(it => def?.match(it));
@@ -311,8 +334,15 @@ export default function SilhouetteBuilder({
         (it.subcategory || "").toLowerCase().includes(q)
       );
     }
-    return pool;
+    return { core: pool.filter(it => !isComfortItem(it)), comfort: pool.filter(isComfortItem) };
   }, [activeSlot, items, search, subcatFilter]);
+
+  // The comfort section opens itself while she's actively narrowing — a
+  // search, or a subcategory chip whose matches are all comfortwear (e.g.
+  // "Leggings") must never land on a collapsed, seemingly-empty grid.
+  const comfortVisible = comfortOpen
+    || (!!search && poolForSlot.comfort.length > 0)
+    || (!!subcatFilter && poolForSlot.core.length === 0 && poolForSlot.comfort.length > 0);
 
   // ── Coordinated sets in the SET slot ──────────────────────────────────────
   // The SET slot used to show ONLY items literally categorized "Sets", so the
@@ -595,7 +625,13 @@ export default function SilhouetteBuilder({
     if (!apiKey) { setEvalErr("Add your Anthropic API key in Settings."); return; }
     setEvaluating(true); setEvalErr(""); setEvaluation(null);
     try {
-      const result = await evaluateLook(pickedItems.map(p => p.item), apiKey);
+      // The occasion/weather chips she's tagged the look with double as the
+      // evaluation brief — the stylist judges fitness-for-purpose, not just
+      // abstract prettiness.
+      const result = await evaluateLook(pickedItems.map(p => p.item), apiKey, {
+        occasions: asArray(occasions),
+        weathers: asArray(weathers),
+      });
       setEvaluation(result);
     } catch (err) {
       setEvalErr(err.message || "Evaluation failed.");
@@ -865,26 +901,40 @@ export default function SilhouetteBuilder({
                     </button>
                   );
                 })
-              ) : (<>
-              {poolForSlot.length === 0 && (
-                <div style={{ gridColumn: "1 / -1", fontSize: 12, color: PALETTE.muted, padding: "28px 0", textAlign: "center" }}>No items in this category.</div>
-              )}
-              {poolForSlot.map(it => {
-                const curIds = asArray(selections[activeSlot]);
-                const isPicked = curIds.includes(it.id);
-                return (
-                  <button key={it.id} onClick={() => togglePick(activeSlot, it.id)}
-                    style={{ background: isPicked ? PALETTE.ink : "#fff", border: `2px solid ${isPicked ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: isPicked ? PALETTE.bg : PALETTE.soft, textAlign: "left" }}>
-                    <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                      {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
-                    </div>
-                    <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", overflow: "hidden", maxHeight: 22 }}>
-                      {pickerLabel(it)}
-                    </div>
-                  </button>
-                );
-              })}
-              </>)}
+              ) : (() => {
+                const renderCard = (it) => {
+                  const curIds = asArray(selections[activeSlot]);
+                  const isPicked = curIds.includes(it.id);
+                  return (
+                    <button key={it.id} onClick={() => togglePick(activeSlot, it.id)}
+                      style={{ background: isPicked ? PALETTE.ink : "#fff", border: `2px solid ${isPicked ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: isPicked ? PALETTE.bg : PALETTE.soft, textAlign: "left" }}>
+                      <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
+                        {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                      </div>
+                      <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", overflow: "hidden", maxHeight: 22 }}>
+                        {pickerLabel(it)}
+                      </div>
+                    </button>
+                  );
+                };
+                const { core, comfort } = poolForSlot;
+                return (<>
+                  {core.length === 0 && comfort.length === 0 && (
+                    <div style={{ gridColumn: "1 / -1", fontSize: 12, color: PALETTE.muted, padding: "28px 0", textAlign: "center" }}>No items in this category.</div>
+                  )}
+                  {core.map(renderCard)}
+                  {/* Comfortwear rides at the END behind a toggle — present but
+                      never leading; auto-open while searching/filtering. */}
+                  {comfort.length > 0 && (
+                    <button onClick={() => setComfortOpen(o => !o)}
+                      style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, padding: "9px 4px", marginTop: core.length ? 6 : 0, background: "none", border: "none", borderTop: core.length ? `1px solid ${PALETTE.line}` : "none", cursor: "pointer", color: PALETTE.muted, fontSize: 10, letterSpacing: "0.14em" }}>
+                      <span>LOUNGE · ACTIVE · ATHLEISURE ({comfort.length})</span>
+                      <span style={{ marginLeft: "auto", fontSize: 11 }}>{comfortVisible ? "▴" : "▾"}</span>
+                    </button>
+                  )}
+                  {comfortVisible && comfort.map(renderCard)}
+                </>);
+              })()}
             </div>
           </div>
         </>
@@ -997,6 +1047,12 @@ export default function SilhouetteBuilder({
             )}
             <div style={{ fontSize: 13, color: PALETTE.soft, fontStyle: "italic" }}>{evaluation.headline}</div>
           </div>
+          {evaluation.works && (
+            <div style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 8 }}>
+              <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>WORKING</span>
+              {evaluation.works}
+            </div>
+          )}
           {evaluation.tips.length > 0 && (
             <ul style={{ paddingLeft: 18, fontSize: 12, color: PALETTE.soft, lineHeight: 1.5 }}>
               {evaluation.tips.map((t, i) => <li key={i} style={{ marginBottom: 4 }}>{t}</li>)}
