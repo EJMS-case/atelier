@@ -180,6 +180,13 @@ export function isBootItem(item) {
   return BOOT_SUBS.has(item.subcategory) ||
     /\bboot(s|ie|ies)?\b/i.test(item.name || "");
 }
+// Blazer predicate shared by the Blazers filter chip and the validator's
+// winter outerwear-layering rule (blazer under coat/jacket in Cool/Cold) —
+// one definition so the chip and the layering pair test can't drift.
+export function isBlazerItem(item) {
+  if (!item || item.category !== "Outerwear") return false;
+  return item.subcategory === "Blazers" || /\bblazers?\b/i.test(item.name || "");
+}
 // ── HOSIERY ─────────────────────────────────────────────────────────────────
 // Tights/stockings live under Accessories > Hosiery (L3: Sheer / Semi-Opaque /
 // Opaque / Fishnet). Single source of truth for "is this a legwear layer" —
