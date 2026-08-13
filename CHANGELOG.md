@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Layer chips become "Include"; Edit opens the builder — 2026-08-13
+
+### Why
+Two owner requests. (1) "It shouldn't be 'only' blazers, knits or stockings — it should be 'include a blazer.'" She was right about the code, not just the wording: "Only Knits" banned every non-knit top (no tank under a knit), and "Only Blazers" banned jackets. Layer groups don't have exclusive alternatives the way the lower half or shoes do — a look IS layers stacked. (2) "When I hit edit here, can it take me to the manual builder with those items?" — the results screen carried its own ~150-line in-place swap/remove/add editor plus a 119-line picker sheet duplicating what the builder already does.
+
+### Changed
+- **Filter group modes** (style-filters.js): `lower` and `shoes` stay "restrict" (Only Jeans / Only Heels genuinely exclude alternatives). `upper` (Knits), `outer` (Blazers), and `legwear` (Stockings) are now **"include" mode**: the toggle bans NOTHING — it renders an `INCLUDE X` prompt line ("a positive request, NOT a ban… never error or drop a look over it"), keeps the occasion-ban rescue, and defers to weather. Chip label for these states reads **"✚ Include X"** instead of "✓ Only X". The ⛔ ACTIVE FILTERS boilerplate explains INCLUDE lines. No validator requirement — no hard rules, per standing owner preference.
+- **Edit on a Style Me result opens the manual builder** pre-filled with the look's pieces, occasion/weather tags, and any layout; saving lands it in Looks like any builder save. The A1 "learn from her edits" signal is preserved by **diffing** her final pick against the generated look on save (removal+addition in the same slot → a swap lesson; leftovers → remove/add) — same `look_edits` rows, derived instead of hand-instrumented, folded into the session's SWAP LESSONS immediately.
+
+### Removed
+- LookCard's in-place edit mode (swap/remove/add rows, `user_edited` stamping and `· EDITED` badge, mid-stream edited-look reconciliation in `generateAndAppendLooks`) and **SwapItemSheet.jsx** (its only consumer was the removed editor).
+
 ## [Unreleased] — Signal audit: trip-day AI was the last personality-blind generator — 2026-08-13
 
 ### Why

@@ -105,10 +105,13 @@ test("only-heels bans all other footwear, nothing outside shoes", () => {
   assert.equal(excluded(["only-heels"], jeans), false);
 });
 
-test("only-knits restricts tops to knits", () => {
-  assert.equal(excluded(["only-knits"], knit), false);
-  assert.equal(excluded(["only-knits"], blouse), true);
-  assert.equal(excluded(["only-knits"], jeans), false);
+test("only-knits is include-mode: it bans NOTHING (a tank layers under a knit)", () => {
+  // Owner 2026-08-13: layer chips (knits/blazers/stockings) mean "include
+  // one", never "exclusively this" — banning blouses/tanks killed layering.
+  for (const it of [knit, blouse, jeans, heels, bag]) {
+    assert.equal(excluded(["only-knits"], it), false, `${it.name} must not be banned by include-mode only-knits`);
+  }
+  assert.equal(matchesActiveOnly(knit, ["only-knits"]), true, "knits still rescued past occasion bans");
 });
 
 test("'only' in one group composes with 'no' in another", () => {
@@ -315,16 +318,14 @@ test("no-blazers excludes blazers (by subcategory or name), spares other outerwe
   assert.equal(excluded(["no-blazers"], blouse), false);
 });
 
-test("only-blazers bans competing jacket-weight layers but SPARES coats (they layer over)", () => {
+test("only-blazers is include-mode: it bans NOTHING (coat over, knit under — all welcome)", () => {
   const leatherJacket = { id: "moto", category: "Outerwear", subcategory: "Jackets", name: "Leather Moto" };
-  assert.equal(excluded(["only-blazers"], blazer), false);
-  assert.equal(excluded(["only-blazers"], leatherJacket), true, "a jacket competes for the blazer's layer");
-  // Owner 2026-08-13: "I can wear a blazer with a jacket in the winter" — an
-  // overcoat goes OVER the blazer, so Only Blazers must never strip coats.
-  assert.equal(excluded(["only-blazers"], woolCoat), false, "coats are exempt from the outer domain");
-  for (const it of [blouse, knit, jeans, heels, bag]) {
-    assert.equal(excluded(["only-blazers"], it), false, `${it.name} is outside the outerwear domain`);
+  // Owner 2026-08-13: "include a blazer", not "only a blazer" — the toggle
+  // must never strip coats, jackets, tops, or anything else from the pool.
+  for (const it of [blazer, leatherJacket, woolCoat, blouse, knit, jeans, heels, bag]) {
+    assert.equal(excluded(["only-blazers"], it), false, `${it.name} must not be banned by include-mode only-blazers`);
   }
+  assert.equal(matchesActiveOnly(blazer, ["only-blazers"]), true, "blazers still rescued past occasion bans");
 });
 
 test("blazers chip renders when owned, hides at zero owned", () => {
@@ -348,7 +349,7 @@ test("no-stockings strips hosiery, spares garments that only sound like hosiery"
   assert.equal(excluded(["no-stockings"], skirtL3), false);
 });
 
-test("only-stockings hard-bans nothing (single-type legwear domain) — it's a steer + rescue", () => {
+test("only-stockings is include-mode: bans nothing — a steer + rescue", () => {
   for (const it of [sheerTights, fishnets, skirtL3, heels, blouse, bag, leggings]) {
     assert.equal(excluded(["only-stockings"], it), false, `${it.name} must never be banned by only-stockings`);
   }
@@ -358,8 +359,8 @@ test("only-stockings hard-bans nothing (single-type legwear domain) — it's a s
 test("describeStyleFilters renders every group's Only line without throwing (outer + legwear included)", () => {
   const lines = describeStyleFilters(["only-blazers", "only-stockings", "only-heels", "no-jeans"]);
   assert.equal(lines.length, 4);
-  assert.ok(lines.some(l => /Blazers ONLY for the outer layer/.test(l)), "outer group line (was a crash pre-2026-08-13)");
-  assert.ok(lines.some(l => /Stockings requested/.test(l) && /weather/i.test(l)), "legwear steer stays weather-safe");
+  assert.ok(lines.some(l => /INCLUDE Blazers/.test(l) && /NOT a ban/.test(l)), "outer group renders the include line (was a crash pre-2026-08-13)");
+  assert.ok(lines.some(l => /INCLUDE Stockings/.test(l) && /weather/i.test(l)), "legwear include line stays weather-safe");
 });
 
 test("stockings chip renders when hosiery is owned, hides otherwise", () => {

@@ -51,9 +51,25 @@ const NON_PUMP_RE = /\b(mule|slide|thong|clog|espadrille|wedge|sandal)s?\b|\bfli
 // exclude a silk cami whose pasted product copy says "pairs with sandals".
 const itemText = (it) => (it.name || "") + " " + classifierNotes(it);
 
+// ── Group MODES (owner, 2026-08-13: "it shouldn't be 'only' blazers, knits
+// or stockings — it should be 'include a blazer'") ──────────────────────────
+// "restrict" groups have genuine alternatives that the Only toggle excludes:
+// the lower half IS jeans-or-skirts-or-dresses, footwear IS one pair. LAYER
+// groups don't work that way — a look is layers stacked, and "Only Knits"
+// banning every blouse/tank killed the layering she actually wears (a tank
+// under a knit, a lightweight knit under a blazer). For "include" groups the
+// Only toggle bans NOTHING: it becomes a positive ask ("work one in"),
+// carried by the describeStyleFilters INCLUDE line plus the occasion-ban
+// rescue (matchesActiveOnly). Weather always wins — no validator
+// requirement, no error walls, per the standing no-hard-rules rule.
+// (Declared before FILTER_TYPES/STYLE_FILTER_CHIPS, which read it at module
+// evaluation.)
+const GROUP_MODES = { lower: "restrict", shoes: "restrict", upper: "include", outer: "include", legwear: "include" };
+
 // Each type: chip label, structural group, and the item matcher used for BOTH
-// directions ("no-X" excludes matches; "only-X" excludes group non-matches).
-// Object order = chip render order in the Style Me panel.
+// directions ("no-X" excludes matches; in restrict groups "only-X" excludes
+// group non-matches; in include groups "only-X" is a positive ask — see
+// GROUP_MODES). Object order = chip render order in the Style Me panel.
 export const FILTER_TYPES = {
   jeans: {
     label: "Jeans",
@@ -154,6 +170,7 @@ export const STYLE_FILTER_CHIPS = Object.entries(FILTER_TYPES).map(([key, t]) =>
   key,
   label: t.label,
   group: t.group,
+  mode: GROUP_MODES[t.group] || "restrict",
 }));
 
 // ── Wardrobe-aware chips ─────────────────────────────────────────────────────
@@ -181,7 +198,7 @@ export function computeFilterChips(items, wearStats = {}, activeKeys = null) {
       owned++;
       wears += wearStats?.[it.id]?.wears ?? (Number(it.wear_count) || 0);
     }
-    return { key, label: t.label, group: t.group, owned, wears, idx };
+    return { key, label: t.label, group: t.group, mode: GROUP_MODES[t.group] || "restrict", owned, wears, idx };
   });
   return rows
     .filter(r => r.owned > 0 || active.has(`no-${r.key}`) || active.has(`only-${r.key}`))
@@ -190,7 +207,7 @@ export function computeFilterChips(items, wearStats = {}, activeKeys = null) {
       b.wears - a.wears ||
       b.owned - a.owned ||
       a.idx - b.idx)
-    .map(({ key, label, group, owned, wears }) => ({ key, label, group, owned, wears }));
+    .map(({ key, label, group, mode, owned, wears }) => ({ key, label, group, mode, owned, wears }));
 }
 
 // ── Group domains ────────────────────────────────────────────────────────────
@@ -224,12 +241,6 @@ const GROUP_DOMAINS = {
   lower: coversLowerHalf,
   shoes: (it) => it.category === "Shoes",
   upper: (it) => slotForItem(it) === "top",
-  // Coats are exempt from the "outer" domain (owner, 2026-08-13: "I can wear
-  // a blazer with a jacket in the winter") — an overcoat layers OVER the
-  // blazer, it doesn't compete with it, so "Only Blazers" must never strip
-  // her coats from a winter pool. Jacket-weight pieces (leather/denim
-  // jackets, trenches under "Jackets") DO compete for the same layer and
-  // stay in the domain.
   outer: (it) => it.category === "Outerwear" && it.subcategory !== "Coats",
   legwear: isHosieryItem,
 };
@@ -285,6 +296,7 @@ export function explainFilterViolation(item, filterKeys) {
     if (t.match(item)) return `matches active filter "No ${t.label}"`;
   }
   for (const [group, types] of Object.entries(onlyByGroup)) {
+    if (GROUP_MODES[group] === "include") continue; // include-mode bans nothing
     if (GROUP_DOMAINS[group](item) && !types.some((t) => t.match(item))) {
       return `is banned because "${types.map((t) => t.label).join(" / ")} Only" is active for ${GROUP_NOUN[group]}`;
     }
@@ -305,6 +317,7 @@ export function buildFilterPredicate(filterKeys) {
       if (t.match(item)) return true;
     }
     for (const [group, types] of onlyEntries) {
+      if (GROUP_MODES[group] === "include") continue; // include-mode bans nothing
       if (GROUP_DOMAINS[group](item) && !types.some((t) => t.match(item))) return true;
     }
     return false;
@@ -340,19 +353,22 @@ export function describeStyleFilters(filterKeys) {
       `${names.join(" or ")} ONLY for the lower half — every look's lower half must be ${names.length > 1 ? `one of: ${names.join(", ")}` : names[0]}. All other bottoms, dresses, and full sets are OFF-LIMITS.`,
     shoes: (names) =>
       `${names.join(" or ")} ONLY for shoes — every look's footwear must be ${names.length > 1 ? `one of: ${names.join(", ")}` : names[0]}. All other shoe types are OFF-LIMITS.`,
-    upper: (names) =>
-      `${names.join(" or ")} ONLY for tops — every look's upper half must be ${names.length > 1 ? `one of: ${names.join(", ")}` : `a ${names[0].replace(/s$/, "").toLowerCase()}`}. All other tops are OFF-LIMITS.`,
-    outer: (names) =>
-      `${names.join(" or ")} ONLY for the outer layer — when a look carries a jacket-weight layer it must be ${names.length > 1 ? `one of: ${names.join(", ")}` : `a ${names[0].replace(/s$/, "").toLowerCase()}`}. Other jacket-weight layers are OFF-LIMITS; skipping the layer is fine, and in Cool/Cold an overcoat worn OVER it is fine too.`,
-    legwear: (names) =>
-      `${names.join(" or ")} requested — build looks that showcase her hosiery: favor skirt/dress silhouettes layered over ${names.join(" or ").toLowerCase()} wherever the weather allows. Never force hosiery into a look the weather rules out.`,
   };
+  // Include-mode groups (layers): a positive ask, never a ban — see
+  // GROUP_MODES. One shared template so all layer chips speak the same way.
+  const includeLine = (names, group) =>
+    `INCLUDE ${names.join(" or ")}: she toggled this on — work ${names.length > 1 ? "one of them" : `a ${names[0].replace(/s$/, "").toLowerCase()}`} into every look where the weather and occasion allow. This is a positive request, NOT a ban: it excludes no other ${GROUP_NOUN[group] || "pieces"}, layering under/over it stays welcome (a tank under a knit, a knit under a blazer, a coat over everything in the cold), and you must NEVER error or drop a look over it — when weather rules it out, skip it.`;
   for (const [group, types] of Object.entries(onlyByGroup)) {
+    const names = types.map((t) => t.label);
+    if (GROUP_MODES[group] === "include") {
+      lines.push(includeLine(names, group));
+      continue;
+    }
     const render = GROUP_ONLY_LINES[group]
       // Safety net for future groups: a missing template must degrade to a
       // generic line, never throw mid-generation.
-      || ((names) => `${names.join(" or ")} ONLY within ${GROUP_NOUN[group] || "their group"} — everything else of that type is OFF-LIMITS.`);
-    lines.push(render(types.map((t) => t.label)));
+      || ((ns) => `${ns.join(" or ")} ONLY within ${GROUP_NOUN[group] || "their group"} — everything else of that type is OFF-LIMITS.`);
+    lines.push(render(names));
   }
   return lines;
 }
