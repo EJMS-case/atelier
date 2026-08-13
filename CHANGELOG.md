@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Stockings filter chip; Only-Blazers crash fixed — 2026-08-13
+
+### Why
+Owner request: a stockings filter in Style Me. Writing the prompt line for it surfaced a latent bug from the Blazers chip shipped hours earlier: `describeStyleFilters` had no "outer" template, so toggling "Only Blazers" would have thrown mid-generation.
+
+### Added
+- **Stockings chip** (17 Noosh hosiery items): rides on `isHosieryItem` (Accessories-gated — a "Fishnet Mesh Top" or athleisure leggings can never match). Its own single-type "legwear" group: "No Stockings" strips hosiery from the pool (safe — hosiery is validator-optional, no error-wall risk); "Only Stockings" hard-bans nothing and instead acts as a rescue past occasion bans plus a prompt steer toward skirt/dress-over-hosiery looks, explicitly weather-guarded so it never forces tights into Hot/Warm.
+
+### Fixed
+- **`describeStyleFilters` missing group templates**: added the "outer" Only line ("Only Blazers" would have crashed — TypeError on an undefined template) and the "legwear" steer line, plus a generic fallback so any future group degrades to a sane line instead of throwing mid-generation.
+- `npm run test:filters` 34 → 38 (hosiery in/out including the fishnet-top and leggings guards, only-stockings bans-nothing + rescue, per-group describe lines render without throwing, zero-owned hiding).
+
 ## [Unreleased] — Style Me filters: Blazers chip; Heels means pumps — 2026-08-13
 
 ### Why
