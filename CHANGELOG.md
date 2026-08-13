@@ -2,6 +2,17 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Subcategory chips go two-level; parent selection shows everything under it — 2026-08-13
+
+### Why
+Owner (with closet screenshot on Accessories): "hosiery is a category. Sub categories should expand when I select it, not prematurely. Everything in the category should show until and unless I select the sub category." Two real defects behind it: (1) both the closet FilterBar and the builder picker rendered L2 parents AND their L3 children in one flat chip row (Hosiery next to Semi-Opaque, Jewelry next to Necklaces); (2) selecting a parent filtered by LITERAL subcategory equality — and legacy dual-labeling stores most rows under L3 labels (every hosiery row is Sheer/Semi-Opaque/Opaque, every skirt Mini/Midi/Maxi, 9 of 38 shoes are Stiletto/Kitten/Ankle), so tapping "Hosiery" or "Skirts" matched little or nothing.
+
+### Changed
+- **`subcatMatches(item, value)`** (constants/taxonomy.js, shared): L2-aware filter test — a parent value matches its own rows and rows stored under its L3 children (via `getSubcatL2`, per the item's own category); an L3 value matches literally. Used by the closet filter predicate (App.jsx) and the builder pool filter.
+- **Closet FilterBar**: subcategory row shows only L2 parents that own items (counting L3-labeled rows); a selected parent's owned children expand on a second row. Tapping a selected parent clears; tapping a selected child collapses back to the parent. The Jeans wash filter now lives behind Pants → Jeans.
+- **Builder picker**: same two-level treatment — the chip row rolls L3-labeled rows up to their parent (resolved per item category, since slots span categories), children render on a dashed-chip row while their parent is selected, and the parent chip stays lit while a child is active.
+- `npm run test:taxonomy` (4 tests) added to the battery — parent-includes-children matching, literal L3, no cross-parent/cross-category leakage (a Mini dress is not a Skirts row).
+
 ## [Unreleased] — Style Preferences finally act; restyles show a piece's range — 2026-08-13
 
 ### Why

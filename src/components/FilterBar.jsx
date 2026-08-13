@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 import { COLOR_FAMILIES } from "../constants/color.js";
 
 export default function FilterBar({ items, activeFilters, onChange }) {
@@ -35,21 +35,33 @@ export default function FilterBar({ items, activeFilters, onChange }) {
   const brands = [...new Set(items.map(it => it.brand).filter(Boolean))].sort();
   const filteredBrands = brands.filter(b => b.toLowerCase().includes(brandSearch.toLowerCase()));
 
-  // Subcategories: only show when exactly one category is selected (scoped to that category)
+  // Subcategories: TWO-LEVEL (owner request 2026-08-13 — "sub categories
+  // should expand when I select it, not prematurely"). Row 1 shows only the
+  // L2 parents that have items — counting rows stored under L3 child labels,
+  // since legacy dual-labeling means e.g. every hosiery row is
+  // Sheer/Semi-Opaque/Opaque and every skirt is Mini/Midi/Maxi. Row 2 (the
+  // children) appears only once a parent with owned children is selected.
+  // Selecting a parent shows EVERYTHING under it — the filter predicate in
+  // App.jsx is subcatMatches (getSubcatL2-aware), not literal equality.
   const selectedCats = activeFilters.category?.filter(c => c !== "Sets") || [];
+  const singleCat = selectedCats.length === 1 ? selectedCats[0] : null;
+  const selectedSub = (activeFilters.subcategory || [])[0] || "";
+  // The selected value's L2 parent — equals the value itself when it IS an L2.
+  const selectedL2 = singleCat && selectedSub
+    ? (getSubcatL2(singleCat, selectedSub) || selectedSub)
+    : "";
   const subcatOptions = (() => {
-    if (selectedCats.length !== 1) return [];   // only show for single-category selection
-    const cat = selectedCats[0];
-    const subs = [];
-    (TAXONOMY[cat] || []).forEach(sub => {
-      // Only show subcategories that actually have items
-      if (items.some(it => it.category === cat && it.subcategory === sub)) subs.push(sub);
-      // Also check L3 subcategories
-      (SUBCATEGORY_L3[sub] || []).forEach(l3 => {
-        if (items.some(it => it.category === cat && it.subcategory === l3)) subs.push(l3);
-      });
-    });
-    return subs;   // preserve TAXONOMY order instead of sorting alphabetically
+    if (!singleCat) return [];   // only show for single-category selection
+    return (TAXONOMY[singleCat] || []).filter(sub =>
+      items.some(it => it.category === singleCat &&
+        (it.subcategory === sub || (SUBCATEGORY_L3[sub] || []).includes(it.subcategory)))
+    );   // preserve TAXONOMY order instead of sorting alphabetically
+  })();
+  const childOptions = (() => {
+    if (!singleCat || !selectedL2) return [];
+    return (SUBCATEGORY_L3[selectedL2] || []).filter(l3 =>
+      items.some(it => it.category === singleCat && it.subcategory === l3)
+    );
   })();
 
   return (
@@ -70,20 +82,37 @@ export default function FilterBar({ items, activeFilters, onChange }) {
         </div>
       </div>
 
-      {/* Subcategory chips — single-select, scoped to selected category */}
+      {/* Subcategory chips — single-select L2 parents; a parent's L3 children
+          expand on their own row below only while that parent is selected.
+          Tapping a selected parent clears; tapping a selected child collapses
+          back to the parent (everything under it stays showing). */}
       {subcatOptions.length > 0 && (
         <div style={s.filterSection}>
           <div style={s.filterRow}>
             {subcatOptions.map(sub => (
               <button key={sub}
                 onClick={() => {
-                  // Single-select: toggle off if already selected, otherwise switch to this one
-                  const current = activeFilters.subcategory || [];
-                  const next = current.includes(sub) ? [] : [sub];
+                  const next = sub === selectedL2 ? [] : [sub];
                   onChange({ ...activeFilters, subcategory: next });
                 }}
-                style={{...s.chip, ...(isActive("subcategory", sub) ? s.chipActive : {})}}>
+                style={{...s.chip, ...(sub === selectedL2 ? s.chipActive : {})}}>
                 {sub}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {childOptions.length > 0 && (
+        <div style={s.filterSection}>
+          <div style={s.filterRow}>
+            {childOptions.map(l3 => (
+              <button key={l3}
+                onClick={() => {
+                  const next = l3 === selectedSub ? [selectedL2] : [l3];
+                  onChange({ ...activeFilters, subcategory: next });
+                }}
+                style={{...s.chip, fontSize: 10, ...(l3 === selectedSub ? s.chipActive : {})}}>
+                {l3}
               </button>
             ))}
           </div>

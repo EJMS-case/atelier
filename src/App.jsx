@@ -10,7 +10,7 @@ import HomeView from "./features/home/HomeView.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
-import { SET_TAGS, STYLE_ME_OCCASIONS } from "./constants/taxonomy.js";
+import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches } from "./constants/taxonomy.js";
 import { effectiveColorFamily } from "./constants/color.js";
 import { defaultSortComparator, mergeItems } from "./utils/item-helpers.js";
 import { computeFilterChips } from "./utils/style-filters.js";
@@ -991,7 +991,10 @@ export default function App() {
     let base = items;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
-    if (activeFilters.subcategory?.length) base = base.filter(it => activeFilters.subcategory.includes(it.subcategory));
+    // subcatMatches is L2-aware (2026-08-13): selecting "Hosiery"/"Skirts"
+    // shows every row filed under their L3 children too — literal equality
+    // matched nothing for parents whose rows all carry L3 labels.
+    if (activeFilters.subcategory?.length) base = base.filter(it => activeFilters.subcategory.some(v => subcatMatches(it, v)));
     // Sleeve length filter — maps Tops subcategories to a sleeve length.
     if (activeFilters.sleeveLength) {
       const sl = activeFilters.sleeveLength;

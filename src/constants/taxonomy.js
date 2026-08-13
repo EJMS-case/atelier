@@ -150,3 +150,15 @@ export function getSubcatL2(category, subcategory) {
   }
   return "";
 }
+
+// L2-aware subcategory filter test (owner request 2026-08-13: "everything in
+// the category should show until and unless I select the sub category").
+// A parent value matches its own rows AND rows stored under its L3 children
+// (legacy dual-labeling: every hosiery row is Sheer/Semi-Opaque/Opaque, every
+// skirt is Mini/Midi/Maxi — a literal equality test on "Hosiery"/"Skirts"
+// matched nothing). An L3 value still matches literally. Shared by the closet
+// FilterBar filter (App.jsx) and the builder picker.
+export function subcatMatches(item, value) {
+  if (!value) return true;
+  return item.subcategory === value || getSubcatL2(item.category, item.subcategory) === value;
+}
