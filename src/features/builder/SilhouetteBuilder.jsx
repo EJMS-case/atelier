@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
-import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
+import { OCCASIONS, WEATHER_SHORTS, SUBCATEGORY_L3, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
 import { slotForItem } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
@@ -312,11 +312,32 @@ export default function SilhouetteBuilder({
 
   const slotDef = SLOTS.find(s => s.key === activeSlot);
 
+  // TWO-LEVEL subcategory chips (owner request 2026-08-13): the row shows L2
+  // parents only — a row stored under an L3 label (Mini, Stiletto,
+  // Semi-Opaque…) rolls up to its parent chip; the children render on their
+  // own row once the parent is selected. Slots span categories, so the L2 is
+  // resolved per item against its OWN category.
   const subcatsForSlot = useMemo(() => {
     const def = SLOTS.find(s => s.key === activeSlot);
     const all = (items || []).filter(it => def?.match(it));
-    return [...new Set(all.map(it => it.subcategory).filter(Boolean))].sort();
+    return [...new Set(all
+      .map(it => it.subcategory ? (getSubcatL2(it.category, it.subcategory) || it.subcategory) : "")
+      .filter(Boolean))].sort();
   }, [activeSlot, items]);
+
+  // The L2 chip the current filter lives under (the filter itself when it IS
+  // an L2; its parent when it's a child), and that parent's owned children.
+  const subcatParent = subcatFilter
+    ? (subcatsForSlot.includes(subcatFilter)
+        ? subcatFilter
+        : subcatsForSlot.find(p => (SUBCATEGORY_L3[p] || []).includes(subcatFilter)) || "")
+    : "";
+  const subcatChildren = useMemo(() => {
+    if (!subcatParent) return [];
+    const def = SLOTS.find(s => s.key === activeSlot);
+    const all = (items || []).filter(it => def?.match(it));
+    return (SUBCATEGORY_L3[subcatParent] || []).filter(l3 => all.some(it => it.subcategory === l3));
+  }, [activeSlot, items, subcatParent]);
 
   // Slot pool split into core wardrobe + comfortwear (Athleisure/Loungewear).
   // Comfort pieces render behind a collapsed section at the end of the grid
@@ -324,7 +345,9 @@ export default function SilhouetteBuilder({
   const poolForSlot = useMemo(() => {
     const def = SLOTS.find(s => s.key === activeSlot);
     let pool = (items || []).filter(it => def?.match(it));
-    if (subcatFilter) pool = pool.filter(it => it.subcategory === subcatFilter);
+    // subcatMatches is L2-aware: a parent chip ("Skirts", "Heels") includes
+    // every row filed under its L3 children; a child chip matches literally.
+    if (subcatFilter) pool = pool.filter(it => subcatMatches(it, subcatFilter));
     if (search) {
       const q = search.toLowerCase();
       pool = pool.filter(it =>
@@ -861,15 +884,26 @@ export default function SilhouetteBuilder({
                 placeholder={`Search ${slotDef?.label.toLowerCase() || "items"}…`}
                 style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 12, background: "#fff", boxSizing: "border-box" }}/>
             </div>
-            {/* Subcategory chips */}
+            {/* Subcategory chips — L2 parents; a selected parent's children
+                expand on their own row below (never prematurely). */}
             {subcatsForSlot.length > 1 && activeSlot !== "set" && (
               <div style={{ display: "flex", gap: 5, overflowX: "auto", padding: "0 16px 8px" }}>
                 <button onClick={() => setSubcatFilter("")}
                   style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${subcatFilter === "" ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === "" ? PALETTE.ink : "transparent", color: subcatFilter === "" ? PALETTE.cream : PALETTE.muted }}>All</button>
                 {subcatsForSlot.map(sub => (
-                  <button key={sub} onClick={() => setSubcatFilter(sub === subcatFilter ? "" : sub)}
-                    style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${subcatFilter === sub ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === sub ? PALETTE.ink : "transparent", color: subcatFilter === sub ? PALETTE.cream : PALETTE.muted }}>
+                  <button key={sub} onClick={() => setSubcatFilter(sub === subcatParent ? "" : sub)}
+                    style={{ flexShrink: 0, fontSize: 10, padding: "4px 8px", borderRadius: 10, whiteSpace: "nowrap", cursor: "pointer", border: `1px solid ${subcatParent === sub ? PALETTE.ink : PALETTE.line}`, background: subcatParent === sub ? PALETTE.ink : "transparent", color: subcatParent === sub ? PALETTE.cream : PALETTE.muted }}>
                     {sub}
+                  </button>
+                ))}
+              </div>
+            )}
+            {subcatChildren.length > 0 && activeSlot !== "set" && (
+              <div style={{ display: "flex", gap: 5, overflowX: "auto", padding: "0 16px 8px" }}>
+                {subcatChildren.map(l3 => (
+                  <button key={l3} onClick={() => setSubcatFilter(l3 === subcatFilter ? subcatParent : l3)}
+                    style={{ flexShrink: 0, fontSize: 10, padding: "3px 8px", borderRadius: 10, whiteSpace: "nowrap", cursor: "pointer", border: `1px dashed ${subcatFilter === l3 ? PALETTE.ink : PALETTE.line}`, background: subcatFilter === l3 ? PALETTE.ink : "transparent", color: subcatFilter === l3 ? PALETTE.cream : PALETTE.muted }}>
+                    {l3}
                   </button>
                 ))}
               </div>
