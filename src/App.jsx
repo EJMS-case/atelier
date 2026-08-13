@@ -12,7 +12,7 @@ import { s, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches } from "./constants/taxonomy.js";
 import { effectiveColorFamily } from "./constants/color.js";
-import { defaultSortComparator, mergeItems } from "./utils/item-helpers.js";
+import { defaultSortComparator, mergeItems, slotForItem } from "./utils/item-helpers.js";
 import { computeFilterChips } from "./utils/style-filters.js";
 import {
   RECENT_LOOKS_KEY,
@@ -176,6 +176,11 @@ export default function App() {
   const [styleExcludes, setStyleExcludes] = useState(new Set()); // user-toggled exclusions
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
   const [manualBuilderOpen, setManualBuilderOpen] = useState(false);
+  // Set when Edit on a Style Me result opens the builder pre-filled with that
+  // look's pieces (2026-08-13 — replaced LookCard's in-place editor). Shape:
+  // synthetic log for SilhouetteBuilder's initialSelections, plus the original
+  // id list so onSave can diff the result into A1 look_edits lessons.
+  const [builderSeed, setBuilderSeed] = useState(null);
   // When the user taps Edit on a planner day, we open the SilhouetteBuilder
   // pre-populated with that plan. Schedule mode + the original date are
   // pre-selected so hitting Save updates the same pin in place.
@@ -869,23 +874,19 @@ export default function App() {
         const head = (prev || []).slice(0, priorCount);
         const tail = (prev || []).slice(priorCount);
         // The final set gets fresh _uids from normalizeLooks, but the streamed
-        // version of the same look is already on screen (possibly hearted, or
-        // being edited). Re-adopt the prior _uid when the item set is
-        // unchanged so the card doesn't remount; if the user already swapped
-        // pieces on the streamed copy (user_edited), keep HER version — her
-        // edit beats a revalidation of the very look she just changed.
+        // version of the same look is already on screen (possibly hearted).
+        // Re-adopt the prior _uid when the item set is unchanged so the card
+        // doesn't remount. (The in-place mid-stream edit path was removed
+        // 2026-08-13 — Edit now opens the builder, which saves to Looks and
+        // never mutates the on-screen results.)
         const tailByIds = new Map(tail.map(lk => [(lk.items || []).join(","), lk]));
         const consumed = new Set();
         const reconciled = normalizedLooks.map(lk => {
           const match = tailByIds.get((lk.items || []).join(","));
           if (match && !consumed.has(match._uid)) {
             consumed.add(match._uid);
-            return { ...lk, _uid: match._uid, user_edited: match.user_edited };
+            return { ...lk, _uid: match._uid };
           }
-          // Same look, edited on screen while validation finished: the edited
-          // copy's ids no longer match, so pair by generation order instead.
-          const edited = tail.find(t => t.user_edited && !consumed.has(t._uid));
-          if (edited) { consumed.add(edited._uid); return edited; }
           return lk;
         });
         return [...head, ...reconciled];
@@ -1173,7 +1174,7 @@ export default function App() {
             tap once = never &nbsp;·&nbsp; tap twice = only &nbsp;·&nbsp; tap again = off
           </div>
           <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
-            {filterChips.map(({key, label}) => {
+            {filterChips.map(({key, label, mode}) => {
               const noKey = `no-${key}`, onlyKey = `only-${key}`;
               const state = styleExcludes.has(noKey) ? "no" : styleExcludes.has(onlyKey) ? "only" : "off";
               const chipStyle = state === "no"
@@ -1190,7 +1191,10 @@ export default function App() {
                     else { next.add(noKey); }
                     return next;
                   })}>
-                  {state === "no" ? `✕ No ${label}` : state === "only" ? `✓ Only ${label}` : label}
+                  {/* Layer chips (blazers/knits/stockings) are include-mode:
+                      the third state is a positive "work one in" ask, not an
+                      exclusive Only — label it honestly. */}
+                  {state === "no" ? `✕ No ${label}` : state === "only" ? (mode === "include" ? `✚ Include ${label}` : `✓ Only ${label}`) : label}
                 </button>
               );
             })}
@@ -1577,7 +1581,7 @@ export default function App() {
             weathers:    editingPlan.plan?.weathers,
             notes:       editingPlan.plan?.notes,
             layout_data: editingPlan.plan?.layout_data,
-          } : null}
+          } : builderSeed}
           initialSaveMode={editingPlan ? "schedule" : "looks"}
           initialScheduleDate={editingPlan?.iso || null}
           onSave={async (log) => {
@@ -1586,6 +1590,54 @@ export default function App() {
             // affordance), PATCH that row rather than INSERTing — and either
             // way strip editing_log_id, which isn't a real column.
             const { editing_log_id, ...patch } = log;
+            // Edit-from-results (builderSeed): diff her final pick against
+            // the generated look and record the changes as A1 look_edits
+            // lessons — same signal the old in-place editor produced, now
+            // derived instead of hand-instrumented. Pair a removal with an
+            // addition in the same slot as a swap; leftovers log as
+            // remove/add. Fire-and-forget.
+            if (builderSeed?.garment_ids?.length) {
+              try {
+                const seedIds = builderSeed.garment_ids;
+                const savedIds = log.garment_ids || [];
+                const seedSet = new Set(seedIds);
+                const savedSet = new Set(savedIds);
+                const byId = new Map(items.map(it => [it.id, it]));
+                const removed = seedIds.filter(id => !savedSet.has(id)).map(id => byId.get(id)).filter(Boolean);
+                const added = savedIds.filter(id => !seedSet.has(id)).map(id => byId.get(id)).filter(Boolean);
+                const addedBySlot = new Map();
+                for (const it of added) {
+                  const k = slotForItem(it);
+                  if (!addedBySlot.has(k)) addedBySlot.set(k, []);
+                  addedBySlot.get(k).push(it);
+                }
+                const edits = [];
+                for (const out of removed) {
+                  const pool = addedBySlot.get(slotForItem(out));
+                  const inn = pool?.length ? pool.shift() : null;
+                  edits.push(inn
+                    ? { action: "swap", outItemId: out.id, inItemId: inn.id }
+                    : { action: "remove", outItemId: out.id, inItemId: null });
+                }
+                for (const pool of addedBySlot.values()) {
+                  for (const it of pool) edits.push({ action: "add", outItemId: null, inItemId: it.id });
+                }
+                const occ = log.occasion || null;
+                const wx = log.weather || null;
+                for (const e of edits) {
+                  const edit = { ...e, occasion: occ, weather: wx };
+                  sb.saveLookEdit(edit);
+                  setLookEdits(prev => [{
+                    action: edit.action,
+                    occasion: edit.occasion,
+                    weather: edit.weather,
+                    out_item_id: edit.outItemId,
+                    in_item_id: edit.inItemId,
+                    created_at: new Date().toISOString(),
+                  }, ...prev].slice(0, 120));
+                }
+              } catch { /* the save itself must never wait on the lesson */ }
+            }
             const result = editing_log_id
               ? await sb.updateOutfitLog(editing_log_id, patch)
               : await sb.saveOutfitLog(patch);
@@ -1652,6 +1704,7 @@ export default function App() {
           onClose={() => {
             setManualBuilderOpen(false);
             setEditingPlan(null);
+            setBuilderSeed(null);
             // Return to whatever view opened the builder (Saved, Planner,
             // etc.). Clear the saved return so the next opener can set it.
             if (builderReturnView && builderReturnView !== "style") {
@@ -1696,22 +1749,16 @@ export default function App() {
           {outfits && outfits.map((look, i) => (
             <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={items}
               onEditItem={handleEditItemCard}
-              onUpdateLook={(updated) => {
-                setOutfits(prev => (prev || []).map((lk, idx) => idx === i ? updated : lk));
-              }}
-              onLogEdit={(edit) => {
-                // Persist the correction (fire-and-forget) and fold it into
-                // this session's SWAP LESSONS immediately — the very next
-                // generation already knows.
-                sb.saveLookEdit(edit);
-                setLookEdits(prev => [{
-                  action: edit.action,
-                  occasion: edit.occasion,
-                  weather: edit.weather,
-                  out_item_id: edit.outItemId,
-                  in_item_id: edit.inItemId,
-                  created_at: new Date().toISOString(),
-                }, ...prev].slice(0, 120));
+              onEditInBuilder={(lk) => {
+                const ids = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
+                setBuilderSeed({
+                  garment_ids: ids,
+                  occasions: [lk.occasion || occasion].filter(Boolean),
+                  weathers: lk.weather ? [lk.weather] : [...weather],
+                  notes: null,
+                  layout_data: Array.isArray(lk.layout_data) ? lk.layout_data : null,
+                });
+                setManualBuilderOpen(true);
               }}
               onRate={async (lk, rating) => {
                 try {

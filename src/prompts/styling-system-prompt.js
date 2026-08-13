@@ -135,7 +135,7 @@ export function buildStylingPrompt({
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
   const exclusionBlock = activeExclusions.length > 0
-    ? `\n⛔ ACTIVE FILTERS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\n"No X" means NO item of that type appears anywhere in ANY look — not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you.\n"X ONLY" means EVERY look must be built that way: if the lower half must be jeans, a look with trousers, a skirt, or a dress is wrong. Any look violating a filter is an AUTOMATIC FAILURE and must be rebuilt from scratch.\n`
+    ? `\n⛔ ACTIVE FILTERS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\n"No X" means NO item of that type appears anywhere in ANY look — not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you.\n"X ONLY" means EVERY look must be built that way: if the lower half must be jeans, a look with trousers, a skirt, or a dress is wrong. Any look violating a No/Only filter is an AUTOMATIC FAILURE and must be rebuilt from scratch.\nAn "INCLUDE X" line is different — a positive ask, not a ban: feature the piece where weather and occasion allow, keep normal layering around it, and never fail a look over it.\n`
     : "";
 
   // NOTE: Don't dump the raw recently-suggested IDs into the prompt — they're
