@@ -271,3 +271,61 @@ test("wear stats fall back to the item's stored wear_count", () => {
   assert.equal(jeansChip.wears, 7);
   assert.ok(chips.map(c => c.key).indexOf("jeans") < chips.map(c => c.key).indexOf("skirts"));
 });
+
+// ── Pump-family Heels chip (owner request 2026-08-12) ────────────────────────
+// "Change heels to only pull pumps, stilettos, and that type of heel." Her
+// closet files heel-adjacent shoes (leather mules, a heeled thong, a dress
+// flip-flop) under the Kitten/Heels L3 subcategories, so the chip needs a
+// name carve-out, not just subcategory membership. Fixtures mirror live rows.
+const slingbackPump = { id: "slb",   category: "Shoes", subcategory: "Kitten",  name: "Denim Slingback Pointed Toe Heel" };
+const leatherMules  = { id: "mule",  category: "Shoes", subcategory: "Kitten",  name: "Leather Mules" };
+const heeledThong   = { id: "thong", category: "Shoes", subcategory: "Heels",   name: "Heeled thong shoe" };
+const dressFlipFlop = { id: "flip",  category: "Shoes", subcategory: "Kitten",  name: "Murals flip flop dress shoe" };
+const corkWedge     = { id: "wedge", category: "Shoes", subcategory: "Wedges",  name: "Cork Wedge" };
+const misfiledPump  = { id: "pump",  category: "Shoes", subcategory: "",        name: "D'Orsay Pump" };
+
+test("heels chip: pump family in — pumps, stilettos, slingback pumps, misfiled pumps by name", () => {
+  for (const it of [heels, slingbackPump, misfiledPump]) {
+    assert.equal(excluded(["no-heels"], it), true, `${it.name} is a pump-family heel`);
+    assert.equal(excluded(["only-heels"], it), false, `${it.name} survives only-heels`);
+  }
+});
+
+test("heels chip: mules / heeled thongs / dress flip-flops / wedges are NOT heels", () => {
+  for (const it of [leatherMules, heeledThong, dressFlipFlop, corkWedge]) {
+    assert.equal(excluded(["no-heels"], it), false, `No Heels must spare ${it.name}`);
+    assert.equal(excluded(["only-heels"], it), true, `only-heels must ban ${it.name}`);
+  }
+});
+
+test("the heeled thong stays reachable via the Sandals chip", () => {
+  assert.equal(excluded(["no-sandals"], heeledThong), true, "thong now reads as a sandal");
+  assert.equal(excluded(["only-sandals"], heeledThong), false);
+});
+
+// ── Blazers chip (owner request 2026-08-12) ──────────────────────────────────
+const blazer   = { id: "blz",  category: "Outerwear", subcategory: "Blazers", name: "The Favorite Blazer" };
+const blazerNm = { id: "blz2", category: "Outerwear", subcategory: "Jackets", name: "Gold Button Cotton Fitted Blazer" };
+const woolCoat = { id: "coat", category: "Outerwear", subcategory: "Coats",   name: "Wool Overcoat" };
+
+test("no-blazers excludes blazers (by subcategory or name), spares other outerwear", () => {
+  assert.equal(excluded(["no-blazers"], blazer), true);
+  assert.equal(excluded(["no-blazers"], blazerNm), true);
+  assert.equal(excluded(["no-blazers"], woolCoat), false);
+  assert.equal(excluded(["no-blazers"], blouse), false);
+});
+
+test("only-blazers bans other outerwear, touches nothing outside the outer group", () => {
+  assert.equal(excluded(["only-blazers"], blazer), false);
+  assert.equal(excluded(["only-blazers"], woolCoat), true);
+  for (const it of [blouse, knit, jeans, heels, bag]) {
+    assert.equal(excluded(["only-blazers"], it), false, `${it.name} is outside the outerwear domain`);
+  }
+});
+
+test("blazers chip renders when owned, hides at zero owned", () => {
+  const withBlazer = computeFilterChips([...closet, blazer], {});
+  assert.ok(withBlazer.map(c => c.key).includes("blazers"));
+  const without = computeFilterChips(closet, {});
+  assert.ok(!without.map(c => c.key).includes("blazers"), "zero-owned blazers chip must hide");
+});

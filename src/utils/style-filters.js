@@ -16,7 +16,7 @@
 // every retry burns).
 
 import { getSubcatL2 } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isCompleteSetItem, HEEL_SUBS, classifierNotes } from "./item-helpers.js";
+import { slotForItem, isBootItem, isCompleteSetItem, classifierNotes } from "./item-helpers.js";
 
 // Trouser-family allow-list carried over from the legacy "trousers-only"
 // toggle — includes the L3 labels rows actually store ("Satin/Silk", "Ponte",
@@ -29,7 +29,23 @@ const TROUSER_SUBS = new Set(["Trousers", "Pants", "Wide Leg", "Straight", "Sati
 
 const SNEAKER_RE = /\b(sneaker|trainer|runner)s?\b/i;
 const FLAT_RE = /\b(flat|loafer|ballet|ballerina)s?\b/i;
-const SANDAL_RE = /\b(sandal|slide)s?\b|\bflip[ -]?flops?\b/i;
+// "thong" included so a heeled thong sandal stays reachable via the Sandals
+// chip now that the Heels chip no longer claims it (see PUMP_SUBS below).
+// Category-gated at every use site, so the word can't match garments.
+const SANDAL_RE = /\b(sandal|slide|thong)s?\b|\bflip[ -]?flops?\b/i;
+
+// Pump-family heels ONLY (owner request 2026-08-12): when she toggles "Heels"
+// she means the classic dress heel — pump, stiletto, slingback pump, kitten,
+// block. Her closet files heel-adjacent shoes (leather mules, a heeled thong,
+// a dress flip-flop) under the same L3 subcategories (Kitten, Heels), so a
+// name carve-out excludes those forms; a positive pump/stiletto name test
+// rescues future misfiled pumps. This is deliberately NARROWER than the
+// shared HEEL_SUBS in item-helpers (Mules/Wedges dropped) — HEEL_SUBS keeps
+// serving the trip-packer's heels-in-heat/activity bans, where every heel
+// form should count.
+const PUMP_SUBS = new Set(["Heels", "Block", "Kitten", "Stiletto", "Pumps", "Slingback", "Slingbacks"]);
+const PUMP_NAME_RE = /\b(pump|stiletto)s?\b/i;
+const NON_PUMP_RE = /\b(mule|slide|thong|clog|espadrille|wedge|sandal)s?\b|\bflip[ -]?flops?\b/i;
 
 // Curated notes only (item-helpers NOTES POLICY): a "No Sandals" chip must not
 // exclude a silk cami whose pasted product copy says "pairs with sandals".
@@ -67,7 +83,10 @@ export const FILTER_TYPES = {
   heels: {
     label: "Heels",
     group: "shoes",
-    match: (it) => it.category === "Shoes" && HEEL_SUBS.has(it.subcategory),
+    match: (it) =>
+      it.category === "Shoes" &&
+      (PUMP_SUBS.has(it.subcategory) || PUMP_NAME_RE.test(it.name || "")) &&
+      !NON_PUMP_RE.test(it.name || ""),
   },
   boots: {
     label: "Boots",
@@ -103,6 +122,15 @@ export const FILTER_TYPES = {
     label: "Knits",
     group: "upper",
     match: (it) => it.category === "Knits",
+  },
+  blazers: {
+    // Owner request 2026-08-12. Its own "outer" group: "Only Blazers" bans
+    // other outerwear (coats, jackets, trenches) while leaving every other
+    // slot untouched; "No Blazers" removes blazers only. Outerwear stays an
+    // optional slot, so an Only toggle here can't starve a look.
+    label: "Blazers",
+    group: "outer",
+    match: (it) => it.category === "Outerwear" && (it.subcategory === "Blazers" || /\bblazers?\b/i.test(it.name || "")),
   },
 };
 
@@ -183,9 +211,10 @@ const GROUP_DOMAINS = {
   lower: coversLowerHalf,
   shoes: (it) => it.category === "Shoes",
   upper: (it) => slotForItem(it) === "top",
+  outer: (it) => it.category === "Outerwear",
 };
 
-const GROUP_NOUN = { lower: "the lower half", shoes: "footwear", upper: "tops" };
+const GROUP_NOUN = { lower: "the lower half", shoes: "footwear", upper: "tops", outer: "outerwear layers" };
 
 // ── Key normalization ────────────────────────────────────────────────────────
 // Accepts the pre-2026-08 toggle keys AND the display labels the validator

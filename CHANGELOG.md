@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Me filters: Blazers chip; Heels means pumps — 2026-08-13
+
+### Why
+Owner requests: add Blazers to the Style Me filters, and "change heels to only pull pumps, stilettos, and that type of heel." Live data showed why the second one matters: her closet files heel-adjacent shoes under the heel L3 subcategories — "Leather Mules" and a dress flip-flop under Kitten, a "Heeled thong shoe" under Heels — so the old subcategory-only matcher pulled all of them into the Heels chip.
+
+### Added
+- **Blazers chip** (15 owned): matches Outerwear > Blazers or "blazer" in the name. New "outer" structural group — "Only Blazers" bans other outerwear (coats/jackets/trenches) and touches nothing else; "No Blazers" removes blazers only. Outerwear stays an optional slot, so an Only toggle here can't starve a look.
+
+### Changed
+- **Heels chip = pump family only**: Heels/Block/Kitten/Stiletto/Pumps/Slingback subcategories or a pump/stiletto name, MINUS a name carve-out for mule/slide/thong/clog/espadrille/wedge/sandal/flip-flop forms. Her 9 true pumps/stilettos/slingback pumps match; the mules, heeled thong, and dress flip-flop no longer do. The heeled thong is now reachable via the Sandals chip ("thong" added to SANDAL_RE, category-gated). Deliberately narrower than the shared `HEEL_SUBS` in item-helpers, which still serves the trip-packer's heels-in-heat/activity bans where every heel form should count.
+- `npm run test:filters` 28 → 34 (pump-family in/out fixtures mirroring the live rows, blazer chip both directions + domain isolation, zero-owned hiding).
+
 ## [Unreleased] — Builder: comfortwear tucked to the end, BELT slot, evaluator gets context — 2026-08-12
 
 ### Why
