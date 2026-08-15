@@ -20,11 +20,11 @@ import { MODEL_STANDARD } from "../../constants/models.js";
 import { sb } from "../../lib/supabase.js";
 import { loadAboutMe } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
-import { stylistNotes } from "../../utils/item-helpers.js";
+import { stylistNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 
 const EVAL_PROMPT = `You are Elyce's personal stylist with a sharp, senior creative-director eye. She built this outfit herself from her own wardrobe and wants your honest read.
 
-Rate the look 1-10 on how well it's styled — silhouette and proportion, colour and texture harmony, formality coherence, and finish — judged on real styling merit and her taste, not any fixed rulebook. When an occasion or weather is given, weigh fitness for it heavily: a beautiful look that's wrong for the room is not a 9. Inventory lines may carry her curated formality as f1 (most casual) to f8 (most formal) — a look mixing distant registers should hear about it.
+Rate the look 1-10 on how well it's styled — silhouette and proportion, colour and texture harmony, formality coherence, and finish — judged on real styling merit and her taste, not any fixed rulebook. When an occasion or weather is given, weigh fitness for it heavily: a beautiful look that's wrong for the room is not a 9. Inventory lines may carry her curated formality as f1 (most casual) to f8 (most formal) — a look mixing distant registers should hear about it. ${NOTES_NEGATION_LEGEND}
 
 Then give:
 - "works": in one line, the strongest thing this look already does (be specific, not flattering).
