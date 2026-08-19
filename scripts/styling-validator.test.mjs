@@ -459,3 +459,40 @@ test("warm: blazer + coat keeps the one-layer nag (the pair is a Cool/Cold move)
   assert.ok(/Cool\/Cold/.test(cb[0].message));
   assert.equal(cb[0].hard, false);
 });
+
+// ── Requested-piece duplicate exemption (owner report 2026-08-19) ────────────
+// "Style my Theory trousers" should give her the trousers restyled across
+// looks — with fewer requested pieces than looks, a must-include piece may
+// legitimately anchor more than one look. Cross-look repeats of a
+// force-included ID no longer fail checkNoDuplicates; within-look duplicates
+// and repeats of NON-requested items still do.
+const twoLooksOf = (idsA, idsB) => ({
+  looks: [idsA, idsB].map(ids => ({
+    vibe: "Quiet Luxury",
+    items: ids.map(id => ({ id, role: "supporting" })),
+    silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "",
+  })),
+});
+
+test("duplicates: a force-included piece may repeat across looks", () => {
+  const parsed = twoLooksOf(["W001", "W002", "W003"], ["W001", "W004", "W003"]);
+  // W001 forced → its repeat is legal; W003 (shoes) repeats WITHOUT being
+  // requested → still a duplicate failure.
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "", ["r1"]);
+  const dupes = failures.filter(f => f.type === "no_duplicates");
+  assert.equal(dupes.length, 1, `only the shoe repeat should fail, got: ${dupes.map(f => f.message)}`);
+  assert.ok(dupes[0].message.includes("W003"));
+});
+
+test("duplicates: within-look duplicate of a forced piece still fails", () => {
+  const parsed = twoLooksOf(["W001", "W001", "W002"], ["W004", "W005", "W006"]);
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "", ["r1"]);
+  assert.ok(failures.some(f => f.type === "no_duplicates" && f.message.includes("appears twice")),
+    "same piece twice in ONE look is still a defect");
+});
+
+test("duplicates: without a request, cross-look repeats still fail", () => {
+  const parsed = twoLooksOf(["W001", "W002", "W003"], ["W001", "W004", "W005"]);
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "");
+  assert.ok(failures.some(f => f.type === "no_duplicates" && f.message.includes("W001")));
+});

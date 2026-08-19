@@ -313,26 +313,48 @@ function matchesFreeText(item, freeText) {
   // "Favorite Daughter blue blazer". Each field can only score once per query
   // so spamming the same word across fields doesn't inflate the count.
   const fieldsHit = new Set();
+  const tokensHit = new Set();
   for (const token of tokens) {
-    if (fields.brand       && fields.brand.includes(token))       fieldsHit.add("brand");
-    if (fields.color       && fields.color.includes(token))       fieldsHit.add("color");
-    if (fields.material    && fields.material.includes(token))    fieldsHit.add("material");
-    if (fields.subcategory && fields.subcategory.includes(token)) fieldsHit.add("subcategory");
-    if (fields.category    && fields.category.includes(token))    fieldsHit.add("category");
-    if (fields.pattern     && fields.pattern.includes(token))     fieldsHit.add("pattern");
-    if (fields.name        && fields.name.includes(token))        fieldsHit.add("name");
+    // Plural→singular fallback: "theory pants" must land on an item NAMED
+    // "Marcee Pant" (substring matching already covers the reverse direction).
+    // Stems only for ≥4-char tokens so a bare "is"/"as" can't stem to noise.
+    const stem = token.length >= 4 && token.endsWith("s") ? token.slice(0, -1) : token;
+    const hit = (field) => field.includes(token) || (stem !== token && field.includes(stem));
+    if (fields.brand       && hit(fields.brand))       { fieldsHit.add("brand");       tokensHit.add(token); }
+    if (fields.color       && hit(fields.color))       { fieldsHit.add("color");       tokensHit.add(token); }
+    if (fields.material    && hit(fields.material))    { fieldsHit.add("material");    tokensHit.add(token); }
+    if (fields.subcategory && hit(fields.subcategory)) { fieldsHit.add("subcategory"); tokensHit.add(token); }
+    if (fields.category    && hit(fields.category))    { fieldsHit.add("category");    tokensHit.add(token); }
+    if (fields.pattern     && hit(fields.pattern))     { fieldsHit.add("pattern");     tokensHit.add(token); }
+    if (fields.name        && hit(fields.name))        { fieldsHit.add("name");        tokensHit.add(token); }
   }
 
   // Single-token query (e.g. "blazer" or "navy") needs one field hit.
-  // Multi-token query needs at least two distinct fields hit to avoid
-  // matching every item with the word "blue" in some random place.
+  // Multi-token query needs at least two distinct fields hit — BY at least
+  // two distinct tokens: a lone garment noun landing in both subcategory and
+  // name (which naturally repeat each other — "Trousers" / "Wide Trouser")
+  // must not read as the multi-field signal that "brand + color +
+  // subcategory" carries.
   if (tokens.length === 1 && fieldsHit.size >= 1) return true;
-  if (tokens.length >= 2 && fieldsHit.size >= 2) return true;
+  if (tokens.length >= 2 && fieldsHit.size >= 2 && tokensHit.size >= 2) return true;
 
   // Brand-anchored fallback: when the full brand name appears verbatim in the
   // request (e.g. "Favorite Daughter"), one additional field hit is enough
-  // because the brand alone is a very strong signal.
-  if (fields.brand && req.includes(fields.brand) && fieldsHit.size >= 1) return true;
+  // because the brand alone is a very strong signal. "Additional" must mean
+  // a hit BEYOND brand: the brand token itself lands in fieldsHit, so a bare
+  // `size >= 1` was satisfied by every item of that brand — "theory trousers"
+  // force-included all ten of her Theory pieces, the model satisfied the
+  // "at least one must appear" rule with a Theory blazer, and three taps in a
+  // row produced zero trousers (owner report 2026-08-19).
+  if (fields.brand && req.includes(fields.brand)) {
+    let nonBrandHits = 0;
+    for (const f of fieldsHit) if (f !== "brand") nonBrandHits++;
+    if (nonBrandHits >= 1) return true;
+    // A request that is essentially JUST the brand ("style me in favorite
+    // daughter") legitimately means "anything of theirs" — every non-stopword
+    // token is part of the brand name, so the whole label matches.
+    if (fieldsHit.has("brand") && tokens.every(t => fields.brand.includes(t))) return true;
+  }
 
   return false;
 }

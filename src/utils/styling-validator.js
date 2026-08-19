@@ -180,15 +180,25 @@ function checkItemsExist(response, idMap) {
 /**
  * Check 3: No duplicate items across looks.
  */
-function checkNoDuplicates(response) {
+function checkNoDuplicates(response, idMap = {}, forceIncludeIds = []) {
   const failures = [];
+  // A piece she explicitly asked for is EXEMPT from the one-item-one-look
+  // rule ACROSS looks: "style my Theory trousers" should give her the
+  // trousers restyled, and with fewer requested pieces than looks that means
+  // legitimate repeats. Within a single look, a duplicate is still a defect.
+  const forced = new Set(forceIncludeIds);
   const usedIds = new Set();
   response.looks.forEach((look, i) => {
+    const inThisLook = new Set();
     (look.items || []).forEach((item) => {
       const cleanId = cleanLookItemId(item);
-      if (usedIds.has(cleanId)) {
+      const isForced = forced.has(idMap[cleanId]);
+      if (inThisLook.has(cleanId)) {
+        failures.push(`Look ${i + 1}: Item '${cleanId}' appears twice in the same look — remove the duplicate.`);
+      } else if (usedIds.has(cleanId) && !isForced) {
         failures.push(`Look ${i + 1}: Item '${cleanId}' is a duplicate — each item can only appear in one look.`);
       }
+      inThisLook.add(cleanId);
       usedIds.add(cleanId);
     });
   });
@@ -853,7 +863,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   if (allFailures.some(f => f.type === "structure")) return allFailures; // Can't proceed if structure is broken
 
   allFailures.push(...checkItemsExist(response, idMap).map(f => ({ type: "items_exist", message: f, hard: true })));
-  allFailures.push(...checkNoDuplicates(response).map(f => ({ type: "no_duplicates", message: f, hard: true })));
+  allFailures.push(...checkNoDuplicates(response, idMap, forceIncludeIds).map(f => ({ type: "no_duplicates", message: f, hard: true })));
   allFailures.push(...checkLowerHalf(response, idMap, allItems).map(f => ({ type: "lower_half", message: f, hard: true })));
   allFailures.push(...checkUpperHalf(response, idMap, allItems).map(f => ({ type: "upper_half", message: f, hard: true })));
   allFailures.push(...checkExclusions(response, idMap, allItems, activeExclusions).map(f => ({ type: "exclusions", message: f, hard: true })));
@@ -1438,6 +1448,13 @@ export async function generateValidatedLooks({
       if (attempt === 0 && onLook) {
         let streamedCount = 0;
         const streamedIds = new Set(); // track IDs already surfaced to caller
+        // Short IDs of force-included pieces — exempt from the cross-look
+        // duplicate hold below, matching checkNoDuplicates' exemption (a
+        // requested piece may legitimately anchor more than one look).
+        const forcedRealIds = new Set(forceIncludeIds);
+        const forcedShortIds = new Set(
+          Object.keys(idMap).filter(shortId => forcedRealIds.has(idMap[shortId]))
+        );
         ({ toolBlock, raw } = await invokeToolStream(
           {
             apiKey,
@@ -1479,7 +1496,7 @@ export async function generateValidatedLooks({
                 // out — soft failures never gate.
                 ...checkExclusions(candidate, idMap, allItems, activeExclusions),
                 ...checkOccasion(candidate, idMap, allItems, occasionSlots, [...forceIncludeIds, ...onlyRescueIds]),
-                ...checkNoDuplicates(candidate),
+                ...checkNoDuplicates(candidate, idMap, forceIncludeIds),
                 ...checkCoordSets(candidate, idMap, allItems),
                 ...checkCompleteSets(candidate, idMap, allItems),
                 ...checkHosieryPairing(candidate, idMap, allItems),
@@ -1488,7 +1505,7 @@ export async function generateValidatedLooks({
               ];
               // Also guard against duplicating items already shown.
               const newIds = (candidate.looks[0]?.items || []).map(cleanLookItemId);
-              const hasDupe = newIds.some(id => streamedIds.has(id));
+              const hasDupe = newIds.some(id => streamedIds.has(id) && !forcedShortIds.has(id));
               if (cFailures.length === 0 && !hasDupe) {
                 const resolved = resolveIds(candidate, idMap, occasion);
                 newIds.forEach(id => streamedIds.add(id)); // short IDs for cross-look dupe check
@@ -1603,12 +1620,20 @@ export async function generateValidatedLooks({
   if (lastParsed?.looks?.length) {
     const hadDuplicates = lastFailures.some(f => f.type === "no_duplicates" && f.hard);
     if (hadDuplicates) {
+      // Mirror checkNoDuplicates' exemption: a force-included piece may
+      // legitimately repeat across looks (she asked for it), so only strip
+      // its within-look duplicates. Everything else dedupes globally,
+      // earlier looks keeping the item they were built around.
+      const forced = new Set(forceIncludeIds);
       const seen = new Set();
       lastParsed.looks.forEach(look => {
         if (!Array.isArray(look.items)) return;
+        const inThisLook = new Set();
         look.items = look.items.filter(item => {
           const cleanId = cleanLookItemId(item);
-          if (seen.has(cleanId)) return false;
+          if (inThisLook.has(cleanId)) return false;
+          if (seen.has(cleanId) && !forced.has(idMap[cleanId])) return false;
+          inThisLook.add(cleanId);
           seen.add(cleanId);
           return true;
         });
