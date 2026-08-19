@@ -1092,6 +1092,15 @@ export default function SilhouetteBuilder({
               {evaluation.tips.map((t, i) => <li key={i} style={{ marginBottom: 4 }}>{t}</li>)}
             </ul>
           )}
+          {/* Weather is deliberately NOT part of the score (owner request
+              2026-08-19) — it renders as its own light aside when the stylist
+              has something to say about the forecast. */}
+          {evaluation.weather && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${PALETTE.line}`, fontSize: 12, color: PALETTE.muted, fontStyle: "italic" }}>
+              <span style={{ fontSize: 9, letterSpacing: "0.14em", fontStyle: "normal", marginRight: 6 }}>WEATHER</span>
+              {evaluation.weather}
+            </div>
+          )}
         </div>
       )}
 

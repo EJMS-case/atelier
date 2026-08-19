@@ -103,3 +103,44 @@ test("weather Any: no footwear gating at all", () => {
   const ids = r.sampled.map(it => it.id);
   for (const id of ["boot1", "boot2", "heel1", "flat1", "sand1"]) assert.ok(ids.includes(id), id);
 });
+
+// ── Brand-anchored matching precision (owner report 2026-08-19) ──────────────
+// "include my theory trousers" force-included EVERY Theory piece she owns:
+// the brand token itself satisfied the fallback's "one field hit", so the
+// blazer/dress/tops all rode along and the model satisfied "at least one must
+// appear" without ever touching the trousers. Three taps, zero pants.
+const BRAND_ITEMS = [
+  { id: "tt1", name: "Marcee Pant", brand: "Theory", category: "Bottoms", subcategory: "Trousers", color: "Black" },
+  { id: "tt2", name: "Demitira Flare Leg Pants", brand: "Theory", category: "Bottoms", subcategory: "Trousers", color: "Slate" },
+  { id: "tb1", name: "Staple Admiral Crepe Blazer", brand: "Theory", category: "Outerwear", subcategory: "Blazers", color: "Navy" },
+  { id: "td1", name: "Sheath Dress", brand: "Theory", category: "Dresses", subcategory: "Midi", color: "Black" },
+  { id: "ts1", name: "Silk Fitted Shirt", brand: "Theory", category: "Tops", subcategory: "Shirts", color: "Dusty Rose" },
+  { id: "ot1", name: "Pleated Wide Trouser", brand: "Vince", category: "Bottoms", subcategory: "Trousers", color: "Black" },
+  { id: "fd1", name: "Erin Blazer", brand: "Favorite Daughter", category: "Outerwear", subcategory: "Blazers", color: "Blue" },
+  { id: "sh1", name: "Whipstitch Pointed Toe Heel", category: "Shoes", subcategory: "Stiletto", color: "Black" },
+];
+const brandSample = (freeTextRequest) => sampleClosetItems({
+  items: BRAND_ITEMS, occasion: "NoPrefilterProbe", occasionSlots: {},
+  weather: "", freeTextRequest,
+});
+
+test("brand + garment type pins ONLY that garment type, not the whole brand", () => {
+  const r = brandSample("include my theory trousers");
+  assert.deepEqual([...r.forceIncludeIds].sort(), ["tt1", "tt2"],
+    "only the Theory trousers — never the blazer/dress/shirt on the brand token alone");
+});
+
+test("brand + 'pants' resolves via the name field the same way", () => {
+  const r = brandSample("style me with my theory pants");
+  assert.deepEqual([...r.forceIncludeIds].sort(), ["tt1", "tt2"]);
+});
+
+test("a brand-only request still means 'anything of theirs'", () => {
+  const r = brandSample("style me in favorite daughter");
+  assert.deepEqual(r.forceIncludeIds, ["fd1"], "the whole-label match keeps working");
+});
+
+test("another brand's trousers do not ride along on the garment token", () => {
+  const r = brandSample("include my theory trousers");
+  assert.ok(!r.forceIncludeIds.includes("ot1"), "Vince trousers hit only one field");
+});
