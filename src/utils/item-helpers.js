@@ -187,6 +187,23 @@ export function isBlazerItem(item) {
   if (!item || item.category !== "Outerwear") return false;
   return item.subcategory === "Blazers" || /\bblazers?\b/i.test(item.name || "");
 }
+// ── SANDAL FORM ─────────────────────────────────────────────────────────────
+// "Is this shoe an open sandal-form?" — wherever it's FILED. Her closet stores
+// heeled thongs and sandal-mules under Kitten/Block (heels shelves), so a
+// literal `subcategory === "Sandals"` test misses them (owner screenshot
+// 2026-08-19: a heeled thong sandal filed under Kitten reached a Work look
+// straight past the Work sandal ban). Name AND curated notes count — her
+// "Leather Mules" carry "thong sandal" only in the note. Bare "mule" is
+// deliberately NOT a match: a closed-toe mule isn't an open shoe; hers match
+// via their own thong/sandal wording. Shared by the Sandals filter chip, the
+// occasion sandal-form ban (styling.js `banned.sandalForms`), and the
+// cool/cold weather gates in filterByWeather + the closet-sampler.
+export const SANDAL_FORM_RE = /\b(sandal|slide|thong)s?\b|\bflip[ -]?flops?\b/i;
+export function isSandalFormItem(item) {
+  if (!item || item.category !== "Shoes") return false;
+  if (item.subcategory === "Sandals") return true;
+  return SANDAL_FORM_RE.test((item.name || "") + " " + classifierNotes(item));
+}
 // ── HOSIERY ─────────────────────────────────────────────────────────────────
 // Tights/stockings live under Accessories > Hosiery (L3: Sheer / Semi-Opaque /
 // Opaque / Fishnet). Single source of truth for "is this a legwear layer" —
@@ -338,7 +355,7 @@ export function filterByWeather(items, weather) {
       if (it.category === "Outerwear" && !isLightOuter) return false;
     }
     if (isMild) {
-      if (it.subcategory === "Sandals") return false;
+      if (isSandalFormItem(it)) return false; // form-aware: thongs filed under Kitten/Block too
       // Mild = spring/fall layering. Wool blazers and trenches are fine, but
       // dead-of-winter pieces (parka, puffer, sherpa, shearling, fleece) read
       // as a costume mismatch. Same for items the user tagged Winter-only.
@@ -352,7 +369,7 @@ export function filterByWeather(items, weather) {
       // No sleeve-based top exclusion — a sleeveless/short top layered under a
       // coat or blazer is exactly how she dresses for the cold. Fabric/season
       // still filtered; the stylist adds the outer layer.
-      if (it.subcategory === "Sandals") return false;
+      if (isSandalFormItem(it)) return false; // form-aware: thongs filed under Kitten/Block too
       if (it.subcategory === "Shorts") return false;
     }
     return true;

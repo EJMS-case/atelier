@@ -507,3 +507,77 @@ test("weather: a force-included winter piece passes; the same piece unforced fai
   const forced = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "Warm (70-84°F)", ["r4"]);
   assert.ok(!forced.some(f => f.type === "weather"), "her requested piece must not weather-fail");
 });
+
+// ── Include toggles are instructions (owner 2026-08-19) ──────────────────────
+// "Include Blazers" + Hot produced zero blazers; her answer: "I selected it,
+// not as a suggestion." Every look must carry the toggled layer when eligible
+// candidates exist, matched items are weather-exempt, and the add-salvage
+// completes a look that lacks one.
+
+const CREPE_BLAZER = { id: "r8", name: "Morena Blazer", category: "Outerwear", subcategory: "Blazers", material: "Crepe", notes: "Tan/camel structured blazer" };
+const INC_ITEMS = [...ALL_ITEMS, CREPE_BLAZER];
+const INC_MAP = { ...ID_MAP, W008: "r8" };
+
+test("include toggle: a blazer-less look hard-fails when eligible blazers exist", () => {
+  const parsed = lookOf("W001", "W002", "W003");
+  const failures = runAllChecks(parsed, INC_MAP, INC_ITEMS, ["only-blazers"], {}, "Work", "Hot (85°F+)");
+  const inc = failures.filter(f => f.type === "include_toggle" && f.hard);
+  assert.equal(inc.length, 1, `expected one include failure, got: ${failures.map(f => f.type)}`);
+  assert.ok(/Include Blazers/.test(inc[0].message) && /W00[68]/.test(inc[0].message),
+    "failure names the toggle and real eligible short-IDs");
+});
+
+test("include toggle: no candidates in the pool → no failure (never an error wall)", () => {
+  const parsed = lookOf("W001", "W002", "W003");
+  const failures = runAllChecks(parsed, INC_MAP, INC_ITEMS, ["only-knits"], {}, "Work", "Hot (85°F+)");
+  assert.ok(!failures.some(f => f.type === "include_toggle"), "no knits exist — the toggle must not fail looks");
+});
+
+test("include toggle: a non-light blazer in Hot is weather-EXEMPT when the toggle demands it", () => {
+  const parsed = lookOf("W001", "W002", "W003", "W008"); // crepe blazer — not isLightOuter
+  const without = runAllChecks(parsed, INC_MAP, INC_ITEMS, [], {}, "Work", "Hot (85°F+)");
+  assert.ok(without.some(f => f.type === "weather" && f.message.includes("Morena")),
+    "without the toggle, a non-light blazer still fails Hot");
+  const withToggle = runAllChecks(parsed, INC_MAP, INC_ITEMS, ["only-blazers"], {}, "Work", "Hot (85°F+)");
+  assert.ok(!withToggle.some(f => f.type === "weather"), "the toggled layer must not become weather retry-bait");
+  assert.ok(!withToggle.some(f => f.type === "include_toggle"), "the look satisfies the toggle");
+});
+
+test("include salvage: adds an eligible blazer to a look that lacks one, recheck clean", async () => {
+  const { salvageByAddingIncludes } = await import("../src/utils/styling-validator.js");
+  const parsed = lookOf("W001", "W002", "W003");
+  const failures = runAllChecks(parsed, INC_MAP, INC_ITEMS, ["only-blazers"], {}, "Work", "Hot (85°F+)");
+  assert.ok(failures.some(f => f.type === "include_toggle" && f.hard));
+  const completed = salvageByAddingIncludes(parsed, failures, INC_MAP, INC_ITEMS,
+    { activeExclusions: ["only-blazers"], occasionSlots: {}, occasion: "Work", weather: "Hot (85°F+)" });
+  assert.ok(completed, "salvage must produce a completed response");
+  const ids = completed.looks[0].items.map(it => it.id);
+  assert.ok(ids.includes("W006") || ids.includes("W008"), "a real blazer was added");
+  const recheck = runAllChecks(completed, INC_MAP, INC_ITEMS, ["only-blazers"], {}, "Work", "Hot (85°F+)");
+  assert.ok(!recheck.some(f => f.hard), `recheck must be clean, got: ${recheck.filter(f => f.hard).map(f => f.message)}`);
+});
+
+// ── Form-aware sandal ban (owner screenshot 2026-08-19) ─────────────────────
+// Her heeled thong is FILED under Kitten, so the literal "Sandals" subcategory
+// ban never saw it. Work/Work Dinner set banned.sandalForms — checkOccasion
+// must catch the shoe by its name + curated notes wherever it's filed.
+
+const THONG_MULE = { id: "r9", name: "Leather Mules", category: "Shoes", subcategory: "Kitten", material: "Leather", notes: "Taupe leather heeled mule thong sandal for casual or vacation — NOT FOR WORK" };
+const SF_ITEMS = [...ALL_ITEMS, THONG_MULE];
+const SF_MAP = { ...ID_MAP, W009: "r9" };
+
+test("sandal forms: a heeled thong filed under Kitten fails a sandalForms occasion", () => {
+  const slots = { banned: { subcategories: ["Sandals"], sandalForms: true } };
+  const parsed = lookOf("W001", "W002", "W009");
+  const failures = runAllChecks(parsed, SF_MAP, SF_ITEMS, [], slots, "Work", "");
+  assert.ok(failures.some(f => f.type === "occasion" && f.hard && f.message.includes("Leather Mules")),
+    "the Kitten-filed thong sandal must fail the Work ban");
+});
+
+test("sandal forms: without the flag, the literal subcategory ban still misses it (Dinner keeps today's behavior)", () => {
+  const slots = { banned: { subcategories: ["Sandals"] } };
+  const parsed = lookOf("W001", "W002", "W009");
+  const failures = runAllChecks(parsed, SF_MAP, SF_ITEMS, [], slots, "Dinner", "");
+  assert.ok(!failures.some(f => f.type === "occasion"),
+    "occasions without sandalForms deliberately keep the literal ban");
+});

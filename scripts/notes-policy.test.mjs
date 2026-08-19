@@ -219,3 +219,42 @@ test("formatInventory: long copy is digested on the prompt line; curated notes r
   assert.ok(camiLine.length < COPY_CAMI.length, "line must be materially shorter than raw copy");
   assert.ok(lines.find(l => l.includes("Pleated")).includes("tailored, office staple"), "curated notes verbatim");
 });
+
+// ── Negative occasion notes: "NOT FOR WORK" (owner 2026-08-19) ───────────────
+// Her note vetoed nothing — the shoe it was written on reached a Work look.
+// noteVetoesOccasion is the enforcement: curated notes only, "work" covers
+// both Work and Work Dinner (her call), literal naming overrides at the
+// sampler (tested there via the nameRescueIds clause).
+
+test("veto: 'NOT FOR WORK' blocks Work and Work Dinner, nothing else", async () => {
+  const { noteVetoesOccasion } = await import("../src/utils/closet-sampler.js");
+  const mule = { name: "Leather Mules", notes: "Taupe leather heeled mule thong sandal for casual or vacation — NOT FOR WORK" };
+  assert.equal(noteVetoesOccasion(mule, "Work"), true);
+  assert.equal(noteVetoesOccasion(mule, "Work Dinner"), true);
+  assert.equal(noteVetoesOccasion(mule, "Casual"), false);
+  assert.equal(noteVetoesOccasion(mule, "Dinner"), false);
+  assert.equal(noteVetoesOccasion(mule, "Vacation"), false);
+});
+
+test("veto: recognized shapes — 'no work', 'never for the office', 'not office-appropriate'", async () => {
+  const { noteVetoesOccasion } = await import("../src/utils/closet-sampler.js");
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "fun piece, no work" }, "Work"), true);
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "never for the office" }, "Work"), true);
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "not office-appropriate" }, "Work"), true);
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "not for dinner" }, "Dinner"), true);
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "not for dinner" }, "Work"), false);
+});
+
+test("veto: positive mentions and near-misses do NOT veto", async () => {
+  const { noteVetoesOccasion } = await import("../src/utils/closet-sampler.js");
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "great for work and travel" }, "Work"), false);
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "not for working out" }, "Work"), false, "'working' is not 'work'");
+  assert.equal(noteVetoesOccasion({ name: "X", notes: "perfect office blazer" }, "Work"), false);
+});
+
+test("veto: product copy (>200 chars) cannot veto — curated notes only", async () => {
+  const { noteVetoesOccasion } = await import("../src/utils/closet-sampler.js");
+  const copy = "A luxurious piece for every wardrobe. ".repeat(6) + "Definitely not for work though.";
+  assert.ok(copy.length > 200);
+  assert.equal(noteVetoesOccasion({ name: "X", notes: copy }, "Work"), false);
+});

@@ -16,7 +16,7 @@
 // every retry burns).
 
 import { getSubcatL2 } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, classifierNotes } from "./item-helpers.js";
+import { slotForItem, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, SANDAL_FORM_RE, classifierNotes } from "./item-helpers.js";
 
 // Trouser-family allow-list carried over from the legacy "trousers-only"
 // toggle — includes the L3 labels rows actually store ("Satin/Silk", "Ponte",
@@ -29,10 +29,11 @@ const TROUSER_SUBS = new Set(["Trousers", "Pants", "Wide Leg", "Straight", "Sati
 
 const SNEAKER_RE = /\b(sneaker|trainer|runner)s?\b/i;
 const FLAT_RE = /\b(flat|loafer|ballet|ballerina)s?\b/i;
-// "thong" included so a heeled thong sandal stays reachable via the Sandals
-// chip now that the Heels chip no longer claims it (see PUMP_SUBS below).
-// Category-gated at every use site, so the word can't match garments.
-const SANDAL_RE = /\b(sandal|slide|thong)s?\b|\bflip[ -]?flops?\b/i;
+// Sandal-form matching moved to the shared isSandalFormItem / SANDAL_FORM_RE
+// (item-helpers) so the chip, the occasion sandal bans, and the weather gates
+// can never drift. "thong" is in the regex so a heeled thong sandal stays
+// reachable via the Sandals chip now that the Heels chip no longer claims it
+// (see PUMP_SUBS below). Category-gated at every use site.
 
 // Pump-family heels ONLY (owner request 2026-08-12): when she toggles "Heels"
 // she means the classic dress heel — pump, stiletto, slingback pump, kitten,
@@ -120,13 +121,16 @@ export const FILTER_TYPES = {
       it.category === "Shoes" &&
       (["Flats", "Loafers"].includes(it.subcategory) || FLAT_RE.test(it.name || "")) &&
       !SNEAKER_RE.test(it.name || "") &&
-      !SANDAL_RE.test(it.name || ""),
+      !SANDAL_FORM_RE.test(it.name || ""),
   },
   sandals: {
+    // Form-aware (shared isSandalFormItem): catches sandal-form shoes filed
+    // under heels shelves (Kitten/Block) via name OR curated notes — her
+    // "Leather Mules" say "thong sandal" only in the note (owner report
+    // 2026-08-19: that shoe dodged "No Sandals" and the Work sandal ban).
     label: "Sandals",
     group: "shoes",
-    match: (it) =>
-      it.category === "Shoes" && (it.subcategory === "Sandals" || SANDAL_RE.test(it.name || "")),
+    match: isSandalFormItem,
   },
   sneakers: {
     label: "Sneakers",
@@ -340,6 +344,29 @@ export function matchesActiveOnly(item, filterKeys) {
 }
 
 /**
+ * The filter types whose toggle is active in an INCLUDE-mode group ("Include
+ * Blazers/Knits/Stockings"). These are DIRECT INSTRUCTIONS (owner 2026-08-19:
+ * "I selected it, not as a suggestion" — she toggles Blazers because she needs
+ * covered shoulders at the office and sheds the layer outside), so the
+ * sampler re-unions their lightest members past the weather gates, the
+ * validator requires one per look (checkIncludeToggles) and exempts matches
+ * from weather compliance, and the prompt line demands them.
+ */
+export function activeIncludeTypes(filterKeys) {
+  const { onlyByGroup } = parseFilters(filterKeys);
+  const out = [];
+  for (const [group, types] of Object.entries(onlyByGroup)) {
+    if (GROUP_MODES[group] === "include") out.push(...types);
+  }
+  return out;
+}
+
+/** True when the item matches any active include-mode toggle. */
+export function matchesActiveInclude(item, filterKeys) {
+  return activeIncludeTypes(filterKeys).some((t) => t.match(item));
+}
+
+/**
  * Human-readable filter lines for the styling prompt. "Only" toggles in the
  * same group are merged into ONE line so the model never reads two "only"
  * rules as a contradiction ("Jeans ONLY" + "Skirts ONLY" → "Jeans or Skirts
@@ -354,10 +381,14 @@ export function describeStyleFilters(filterKeys) {
     shoes: (names) =>
       `${names.join(" or ")} ONLY for shoes — every look's footwear must be ${names.length > 1 ? `one of: ${names.join(", ")}` : names[0]}. All other shoe types are OFF-LIMITS.`,
   };
-  // Include-mode groups (layers): a positive ask, never a ban — see
-  // GROUP_MODES. One shared template so all layer chips speak the same way.
+  // Include-mode groups (layers): a DIRECT INSTRUCTION, never a ban — see
+  // GROUP_MODES. Owner 2026-08-19 ("Include Blazers" + Hot produced zero
+  // blazers): "I selected it, not as a suggestion." The old wording told the
+  // model to skip the layer when weather ruled it out — now the toggle
+  // outranks the weather guidance for this one layer, and the sampler
+  // guarantees eligible candidates are in the inventory.
   const includeLine = (names, group) =>
-    `INCLUDE ${names.join(" or ")}: she toggled this on — work ${names.length > 1 ? "one of them" : `a ${names[0].replace(/s$/, "").toLowerCase()}`} into every look where the weather and occasion allow. This is a positive request, NOT a ban: it excludes no other ${GROUP_NOUN[group] || "pieces"}, layering under/over it stays welcome (a tank under a knit, a knit under a blazer, a coat over everything in the cold), and you must NEVER error or drop a look over it — when weather rules it out, skip it.`;
+    `INCLUDE ${names.join(" or ")} — A DIRECT INSTRUCTION, NOT A SUGGESTION: she toggled this on deliberately, so EVERY look must work ${names.length > 1 ? "one of them" : `a ${names[0].replace(/s$/, "").toLowerCase()}`} in. For this one layer, this instruction OUTRANKS the weather guidance: on a hot day pick the LIGHTEST option in the inventory and style FOR the heat — worn open over a bare base, sleeves pushed, or draped over the shoulders (she needs the covered-shoulders layer indoors and sheds it outside). It bans no other ${GROUP_NOUN[group] || "pieces"} — layering under/over it stays welcome (a tank under a knit, a knit under a blazer, a coat over everything in the cold) — and you must NEVER error over it: only if the inventory truly contains none may you build the look without it.`;
   for (const [group, types] of Object.entries(onlyByGroup)) {
     const names = types.map((t) => t.label);
     if (GROUP_MODES[group] === "include") {

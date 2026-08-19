@@ -359,12 +359,44 @@ test("only-stockings is include-mode: bans nothing — a steer + rescue", () => 
 test("describeStyleFilters renders every group's Only line without throwing (outer + legwear included)", () => {
   const lines = describeStyleFilters(["only-blazers", "only-stockings", "only-heels", "no-jeans"]);
   assert.equal(lines.length, 4);
-  assert.ok(lines.some(l => /INCLUDE Blazers/.test(l) && /NOT a ban/.test(l)), "outer group renders the include line (was a crash pre-2026-08-13)");
-  assert.ok(lines.some(l => /INCLUDE Stockings/.test(l) && /weather/i.test(l)), "legwear include line stays weather-safe");
+  assert.ok(lines.some(l => /INCLUDE Blazers/.test(l) && /DIRECT INSTRUCTION/.test(l) && /EVERY look/.test(l)), "outer group renders the include line as a firm per-look instruction (owner 2026-08-19)");
+  assert.ok(lines.some(l => /INCLUDE Stockings/.test(l) && /bans no other/i.test(l)), "include line stays a positive ask, never a ban");
 });
 
 test("stockings chip renders when hosiery is owned, hides otherwise", () => {
   const withTights = computeFilterChips([...closet, sheerTights], {});
   assert.ok(withTights.map(c => c.key).includes("stockings"));
   assert.ok(!computeFilterChips(closet, {}).map(c => c.key).includes("stockings"));
+});
+
+// ── Sandal-form matching (owner screenshot 2026-08-19) ───────────────────────
+// Her Schutz "Leather Mules" are FILED under Kitten with "thong sandal" only
+// in the curated note — the chip (and every consumer of the shared
+// isSandalFormItem) must catch them; the Heels chip must not.
+
+const thongMule = { id: "thongmule", category: "Shoes", subcategory: "Kitten", name: "Leather Mules", notes: "Taupe leather heeled mule thong sandal for casual or vacation — NOT FOR WORK" };
+const namedThong = { id: "namedthong", category: "Shoes", subcategory: "Block", name: "Heeled thong shoe", notes: "Black leather slip on block heel sandal" };
+const plainKitten = { id: "plainkit", category: "Shoes", subcategory: "Kitten", name: "Suede Kitten Pump" };
+
+test("sandals chip catches sandal-forms filed under heels shelves via name AND curated notes", () => {
+  assert.equal(excluded(["no-sandals"], thongMule), true, "thong-sandal note must match the Sandals chip");
+  assert.equal(excluded(["no-sandals"], namedThong), true, "thong in the name must match");
+  assert.equal(excluded(["no-sandals"], plainKitten), false, "a real kitten pump is not a sandal");
+});
+
+test("heels chip still excludes mule/thong forms; pump stays", () => {
+  assert.equal(excluded(["no-heels"], thongMule), false, "the mule is the Sandals chip's, not Heels'");
+  assert.equal(excluded(["no-heels"], plainKitten), true);
+});
+
+// ── Include-mode helpers (owner 2026-08-19: toggles are instructions) ────────
+
+test("matchesActiveInclude: true only for active include-mode toggles", async () => {
+  const { matchesActiveInclude, activeIncludeTypes } = await import("../src/utils/style-filters.js");
+  const blazer = { id: "blz", category: "Outerwear", subcategory: "Blazers", name: "Morena Blazer" };
+  assert.equal(matchesActiveInclude(blazer, ["only-blazers"]), true);
+  assert.equal(matchesActiveInclude(heels, ["only-blazers"]), false, "non-matching item");
+  assert.equal(matchesActiveInclude(heels, ["only-heels"]), false, "restrict-mode toggles are not includes");
+  assert.equal(matchesActiveInclude(blazer, ["no-blazers"]), false, "a No toggle is not an include");
+  assert.equal(activeIncludeTypes(["only-blazers", "only-stockings", "only-heels"]).map(t => t.label).sort().join(","), "Blazers,Stockings");
 });

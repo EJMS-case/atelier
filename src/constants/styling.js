@@ -48,6 +48,12 @@ export const STYLE_PREFS = {
 // Consumed fields ONLY (verified against every caller):
 //   · banned.categories / banned.subcategories / banned.keywords — read by the
 //     closet-sampler's pre-filter and the validator's checkOccasion.
+//   · banned.sandalForms — form-aware sandal ban (shared isSandalFormItem):
+//     also drops open sandal-form shoes FILED elsewhere (her heeled thongs
+//     live under Kitten/Block, so the literal "Sandals" subcategory ban
+//     missed them — owner screenshot 2026-08-19). Work contexts only; Dinner
+//     deliberately keeps the literal ban (her notes vouch heeled thong
+//     sandals "for dinners in warm weather").
 //   · promptNote — injected into the styling prompt's REQUEST block.
 //   · required.bag — read by the validator's (soft) checkBag.
 //   · required.layer — read by stylist.js + the matrix scripts, which demote
@@ -61,7 +67,7 @@ export const OCCASION_SLOTS = {
     // OCCASION_PREFILTERS handles the "no shorts" rule at the pool stage; the
     // banned list below no longer drops "Jeans" so denim pants reach the AI.
     required: { layer: ["Blazers","Coats","Jackets","Cardigans"], bag: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["T-Shirts","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories","Printed"], keywords: ["evening","cocktail","gown","formal","ripped","distressed"] },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["T-Shirts","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories","Printed"], sandalForms: true, keywords: ["evening","cocktail","gown","formal","ripped","distressed"] },
     promptNote: "WORK: Polished and current, never stiff or corporate — everyday office through executive meetings and interviews. She should read powerful and effortless: sharp tailoring, considered layering, one quiet point of interest. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind. Tanks and sleeveless shells are LAYERING bases here: under a blazer, jacket, or knit they read polished — check each piece's own notes for how she wears it. Avoid a tank as the only visible top unless its notes say it dresses up.",
   },
   "Work Dinner": {
@@ -69,7 +75,7 @@ export const OCCASION_SLOTS = {
     // of evening polish, so cocktail dresses (which live in Occasionwear) and
     // gowns are all dropped at the sampler stage.
     required: { bag: true },
-    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Shorts","Sandals","Gowns","Formal Separates","Cocktail Dresses","Evening Accessories"], keywords: ["gown","formal","cocktail"] },
+    banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Shorts","Sandals","Gowns","Formal Separates","Cocktail Dresses","Evening Accessories"], sandalForms: true, keywords: ["gown","formal","cocktail"] },
     promptNote: "WORK DINNER: Desk to restaurant without changing — client dinners, after-work events, evening meetings. Tailored separates or a midi dress that still reads professional, sharpened with ONE evening cue: satin sheen, leather, a finer heel, a stronger earring. Mix fabric weights (wool, leather, silk, satin, fine knit, structured cotton). Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO occasionwear (this is still work-adjacent, not a party). Tanks and sleeveless shells are LAYERING bases here: under a blazer, jacket, or knit they read polished — check each piece's own notes for how she wears it. Avoid a tank as the only visible top unless its notes say it dresses up.",
   },
   Casual: {

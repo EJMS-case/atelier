@@ -2,6 +2,32 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Include Blazers is an instruction; sandal-forms banned from Work; "NOT FOR WORK" notes enforced — 2026-08-19
+
+### Why
+Owner screenshots, three misfires in one Work + Hot tap, choices confirmed by her survey answers:
+1. **"Include Blazers" produced zero blazers.** Hot removed every blazer that isn't explicitly a light fabric (of her 15, only the cotton one qualifies) and the INCLUDE prompt line literally said "when weather rules it out, skip it". Her answer: *"I selected it, not as a suggestion. I need to cover my shoulders at work. This is what I mean by 'be smarter'."*
+2. **A heeled thong sandal reached a Work look.** The Work sandal ban tests the literal "Sandals" subcategory; her Schutz "Leather Mules" are filed under Kitten (and the Marc Fisher heeled thong under Block), so the ban never saw them. She chose: ban all open sandal-forms from Work.
+3. **The same shoe's note says "NOT FOR WORK" — ignored.** Notes reach the prompt as context but no mechanism enforces a negative occasion note. She chose: "not for work" blocks Work AND Work Dinner.
+
+### Added
+- **`checkIncludeToggles` (hard) + `salvageByAddingIncludes`** (styling-validator): every look must carry a piece matching each active include-mode toggle whenever eligible candidates exist in the sampled inventory (requirement caps at the candidate count; zero candidates → no failure, never an error wall). The salvage mirrors `salvageByAddingShoes` — a look lacking the layer gets an unused eligible candidate added (running before the shoe salvage, tolerating a still-pending shoes failure so a look missing both completes). The streaming gate includes the check so a blazer-less look can't stream to screen and dodge it.
+- **Include-toggle weather machinery**: the sampler re-unions a toggled type's lightest members past the weather gates until ≥3 candidates (one per look) exist — heavy/winter pieces only as last resort — and exempts them from rotation-drop; `checkWeatherCompliance` exempts include-matched items (same principle as named pieces: the toggle is her call, the prompt teaches lightest-option style-for-the-heat). New `activeIncludeTypes`/`matchesActiveInclude` helpers in style-filters. The INCLUDE prompt line rewritten from "skip it when weather rules it out" to a firm per-look instruction that outranks the weather guidance for that one layer.
+- **`isSandalFormItem` / `SANDAL_FORM_RE`** (item-helpers): shared open-sandal-form matcher — subcategory "Sandals" OR sandal/slide/thong/flip-flop in the NAME or CURATED NOTES, category-gated to Shoes. Bare "mule" deliberately doesn't match (a closed-toe mule isn't an open shoe; hers match via their own "thong sandal" wording).
+- **`banned.sandalForms` occasion flag** (styling.js — Work + Work Dinner only): enforced in the sampler's step-1 ban and `checkOccasion`, with the same Only-toggle/named-piece rescues as subcategory bans. Dinner/Occasion deliberately keep the literal ban — her notes vouch heeled thong sandals "for dinners in warm weather".
+- **`noteVetoesOccasion`** (closet-sampler): her own curated note can veto a piece OUT of an occasion — "not for work", "no work", "never for the office" (per her answer, work wording covers Work Dinner too; every occasion has aliases, e.g. "not for dinner"). Hard pool removal; product copy (>200 chars) can't veto; literally naming the piece in the request box still overrides.
+
+### Changed
+- Sandals filter chip now uses `isSandalFormItem` (notes-aware), so "No Sandals" finally covers the Kitten-filed mule; the cool/cold weather gates (sampler 3a, `filterByWeather` Mild/Cool/Cold, validator `lightOnly`) are form-aware the same way.
+
+### Verification
+- test:validator 34→42, test:filters 38→41, test:notes 21→25; full battery + build green. End-to-end sampler sim (her exact closet shape): Work+Hot pool excludes the mule, keeps it for Casual, and carries 3 blazers (cotton+crepe+poly, wool held back) with the toggle on.
+
+### Watch
+- Her next "Include Blazers" tap in any weather should produce a blazer in EVERY look; `stylist_outfit:include_salvage` rows appearing occasionally = safety net working, a spike = the prompt line isn't landing.
+- If she ever wants a mule/thong at Work Dinner after all, the lever is removing `sandalForms` from Work Dinner's banned block — one line.
+- Note vetoes are sampler-only: the manual builder and evaluator deliberately still allow a vetoed piece (her hands, her choice).
+
 ## [Unreleased] — Evaluate look works again: sampling param removed — 2026-08-19
 
 ### Why
