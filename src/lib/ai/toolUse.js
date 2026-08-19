@@ -38,8 +38,12 @@ export function friendlyApiError(status, rawMsg) {
 // POST to the Messages API with retry + exponential-ish backoff on transient /
 // overload errors. Returns the Response (still stream-readable) on success, or
 // throws an Error whose message is already user-friendly.
+const SAMPLING_PARAMS = ["temperature", "top_p", "top_k"];
+
 export async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = {}) {
   const delays = [600, 1500, 3200];
+  body = { ...body }; // local copy — the sampling-param rescue below may mutate it
+  let samplingStripped = false;
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let res;
@@ -58,6 +62,21 @@ export async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = 
     }
     const err = await res.json().catch(() => ({}));
     const raw = err?.error?.message || `API error ${res.status}`;
+    // Newer models (Sonnet 5, Opus 4.7+) removed the sampling params — a 400
+    // naming one means this call's model no longer accepts it. Strip them and
+    // retry instead of surfacing an error the user can't act on. Covers any
+    // call site the next model bump would otherwise break.
+    if (
+      res.status === 400 &&
+      !samplingStripped &&
+      SAMPLING_PARAMS.some(p => p in body) &&
+      /\b(temperature|top_p|top_k)\b/.test(raw)
+    ) {
+      samplingStripped = true;
+      for (const p of SAMPLING_PARAMS) delete body[p];
+      attempt--; // doesn't consume a transient-retry slot
+      continue;
+    }
     const e = new Error(friendlyApiError(res.status, raw));
     e.status = res.status;
     e.rawMessage = raw;
