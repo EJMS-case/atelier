@@ -2,6 +2,23 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — "Theory trousers" actually get styled; the evaluator grows up — 2026-08-19
+
+### Why
+Two owner reports. (1) "I just ran 3 style me prompts to include a pair of theory trousers and none of them yielded outfits with the pants." Root cause: `matchesFreeText`'s brand-anchored fallback required "one field hit" but the brand token itself counted as that hit — so "theory trousers" force-included **all ten** of her Theory pieces (blazers, dresses, tops, the trousers), and the "at least one must appear" rule was satisfiable by the blazer. Three taps, zero pants, no validation errors. (2) The evaluator's text was cutting off (hard 120/160-char slices, mid-sentence), it scored looks down for weather, and it judged Work looks on a bag she parks at her desk all day.
+
+### Fixed
+- **Brand-anchored matching is precise** (closet-sampler.js): the fallback now needs a field hit BEYOND brand ("theory trousers" pins only the trousers); a brand-only request ("style me in favorite daughter") still means "anything of theirs". The multi-token rule also requires ≥2 distinct **tokens** to land, so a lone garment noun hitting the naturally-redundant subcategory+name pair can't fake the multi-field signal — and tokens fall back to their singular stem so "theory pants" lands on an item named "Marcee Pant".
+- **Evaluator text no longer truncates**: headline/works/tips were hard-sliced at 120/160 chars (that was the "cut off"); caps are now generous safety rails only, and `max_tokens` 500→900.
+
+### Changed
+- **A requested piece anchors EVERY look**: the MUST-INCLUDE prompt block now demands each look be built around one of the matched pieces, and force-included IDs are exempt from the one-item-one-look rule ACROSS looks (within-look duplicates still fail) — `checkNoDuplicates`, the dedupe salvage, and the streaming gate all share the exemption, so "style my trousers" with two pairs and three looks restyles the pairs instead of shipping a pantless third look. The validator floor stays ≥1 (hard) — no new error walls.
+- **Evaluator is a senior stylist** (evaluateLook.js, MODEL_STANDARD→MODEL_STRONG): quiet-luxury register calibration, her hand-picked color pairs in context (activating one earns credit; missing an easy one is tip material), tips must be complete, concrete fitting-room adjustments. **Weather no longer moves the score** — it returns as a separate `weather` aside rendered as its own sidebar row ("a little wintery for this heat"). **Work looks exclude the bag from the score and tips** (commute piece; one light mention allowed only when it genuinely clashes).
+
+### Notes
+- Her "Terena Stretch Virgin Wool Pants" are invisible to Style Me in Hot/Warm because the heavy-fabric filter reads "Wool" in the item NAME — even though her own notes call them summer/spring pants. Deliberately not changed (free text doesn't bypass weather, per standing rule); flagged for the owner in the session report.
+- Tests: `test:freetext` 7→11 (brand precision, plural stems), `test:validator` 32→35 (duplicate exemption).
+
 ## [Unreleased] — Note negations read correctly: "NOT FOR WORK" no longer means work-only — 2026-08-15
 
 ### Why
