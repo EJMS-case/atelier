@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Named pieces beat the weather filter; heat looks read light — 2026-08-19
+
+### Why
+Owner screenshot, minutes after the #184 deploy: 'include my Dark Lotus Trousers "Terena Stretch Virgin Wool Pants"' on Work + Hot produced a look without the pants — and a red top over forest-green trousers, which she called "much too dark for hot… I don't want any hard rules. I just want it to be smarter!" Two gaps: (1) the weather filter's name-based wool test removed her LITERALLY-NAMED pants from the pool before force-include ran, so her request styled without its subject (the exact case flagged in the #184 notes); (2) nothing anywhere taught the stylist that a heat look should read light — fabric rules governed weight but not palette.
+
+### Changed
+- **Literal name matches now clear the weather gates** (closet-sampler step 3): items in `nameRescueIds` are re-unioned into the pool after `filterByWeather` and the step-3a gates — naming a piece is an unambiguous instruction, on a par with the existing occasion-ban clearance. GENEROUS free-text matches still weather-filter ("theory trousers" won't resurrect wool in August; the full quoted name will). `checkWeatherCompliance` exempts force-included IDs at every call site (terminal, streaming gate, swap-salvage probe) so the rescued piece can't become retry-bait, and the EXPLICIT-REQUEST OVERRIDE prompt block now tells the model to style AROUND a weather-awkward named piece (lightest partners, bare shoe, no extra layers) instead of dropping it. Active "No …" toggles still always win.
+- **☀️ HEAT/WARM PALETTE steering** (dynamic weather blocks, explicitly taste-not-ban): hot looks ground in light tones (white/cream/ivory/camel/soft grey/fresh color); ONE deep winter shade may anchor, but mostly-dark and dark-on-dark stories are named as wintry and steered to rework toward light. Softer variant for Warm. No validator changes — a shown look still always beats an error.
+
+### Notes
+- Tests: `test:freetext` 11→14 (named-wool survives Hot + is force-included; generous match still filtered; no-request unchanged), `test:validator` 35→36 (forced winter piece passes Warm, unforced still fails).
+
 ## [Unreleased] — "Theory trousers" actually get styled; the evaluator grows up — 2026-08-19
 
 ### Why

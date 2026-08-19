@@ -496,3 +496,14 @@ test("duplicates: without a request, cross-look repeats still fail", () => {
   const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "");
   assert.ok(failures.some(f => f.type === "no_duplicates" && f.message.includes("W001")));
 });
+
+// ── Forced pieces are exempt from weather compliance (owner report 2026-08-19)
+// The sampler's named-piece weather re-union deliberately offers her named
+// item in any weather; the validator must not turn that into retry-bait.
+test("weather: a force-included winter piece passes; the same piece unforced fails", () => {
+  const parsed = lookOf("W001", "W002", "W003", "W004"); // W004 = winter-tagged
+  const unforced = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "Warm (70-84°F)");
+  assert.ok(unforced.some(f => f.type === "weather" && f.hard), "unforced winter piece must still fail Warm");
+  const forced = runAllChecks(parsed, ID_MAP, ALL_ITEMS, [], {}, "Work", "Warm (70-84°F)", ["r4"]);
+  assert.ok(!forced.some(f => f.type === "weather"), "her requested piece must not weather-fail");
+});
