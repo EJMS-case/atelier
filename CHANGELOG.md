@@ -2,6 +2,23 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Background removal rejects ghost mattes; Remove-Background is re-runnable — 2026-08-19
+
+### Why
+Owner screenshots (3:14 AM, "Leather Work Tote"): background removal on a brown leather tote "succeeded" but returned a **ghost matte** — handles fully opaque, the entire body at ~15–20% alpha — previewed as a washed-out white ghost with the success message "✓ Background removed. Tap Save Changes to keep it." One tap from overwriting the only copy of the photo (originals aren't kept). Confirmed in the DB that she did NOT save it (the row still carries fresh-upload flags and the original image). Three compounding gaps: no matte-quality check anywhere in the pipeline; the trim then clips wherever ghost alpha dips below the bbox threshold (the bag's fading bottom edge); and after any removal the button locks to "✓ Background already removed" — a bad result dead-ends with no retry short of re-uploading. The likely producer is the @imgly in-browser fallback (its known failure mode on large uniform regions), which runs **silently** whenever Remove.bg fails — she can't tell quality dropped because a key/credit problem swapped the engine.
+
+### Added
+- **`assessAlphaMatte` (utils/alpha-matte.js, pure + node-testable)**: verdict on a cutout's alpha channel. Rejects "ghost" (majority of visible pixels semi-transparent AND almost nothing solid: `partialFraction > 0.6 && opaqueFraction < 0.25`, or no pixel above ~78% alpha) and "empty". The two-sided test is deliberate: legitimately sheer garments (organza, hosiery) carry large semi-transparent panels but always keep solid structure (seams, hems, plackets), so they pass. Thresholds are exported knobs. `assessCutout(dataUrl)` in images.js is the canvas-side wrapper; unreadable pixels return null and **fail open**.
+- **Quality gate in `stripBackground`** (lib/bgRemoval.js): every successful removal is assessed. A ghosted Remove.bg result falls through to imgly; a ghosted imgly result is rejected and the ORIGINAL photo kept (`has_bg: true`). All three call sites (EditItemView, BulkAdd, Settings batch) already treat `has_bg: true` as "removal didn't happen", so the gate needed zero call-site changes. The result now carries `reason` ("bad_matte" | "failed" | "no_remover") and `rmbg_error` (Remove.bg's own failure message) so the UI can say what actually went wrong.
+- `npm run test:matte` (7) in the battery — includes the ghosted-tote shape, the sheer-garment allowance, and the fail-open cases.
+
+### Fixed
+- **EditItemView Remove-Background dead-end**: the button is no longer disabled after a removal (`✓ Background already removed`) — it stays live as "↻ Re-run Background Removal", so a bad cutout can be re-run in place. Failure messages are now reason-specific: a rejected ghost matte explains the original was kept, and any Remove.bg API error (credits, key) is surfaced verbatim instead of silently swapping to the lower-quality local engine.
+
+### Watch
+- If she reports the removal "refusing" on a piece, check whether it's the gate rejecting genuinely bad mattes (working as intended — the fix is Remove.bg credits/key for a cleaner engine) vs a false rejection of an unusual sheer piece (then loosen `GHOST_PARTIAL_MIN`/`GHOST_OPAQUE_MAX` in alpha-matte.js).
+- The tote item (`item-1787123664680-0cxkgteg25qu`) still has its background (`has_bg: null`); once this deploys she can tap Remove Background again — with a working Remove.bg key it should cut cleanly.
+
 ## [Unreleased] — Include Blazers is an instruction; sandal-forms banned from Work; "NOT FOR WORK" notes enforced — 2026-08-19
 
 ### Why

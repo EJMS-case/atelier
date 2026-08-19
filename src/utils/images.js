@@ -3,6 +3,8 @@
 // `stripBackground` in lib/bgRemoval.js for background removal — it has the
 // Remove.bg + imgly fallback chain this file used to lack.
 
+import { assessAlphaMatte } from "./alpha-matte.js";
+
 // Longest edge kept for a stored garment cutout. Every write path (bulk add,
 // the Settings trim/re-cut passes, the background drip) uses this ONE value —
 // they must agree, because a re-trim at a smaller cap would silently downscale
@@ -126,6 +128,34 @@ export async function trimTransparentBorders(dataUrl) {
       resolve(c.toDataURL("image/png"));
     };
     img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+// Load a data URL and run the pure alpha-matte assessor over its pixels.
+// Returns the assessment object, or null when the pixels can't be read
+// (decode failure, CORS taint) — callers must FAIL OPEN on null: an
+// unreadable matte is not evidence of a bad one.
+export function assessCutout(dataUrl) {
+  return new Promise((resolve) => {
+    if (!dataUrl) { resolve(null); return; }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) { resolve(null); return; }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, w, h).data;
+        resolve(assessAlphaMatte(data, w, h));
+      } catch {
+        resolve(null); // tainted canvas / OOM — can't judge, fail open
+      }
+    };
+    img.onerror = () => resolve(null);
     img.src = dataUrl;
   });
 }
