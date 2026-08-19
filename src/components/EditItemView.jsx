@@ -85,11 +85,21 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
       const base64 = await imageToBase64(preview);
       const result = await stripBackground(base64, { rmbgKey });
       if (result.has_bg) {
-        // Both Remove.bg (or missing key) and the imgly fallback gave up.
+        // Removal didn't produce a keepable cutout — the original photo is
+        // untouched. Say WHY: a rejected ghost matte (the washed-out-tote
+        // failure) reads very differently from a missing key, and if
+        // Remove.bg itself errored (credits, key) that's the actionable part.
         setBgState("error");
-        setBgError(rmbgKey
-          ? "Background removal failed — Remove.bg returned an error and the local fallback isn't available. Try a clearer photo or check your API credit balance."
-          : "Add a Remove.bg API key in Settings to strip backgrounds (or upload a photo that's already transparent).");
+        const rmbgNote = result.rmbg_error
+          ? ` Remove.bg error: ${result.rmbg_error}.`
+          : "";
+        if (result.reason === "bad_matte") {
+          setBgError(`The cutout came back washed out (semi-transparent), so your original photo was kept. Try again${rmbgKey ? "" : ", or add a Remove.bg API key in Settings for a cleaner cut"}.${rmbgNote}`);
+        } else {
+          setBgError(rmbgKey
+            ? `Background removal failed and the local fallback couldn't finish. Try a clearer photo or check your Remove.bg credit balance.${rmbgNote}`
+            : "Add a Remove.bg API key in Settings to strip backgrounds (or upload a photo that's already transparent).");
+        }
         return;
       }
       // Trim transparent border so the saved photo is tight to the visible
@@ -129,14 +139,18 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           users can clean up legacy uploads without going through Settings. */}
       {preview && (
         <div style={{marginBottom:20}}>
+          {/* Never lock the button after a removal: a bad result used to
+              dead-end here ("✓ Background already removed", disabled) with no
+              way to re-run short of re-uploading the photo. Re-running is
+              user-initiated and harmless — it works on the current preview. */}
           <button
             style={{...s.btnSecondary, width:"100%"}}
             onClick={handleStripBackground}
-            disabled={bgState === "running" || form.has_bg === false}>
+            disabled={bgState === "running"}>
             {bgState === "running"
               ? "Removing background…"
               : form.has_bg === false
-                ? "✓ Background already removed"
+                ? "↻ Re-run Background Removal"
                 : "Remove Background"}
           </button>
           {bgState === "success" && (
