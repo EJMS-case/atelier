@@ -418,8 +418,15 @@ function checkCategoryBalance(response, idMap, allItems, weather) {
  * generic names) can still leak through. This re-checks each picked item
  * against the selected weather and rejects overtly wrong matches.
  */
-function checkWeatherCompliance(response, idMap, allItems, weather) {
+function checkWeatherCompliance(response, idMap, allItems, weather, forceIncludeIds = []) {
   if (!weather) return [];
+  // A piece she explicitly asked for is exempt: the sampler's named-piece
+  // weather re-union (closet-sampler step 3) deliberately puts her named
+  // items back in the pool, so failing them here would turn her own request
+  // into retry-bait ("Terena Stretch Virgin Wool Pants" on a Hot day is her
+  // call). The prompt tells the model to style AROUND such a piece; every
+  // item she didn't ask for is still held to the weather rules below.
+  const forcedExempt = new Set(forceIncludeIds);
   const w = weather.toLowerCase();
   if (w === "any" || w === "") return [];
 
@@ -436,6 +443,7 @@ function checkWeatherCompliance(response, idMap, allItems, weather) {
     (look.items || []).forEach((item) => {
       const resolved = resolveLookItem(item, idMap, allItems);
       if (!resolved) return;
+      if (forcedExempt.has(resolved.id)) return;
 
       // classifierNotes, not raw notes (see item-helpers NOTES POLICY):
       // pasted product copy saying "pairs with shorts/sandals" was hard-
@@ -882,7 +890,7 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
     const structural = /\d+ (Shoes|Bottoms) items/.test(f);
     allFailures.push({ type: "category_balance", message: f, hard: structural });
   });
-  allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather).map(f => ({ type: "weather", message: f, hard: true })));
+  allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather, forceIncludeIds).map(f => ({ type: "weather", message: f, hard: true })));
   allFailures.push(...checkShoes(response, idMap, allItems, occasion).map(f => ({ type: "shoes", message: f, hard: true })));
   allFailures.push(...checkBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "bag", message: f, hard: false })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
@@ -1000,7 +1008,7 @@ const ROLE_TO_SLOT = { shoes: "shoes", lower: "lower_half", dress: "lower_half",
 // heat" shortcut pass a wool trouser as a valid warm-weather swap.
 function itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions = [], occasionSlots, forceIncludeIds = [] } = {}) {
   const probe = { looks: [{ items: [{ id: shortId, role: "supporting" }] }] };
-  if (checkWeatherCompliance(probe, idMap, allItems, weather).length > 0) return true;
+  if (checkWeatherCompliance(probe, idMap, allItems, weather, forceIncludeIds).length > 0) return true;
   if (activeExclusions.length > 0 && checkExclusions(probe, idMap, allItems, activeExclusions).length > 0) return true;
   if (checkOccasion(probe, idMap, allItems, occasionSlots, forceIncludeIds).length > 0) return true;
   return false;
@@ -1485,7 +1493,7 @@ export async function generateValidatedLooks({
                 // Safe to gate now: the add-a-shoe salvage means the final pass
                 // can still ship a completed version of a held-back look.
                 ...checkShoes(candidate, idMap, allItems, occasion),
-                ...checkWeatherCompliance(candidate, idMap, allItems, weather),
+                ...checkWeatherCompliance(candidate, idMap, allItems, weather, forceIncludeIds),
                 // 2026-08-07: the gate must cover every NON-NEGOTIABLE hard
                 // check, because a streamed look survives even a terminal
                 // validation failure (App keeps shown looks instead of an

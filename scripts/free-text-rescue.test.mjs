@@ -144,3 +144,40 @@ test("another brand's trousers do not ride along on the garment token", () => {
   const r = brandSample("include my theory trousers");
   assert.ok(!r.forceIncludeIds.includes("ot1"), "Vince trousers hit only one field");
 });
+
+// ── Named pieces survive the weather gates (owner report 2026-08-19) ─────────
+// She typed 'include my Dark Lotus Trousers "Terena Stretch Virgin Wool
+// Pants"' on a Hot day and got looks without them: the name-based wool test
+// removed the pants from the pool BEFORE force-include ran, so her explicit
+// request styled without its subject. A literal name is an unambiguous
+// instruction — it now clears the weather gates. Generous matches still
+// weather-filter.
+import { filterByWeather } from "../src/utils/item-helpers.js";
+
+const WOOL_ITEMS = [
+  { id: "w1", name: "Terena Stretch Virgin Wool Pants", brand: "Theory", category: "Bottoms", subcategory: "Trousers", color: "Dark Lotus", material: "Virgin Wool" },
+  { id: "w2", name: "Marcee Pant", brand: "Theory", category: "Bottoms", subcategory: "Trousers", color: "Black", material: "Triacetate" },
+  { id: "t1", name: "Silk Blouse", category: "Tops", subcategory: "Blouses" },
+  { id: "s1", name: "Whipstitch Pointed Toe Heel", category: "Shoes", subcategory: "Stiletto" },
+];
+const woolSample = (freeTextRequest) => sampleClosetItems({
+  items: WOOL_ITEMS, occasion: "NoPrefilterProbe", occasionSlots: {},
+  weather: "Hot (85°F+)", freeTextRequest, filterByWeather,
+});
+
+test("a literally-named wool piece survives Hot and is force-included", () => {
+  const r = woolSample('include my Dark Lotus Trousers "Terena Stretch Virgin Wool Pants"');
+  assert.ok(r.sampled.some(it => it.id === "w1"), "the named pants must reach the model");
+  assert.deepEqual(r.forceIncludeIds, ["w1"]);
+});
+
+test("a generous match does NOT bypass the weather filter", () => {
+  const r = woolSample("theory trousers");
+  assert.ok(!r.sampled.some(it => it.id === "w1"), "unnamed wool stays out in Hot");
+  assert.ok(r.forceIncludeIds.includes("w2"), "the weather-fine trousers still force-include");
+});
+
+test("no request: wool stays weather-filtered in Hot", () => {
+  const r = woolSample("");
+  assert.ok(!r.sampled.some(it => it.id === "w1"));
+});
