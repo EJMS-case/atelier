@@ -408,7 +408,8 @@ export function sampleClosetItems({
   // CATEGORY yields only to a comfort-occasion note rescue, and a banned
   // SUBCATEGORY only to an active "Only …" toggle (onlyRescueIds). Nor does
   // it bypass active toggle exclusions (she clicked "No Jeans" on purpose)
-  // or weather filters (jeans in a heatwave is still wrong).
+  // or weather filters (jeans in a heatwave is still wrong). LITERAL name
+  // matches (nameRescueIds) are the exception for weather — see step 3.
   const freeTextOverrideIds = new Set(
     freeTextRequest
       ? items.filter(it => matchesFreeText(it, freeTextRequest)).map(it => it.id)
@@ -430,8 +431,9 @@ export function sampleClosetItems({
   // "Sienna Jumpsuit" hit the Jumpsuits category ban in step 1 and the piece
   // was gone before force-include ran (owner report 2026-08-02). A literal
   // name match is an unambiguous instruction, so it clears occasion category
-  // AND subcategory bans. Weather filters and active "No …" toggles still
-  // apply — those are separate deliberate signals, not this request.
+  // AND subcategory bans — and, since 2026-08-19, the weather gates too (see
+  // step 3). Active "No …" toggles still apply: she clicked those on purpose
+  // in the same session as typing the request.
   const nameRescueIds = new Set(
     freeTextRequest ? items.filter(it => namedExplicitly(it, freeTextRequest)).map(it => it.id) : []
   );
@@ -517,6 +519,17 @@ export function sampleClosetItems({
   }
 
   // ── 3. Weather filter ──
+  // A piece she NAMED in the request survives every weather gate below: the
+  // literal name is an unambiguous instruction — 'include my … "Terena
+  // Stretch Virgin Wool Pants"' on a Hot day is her call, not ours (owner
+  // report 2026-08-19: the name-based wool test silently deleted her named
+  // pants before force-include ran, and the request styled without them).
+  // GENEROUS free-text matches still weather-filter as before (a bare "jeans"
+  // token in a heatwave must not resurrect flannel). The validator mirrors
+  // this: checkWeatherCompliance exempts force-included IDs, so a rescued
+  // piece can't become retry-bait. The named-piece re-union happens after
+  // step 3a so it clears every weather gate in one place.
+  const namedPreWeather = pool.filter(it => nameRescueIds.has(it.id));
   if (filterByWeather && weather) {
     pool = filterByWeather(pool, weather);
   }
@@ -589,6 +602,13 @@ export function sampleClosetItems({
       return true;
     });
   }
+  // Named-piece re-union (see the step-3 note): anything she explicitly named
+  // that the weather gates removed goes back into the pool.
+  if (namedPreWeather.length > 0) {
+    const surviving = new Set(pool.map(it => it.id));
+    for (const it of namedPreWeather) if (!surviving.has(it.id)) pool.push(it);
+  }
+
   // Boost applies only when the pool can actually use legwear (a skirt or
   // dress survived the filters): hosiery is exempted from the repeat-rotation
   // drop in 3b and sorted to the front of the accessories bucket in step 5 so the
