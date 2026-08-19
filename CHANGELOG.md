@@ -2,6 +2,35 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Evaluate look survives truncation; backend cleanup pass — 2026-08-19
+
+### Why
+Owner screenshot (03:19): "**Could not parse evaluation response**" on ✦ Evaluate look. The 08-19 evaluator rework raised the response contract to ~600–700 tokens of JSON but left `max_tokens` at 900 — a generous evaluation gets cut mid-JSON, and the old parser demanded one complete `{…}` block, failing wholesale with the score sitting right there. The path also never logged, so the failure left nothing to diagnose. Separately, the owner asked for a backend cleanup pass (dead code, inefficiencies); two full audit sweeps ran over `src/` and every finding was verified in code before acting.
+
+### Fixed
+- **Evaluate look**: `max_tokens` 900→1400; new pure `parseEvalResponse` (`features/builder/evalParse.js`, `npm run test:evalparse` 9) — fence/prose tolerant, structural repair via coerce-shapes' `parseLooseJson`, field-level salvage for mid-string truncation (cut-off sentence trimmed to a whole word, half-finished tips dropped). Total parse failures now log `evaluate_look:parse` with `stop_reason` + raw text (the replay protocol finally has payloads here); tolerant parses log `evaluate_look:recovered`. The user-facing error is now actionable ("came back garbled — tap Evaluate look again").
+
+### Changed (performance — same behavior, verified by the full battery)
+- **`itemIdIndex(items)`** (item-helpers): WeakMap-cached id→item Map keyed on closet-array identity; `resolveItemIds` now uses it (App treats the closet immutably, so identity is a correct key). Callers resolving many looks stop paying ~470 Map inserts per call.
+- **Validator lookups are O(1)**: `resolveLookItem` (funnel for ~25 checks per look, every streamed look + retry + salvage) and both full-`idMap` scans (`eligibleIncludeShortIds`, `eligibleShortIdsForSlot`) now use the index instead of `allItems.find` per id.
+- **Hot render paths converted to `resolveItemIds`/memo**: calendar month grid (42 cells × ~470 scans per render), DayModal + saved-look list, TripDetailView `resolveItems` + packing list, HomeView today/upcoming plans, LookBackCard, SilhouetteBuilder `pickedItems` (now `useMemo` — was rescanning the closet per drag frame), stylist.js history/shopping sites.
+- **App landing grid**: Recently-Added/Needs-Categorizing lists are `useMemo`'d (were filter+date-sorting the whole closet inside JSX on every App state tick, two `Date` allocations per sort comparison); piece-favorite checks go through a memoized `Set` (`favPieceIds`) instead of `favorites.some` per card.
+- **FilterBar**: brand list memoized (every keystroke in brand search re-scanned + re-sorted the closet).
+- **Mount fetch dedupe**: `sb.getStyleFingerprint` and `sb.fetchLookEdits` share in-flight promises (each was fired twice concurrently on App mount). In-flight only — cleared when settled, so Settings' refresh and post-save re-reads still hit the network.
+- **stylist.js**: the three hand-copied look-exemplar blocks (loved/disliked/recent-combos) collapsed into one `describeLookLine` helper — same output strings, byte-identical prompts.
+
+### Removed (dead code — every removal verified at zero reference sites)
+- `generateValidatedLooks`' `prompt` back-compat param + branch (no caller passes it); validator's shadowing `coerceLooksShape` export renamed to internal `coerceLooksShapeLogged` (the imported one lives in coerce-shapes.js); `ValidationError` de-exported (App matches `e.name`, nothing imports the class).
+- LookCard's unreachable legacy fields (`look.jewelry`/`accessories`/`why` — no producer since the LooksTool schema); App's normalized `colorStory`/`reasoning` look fields (zero consumers); `buildStylingPrompt().fullPrompt` (eagerly concatenated the whole preamble per call, zero consumers) + its stale doc lines; App's dead `TEMPS` set; `sb.updateItemLastWorn` + `sb.fetchAllTrips` (both superseded, zero callers); two unused map indices.
+- 22 exported-but-never-imported symbols de-exported (storage keys, `STORAGE_HEADERS`, `TZ`, `STYLING_STATIC_PREAMBLE`, `summarizeInventory`, `friendlyApiError`, etc.) — bindings kept, module surface honest. Test-only exports deliberately kept.
+
+### Verification
+- Full battery green (now 15 suites incl. test:evalparse 9 + test:matte 7) + build clean. `STYLING_STATIC_PREAMBLE` string byte-identical — no prompt-cache invalidation.
+
+### Deferred with reasons (see HANDOFF)
+- Saved-tab views (`LooksView`/`OutfitHistory`/`FavoritesView`/`PlannerWrapper`) each refetch `outfit_logs`/plans App already holds — consolidating changes data-freshness semantics; documented as the next efficiency lever, not done blind.
+- The OutfitHistory/ItemWearHistory plan-merge twin, the shared search-semantics twin, and Settings' two batch-loop scaffolds — behavior-sensitive extractions, each needs its divergent flags preserved.
+
 ## [Unreleased] — Background removal rejects ghost mattes; Remove-Background is re-runnable — 2026-08-19
 
 ### Why

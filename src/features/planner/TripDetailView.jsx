@@ -12,6 +12,7 @@ import { SEASONAL_HIGHS } from "../../lib/time.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps } from "./outfits.js";
+import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES } from "./tripPacker.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
@@ -196,8 +197,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
 
   // Resolve item-id list to item objects, dropping anything missing from the
   // current wardrobe (deleted items, etc.).
-  const resolveItems = (ids) =>
-    (ids || []).map(id => items.find(it => it.id === id)).filter(Boolean);
+  const resolveItems = (ids) => resolveItemIds(items, ids);
 
   // Build the priorDays array (everything ALREADY planned on other days)
   // that the AI uses to avoid repeating the hero piece across the trip.
@@ -489,7 +489,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
     });
 
     const allIds = Object.keys(itemDays);
-    const allItems = allIds.map(id => items.find(it => it.id === id)).filter(Boolean);
+    const allItems = resolveItemIds(items, allIds);
 
     const byCategory = {};
     allItems.forEach(it => {

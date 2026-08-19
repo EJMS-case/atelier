@@ -16,7 +16,7 @@ import { sb } from "../../lib/supabase.js";
 // keep the row (and later the inventory line) small. Her tags stay the source
 // of truth for colour; these fields ADD the fabric/drape/formality/vibe signal
 // her tags rarely capture.
-export function visionDescriptor({ vision, colorAgrees }) {
+function visionDescriptor({ vision, colorAgrees }) {
   return {
     v: 1,
     color: vision.color || "",

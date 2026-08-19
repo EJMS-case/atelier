@@ -13,6 +13,7 @@ import LookBackCard from "../recap/LookBackCard.jsx";
 // accessories/belts/shoes/bags, no swim/lounge/athleisure). Shared with the
 // recap's rediscover/challenge nudges so the two lists never drift.
 import { GARMENT_CATS as NEGLECT_CATS } from "../recap/recapData.js";
+import { resolveItemIds } from "../../utils/item-helpers.js";
 import { PALETTE } from "../../constants/palette.js";
 
 
@@ -67,9 +68,10 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
   const avgCpw         = cpwValues.length > 0 ? cpwValues.reduce((a, b) => a + b, 0) / cpwValues.length : null;
 
   // Every outfit on today's plan, not just the legacy `items` mirror of #0.
-  const todayPlanItems = flattenPlanItemIds(todayPlan)
-    .map(id => items.find(it => it.id === id))
-    .filter(Boolean);
+  const todayPlanItems = useMemo(
+    () => resolveItemIds(items, flattenPlanItemIds(todayPlan)),
+    [items, todayPlan],
+  );
 
   return (
     <div style={{ padding: "8px 16px 120px" }}>
@@ -112,9 +114,7 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
           <div style={sectionHeader}>COMING UP</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {upcomingPlans.map(plan => {
-              const planItems = (plan.items || [])
-                .map(id => items.find(it => it.id === id))
-                .filter(Boolean);
+              const planItems = resolveItemIds(items, plan.items);
               const tag = plan.day_label || plan.occasion || "";
               return (
                 <button key={plan.date} onClick={onOpenPlanner}

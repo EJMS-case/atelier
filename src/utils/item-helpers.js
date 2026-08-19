@@ -174,7 +174,7 @@ export function isCompleteSetItem(item) {
 //   + Ankle/Knee-High/Over-the-Knee (L3), plus anything whose name reads
 //   boot/bootie.
 export const HEEL_SUBS = new Set(["Heels", "Block", "Kitten", "Stiletto", "Pumps", "Mules", "Slingback", "Slingbacks", "Wedges"]);
-export const BOOT_SUBS = new Set(["Boots", "Ankle", "Knee-High", "Over-the-Knee"]);
+const BOOT_SUBS = new Set(["Boots", "Ankle", "Knee-High", "Over-the-Knee"]);
 export function isBootItem(item) {
   if (!item) return false;
   return BOOT_SUBS.has(item.subcategory) ||
@@ -211,7 +211,7 @@ export function isSandalFormItem(item) {
 // styling-validator (statement / item-count exemptions), and filterByWeather
 // below. Category-gated to Accessories so a fishnet top or "tight" fit note
 // on a garment never matches.
-export const HOSIERY_SUBS = new Set(["Hosiery", "Sheer", "Semi-Opaque", "Opaque", "Fishnet"]);
+const HOSIERY_SUBS = new Set(["Hosiery", "Sheer", "Semi-Opaque", "Opaque", "Fishnet"]);
 export function isHosieryItem(item) {
   if (!item || item.category !== "Accessories") return false;
   if (HOSIERY_SUBS.has(item.subcategory)) return true;
@@ -234,7 +234,7 @@ export function isHosieryItem(item) {
 // slingback whose pattern got auto-detected as "denim", or a leather bag
 // tagged "leather"). Now it's a whitelist of pattern values that genuinely
 // read as statement.
-export const STATEMENT_PATTERNS = new Set([
+const STATEMENT_PATTERNS = new Set([
   "striped", "stripe", "stripes",
   "plaid", "tartan", "houndstooth", "gingham", "windowpane", "check", "checked", "chevron", "argyle",
   "floral", "botanical",
@@ -381,7 +381,7 @@ export function filterByWeather(items, weather) {
 // shade name first, then derive a family from the free-form color string
 // and use the family's start-of-range index as a fallback. Items with no
 // recognizable color land at the end of the sort.
-export function colorSortIdx(item) {
+function colorSortIdx(item) {
   const cf = item.color_family || "";
   if (COLOR_SORT_ORDER[cf] !== undefined) return COLOR_SORT_ORDER[cf];
   const c = (item.color || "").trim();
@@ -486,8 +486,26 @@ export function mergeItems(sbItems, localItems) {
 // resolving many looks don't rescan the items array per id; the String()
 // key normalizes numeric-vs-string id drift. Missing ids (deleted items)
 // drop out silently.
+//
+// The id index is cached per items-ARRAY-IDENTITY (WeakMap): App treats the
+// closet immutably (every mutation replaces the array), so identity is a
+// correct cache key, and callers resolving many looks against one closet —
+// a 50-card Saved list, the calendar's 42-cell grid — pay the ~470 Map
+// inserts once instead of per call. A stale-by-mutation entry is impossible
+// unless someone mutates `items` in place; don't.
+const _idIndexCache = new WeakMap();
+export function itemIdIndex(items) {
+  if (!Array.isArray(items)) return new Map();
+  let byId = _idIndexCache.get(items);
+  if (!byId) {
+    byId = new Map(items.map(it => [String(it.id), it]));
+    _idIndexCache.set(items, byId);
+  }
+  return byId;
+}
+
 export function resolveItemIds(items, ids) {
-  const byId = new Map(items.map(it => [String(it.id), it]));
+  const byId = itemIdIndex(items);
   return (ids || [])
     .map(raw => byId.get(String(typeof raw === "object" && raw !== null ? raw.id : raw)))
     .filter(Boolean);
@@ -500,7 +518,7 @@ export function resolveItemIds(items, ids) {
 // used a broken `indexOf(x) ?? 99` compare (indexOf returns -1, never null),
 // so unknown categories (including "Knits", missing from those copies)
 // sorted FIRST instead of last.
-export const CATEGORY_DISPLAY_ORDER = ["Outerwear","Dresses","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
+const CATEGORY_DISPLAY_ORDER = ["Outerwear","Dresses","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
 
 // Returns a NEW array sorted by CATEGORY_DISPLAY_ORDER; unknown categories
 // sink to the end. Stable within a category (Array.prototype.sort is stable).

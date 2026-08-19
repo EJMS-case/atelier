@@ -8,6 +8,7 @@ import { buildRecap, monthWindow } from "./recapData.js";
 import { judgeMostStylish } from "./recapAI.js";
 import { nyToday, friendlyDate } from "../../lib/time.js";
 import { PALETTE } from "../../constants/palette.js";
+import { resolveItemIds } from "../../utils/item-helpers.js";
 
 
 const card = { background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: 14, marginBottom: 14 };
@@ -81,7 +82,7 @@ export default function LookBackCard({ items, favorites = [], apiKey, plans: all
     }
   };
 
-  const piecesOf = (look) => (look.itemIds || []).map(id => items.find(it => it.id === id)).filter(Boolean);
+  const piecesOf = (look) => resolveItemIds(items, look.itemIds);
 
   return (
     <section style={card}>

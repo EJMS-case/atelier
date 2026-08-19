@@ -4,7 +4,7 @@
 // (which matters for users traveling). Every "what day is it" check in the
 // app should go through these helpers so we have one source of truth.
 
-export const TZ = "America/New_York";
+const TZ = "America/New_York";
 export const CITY = "New York, NY";
 // Open-Meteo coordinates for Manhattan. Free, no API key, no signup.
 export const LAT = 40.7128;

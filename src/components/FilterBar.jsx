@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
 import { COLOR_FAMILIES } from "../constants/color.js";
@@ -31,8 +31,13 @@ export default function FilterBar({ items, activeFilters, onChange }) {
   const clearAll = () => onChange({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const hasActive = Object.values(activeFilters).some(v => Array.isArray(v) ? v.length > 0 : !!v);
 
-  // Unique brands from wardrobe
-  const brands = [...new Set(items.map(it => it.brand).filter(Boolean))].sort();
+  // Unique brands from wardrobe — memoized: brandSearch is local state, so
+  // every keystroke re-renders this component and used to re-scan + re-sort
+  // the whole closet.
+  const brands = useMemo(
+    () => [...new Set(items.map(it => it.brand).filter(Boolean))].sort(),
+    [items],
+  );
   const filteredBrands = brands.filter(b => b.toLowerCase().includes(brandSearch.toLowerCase()));
 
   // Subcategories: TWO-LEVEL (owner request 2026-08-13 — "sub categories

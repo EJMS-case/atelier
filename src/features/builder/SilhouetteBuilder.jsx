@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
 import { OCCASIONS, WEATHER_SHORTS, SUBCATEGORY_L3, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
-import { slotForItem } from "../../utils/item-helpers.js";
+import { slotForItem, itemIdIndex } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
@@ -443,13 +443,17 @@ export default function SilhouetteBuilder({
 
   // Flatten the multi-item slots into a single list of {slot, item} pairs.
   // The slot is preserved so default positions / z-order / layout controls
-  // still key off the slot definition.
-  const pickedItems = Object.entries(selections).flatMap(([slot, ids]) => {
-    const arr = Array.isArray(ids) ? ids : [ids];
-    return arr
-      .map(id => ({ slot, item: items.find(i => i.id === id) }))
-      .filter(x => x.item);
-  });
+  // still key off the slot definition. Memoized: this used to rescan the
+  // ~470-item closet per selection per render, and drag/resize renders fire
+  // continuously.
+  const pickedItems = useMemo(() => {
+    const byId = itemIdIndex(items || []);
+    return Object.entries(selections).flatMap(([slot, ids]) =>
+      asArray(ids)
+        .map(id => ({ slot, item: byId.get(String(id)) }))
+        .filter(x => x.item)
+    );
+  }, [selections, items]);
 
   // Toggle helper. Multi-slots accumulate; single-slots replace.
   const togglePick = (slot, id) => {

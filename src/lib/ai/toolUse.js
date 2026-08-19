@@ -26,7 +26,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Turn a raw API error into something the user can act on instead of a bare
 // "Overloaded". The stylist UI shows this string directly.
-export function friendlyApiError(status, rawMsg) {
+function friendlyApiError(status, rawMsg) {
   const m = (rawMsg || "").toLowerCase();
   if (status === 529 || m.includes("overloaded")) return "The stylist is in high demand right now — give it a few seconds and tap Style Me again.";
   if (status === 429) return "That was a lot of requests in a row — wait a moment, then try again.";

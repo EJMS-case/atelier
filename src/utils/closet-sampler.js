@@ -671,7 +671,8 @@ export function sampleClosetItems({
       const removed = includePreWeather.filter(it => t.match(it) && !surviving.has(it.id));
       const light = removed.filter(it =>
         !HEAVY_RE.test(wxText(it)) && (it.season_weight || "").toLowerCase() !== "winter");
-      const heavier = removed.filter(it => !light.includes(it));
+      const lightSet = new Set(light);
+      const heavier = removed.filter(it => !lightSet.has(it));
       for (const it of [...light, ...heavier]) {
         if (have >= MIN_INCLUDE) break;
         pool.push(it);

@@ -24,6 +24,8 @@ import { sb } from "../../lib/supabase.js";
 import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
 import { stylistNotes } from "../../utils/item-helpers.js";
+import { parseEvalResponse } from "./evalParse.js";
+import { logAiError } from "../../lib/ai/logError.js";
 
 const EVAL_PROMPT = `You are Elyce's personal stylist — a senior editorial stylist with a sharp, high-end eye. Her register is quiet luxury (The Row, Totême, Khaite; easy-feminine by way of Sézane). She built this outfit herself from her own wardrobe and wants the read she'd get from a top-tier human stylist: honest, precise, and chic — never generic, never flattering for its own sake.
 
@@ -100,9 +102,13 @@ export async function evaluateLook(items, apiKey, opts = {}) {
 
   // No sampling params here: Sonnet 5 removed `temperature` — sending it is a
   // hard 400 ("`temperature` is deprecated for this model") shown to the user.
+  // max_tokens 1400: the response contract budgets ~600-700 tokens of JSON
+  // (280-char headline + 400-char works + 3×400-char tips + 400-char weather)
+  // and 900 was cutting generous evaluations off mid-JSON — the owner's
+  // "Could not parse evaluation response" screenshot (2026-08-19 03:19).
   const res = await anthropicFetch({
     model: opts.model || MODEL_STRONG,
-    max_tokens: 900,
+    max_tokens: 1400,
     messages: [{
       role: "user",
       content: `${EVAL_PROMPT}\n${context.length ? `\n${context.join("\n\n")}\n` : ""}\nITEMS ON THE CANVAS:\n${inventory}`,
@@ -111,22 +117,24 @@ export async function evaluateLook(items, apiKey, opts = {}) {
 
   const body = await res.json();
   const text = body.content?.map(b => b.text || "").join("") || "";
-  const match = text.replace(/```json|```/g, "").trim().match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("Could not parse evaluation response");
+  const { parsed, salvaged } = parseEvalResponse(text);
 
-  // Caps are generous safety rails against runaway output, NOT formatting —
-  // the old 120/160-char slices were truncating her evaluations mid-sentence
-  // (owner report 2026-08-19).
-  const parsed = JSON.parse(match[0]);
-  return {
-    score: typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : null,
-    headline: String(parsed.headline || "").slice(0, 280),
-    works: String(parsed.works || "").slice(0, 400),
-    tips: Array.isArray(parsed.tips)
-      ? parsed.tips.filter(t => typeof t === "string").slice(0, 3).map(t => t.trim().slice(0, 400))
-      : [],
-    weather: typeof parsed.weather === "string" && parsed.weather.trim()
-      ? parsed.weather.trim().slice(0, 400)
-      : null,
-  };
+  // The protocol needs payloads: this path never logged, so the owner's
+  // parse failure left nothing to replay. A salvage is a `:recovered`-style
+  // heads-up; a total miss carries the raw text for a real diagnosis.
+  if (!parsed) {
+    logAiError("evaluate_look:parse", {
+      stop_reason: body.stop_reason ?? null,
+      model: body.model ?? null,
+      text: text.slice(0, 4000),
+    }, "unparseable evaluation response");
+    throw new Error("The evaluation came back garbled — tap Evaluate look again.");
+  }
+  if (salvaged) {
+    logAiError("evaluate_look:recovered", {
+      stop_reason: body.stop_reason ?? null,
+      truncated: body.stop_reason === "max_tokens",
+    }, "evaluation response needed tolerant parse");
+  }
+  return parsed;
 }
