@@ -2,6 +2,20 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Evaluate look works again: sampling param removed — 2026-08-19
+
+### Why
+Owner screenshot: tapping **✦ Evaluate look** in the builder surfaced "`temperature` is deprecated for this model." and no evaluation. The evaluator's rewrite (#184) moved it to MODEL_STRONG (Sonnet 5) but kept its `temperature: 0.6` — Sonnet 5 removed the sampling params, so the API 400s and `friendlyApiError` passes the raw message through to the UI. Same class of break the stylist pipeline already dodged on Opus 4.8 (see the comment at styling-validator.js' streaming call).
+
+### Fixed
+- **`evaluateLook.js` no longer sends `temperature`** — the call succeeds on Sonnet 5 again. Look-evaluation variety was never the point of the setting; the read is deterministic-ish by nature.
+
+### Changed
+- **`anthropicFetch` self-heals removed sampling params**: a 400 whose message names `temperature`/`top_p`/`top_k` while the request body carries one now strips all three and retries once (no transient-retry slot consumed) instead of surfacing an error the user can't act on. This future-proofs the two call sites that still legitimately pass temperature to models that accept it today — builderChat (Sonnet 4.6) and autoDetectItem (Haiku 4.5) — against the next model-constant bump.
+
+### Verification
+- Full battery + build green.
+
 ## [Unreleased] — "In Your Looks": tap a garment, see when you wore it — 2026-08-19
 
 ### Why

@@ -98,10 +98,11 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   const fp = await sb.fingerprintTextCached(1200);
   if (fp) context.push(`HER STYLE FINGERPRINT (your read on her taste — judge against it):\n${fp}`);
 
+  // No sampling params here: Sonnet 5 removed `temperature` — sending it is a
+  // hard 400 ("`temperature` is deprecated for this model") shown to the user.
   const res = await anthropicFetch({
     model: opts.model || MODEL_STRONG,
     max_tokens: 900,
-    temperature: 0.6,
     messages: [{
       role: "user",
       content: `${EVAL_PROMPT}\n${context.length ? `\n${context.join("\n\n")}\n` : ""}\nITEMS ON THE CANVAS:\n${inventory}`,
