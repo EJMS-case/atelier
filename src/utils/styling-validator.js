@@ -10,9 +10,9 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isStatementPiece, classifierNotes } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
-import { explainFilterViolation } from "./style-filters.js";
+import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
@@ -299,6 +299,12 @@ function checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds
       }
       if (bannedSubs.has(resolved.subcategory)) {
         failures.push(`Look ${i + 1} contains '${resolved.name}' (${resolved.subcategory}) which is banned for this occasion.`);
+      } else if (occasionSlots.banned.sandalForms && isSandalFormItem(resolved)) {
+        // Form-aware sandal ban (Work / Work Dinner): open sandal-form shoes
+        // filed under heels shelves — a heeled thong under Kitten/Block —
+        // are just as banned as subcategory "Sandals" (mirrors the sampler's
+        // step-1 clause; owner screenshot 2026-08-19).
+        failures.push(`Look ${i + 1} contains '${resolved.name}' — an open sandal-form shoe (thong/slide/sandal), which is banned for this occasion.`);
       }
     });
   });
@@ -418,7 +424,7 @@ function checkCategoryBalance(response, idMap, allItems, weather) {
  * generic names) can still leak through. This re-checks each picked item
  * against the selected weather and rejects overtly wrong matches.
  */
-function checkWeatherCompliance(response, idMap, allItems, weather, forceIncludeIds = []) {
+function checkWeatherCompliance(response, idMap, allItems, weather, forceIncludeIds = [], activeExclusions = []) {
   if (!weather) return [];
   // A piece she explicitly asked for is exempt: the sampler's named-piece
   // weather re-union (closet-sampler step 3) deliberately puts her named
@@ -426,6 +432,10 @@ function checkWeatherCompliance(response, idMap, allItems, weather, forceInclude
   // into retry-bait ("Terena Stretch Virgin Wool Pants" on a Hot day is her
   // call). The prompt tells the model to style AROUND such a piece; every
   // item she didn't ask for is still held to the weather rules below.
+  // Same principle for active INCLUDE-mode toggles (owner 2026-08-19:
+  // "Include Blazers" is an instruction, not a suggestion): a blazer the
+  // toggle demands must not become weather retry-bait — the prompt teaches
+  // lightest-option, style-for-the-heat handling instead.
   const forcedExempt = new Set(forceIncludeIds);
   const w = weather.toLowerCase();
   if (w === "any" || w === "") return [];
@@ -444,6 +454,7 @@ function checkWeatherCompliance(response, idMap, allItems, weather, forceInclude
       const resolved = resolveLookItem(item, idMap, allItems);
       if (!resolved) return;
       if (forcedExempt.has(resolved.id)) return;
+      if (activeExclusions.length > 0 && matchesActiveInclude(resolved, activeExclusions)) return;
 
       // classifierNotes, not raw notes (see item-helpers NOTES POLICY):
       // pasted product copy saying "pairs with shorts/sandals" was hard-
@@ -857,6 +868,60 @@ function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
   return failures;
 }
 
+/**
+ * Check: active INCLUDE-mode toggles ("Include Blazers/Knits/Stockings") are
+ * direct instructions — every look must carry one matching piece (owner
+ * 2026-08-19: "I selected it, not as a suggestion. This is what I mean by
+ * 'be smarter'"). Never an error wall on a thin closet: a type with zero
+ * eligible candidates in the sampled inventory is skipped entirely, and the
+ * requirement caps at the candidate count (cross-look duplicates stay
+ * banned, so 1 candidate can only ever satisfy 1 look).
+ */
+function checkIncludeToggles(response, idMap, allItems, activeExclusions, occasionSlots, weather) {
+  const types = activeExclusions?.length ? activeIncludeTypes(activeExclusions) : [];
+  if (types.length === 0) return [];
+  const failures = [];
+
+  for (const t of types) {
+    const candidates = eligibleIncludeShortIds(t, idMap, allItems, { occasionSlots, weather, activeExclusions });
+    if (candidates.length === 0) continue; // nothing to include — never fail over it
+
+    const lacking = [];
+    let satisfied = 0;
+    response.looks.forEach((look, i) => {
+      const has = (look.items || []).some(item => {
+        const resolved = resolveLookItem(item, idMap, allItems);
+        return resolved && t.match(resolved);
+      });
+      if (has) satisfied++;
+      else lacking.push(i);
+    });
+
+    // Can't demand more distinct pieces than exist (HC4 forbids reuse).
+    const required = Math.min(response.looks.length, candidates.length);
+    for (const i of lacking.slice(0, Math.max(0, required - satisfied))) {
+      failures.push(`Look ${i + 1} must include a ${t.label.replace(/s$/, "")} — her "Include ${t.label}" toggle is ON (a direct instruction, not a suggestion). Eligible: ${candidates.slice(0, 8).join(", ")}. In heat, pick the lightest and style it worn open or over the shoulders.`);
+    }
+  }
+  return failures;
+}
+
+// Candidate short-IDs for an include type: in the sampled inventory, matching
+// the type, and individually clean for this occasion/weather/filters context
+// (include-matched items are weather-exempt inside that probe, so a crepe
+// blazer on a Hot day still counts). Shared by checkIncludeToggles and
+// salvageByAddingIncludes so the check never demands what the salvage can't add.
+function eligibleIncludeShortIds(t, idMap, allItems, { occasionSlots, weather, activeExclusions = [] } = {}) {
+  const out = [];
+  for (const [shortId, realId] of Object.entries(idMap)) {
+    const item = allItems.find(it => it.id === realId);
+    if (!item || !t.match(item)) continue;
+    if (itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions, occasionSlots })) continue;
+    out.push(shortId);
+  }
+  return out;
+}
+
 // ── Run all checks ───────────────────────────────────────────────────────────
 // Exported so the offline style-me-matrix script can probe every
 // (occasion × weather) cell for unsatisfiable rule combinations without
@@ -890,7 +955,13 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
     const structural = /\d+ (Shoes|Bottoms) items/.test(f);
     allFailures.push({ type: "category_balance", message: f, hard: structural });
   });
-  allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather, forceIncludeIds).map(f => ({ type: "weather", message: f, hard: true })));
+  allFailures.push(...checkWeatherCompliance(response, idMap, allItems, weather, forceIncludeIds, activeExclusions).map(f => ({ type: "weather", message: f, hard: true })));
+  // Include-mode toggles ("Include Blazers") are direct instructions — every
+  // look must carry one when eligible candidates exist in the inventory
+  // (owner 2026-08-19: "I selected it, not as a suggestion"). Hard, like
+  // checkShoes: a MISSING-piece failure with its own add-salvage
+  // (salvageByAddingIncludes), so it can complete a look instead of walling.
+  allFailures.push(...checkIncludeToggles(response, idMap, allItems, activeExclusions, occasionSlots, weather).map(f => ({ type: "include_toggle", message: f, hard: true })));
   allFailures.push(...checkShoes(response, idMap, allItems, occasion).map(f => ({ type: "shoes", message: f, hard: true })));
   allFailures.push(...checkBag(response, idMap, allItems, occasion, occasionSlots).map(f => ({ type: "bag", message: f, hard: false })));
   allFailures.push(...checkCoordSets(response, idMap, allItems).map(f => ({ type: "coord_sets", message: f, hard: true })));
@@ -1008,7 +1079,7 @@ const ROLE_TO_SLOT = { shoes: "shoes", lower: "lower_half", dress: "lower_half",
 // heat" shortcut pass a wool trouser as a valid warm-weather swap.
 function itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions = [], occasionSlots, forceIncludeIds = [] } = {}) {
   const probe = { looks: [{ items: [{ id: shortId, role: "supporting" }] }] };
-  if (checkWeatherCompliance(probe, idMap, allItems, weather, forceIncludeIds).length > 0) return true;
+  if (checkWeatherCompliance(probe, idMap, allItems, weather, forceIncludeIds, activeExclusions).length > 0) return true;
   if (activeExclusions.length > 0 && checkExclusions(probe, idMap, allItems, activeExclusions).length > 0) return true;
   if (checkOccasion(probe, idMap, allItems, occasionSlots, forceIncludeIds).length > 0) return true;
   return false;
@@ -1167,6 +1238,57 @@ export function salvageByAddingShoes(parsed, failures, idMap, allItems, ctx = {}
         break;
       }
     }
+  }
+  return addedAny ? { ...parsed, looks } : null;
+}
+
+// ── Add-an-include salvage ───────────────────────────────────────────────────
+// Same missing-piece logic as salvageByAddingShoes, for the include-toggle
+// check: when a look lacks the layer an active "Include Blazers/…" toggle
+// demands, add an unused eligible candidate rather than walling or dropping
+// the look. Runs BEFORE the shoe salvage so a look missing both gets its
+// layer first, then its shoe — its per-look recheck therefore tolerates a
+// still-pending shoes failure (the shoe salvage completes it next).
+export function salvageByAddingIncludes(parsed, failures, idMap, allItems, ctx = {}) {
+  const { activeExclusions = [], occasionSlots = {}, occasion = "Work", weather = "", onlyRescueIds = [] } = ctx;
+  if (!parsed?.looks?.length) return null;
+  if (!failures.some(f => f.hard && f.type === "include_toggle")) return null;
+
+  const types = activeExclusions?.length ? activeIncludeTypes(activeExclusions) : [];
+  if (types.length === 0) return null;
+
+  // Every short-ID already used anywhere in the response — HC4 forbids reuse.
+  const usedShortIds = new Set();
+  parsed.looks.forEach(l => (l.items || []).forEach(item => usedShortIds.add(cleanLookItemId(item))));
+
+  const looks = parsed.looks.map(l => ({
+    ...l,
+    items: Array.isArray(l.items) ? [...l.items] : l.items,
+  }));
+  let addedAny = false;
+
+  for (const t of types) {
+    const candidates = eligibleIncludeShortIds(t, idMap, allItems, { occasionSlots, weather, activeExclusions });
+    if (candidates.length === 0) continue;
+    looks.forEach((look, idx) => {
+      if (!Array.isArray(look.items)) return;
+      const has = look.items.some(item => {
+        const resolved = resolveLookItem(item, idMap, allItems);
+        return resolved && t.match(resolved);
+      });
+      if (has) return;
+      for (const shortId of candidates) {
+        if (usedShortIds.has(shortId)) continue;
+        const candidateLook = { ...look, items: [...look.items, { id: shortId, role: "supporting" }] };
+        const check = runAllChecks({ looks: [candidateLook] }, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, [], onlyRescueIds);
+        if (!check.some(f => f.hard && f.type !== "shoes")) {
+          looks[idx] = candidateLook;
+          usedShortIds.add(shortId);
+          addedAny = true;
+          break;
+        }
+      }
+    });
   }
   return addedAny ? { ...parsed, looks } : null;
 }
@@ -1493,7 +1615,12 @@ export async function generateValidatedLooks({
                 // Safe to gate now: the add-a-shoe salvage means the final pass
                 // can still ship a completed version of a held-back look.
                 ...checkShoes(candidate, idMap, allItems, occasion),
-                ...checkWeatherCompliance(candidate, idMap, allItems, weather, forceIncludeIds),
+                ...checkWeatherCompliance(candidate, idMap, allItems, weather, forceIncludeIds, activeExclusions),
+                // Include toggles gate streaming too: a streamed look survives
+                // terminal validation by design, so without this a blazer-less
+                // look would reach the screen despite the toggle. Held-back
+                // looks can still ship completed via salvageByAddingIncludes.
+                ...checkIncludeToggles(candidate, idMap, allItems, activeExclusions, occasionSlots, weather),
                 // 2026-08-07: the gate must cover every NON-NEGOTIABLE hard
                 // check, because a streamed look survives even a terminal
                 // validation failure (App keeps shown looks instead of an
@@ -1699,6 +1826,30 @@ export async function generateValidatedLooks({
       // Item-dropping helped but didn't fully clear the board — hand the
       // trimmed looks + fresh failure list to the salvage steps below.
       lastParsed = trimmed;
+      lastFailures = recheck;
+    }
+  }
+
+  // Salvage step 2.7: ADD the include-toggle layer when a look lacks the
+  // piece an active "Include Blazers/…" toggle demands — a MISSING-piece
+  // failure like shoes, so drop/swap can't fix it. Runs before the shoe
+  // salvage so a look missing both gets layer first, then shoe.
+  if (lastParsed?.looks?.length && lastFailures.some(f => f.hard && f.type === "include_toggle")) {
+    const completed = salvageByAddingIncludes(lastParsed, lastFailures, idMap, allItems,
+      { activeExclusions, occasionSlots, occasion, weather, onlyRescueIds });
+    if (completed) {
+      const recheck = runAllChecks(completed, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
+      if (!recheck.some(f => f.hard)) {
+        console.warn("[Atelier Validator] Include-add salvage succeeded — shipped after adding the toggled layer:",
+          lastFailures.filter(f => f.hard).map(f => f.message));
+        logAiError("stylist_outfit:include_salvage",
+          { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
+          "salvaged by adding the include-toggle layer to a look that lacked it");
+        return resolveIds(completed, idMap, occasion);
+      }
+      // The layer was added but other hard failures remain — hand the
+      // completed looks + fresh failure list to the shoe salvage below.
+      lastParsed = completed;
       lastFailures = recheck;
     }
   }
