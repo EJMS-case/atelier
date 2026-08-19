@@ -2,6 +2,23 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — "In Your Looks": tap a garment, see when you wore it — 2026-08-19
+
+### Why
+Owner request: "when I click a garment from my closet, see the outfits I already wore and saved with that piece… organized, with the date I wore it so I don't repeat too often." Zero AI tokens — it's a pure data view over `wearData.logs`/`wearData.plans` that App already fetches (no new network calls, no schema changes). Also fixed on the way: the "+ Create new set" dead-end from stale PR #151 (open item 10).
+
+### Added
+- **`ItemWearHistory.jsx`** — read-only "In Your Looks" card in EditItemView (after Coord Set): a summary line (worn N days · last date + days-ago), a **WORN & PLANNED** section merging dated `outfit_logs` with planner pins (deduped by date+item-set signature, mirroring OutfitHistory; FUTURE pins surface too, flagged `PLANNED` — "you're already wearing this Friday" is exactly the don't-repeat signal), and a **SAVED LOOKS** section (undated logs). Each row: friendly date, days-ago, occasion tags, and a 40×50 thumbnail strip of the OTHER pieces in the look (category-ordered, +N overflow). Sections preview 4 rows with show-all toggles; the card renders nothing for a piece with no history.
+
+### Fixed
+- **"+ Create new set" now visibly works** (EditItemView): the freshly minted set renders as its own select option ("✦ New set — saves with this item", live-updating to the typed name) instead of silently falling back to "— Not part of a set —", and an inline **Set name** field appears for any linked piece — the name persists on Save via a new `onSaveSetMeta` prop → App's existing `updateSetMeta`. Switching sets syncs the name field; clearing resets it.
+
+### Changed
+- SavedLookCard's hand-rolled id resolution (double `find` per id) replaced with the shared `resolveItemIds` (open item 5, opportunistic); the set-options builder in EditItemView now counts pieces in one pass instead of a filter per set.
+
+### Verification
+- Full battery + build green; Playwright smoke against the dev server with stubbed Supabase REST — screenshots confirm the card's layout, the PLANNED pill, days-ago labels, thumbnail sizing, and the new-set naming flow end to end.
+
 ## [Unreleased] — Named pieces beat the weather filter; heat looks read light — 2026-08-19
 
 ### Why
