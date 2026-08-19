@@ -1552,6 +1552,9 @@ export default function App() {
           item={editItem}
           allItems={items}
           setsMeta={setsMeta}
+          onSaveSetMeta={updateSetMeta}
+          logs={wearData.logs}
+          plans={wearData.plans}
           rmbgKey={rmbgKey}
           onSave={async (fields) => {
             const result = await updateItem(editItem.id, fields);
