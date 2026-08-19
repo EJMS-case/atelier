@@ -23,7 +23,7 @@ import { MODEL_STRONG } from "../../constants/models.js";
 import { sb } from "../../lib/supabase.js";
 import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
-import { stylistNotes } from "../../utils/item-helpers.js";
+import { stylistNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 
 const EVAL_PROMPT = `You are Elyce's personal stylist — a senior editorial stylist with a sharp, high-end eye. Her register is quiet luxury (The Row, Totême, Khaite; easy-feminine by way of Sézane). She built this outfit herself from her own wardrobe and wants the read she'd get from a top-tier human stylist: honest, precise, and chic — never generic, never flattering for its own sake.
 
@@ -33,6 +33,8 @@ SCORE the look 1-10 on styling merit:
 - formality coherence — inventory lines may carry her curated formality as f1 (most casual) to f8 (most formal); a look mixing distant registers should hear about it,
 - intentionality and finish (does it read styled, or assembled),
 - and, when an occasion is given, fitness for that room — a beautiful look that's wrong for the room is not a 9.
+
+${NOTES_NEGATION_LEGEND}
 
 WEATHER IS NOT A RATING FACTOR. Never move the score for the forecast. If the look reads seasonally off for the stated weather, say so ONLY in the separate "weather" field — one light, knowing aside ("the suede and the dark palette read a little wintery for this heat"). If the look sits fine in the weather, set "weather" to null.
 

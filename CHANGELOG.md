@@ -19,6 +19,18 @@ Two owner reports. (1) "I just ran 3 style me prompts to include a pair of theor
 - Her "Terena Stretch Virgin Wool Pants" are invisible to Style Me in Hot/Warm because the heavy-fabric filter reads "Wool" in the item NAME — even though her own notes call them summer/spring pants. Deliberately not changed (free text doesn't bypass weather, per standing rule); flagged for the owner in the session report.
 - Tests: `test:freetext` 7→11 (brand precision, plural stems), `test:validator` 32→35 (duplicate exemption).
 
+## [Unreleased] — Note negations read correctly: "NOT FOR WORK" no longer means work-only — 2026-08-15
+
+### Why
+Owner report (with Edit Item screenshot): after generating Casual + Warm/Hot looks and swapping in her taupe Schutz mules — noted "Taupe leather heeled mule thong sandal for casual or vacation — NOT FOR WORK" — the evaluator claimed her notes said the shoes were NOT for casual. The note reaches every AI surface verbatim (verified: 76 chars, under every digest cap), so this wasn't truncation. The root cause is instruction-shaped: the Style Me preamble's CONSTRAINTS block teaches phrase-level matching — "Any 'X only' or 'for X' phrase in notes is the user telling you 'don't suggest this outside of X'" — with no negated form taught. "NOT FOR WORK" contains the phrase "FOR WORK", so a literal reading extracts a work-only constraint and inverts her exclusion; the evaluator/builder-chat/trip-day prompts had NO constraint-reading guidance at all and improvised the same misparse. Her closet has form here — another piece's notes read "NOT good for work" (see 2026-08-07 entry) — so negated tags are her natural register and must parse correctly.
+
+### Changed
+- **CONSTRAINTS block** (styling-system-prompt.js, static preamble — one-time cache invalidation): a NEGATION FIRST rule leads the list ("NOT for X" / "never for X" / "no X" excludes from X and says nothing about anywhere else, with her exact note shape as the worked example), and the catch-all is scoped to any **non-negated** "X only" / "for X" phrase.
+- **`NOTES_NEGATION_LEGEND`** (item-helpers.js, next to the NOTES POLICY): one shared prompt sentence teaching exact-reading of "for X" vs "NOT for X", now carried by every AI surface that shows the model notes without the full preamble — `evaluateLook` (the reported surface), builder chat, and `generateTripDayLook`. Shared constant so the four surfaces can't drift.
+
+### Notes
+- No sampler/validator/classifier changes: `classifierNotes`/keyword code paths never misread this note (Casual bans no "work" keyword) — the inversion was purely in what the models were told, so the fix is purely prompt-side. Full test battery + matrix green; no behavior change for notes written in the already-taught vocabulary ("no work", "casual only").
+
 ## [Unreleased] — Layer chips become "Include"; Edit opens the builder — 2026-08-13
 
 ### Why

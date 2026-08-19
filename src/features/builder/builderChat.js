@@ -10,7 +10,7 @@ import { MODEL_STANDARD } from "../../constants/models.js";
 // stylistNotes: long pasted product copy is condensed to its stylist-relevant
 // sentences before riding the chat context (up to 40 items per category ×
 // ~1 kB of copy each is real token money); curated notes pass through whole.
-import { stylistNotes } from "../../utils/item-helpers.js";
+import { stylistNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 
 const SLOT_CATEGORIES = {
   shoes:     ["Shoes"],
@@ -69,6 +69,8 @@ ${assembledText}
 
 HER CLOSET — everything she owns that could complete or refine the look (swaps included):
 ${referenceText}
+
+${NOTES_NEGATION_LEGEND}
 
 Just talk to her like you would in person:
 - Have a real conversation, not a form. Give your honest opinion and the "why" behind it — proportion, color, texture, mood, occasion — but trust your taste; there are no formulas to follow. Agree, push back, riff, or ask her a question if it helps.

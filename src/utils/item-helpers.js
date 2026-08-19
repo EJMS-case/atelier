@@ -31,6 +31,16 @@ import {
 // stylistNotes() below is the PROMPT-side counterpart: a bounded digest so
 // long copy doesn't ride the uncached prompt body at full length.
 export const CURATED_NOTES_MAX = 200;
+// Prompt legend for READING notes, shared by every AI surface that shows the
+// model raw or digested notes (evaluateLook, builder chat, trip-day looks;
+// Style Me's static preamble teaches the long-form version of the same rule).
+// Why it exists (owner report 2026-08-15): her tags use negation — "NOT FOR
+// WORK", "NOT good for work" — and a model doing phrase-level constraint
+// matching latches onto the embedded "for work" and inverts her meaning (the
+// evaluator told her a mule noted "for casual or vacation — NOT FOR WORK" was
+// not-for-casual). Negation must be resolved before any "for X" reading.
+export const NOTES_NEGATION_LEGEND =
+  'Read her notes exactly as written: "for X" / "X only" says where a piece belongs; "NOT for X" / "never for X" / "no X" ONLY excludes it from X and implies nothing about anywhere else. E.g. "for casual or vacation — NOT FOR WORK" = great for casual/vacation, excluded from work. Never invert a negation.';
 export function classifierNotes(item) {
   const notes = item && item.notes ? String(item.notes) : "";
   return notes.length <= CURATED_NOTES_MAX ? notes : "";
