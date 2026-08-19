@@ -4,8 +4,9 @@ import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../consta
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
+import ItemWearHistory from "./ItemWearHistory.jsx";
 
-export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround }) {
+export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -18,6 +19,13 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     is_recut: item.is_recut,
   });
   const [preview, setPreview] = useState(item.image || null);
+  // Set name lives beside the set link (owner report, stale PR #151 / open
+  // item 10): picking "+ Create new set" used to mint an id no option matched,
+  // so the select silently displayed "— Not part of a set —" and the set could
+  // only be named later from the Sets tab. Now the fresh set renders as its
+  // own option and is nameable inline; the name persists on Save via
+  // onSaveSetMeta → App.updateSetMeta.
+  const [setName, setSetName] = useState((setsMetaProp || {})[item.set_id]?.name || "");
   const [confirm, setConfirm] = useState(false);
   const [bgState, setBgState] = useState("idle"); // idle | running | success | error
   const [bgError, setBgError] = useState("");
@@ -33,6 +41,12 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
     setSaving(true);
     setSaveError("");
     try {
+      // Persist the set name first — updateSetMeta is optimistic-local with a
+      // fire-and-forget upsert, so this can't block or fail the item save.
+      if (form.set_id && onSaveSetMeta) {
+        const existing = (setsMetaProp || {})[form.set_id]?.name || "";
+        if (setName.trim() !== existing) onSaveSetMeta(form.set_id, { name: setName.trim() });
+      }
       const result = await onSave(form);
       if (result && result.ok === false) {
         setSaveError(result.error || "Couldn't save. Try again.");
@@ -241,31 +255,51 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
             if (val === "__new__") {
               const newId = crypto.randomUUID();
               setForm(f => ({ ...f, set_id: newId }));
+              setSetName("");
             } else if (val === "") {
               // Clearing set membership must also clear is_separable — otherwise
               // a stale `true` flag leaks in and the "Part of Set" badge + filter
               // silently treat the orphan as separable.
               setForm(f => ({ ...f, set_id: "", is_separable: false }));
+              setSetName("");
             } else {
               setForm(f => ({ ...f, set_id: val }));
+              setSetName((setsMetaProp || {})[val]?.name || "");
             }
           }}>
           <option value="">— Not part of a set —</option>
           <option value="__new__">+ Create new set</option>
           {(() => {
-            // Build unique set IDs from items
-            const seen = new Set();
-            return (allItems || []).filter(it => it.set_id && !seen.has(it.set_id) && (seen.add(it.set_id), true)).map(it => {
-              const setName = (setsMetaProp || {})[it.set_id]?.name;
-              const count = (allItems || []).filter(o => o.set_id === it.set_id).length;
-              return (
-                <option key={it.set_id} value={it.set_id}>
-                  {setName || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
+            // Build unique set IDs from items; count pieces in one pass.
+            const counts = new Map();
+            (allItems || []).forEach(it => {
+              if (it.set_id) counts.set(it.set_id, (counts.get(it.set_id) || 0) + 1);
+            });
+            const options = [...counts.entries()].map(([id, count]) => (
+              <option key={id} value={id}>
+                {(setsMetaProp || {})[id]?.name || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
+              </option>
+            ));
+            // A freshly minted set has no member rows yet, so no option above
+            // matches it — without this the select fell back to "— Not part of
+            // a set —" and creating a set looked like it did nothing.
+            if (form.set_id && !counts.has(form.set_id)) {
+              options.unshift(
+                <option key={form.set_id} value={form.set_id}>
+                  ✦ {setName.trim() || "New set"} — saves with this item
                 </option>
               );
-            });
+            }
+            return options;
           })()}
         </select>
+        {form.set_id && (
+          <div style={{marginBottom:10}}>
+            <div style={s.fieldLabel}>Set name</div>
+            <input style={{...s.input, width:"100%"}} placeholder="e.g. Navy Tweed Coord"
+              value={setName} onChange={e => setSetName(e.target.value)}/>
+          </div>
+        )}
         {form.category === "Sets" ? (
           // A "Sets" item stored as one piece: let her declare whether it's a
           // complete two-piece to keep together (styled as one look, like a
@@ -286,6 +320,11 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           </label>
         ) : null}
       </div>
+
+      {/* "In Your Looks" — worn/planned/saved outfits featuring this piece,
+          with dates, so she can judge repeat spacing at a glance. Renders
+          nothing when the piece has no history. */}
+      <ItemWearHistory item={item} allItems={allItems} logs={logs} plans={plans} />
 
       {onStyleAround && (
         <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}

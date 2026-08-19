@@ -3,7 +3,7 @@ import { s } from "../ui/styles.js";
 import EditorialCollage from "./EditorialCollage.jsx";
 import ItemDetailSheet from "./ItemDetailSheet.jsx";
 import { tagsFor } from "../lib/multitag.js";
-import { sortByCategoryOrder } from "../utils/item-helpers.js";
+import { sortByCategoryOrder, resolveItemIds } from "../utils/item-helpers.js";
 
 // Free-text query provided by SavedView's search box. The Looks and Favorites
 // lists fetch and render their own data, so search reaches them here at the
@@ -27,11 +27,7 @@ export default function SavedLookCard({ log, items, subtitle, headerRight, notes
   const [detailItem, setDetailItem] = useState(null);
   const searchQ = useContext(LookSearchContext);
 
-  const logItems = sortByCategoryOrder(
-    (log.garment_ids || [])
-      .map(id => items.find(i => i.id === id) || items.find(i => String(i.id) === String(id)))
-      .filter(Boolean)
-  );
+  const logItems = sortByCategoryOrder(resolveItemIds(items, log.garment_ids));
 
   // Mirror OutfitHistory's search semantics: case-insensitive substring match
   // over constituent item names, occasion tags, and notes.
