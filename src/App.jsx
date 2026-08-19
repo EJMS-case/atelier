@@ -55,6 +55,7 @@ const EditItemView      = lazy(() => import("./components/EditItemView.jsx"));
 const SilhouetteBuilder = lazy(() => import("./features/builder/SilhouetteBuilder.jsx"));
 const InspirationView   = lazy(() => import("./features/inspiration/InspirationView.jsx"));
 const VisionPilotView   = lazy(() => import("./components/VisionPilotView.jsx"));
+const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
 import { unionTags, outfitsOf, buildPlanPayload, newOutfitId } from "./features/planner/outfits.js";
@@ -1346,6 +1347,8 @@ export default function App() {
             onRefreshWearData={refreshWearData}
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
+            onOpenProfile={() => setView("profile")}
+            styleFingerprint={styleFingerprint}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onStyleItem={(item) => {
               setRequest(`Style around my ${item.name}`);
@@ -2049,10 +2052,22 @@ export default function App() {
           }}
           onAddItems={addItems}
           onForceSync={forceSyncAll}
-          styleFingerprint={styleFingerprint}
-          setStyleFingerprint={setStyleFingerprint}
           onNavigate={setView}
           onBack={() => setView("closet")}/>
+      )}
+
+      {/* ── STYLE PROFILE (roadmap B — her stylist's file; entry card on Home,
+             pointer in Settings; placement "Inside Home" chosen by owner) ── */}
+      {view === "profile" && (
+        <StyleProfileView
+          items={items}
+          apiKey={apiKey}
+          styleFingerprint={styleFingerprint}
+          setStyleFingerprint={setStyleFingerprint}
+          lovedLooks={lovedLooks}
+          logCount={wearData.logs ? wearData.logs.length : null}
+          onBack={() => setView("home")}
+        />
       )}
 
       {view === "visionpilot" && (

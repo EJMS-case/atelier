@@ -2,6 +2,24 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Profile surface (roadmap B) + owner-approved schema drops — 2026-08-19
+
+### Why
+Roadmap B from the owner's 2026-08-08 survey — the last unstarted item on her agreed A2→A4→A5→B order: taste surfaces were buried in Settings between API keys and photo-batch tools. She picked the placement in this session's survey: **inside Home**. The same survey approved dropping the dead database schema (handoff open item 6).
+
+### Added
+- **`StyleProfileView`** (`src/features/profile/`, lazy chunk) — her stylist's file on her: (1) **Your Stylist's Read** — the fingerprint, its date + source count, and a new freshness line (*"N new looks since"* = current log count vs `source_count`) so drift is visible before the 10-look auto-refresh fires; refresh button moved from Settings. (2) **Color Pairings** — the pairs editor + style modes moved from Settings, plus **suggested pairs derived from her loved looks** (deterministic, zero AI calls: non-neutral color families that co-occur inside hearted looks and aren't already on her list; one tap adds them). (3) **About Me** — the six fields moved from Settings, always expanded.
+- **Home entry card** — "✦ YOUR STYLE PROFILE" under the Style-me CTA, teasing the first two lines of the fingerprint (or an invitation when none exists). Verified in Playwright at phone viewport: card renders, opens the view, all three sections render, Back returns to Home, zero console errors.
+- **Migration 0017** (`drop_dead_schema`, applied to production via MCP): drops `moodboards`, `look_feedback.mood`, and `wardrobe_items.primary_color_hex/secondary_color/secondary_color_hex/thumbnail_url` — all zero-code-reference (grep-verified same day), **owner-approved by survey**. Live values (1 moodboard, 5 moods, 157 color hexes) snapshotted into service-role-only `dropped_columns_backup_20260819` first; drop the backup after a month or two of nobody missing it.
+
+### Changed
+- **Settings is plumbing-only now**: Style Preferences / Style Fingerprint / About Me cards removed; a "Style Profile — now on Home" pointer sits at the top of More Tools. Keys, photo tools, orphan recovery, and data tools stay put.
+- Persistence unchanged: prefs + About Me still per-device localStorage via storage.js; fingerprint still `user_settings`. Generation reads (`loadStylePrefs`/`loadAboutMe` at generate time) untouched.
+
+### Watch
+- Ask her whether the Home card + profile page feel right, and whether the loved-look pair suggestions surface anything true (they need ≥1 loved look with 2+ non-neutral-family pieces to appear at all).
+- **Remove.bg: she answered "not sure — remind me later."** When she next hits a washed-out cutout (the gate now names the Remove.bg error), remind her the fix is checking credits/key at remove.bg.
+
 ## [Unreleased] — Evaluate look survives truncation; backend cleanup pass — 2026-08-19
 
 ### Why

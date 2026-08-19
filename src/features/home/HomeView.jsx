@@ -17,7 +17,7 @@ import { resolveItemIds } from "../../utils/item-helpers.js";
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem }) {
+export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem, onOpenProfile, styleFingerprint }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -102,6 +102,25 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
         <button onClick={onOpenStyle}
           style={{ width: "100%", padding: "14px 16px", background: PALETTE.ink, color: PALETTE.cream, border: "none", borderRadius: 10, marginBottom: 16, fontSize: 13, letterSpacing: "0.08em", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
           ✦ Style me for today
+        </button>
+      )}
+
+      {/* Style Profile entry — her stylist's file (fingerprint, color
+          pairings, About Me), moved out of Settings (roadmap B; placement
+          "Inside Home" chosen by the owner 2026-08-19). One-line teaser from
+          the fingerprint when it exists. */}
+      {onOpenProfile && (
+        <button onClick={onOpenProfile}
+          style={{ width: "100%", textAlign: "left", padding: "12px 14px", background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 16, cursor: "pointer" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted }}>✦ YOUR STYLE PROFILE</div>
+            <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+          </div>
+          <div style={{ fontSize: 12, color: PALETTE.soft, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {styleFingerprint?.text
+              ? styleFingerprint.text
+              : "Your stylist's read on you — fingerprint, color pairings, and fit notes."}
+          </div>
         </button>
       )}
 
