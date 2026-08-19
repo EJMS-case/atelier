@@ -16,7 +16,7 @@
 // alpha variants by string concatenation (`${accent}0A`) need the raw hex —
 // keep it here so the token value has a single JS home instead of being
 // hand-mirrored per view.
-export const ACCENT_STRONG_HEX = "#6D1A2E";
+const ACCENT_STRONG_HEX = "#6D1A2E";
 
 export const PALETTE = {
   ink:    "var(--color-ink)",

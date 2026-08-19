@@ -740,6 +740,34 @@ export default function App() {
     favorites.some(f => f.type === type && f.reference_id === refId),
   [favorites]);
 
+  // Set-backed piece-favorite test for the closet grids — isFav is O(favorites)
+  // and the grids call it once per card per render (~470 cards on the landing
+  // view). Same answer, O(1) per card.
+  const favPieceIds = useMemo(
+    () => new Set(favorites.filter(f => f.type === "piece").map(f => f.reference_id)),
+    [favorites],
+  );
+
+  // Landing-view sections, memoized: these ran inside the render JSX on every
+  // App state tick (sync flash, weather chips, Style Me streaming), filtering
+  // + date-sorting the whole closet each time. Date.parse is hoisted so the
+  // sort doesn't allocate two Date objects per comparison.
+  const { recentItems, uncategorized } = useMemo(() => {
+    const now = Date.now();
+    const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+    const stamped = items
+      .map(it => ({ it, t: it.created_at ? Date.parse(it.created_at) : NaN }))
+      .filter(x => Number.isFinite(x.t) && now - x.t < TWO_WEEKS)
+      .sort((a, b) => b.t - a.t);
+    return {
+      recentItems: stamped.map(x => x.it),
+      // True uncategorized = missing top-level category. Subcategory is not
+      // always available (Belts/Jumpsuits have no subcategory list in
+      // taxonomy.js, so checking !it.subcategory left them stranded).
+      uncategorized: items.filter(it => !it.category),
+    };
+  }, [items]);
+
   const toggleFav = useCallback(async (type, refId) => {
     const existing = favorites.find(f => f.type === type && f.reference_id === refId);
     if (existing) {
@@ -793,8 +821,6 @@ export default function App() {
       weather: look.weather || ([...weather].join(" + ") || null),
       weathers: look.weathers || [...weather],
       styling: look.rationale || look.styling || "",
-      colorStory: look.color_strategy || look.colorStory || "",
-      reasoning: look.rationale || look.reasoning || "",
     };
   });
 
@@ -1130,7 +1156,6 @@ export default function App() {
                 ["Cool (40-54°F)","Cool"],
                 ["Cold (below 40°F)","Cold"],
               ];
-              const TEMPS = new Set(TEMP_CHIPS.map(([v]) => v));
               const isAny = weather.size === 0;
               const toggleTemp = (val) => setWeather(prev => {
                 const next = new Set(prev);
@@ -1441,15 +1466,6 @@ export default function App() {
           {/* Landing view: Recently Added + uncategorized when no filters active
               AND no search is running (else it stacks above search results). */}
           {!isSetView && !closetSearch.trim() && !activeFilters.category?.length && !activeFilters.subcategory?.length && !activeFilters.color?.length && !activeFilters.brand?.length && !activeFilters.sets && !activeFilters.lastWorn && (() => {
-            const now = Date.now();
-            const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
-            const recentItems = items
-              .filter(it => it.created_at && (now - new Date(it.created_at).getTime()) < TWO_WEEKS)
-              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-            // True uncategorized = missing top-level category. Subcategory is
-            // not always available (Belts/Jumpsuits have no subcategory list
-            // in taxonomy.js, so checking !it.subcategory left them stranded).
-            const uncategorized = items.filter(it => !it.category);
             const showRecent = recentItems.length > 0;
             const showUncat = uncategorized.length > 0;
             if (!showRecent && !showUncat) return null;
@@ -1465,7 +1481,7 @@ export default function App() {
                         <ItemCard key={item.id} item={item} allItems={items}
                           onDelete={deleteItem}
                           onEdit={handleEditItemCard}
-                          isFavorited={isFav("piece", item.id)}
+                          isFavorited={favPieceIds.has(item.id)}
                           onToggleFav={handleToggleFavPiece}
                           onStyleItem={styleWithItem}/>
                       ))}
@@ -1482,7 +1498,7 @@ export default function App() {
                         <ItemCard key={item.id} item={item} allItems={items}
                           onDelete={deleteItem}
                           onEdit={handleEditItemCard}
-                          isFavorited={isFav("piece", item.id)}
+                          isFavorited={favPieceIds.has(item.id)}
                           onToggleFav={handleToggleFavPiece}
                           onStyleItem={styleWithItem}/>
                       ))}
@@ -1505,7 +1521,7 @@ export default function App() {
                 <ItemCard key={item.id} item={item} allItems={items}
                   onDelete={deleteItem}
                   onEdit={handleEditItemCard}
-                  isFavorited={isFav("piece", item.id)}
+                  isFavorited={favPieceIds.has(item.id)}
                   onToggleFav={handleToggleFavPiece}
                   onStyleItem={styleWithItem}/>
               ))}

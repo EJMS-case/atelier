@@ -265,7 +265,7 @@ const LEGACY_FILTER_KEYS = {
   "Heels Only": "only-heels",
   "No Knits": "no-knits",
 };
-export function normalizeFilterKey(key) {
+function normalizeFilterKey(key) {
   return LEGACY_FILTER_KEYS[key] || key;
 }
 
@@ -273,7 +273,7 @@ export function normalizeFilterKey(key) {
  * Parse a set/array of filter keys into { no: [type…], onlyByGroup: {group: [type…]} }.
  * Unknown keys are ignored (forward-compatible).
  */
-export function parseFilters(filterKeys) {
+function parseFilters(filterKeys) {
   const no = [];
   const onlyByGroup = {};
   for (const raw of filterKeys || []) {

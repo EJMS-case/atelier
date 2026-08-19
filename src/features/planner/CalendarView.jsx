@@ -16,6 +16,7 @@ import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import TripDetailView from "./TripDetailView.jsx";
 import { PALETTE_STRONG } from "../../constants/palette.js";
+import { resolveItemIds } from "../../utils/item-helpers.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
@@ -317,9 +318,7 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
             iso === tripForDay.start_date ||
             (iso < tripForDay.start_date === false && isoDate(startOfMonth(anchor)) === iso)
           );
-          const planItems = plan?.items
-            ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
-            : [];
+          const planItems = resolveItemIds(items, plan?.items);
           const isToday = iso === todayIso;
           return (
             <button key={iso}
@@ -498,9 +497,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
   const friendly = friendlyDate(iso); // "Today" / "Tomorrow" / weekday-month-day
   const fullLabel = new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" });
   const headerEyebrow = isPast ? "WORN" : isToday ? "TODAY" : "PLAN";
-  const planItems = plan?.items
-    ? (plan.items || []).map(id => items.find(it => it.id === id)).filter(Boolean)
-    : [];
+  const planItems = resolveItemIds(items, plan?.items);
   const planLayout = plan?.layout_data
     || (plan?.outfit_log_id && (outfitLogs || []).find(l => l.id === plan.outfit_log_id)?.layout_data)
     || null;
@@ -597,7 +594,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
               </div>
             )}
             {matching.map(log => {
-              const logItems = (log.garment_ids || []).map(id => items.find(i => i.id === id)).filter(Boolean).slice(0, 4);
+              const logItems = resolveItemIds(items, log.garment_ids).slice(0, 4);
               return (
                 <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather })}
                   style={{ display: "flex", gap: 10, width: "100%", padding: 10, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, marginBottom: 8, cursor: "pointer", alignItems: "center", textAlign: "left" }}>

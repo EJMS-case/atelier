@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -33,7 +33,9 @@ const FALLBACK_MODEL = MODEL_STRONG;
 const TRANSIENT_STATUS = new Set([408, 409, 429, 500, 502, 503, 529]);
 
 // ── Validation Error ─────────────────────────────────────────────────────────
-export class ValidationError extends Error {
+// Not exported: App identifies it by `e.name === "ValidationError"` (string
+// check survives minification of the class binding), nothing imports the class.
+class ValidationError extends Error {
   constructor(message, failures = []) {
     super(message);
     this.name = "ValidationError";
@@ -117,9 +119,12 @@ function realIdOf(lookItem, idMap) {
 }
 
 // The closet item object for a look item, or undefined when unresolvable.
+// itemIdIndex is a WeakMap-cached id→item Map keyed on the array identity, so
+// the ~25 checks funnelling through here per look do O(1) lookups instead of
+// each rescanning the ~470-item closet.
 function resolveLookItem(lookItem, idMap, allItems) {
   const realId = realIdOf(lookItem, idMap);
-  return allItems?.find(it => it.id === realId);
+  return itemIdIndex(allItems).get(String(realId));
 }
 
 // All of a look's items resolved to closet objects, unresolvable ones dropped.
@@ -291,7 +296,7 @@ function checkOccasion(response, idMap, allItems, occasionSlots, forceIncludeIds
     (look.items || []).forEach((item) => {
       const realId = realIdOf(item, idMap);
       if (overrideIds.has(realId)) return;
-      const resolved = allItems.find(it => it.id === realId);
+      const resolved = itemIdIndex(allItems).get(String(realId));
       if (!resolved) return;
 
       if (bannedCats.has(resolved.category)) {
@@ -913,8 +918,9 @@ function checkIncludeToggles(response, idMap, allItems, activeExclusions, occasi
 // salvageByAddingIncludes so the check never demands what the salvage can't add.
 function eligibleIncludeShortIds(t, idMap, allItems, { occasionSlots, weather, activeExclusions = [] } = {}) {
   const out = [];
+  const byId = itemIdIndex(allItems);
   for (const [shortId, realId] of Object.entries(idMap)) {
-    const item = allItems.find(it => it.id === realId);
+    const item = byId.get(String(realId));
     if (!item || !t.match(item)) continue;
     if (itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions, occasionSlots })) continue;
     out.push(shortId);
@@ -1091,8 +1097,9 @@ function eligibleShortIdsForSlot(slotType, idMap, allItems, { occasionSlots, wea
   const bannedCats = new Set(occasionSlots?.banned?.categories || []);
   const bannedSubs = new Set(occasionSlots?.banned?.subcategories || []);
   const out = [];
+  const byId = itemIdIndex(allItems);
   for (const [shortId, realId] of Object.entries(idMap)) {
-    const item = allItems.find(it => it.id === realId);
+    const item = byId.get(String(realId));
     if (!item) continue;
     if (!roles.has(getGarmentRole(item))) continue;
     if (bannedCats.has(item.category) || bannedSubs.has(item.subcategory)) continue;
@@ -1168,7 +1175,7 @@ export function salvageBySwappingItems(parsed, failures, idMap, allItems, ctx = 
     // weather failure for a top-under-dress one. Match the offender's role.
     const replacement = candidatesFor(slot).find(id =>
       !usedShortIds.has(id) &&
-      getGarmentRole(allItems.find(it => it.id === (idMap?.[id] || id))) === offenderRole
+      getGarmentRole(itemIdIndex(allItems).get(String(idMap?.[id] || id))) === offenderRole
     );
     if (!replacement) continue;  // nothing eligible; fall through to the drop salvage
 
@@ -1452,7 +1459,7 @@ export function extractCompleteLooks(partialJson) {
 // to be written on every recovery, but when coercion falls short the
 // :schema log right after already captures the whole input, so the payload
 // here was pure write volume.
-export function coerceLooksShape(input) {
+function coerceLooksShapeLogged(input) {
   return coerceLooksShapeCore(input, {
     onRecover: (_original, _coerced, cases) =>
       logAiError("stylist_outfit:recovered", { cases }, "coerceLooksShape recovered malformed tool output"),
@@ -1481,7 +1488,6 @@ export async function generateValidatedLooks({
   apiKey,
   staticPreamble,
   dynamicBody,
-  prompt,
   idMap,
   allItems,
   activeExclusions = [],
@@ -1493,11 +1499,6 @@ export async function generateValidatedLooks({
   onlyRescueIds = [],
   onLook,
 }) {
-  // Back-compat: callers may still pass a single `prompt` string.
-  if (!staticPreamble && !dynamicBody && prompt) {
-    dynamicBody = prompt;
-  }
-
   let lastFailures = [];
   let lastParsed = null;
   let lastStrippedCount = 0;
@@ -1689,7 +1690,7 @@ export async function generateValidatedLooks({
       continue;
     }
 
-    const coerced = coerceLooksShape(toolBlock.input);
+    const coerced = coerceLooksShapeLogged(toolBlock.input);
 
     // Stylist honesty clause: if the model genuinely can't build a look,
     // surface the explanation rather than retrying into something forced.

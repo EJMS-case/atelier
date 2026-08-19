@@ -10,14 +10,14 @@
 import { normalizeItem } from "./item-helpers.js";
 import { STYLE_PREFS } from "../constants/styling.js";
 
-export const STORAGE_KEY           = "atelier:wardrobe:v1";
-export const API_KEY_STORE         = "atelier:api-key";
-export const RMBG_KEY_STORE        = "atelier:rmbg-key";
-export const SETS_META_KEY         = "atelier:sets-meta:v1";
-export const STYLE_PREFS_KEY       = "atelier:style-prefs:v1";
-export const ABOUT_ME_KEY          = "atelier:about-me:v1";
+const STORAGE_KEY           = "atelier:wardrobe:v1";
+const API_KEY_STORE         = "atelier:api-key";
+const RMBG_KEY_STORE        = "atelier:rmbg-key";
+const SETS_META_KEY         = "atelier:sets-meta:v1";
+const STYLE_PREFS_KEY       = "atelier:style-prefs:v1";
+const ABOUT_ME_KEY          = "atelier:about-me:v1";
 export const RECENT_LOOKS_KEY      = "atelier:recent-looks";
-export const INSIGHTS_DISMISSED_KEY = "atelier:insights-dismissed";
+const INSIGHTS_DISMISSED_KEY = "atelier:insights-dismissed";
 export const RECENT_ITEMS_KEY      = "atelier:recently-suggested-items";
 export const SUGGESTION_COUNTS_KEY = "atelier:item-suggestion-counts";
 

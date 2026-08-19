@@ -218,7 +218,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   let varietyBlock = "";
   if (priorDays.length > 0) {
     const nameById = new Map(items.map(it => [it.id, it]));
-    const summary = priorDays.map((d, i) => {
+    const summary = priorDays.map((d) => {
       const names = (d.itemIds || [])
         .map(id => nameById.get(id))
         .filter(Boolean)

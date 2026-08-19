@@ -13,7 +13,7 @@ import { describeStyleFilters } from "../../utils/style-filters.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
 import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
-import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js";
+import { getSleeveType, shuffle, slotForItem, resolveItemIds } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { summarizeLookEdits } from "../../features/stylist/lookEdits.js";
 import { summarizeOccasionMemory } from "../../features/stylist/occasionMemory.js";
@@ -136,63 +136,49 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     hero: heroStrategies[i % heroStrategies.length],
   }));
 
-  // Loved looks → compact TEXT exemplars (no W-IDs, so they never pollute item
-  // selection). Each becomes "[Occasion] color subcategory + color subcategory…"
-  // — enough for the model to read the level of polish and the kinds of
+  // Compact TEXT exemplar for one historical look: "[Occasion] color
+  // subcategory + color subcategory…". No W-IDs, so history lines can never
+  // pollute item selection. Shared by loved/disliked/recent-combo lines
+  // (was three hand-copies of the same 12-line body); returns null when
+  // fewer than 2 pieces resolve — a one-piece line teaches nothing.
+  const describeLookLine = (ids, occasion) => {
+    const pieces = resolveItemIds(items, ids)
+      .slice(0, 8)
+      .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
+    if (pieces.length < 2) return null;
+    return { line: `${occasion ? `[${occasion}] ` : ""}${pieces.join(" + ")}`, pieces };
+  };
+
+  // Loved looks → exemplars of the level of polish and the kinds of
   // combinations she rates highly, without copying the exact pieces.
   const lovedLookLines = (lovedLooks || [])
     .slice(0, 5)
-    .map(ll => {
-      const pieces = (ll.garment_ids || ll.items || [])
-        .map(id => items.find(it => it.id === id))
-        .filter(Boolean)
-        .slice(0, 8)
-        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
-      if (pieces.length < 2) return null;
-      const occ = ll.occasion ? `[${ll.occasion}] ` : "";
-      return `${occ}${pieces.join(" + ")}`;
-    })
+    .map(ll => describeLookLine(ll.garment_ids || ll.items, ll.occasion)?.line)
     .filter(Boolean);
 
-  // Disliked looks: same text-only format as loved looks — item descriptions
-  // only, no W-IDs, so they can't interfere with item selection.
+  // Disliked looks: same text-only format as loved looks.
   const dislikedLookLines = (dislikedLooks || [])
     .slice(0, 5)
-    .map(ll => {
-      const pieces = (ll.item_ids || ll.garment_ids || ll.items || [])
-        .map(id => items.find(it => it.id === id))
-        .filter(Boolean)
-        .slice(0, 8)
-        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
-      if (pieces.length < 2) return null;
-      const occ = ll.occasion ? `[${ll.occasion}] ` : "";
-      return `${occ}${pieces.join(" + ")}`;
-    })
+    .map(ll => describeLookLine(ll.item_ids || ll.garment_ids || ll.items, ll.occasion)?.line)
     .filter(Boolean);
 
   // Recent combos — the LOOK-combination companion to the item-level rotation
   // memory: rotation keeps individual pieces fresh, but pieces can still
-  // recombine into the same recipe. Same text-only format as loved/disliked
-  // looks (no W-IDs, so history can't pollute item selection). allLooks arrives
-  // oldest→newest, so reverse before slicing — the model reads newest first.
-  // Deduped on the sorted piece set so a re-generation of the same combination
-  // doesn't burn multiple lines of the 8-line budget.
+  // recombine into the same recipe. allLooks arrives oldest→newest, so
+  // reverse before slicing — the model reads newest first. Deduped on the
+  // sorted piece set so a re-generation of the same combination doesn't burn
+  // multiple lines of the 8-line budget.
   const seenComboKeys = new Set();
   const recentCombos = (previousLooks || [])
     .slice()
     .reverse()
     .map(pl => {
-      const pieces = (pl.garment_ids || pl.items || [])
-        .map(id => items.find(it => it.id === id))
-        .filter(Boolean)
-        .slice(0, 8)
-        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
-      if (pieces.length < 2) return null;
-      const key = [...pieces].sort().join("|");
+      const described = describeLookLine(pl.garment_ids || pl.items, pl.occasion);
+      if (!described) return null;
+      const key = [...described.pieces].sort().join("|");
       if (seenComboKeys.has(key)) return null;
       seenComboKeys.add(key);
-      const occ = pl.occasion ? `[${pl.occasion}] ` : "";
-      return `${occ}${pieces.join(" + ")}`;
+      return described.line;
     })
     .filter(Boolean)
     .slice(0, 8);
@@ -382,7 +368,7 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
   const anchors = analysis.wardrobeAnchors.map(a => `${a.item.name} (${a.count}x)`).join(", ") || "none yet";
   const underutil = analysis.underutilized.slice(0, 3).map(it => it.name).join(", ") || "none";
   const recentLogs = outfitLogs.slice(0, 10).map(l => {
-    const logItems = (l.garment_ids || []).map(id => items.find(it => it.id === id)).filter(Boolean);
+    const logItems = resolveItemIds(items, l.garment_ids);
     return `${l.date_worn}: ${logItems.map(it => `${it.category}:${it.name}`).join(", ")} (${l.occasion || "casual"})`;
   }).join("\n");
   return `Write a 2-3 sentence monthly style profile for this wardrobe user. Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
@@ -431,7 +417,7 @@ export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, on
 // Compact wardrobe summary: one line per category > subcategory with a count,
 // a color roll-up, and a few example pieces. Replaces the full 400+-line
 // inventory dump that blew the token budget and starved the tool response.
-export function summarizeInventory(items, { examplesPer = 4 } = {}) {
+function summarizeInventory(items, { examplesPer = 4 } = {}) {
   const groups = new Map();
   for (const it of items) {
     const key = `${it.category || "Uncategorized"}${it.subcategory ? ` > ${it.subcategory}` : ""}`;
@@ -526,7 +512,7 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
     }, "gaps");
   }
 
-  const selectedItems = selectedIds.map(id => items.find(i => i.id === id)).filter(Boolean);
+  const selectedItems = resolveItemIds(items, selectedIds);
   const outfitStr = selectedItems.map(it =>
     `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`
   ).join("\n");

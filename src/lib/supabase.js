@@ -14,7 +14,7 @@ export const SB_HEADERS = {
 };
 
 export const BUCKET = "wardrobe-images";
-export const STORAGE_HEADERS = {
+const STORAGE_HEADERS = {
   "apikey": SUPABASE_KEY,
   "Authorization": `Bearer ${SUPABASE_KEY}`,
 };
@@ -308,16 +308,9 @@ export const sb = {
     });
     if (!res.ok) throw new Error("Remove favorite failed");
   },
-  async updateItemLastWorn(id, date) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify({ last_worn: date }),
-    });
-    if (!res.ok) throw new Error("Update last_worn failed");
-  },
   // Set last_worn on many items in ONE request (all get the same date) instead
   // of a PATCH per garment — logging a 6-piece outfit was firing 6 round-trips.
+  // (The per-item updateItemLastWorn this replaced is deleted — zero callers.)
   async setLastWornBulk(ids = [], date) {
     const list = [...new Set(ids)].filter(Boolean);
     if (list.length === 0) return;
@@ -388,15 +381,26 @@ export const sb = {
     }
     return this._fpTextPromise.then(t => t.slice(0, maxLen));
   },
-  async getStyleFingerprint() {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
-        headers: SB_HEADERS,
-      });
-      if (!res.ok) return null;
-      const rows = await res.json();
-      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
-    } catch { return null; }
+  // In-flight sharing only (cleared once settled) — concurrent mount-time
+  // callers (App's initial load effect + maybeRefreshFingerprint) used to
+  // fire two identical GETs. NOT a result cache: Settings' refresh button
+  // and post-save re-reads still hit the network.
+  _fpInflight: null,
+  getStyleFingerprint() {
+    if (this._fpInflight) return this._fpInflight;
+    const p = (async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
+          headers: SB_HEADERS,
+        });
+        if (!res.ok) return null;
+        const rows = await res.json();
+        return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+      } catch { return null; }
+    })();
+    this._fpInflight = p;
+    p.finally(() => { if (this._fpInflight === p) this._fpInflight = null; });
+    return p;
   },
   async saveStyleFingerprint(fp) {
     try {
@@ -542,14 +546,6 @@ export const sb = {
     if (!res.ok) return [];
     return res.json().catch(() => []);
   },
-  async fetchAllTrips() {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/trips?order=start_date.asc`,
-      { headers: SB_HEADERS },
-    );
-    if (!res.ok) return [];
-    return res.json().catch(() => []);
-  },
   async updateTrip(id, patch) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
       method: "PATCH",
@@ -675,15 +671,25 @@ export const sb = {
   },
   // Newest first, capped — the aggregator collapses repeats so 120 rows is
   // months of signal.
-  async fetchLookEdits(limit = 120) {
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/look_edits?select=action,occasion,weather,out_item_id,in_item_id,created_at&order=created_at.desc&limit=${limit}`,
-        { headers: SB_HEADERS },
-      );
-      if (!res.ok) return [];
-      return (await res.json().catch(() => [])) || [];
-    } catch { return []; }
+  // In-flight sharing per limit (cleared once settled): App's mount path
+  // fires this twice concurrently (the unconditional SWAP-LESSONS load and
+  // the fingerprint-staleness check), which was two identical GETs.
+  _lookEditsInflight: {},
+  fetchLookEdits(limit = 120) {
+    if (this._lookEditsInflight[limit]) return this._lookEditsInflight[limit];
+    const p = (async () => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/look_edits?select=action,occasion,weather,out_item_id,in_item_id,created_at&order=created_at.desc&limit=${limit}`,
+          { headers: SB_HEADERS },
+        );
+        if (!res.ok) return [];
+        return (await res.json().catch(() => [])) || [];
+      } catch { return []; }
+    })();
+    this._lookEditsInflight[limit] = p;
+    p.finally(() => { if (this._lookEditsInflight[limit] === p) delete this._lookEditsInflight[limit]; });
+    return p;
   },
 
   // ── Sets ──
