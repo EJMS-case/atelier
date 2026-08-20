@@ -357,7 +357,7 @@ export const sb = {
     if (!this._settingsBatch) {
       this._settingsBatch = (async () => {
         try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(api_keys,style_fingerprint,rotation_state)&select=key,value`, {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(api_keys,style_fingerprint,rotation_state,brand_discovery)&select=key,value`, {
             headers: SB_HEADERS,
           });
           if (!res.ok) return null;
@@ -442,6 +442,33 @@ export const sb = {
       });
       if (!res.ok) console.warn("[sb] saveStyleFingerprint failed:", res.status);
     } catch { /* swallow — non-fatal, regenerate on demand */ }
+  },
+
+  // ── Brand discovery (key='brand_discovery') ──
+  // Cached Brand Atlas result: { brands, generated_at, web, dismissed }.
+  // Cross-device on purpose — a scouting run is a real AI spend; every device
+  // should reuse it. Mount read rides the settings batch above.
+  async getBrandDiscovery() {
+    try {
+      const hit = await this._settingsRow("brand_discovery");
+      if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.brand_discovery&select=value`, {
+        headers: SB_HEADERS,
+      });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+    } catch { return null; }
+  },
+  async saveBrandDiscovery(data) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "brand_discovery", value: JSON.stringify(data) }),
+      });
+      if (!res.ok) console.warn("[sb] saveBrandDiscovery failed:", res.status);
+    } catch { /* swallow — the in-memory copy still renders this session */ }
   },
 
   // ── Rotation state (key='rotation_state') ──

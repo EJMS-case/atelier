@@ -20,7 +20,7 @@ import { loadStylePrefs } from "../../utils/storage.js";
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, onOpenProfile, styleFingerprint }) {
+export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, onOpenProfile, styleFingerprint, brandDiscovery, onOpenDiscovery }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -185,6 +185,24 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
             ))}
           </div>
         </section>
+      )}
+
+      {/* Brand Atlas entry — renders ONLY the cached scouting result (zero AI
+          calls, zero network on Home). The heavy work — a web-search-backed
+          scouting run — lives behind an explicit tap inside the view. */}
+      {onOpenDiscovery && (
+        <button onClick={onOpenDiscovery}
+          style={{ width: "100%", textAlign: "left", padding: "12px 14px", background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 16, cursor: "pointer" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted }}>✧ BRAND ATLAS</div>
+            <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+          </div>
+          <div style={{ fontSize: 12, color: PALETTE.soft, marginTop: 6, lineHeight: 1.45 }}>
+            {brandDiscovery?.brands?.length
+              ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
+              : "Lesser-known, international labels scouted live against your closet."}
+          </div>
+        </button>
       )}
 
       {/* Coming Up — next planned days within the 2-week horizon. Pinned near

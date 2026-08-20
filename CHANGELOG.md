@@ -26,8 +26,12 @@ Owner audit of the Home Screen and the builder chatbot: the not-used list was "r
 - **EditorialCollage**: one shared `matchMedia` + one listener app-wide (was one per instance — 42 in the calendar grid).
 - **`judgeMostStylish` dynamically imported** on tap — recapAI (and its toolUse/coerce chain) left the cold-start chunk (`recapAI` is its own ~2.6 kB chunk now).
 
+### Added (same session, owner follow-up request)
+- **Brand Atlas** (`features/discovery/`, lazy ~6.8 kB chunk; `npm run test:brands` 5) — "find new, unique and lesser-known brands I would love … can that live in the home page or will it get too heavy?" It lives on Home WITHOUT the weight: the Home card renders only the **cached** result (zero AI calls, zero network — the cache rides the existing settings mount batch); a scouting run happens only on an explicit tap inside the view. Each run sends her deterministic taste profile (owned-brand census, core palette, texture profile, fingerprint) to `MODEL_STRONG` with the **web search server tool** (max 6 searches) so finds are current, real, international, and purchasable — with a graceful no-web fallback (flagged in the UI) if the org's key lacks the tool. Results persist cross-device (`user_settings.brand_discovery`); "✕ not for me" dismisses a brand permanently and excludes it from every future run; owned brands are always excluded. Tolerant last-array JSON parse (`parseBrandDiscovery`), parse failures log `brand_discovery:parse` with the raw text.
+
 ### Watch
 - Ask her: does Home feel smarter (seasonal rotation, Color Stories), do the period reviews read true, does the gap analysis now name the navy-bag class of gap, and does the builder chat finally track her edits and register high-end?
+- **Brand Atlas first run**: if it errors mentioning the tool, her API key's org doesn't have web search enabled (console.anthropic.com → toggle web search); the no-web fallback still works but says so. If the finds feel off-register, the levers are the scouting prompt's register paragraph and `max_uses`.
 - `FASHION_COMBOS` / `TEXTURE_ROSTER` are the editorial knobs — refresh seasonally, keep the register quiet-luxury and Dark Winter-safe.
 - Chat markdown is deliberately minimal (bold/italic/lists). If she wants tables or links, extend `MarkdownLite`, not the prompt.
 

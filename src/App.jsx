@@ -57,6 +57,7 @@ const SilhouetteBuilder = lazy(() => import("./features/builder/SilhouetteBuilde
 const InspirationView   = lazy(() => import("./features/inspiration/InspirationView.jsx"));
 const VisionPilotView   = lazy(() => import("./components/VisionPilotView.jsx"));
 const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView.jsx"));
+const BrandDiscoveryView = lazy(() => import("./features/discovery/BrandDiscoveryView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
 import { unionTags, outfitsOf, buildPlanPayload, newOutfitId } from "./features/planner/outfits.js";
@@ -223,9 +224,13 @@ export default function App() {
   // Lazy-load inspirations + fingerprint on first render. They live in their
   // own table/key and never block the closet boot — failures here shouldn't
   // break Style Me.
+  // Cached Brand Atlas result (cross-device, user_settings) — Home renders it
+  // with zero AI calls; scouting runs only on the explicit tap in the view.
+  const [brandDiscovery, setBrandDiscovery] = useState(null);
   useEffect(() => {
     listInspirations().then(setInspirations).catch(() => setInspirations([]));
     sb.getStyleFingerprint().then(setStyleFingerprint).catch(() => setStyleFingerprint(null));
+    sb.getBrandDiscovery().then(setBrandDiscovery).catch(() => setBrandDiscovery(null));
     // Pull the other devices' anti-repeat memory so this one doesn't re-suggest
     // pieces the stylist just offered elsewhere, then push the merged union
     // back so the remote copy is the superset (cheap single-row write).
@@ -1358,6 +1363,8 @@ export default function App() {
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onStyleRequest={(req) => { setRequest(req); setView("style"); setStylePanelOpen(true); }}
             onOpenProfile={() => setView("profile")}
+            brandDiscovery={brandDiscovery}
+            onOpenDiscovery={() => setView("discovery")}
             styleFingerprint={styleFingerprint}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onStyleItem={(item) => {
@@ -2078,6 +2085,18 @@ export default function App() {
           logCount={wearData.logs ? wearData.logs.length : null}
           onBack={() => setView("home")}
           onEditItem={(item) => { setEditItem(item); setEditReturnView("profile"); setView("edit"); }}
+        />
+      )}
+
+      {/* ── Brand Atlas — lesser-known brand discovery (cached; scouting only
+             on explicit tap inside the view) ── */}
+      {view === "discovery" && (
+        <BrandDiscoveryView
+          items={items}
+          apiKey={apiKey}
+          discovery={brandDiscovery}
+          setDiscovery={setBrandDiscovery}
+          onBack={() => setView("home")}
         />
       )}
 
