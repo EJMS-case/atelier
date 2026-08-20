@@ -2,6 +2,35 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Smarter Home + period reviews, coverage-driven gap analysis, builder-chat overhaul, AI readiness audit — 2026-08-20
+
+### Why
+Owner audit of the Home Screen and the builder chatbot: the not-used list was "repetitive and not seasonal", color pairings had to be typed by hand, the gap analysis "frankly sucks — I don't have a navy bag, why doesn't it suggest that?", she wants month/quarter/year reviews of her best outfits, and the Build-me chat "can't see" outfit edits, asks where she's going with Work already selected, has no rich text, and is slow. Plus: in-fashion color blocking, texture gaps, a color/category audit so the AI can read everything, and a speed pass.
+
+### Added
+- **`utils/wardrobe-coverage.js`** (pure, `npm run test:coverage` 10) — deterministic closet analytics: core palette with dominant shades, **color × category coverage** (a core color missing from an anchor category — the "no navy bag" detector), **texture inventory** vs a canonical seasonal roster, **auto color pairs** (in-fashion combos ∩ closet, manual-pair aware), **pair unlocks** (pairings one purchase away), date-seeded `rotateDaily`.
+- **`constants/fashion-combos.js`** — 16 curated in-fashion color-blocking pairs (quiet-luxury register, Dark Winter + warm-exception palette, season-tagged, one-line editorial notes) + the 16-texture seasonal roster.
+- **Home · Color Stories card** — up to 3 in-fashion pairings her closet supports right now, with swatches and the editorial why; tap → Style Me pre-briefed to build around the pair. Zero AI calls, zero typing.
+- **Month / Quarter / Year in review** — LookBackCard grew a period toggle (30/90/365-day windows through the same `buildRecap`); new `periodStats` (distinct garments worn + closet-utilization %, loved count, worn color story, top pieces with wear counts). The most-stylish judge now reads her **style fingerprint**, is period-aware, favors range across winners, and caps candidates at 80 (hearted always kept) so a year window can't blow the prompt.
+- **Style Profile · AI Readiness card** (`features/profile/dataAudit.js`, `npm run test:audit` 7) — the color & category audit: readiness % (critical-clean rows), per-issue counts (unreadable color, missing/off-taxonomy subcategory, no photo, missing material/formality, notes over the classifier cap), and a flagged-pieces list that opens each item in the editor. Critical issues (break AI reads) rank above enhancers.
+- **Style Profile · "In fashion now" pair suggestions** — auto-pair chips with swatches; one tap promotes one to her standing list.
+
+### Changed
+- **Home "Neglected" → "Back in Rotation"**: season-filtered by today's NYC bucket (`filterByWeather` — August never nags about resting wool) and rotated daily (`rotateDaily`), with the bucket named in the header; the section (and the old always-rendered empty gray box — the layout gap) disappears entirely when there's nothing to say.
+- **Gap analysis rebuilt around computed coverage signals**: the prompt now carries HER CORE PALETTE, the COLOR × CATEGORY COVERAGE matrix, texture coverage for the season, IN-FASHION PAIRINGS ONE PURCHASE AWAY, and her style fingerprint — with instructions that a core color missing from an anchor category is the sharpest gap and that data-backed reasons must be cited. "Complete a Look" gains the fingerprint too.
+- **Builder chat overhauled** (`builderChat.js`): the CURRENT LOOK block is rebuilt on **every turn** and rides the latest message — mid-conversation edits are finally visible (the old code snapshotted context onto the first message only); the builder's occasion/weather chips are in the brief (no more "where are we headed?"); context adds fingerprint + About Me silhouette + color pairs (manual + auto); persona raised to the senior-stylist register on `MODEL_STRONG`; responses **stream** token-by-token; light **markdown** renders via new dependency-free `MarkdownLite`; persona + closet live in a **cached system block** (byte-stable per session) so follow-up turns are fast and cheap; dead `temperature` param dropped.
+- **Auto color pairs feed every AI surface**: Style Me (`autoPairs` on style prefs → new prompt block, dynamic body only — no preamble cache invalidation), Evaluate look (via `closetItems`), trip-day generation, and the builder chat. Manual pairs always lead; auto pairs are framed as of-the-moment options.
+
+### Performance (HANDOFF-deferred levers, shipped)
+- **`user_settings` mount reads**: first getter kicks off ONE `key=in.(api_keys,style_fingerprint,rotation_state)` fetch; each key served from it exactly once, then per-key fetches as before (refresh flows stay fresh). 3 GETs → 1 on cold start.
+- **EditorialCollage**: one shared `matchMedia` + one listener app-wide (was one per instance — 42 in the calendar grid).
+- **`judgeMostStylish` dynamically imported** on tap — recapAI (and its toolUse/coerce chain) left the cold-start chunk (`recapAI` is its own ~2.6 kB chunk now).
+
+### Watch
+- Ask her: does Home feel smarter (seasonal rotation, Color Stories), do the period reviews read true, does the gap analysis now name the navy-bag class of gap, and does the builder chat finally track her edits and register high-end?
+- `FASHION_COMBOS` / `TEXTURE_ROSTER` are the editorial knobs — refresh seasonally, keep the register quiet-luxury and Dark Winter-safe.
+- Chat markdown is deliberately minimal (bold/italic/lists). If she wants tables or links, extend `MarkdownLite`, not the prompt.
+
 ## [Unreleased] — Style Profile surface (roadmap B) + owner-approved schema drops — 2026-08-19
 
 ### Why

@@ -9,17 +9,29 @@ import TrimmedImage from "./TrimmedImage.jsx";
 // layout recipes that mimic Pinterest flat-lays — large hero garment, bag
 // overlapping a hip, shoes grounding the bottom. Desktop keeps the wider
 // landscape composition that already works there.
+//
+// ONE matchMedia + ONE native listener for the whole app: the calendar grid
+// renders 42 collages at once, and the per-instance version created 42
+// matchMedia objects and listeners. Instances subscribe to this shared store.
+const MOBILE_QUERY = "(max-width: 480px)";
+const mqSubscribers = new Set();
+let sharedMq = null;
+function ensureSharedMq() {
+  if (sharedMq || typeof window === "undefined") return;
+  sharedMq = window.matchMedia(MOBILE_QUERY);
+  sharedMq.addEventListener?.("change", (e) => {
+    mqSubscribers.forEach(fn => fn(e.matches));
+  });
+}
+
 function useIsMobileCollage() {
-  const query = "(max-width: 480px)";
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia(query).matches
-  );
+  ensureSharedMq();
+  const [isMobile, setIsMobile] = useState(() => (sharedMq ? sharedMq.matches : false));
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(query);
-    const handler = (e) => setIsMobile(e.matches);
-    mq.addEventListener?.("change", handler);
-    return () => mq.removeEventListener?.("change", handler);
+    mqSubscribers.add(setIsMobile);
+    // Re-sync in case the viewport changed between render and subscribe.
+    if (sharedMq) setIsMobile(sharedMq.matches);
+    return () => { mqSubscribers.delete(setIsMobile); };
   }, []);
   return isMobile;
 }

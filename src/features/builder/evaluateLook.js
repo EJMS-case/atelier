@@ -23,6 +23,7 @@ import { MODEL_STRONG } from "../../constants/models.js";
 import { sb } from "../../lib/supabase.js";
 import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
+import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
 import { stylistNotes } from "../../utils/item-helpers.js";
 import { parseEvalResponse } from "./evalParse.js";
 import { logAiError } from "../../lib/ai/logError.js";
@@ -73,7 +74,8 @@ function formatItemLine(it) {
  * @param {Array}  items  - resolved wardrobe items on the canvas
  * @param {string} apiKey
  * @param {Object} opts   - { occasions?: string[], weathers?: string[],
- *                           model?, signal? }
+ *                           closetItems? (full wardrobe, for auto color
+ *                           pairs), model?, signal? }
  */
 export async function evaluateLook(items, apiKey, opts = {}) {
   if (!apiKey) throw new Error("API key required");
@@ -91,11 +93,18 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   if (Array.isArray(silhouette) && silhouette.length) {
     context.push(`HER BODY & FIT (dress to flatter):\n${silhouette.join("\n")}`);
   }
-  // Her hand-picked Settings color pairs — an activated pair is a signature
-  // move worth crediting; a missed easy activation is fair tip material.
+  // Her hand-picked color pairs + the in-fashion pairs her closet supports
+  // (auto-derived when the caller passes the full closet) — an activated pair
+  // is a signature move worth crediting; a missed easy activation is fair tip
+  // material.
   const prefs = loadStylePrefs();
-  if (prefs?.colorPairs?.length) {
-    context.push(`HER FAVORITE COLOR PAIRINGS (chosen by her, by hand): ${prefs.colorPairs.join(", ")}. A look that activates one deserves credit; a neutral look that could easily take a pair color is a natural tip.`);
+  const manualPairs = prefs?.colorPairs || [];
+  const autoPairs = opts.closetItems?.length
+    ? autoColorPairs(opts.closetItems, { exclude: manualPairs, max: 3 }).map(p => p.label)
+    : [];
+  const allPairs = [...manualPairs, ...autoPairs];
+  if (allPairs.length) {
+    context.push(`HER COLOR PAIRINGS (hand-picked favorites${autoPairs.length ? ", plus in-fashion pairs her closet supports" : ""}): ${allPairs.join(", ")}. A look that activates one deserves credit; a neutral look that could easily take a pair color is a natural tip.`);
   }
   const fp = await sb.fingerprintTextCached(1200);
   if (fp) context.push(`HER STYLE FINGERPRINT (your read on her taste — judge against it):\n${fp}`);

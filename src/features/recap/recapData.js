@@ -10,6 +10,7 @@
 import { outfitsOf } from "../planner/outfits.js";
 import { asArray } from "../../lib/multitag.js";
 import { filterByWeather } from "../../utils/item-helpers.js";
+import { effectiveColorFamily } from "../../constants/color.js";
 
 // Categories that don't count as "leaned-on" garments — belts, jewelry and
 // other accessories, shoes, and bags repeat freely by design.
@@ -157,6 +158,43 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     if (challenge.length >= 3) break;
   }
 
+  // ── Period stats — the "in review" layer (month/quarter/year windows).
+  // All derived from the same looks; garments only for the piece rankings so
+  // shoes/bags (which repeat by design) don't crowd the story.
+  const periodWearDays = {};
+  looks.forEach(l => {
+    l.itemIds.forEach(id => {
+      const it = itemMap[id];
+      if (!it || OVERWEAR_EXCLUDE.has(it.category)) return;
+      (periodWearDays[id] ||= new Set()).add(l.date);
+    });
+  });
+  const topPieces = Object.entries(periodWearDays)
+    .map(([id, ds]) => ({ item: itemMap[id], wears: ds.size }))
+    .filter(x => x.item)
+    .sort((a, b) => b.wears - a.wears || (a.item.name || "").localeCompare(b.item.name || ""))
+    .slice(0, 6);
+  // Color story of the period — families actually WORN (weighted by
+  // appearances), not families merely owned.
+  const famCounts = {};
+  looks.forEach(l => l.itemIds.forEach(id => {
+    const fam = itemMap[id] ? effectiveColorFamily(itemMap[id]) : "";
+    if (fam) famCounts[fam] = (famCounts[fam] || 0) + 1;
+  }));
+  const colorFamilies = Object.entries(famCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([family, count]) => ({ family, count }));
+  const garmentCount = (items || []).filter(it => GARMENT_CATS.has(it.category)).length;
+  const distinctGarments = Object.keys(periodWearDays).length;
+  const periodStats = {
+    distinctGarments,
+    garmentCount,
+    utilizationPct: garmentCount > 0 ? Math.round((distinctGarments / garmentCount) * 100) : null,
+    heartedCount: looks.filter(l => l.hearted).length,
+    topPieces,
+    colorFamilies,
+  };
+
   return {
     window: { startIso, endIso, days },
     empty: looks.length === 0,
@@ -166,5 +204,6 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     leanedOn,
     rediscover,
     challenge,
+    periodStats,
   };
 }

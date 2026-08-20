@@ -14,6 +14,7 @@ import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
 import { filterByWeather, stylistNotes } from "../../utils/item-helpers.js";
 import { loadStylePrefs, loadAboutMe } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
+import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
 import { sb } from "../supabase.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
@@ -247,8 +248,11 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   const fp = await sb.fingerprintTextCached(800);
   if (fp) personalBits.push(`HER STYLE (distilled from her worn-outfit history — soft bias, never a hard rule):\n${fp}`);
   const prefs = loadStylePrefs();
-  if (prefs?.colorPairs?.length) {
-    personalBits.push(`HER FAVORITE COLOR PAIRINGS (she chose these — neutrals ground any pair; reaching for a pair's partner is a signature move): ${prefs.colorPairs.join(", ")}`);
+  const tripManualPairs = prefs?.colorPairs || [];
+  const tripAutoPairs = autoColorPairs(items, { exclude: tripManualPairs, max: 2 }).map(p => p.label);
+  const tripAllPairs = [...tripManualPairs, ...tripAutoPairs];
+  if (tripAllPairs.length) {
+    personalBits.push(`HER COLOR PAIRINGS (hand-picked favorites${tripAutoPairs.length ? " + in-fashion pairs her closet supports" : ""} — neutrals ground any pair; reaching for a pair's partner is a signature move): ${tripAllPairs.join(", ")}`);
   }
   const silhouette = summarizeSilhouette(loadAboutMe());
   if (Array.isArray(silhouette) && silhouette.length) {
