@@ -1364,6 +1364,7 @@ export default function App() {
             onStyleRequest={(req) => { setRequest(req); setView("style"); setStylePanelOpen(true); }}
             brandDiscovery={brandDiscovery}
             onOpenDiscovery={() => setView("discovery")}
+            onOpenShop={() => setView("shop")}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onStyleItem={(item) => {
               setRequest(`Style around my ${item.name}`);

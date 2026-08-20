@@ -43,6 +43,22 @@ export function classifierNotes(item) {
   return notes.length <= CURATED_NOTES_MAX ? notes : "";
 }
 
+// ── COMFORT / ACTIVEWEAR CODING ─────────────────────────────────────────────
+// Detects pieces that are athleisure/lounge in SPIRIT even when they're filed
+// under real-garment categories (her FP Movement sets live under Sets/Tops,
+// PopFlex skirts under Bottoms). Category gates alone kept letting leggings
+// and sports bras into "restyle this" surfaces and color-story exemplars
+// (owner, 2026-08-20 ×2). Signals: activewear brand, comfort-coded name, or
+// her own formality tag ≤2.
+const COMFORT_BRAND_RE = /fp movement|free people movement|popflex|beyond yoga|alo yoga|lululemon|l\*space/i;
+const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra|zip[- ]?up|athletic|swim|bikini|cover[- ]?up|lounge|pajama|sleep|cozy)\b/i;
+export function isComfortCoded(item) {
+  const f = Number(item?.formality);
+  if (Number.isFinite(f) && f <= 2) return true;
+  const text = `${item?.brand || ""} ${item?.name || ""}`;
+  return COMFORT_BRAND_RE.test(text) || COMFORT_NAME_RE.test(text);
+}
+
 // The notes text a PROMPT should carry for this item: her curated stylist
 // line when present, otherwise the bounded stylistNotes digest of the notes.
 export function promptNotes(item, { maxLen = PROMPT_NOTES_MAX } = {}) {

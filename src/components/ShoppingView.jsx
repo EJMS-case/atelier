@@ -20,7 +20,11 @@ function CoveragePanel({ items }) {
       const unlocks = pairUnlocks(items, { max: 3 });
       const textures = textureInventory(items, { season });
       return { season, profile, coverage, unlocks, textures };
-    } catch { return null; }
+    } catch (e) {
+      // Visible in console — a silent null here once hid the whole panel.
+      console.error("[Atelier] coverage panel failed:", e);
+      return null;
+    }
   }, [items]);
   if (!data) return null;
   const { profile, coverage, unlocks, textures, season } = data;

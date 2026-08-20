@@ -20,7 +20,7 @@ import { loadStylePrefs } from "../../utils/storage.js";
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery }) {
+export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -86,25 +86,26 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
   // Color Stories — in-fashion color-blocking pairs her closet can make right
   // now (auto-derived, nothing to type), excluding pairs she already keeps by
   // hand in her Style Profile. Tap one → Style Me pre-briefed with the pair.
+  // Each story carries up to 3 of HER pieces (mixing both sides), deduped
+  // ACROSS stories — the same pink blouse fronting two cards read as filler
+  // (owner screenshot, 2026-08-20).
   const colorStories = useMemo(() => {
     try {
-      return autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 4 });
+      const stories = autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 4 });
+      const used = new Set();
+      return stories.map(story => {
+        const fresh = (list) => (list || []).filter(it => it.image && !used.has(it.id));
+        const a = fresh(story.aItems);
+        const b = fresh(story.bItems);
+        const pieces = [];
+        for (let i = 0; pieces.length < 3 && (i < a.length || i < b.length); i++) {
+          if (a[i] && pieces.length < 3) { pieces.push(a[i]); used.add(a[i].id); }
+          if (b[i] && pieces.length < 3) { pieces.push(b[i]); used.add(b[i].id); }
+        }
+        return { ...story, pieces };
+      });
     } catch { return []; }
   }, [items]);
-
-  // Up to 3 real pieces per story (mixing both sides) so the pairing reads as
-  // HER clothes, not an abstract swatch exercise.
-  const storyPieces = (story) => {
-    const withImg = (list) => (list || []).filter(it => it.image);
-    const a = withImg(story.aItems);
-    const b = withImg(story.bItems);
-    const picks = [];
-    for (let i = 0; picks.length < 3 && (i < a.length || i < b.length); i++) {
-      if (a[i]) picks.push(a[i]);
-      if (picks.length < 3 && b[i]) picks.push(b[i]);
-    }
-    return picks;
-  };
 
   const itemsWithPrice = useMemo(() => wearItems.filter(it => Number(it.price_paid) > 0), [wearItems]);
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
@@ -131,7 +132,7 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
         <button onClick={onOpenPlanner}
           style={{ width: "100%", textAlign: "left", padding: 14, background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 16, cursor: "pointer" }}>
           <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted, marginBottom: 8 }}>
-            PLANNED FOR TODAY · {friendlyDate(todayIso)}
+            PLANNED FOR TODAY
           </div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
             {todayPlanItems.slice(0, 6).map(it => (
@@ -179,7 +180,7 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
                 </div>
                 {/* Her actual pieces that make the pairing — not just swatches. */}
                 <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                  {storyPieces(story).map(it => (
+                  {story.pieces.map(it => (
                     <div key={it.id} style={{ width: 34, height: 34, background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 4, overflow: "hidden" }}>
                       <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
                     </div>
@@ -191,22 +192,43 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
         </section>
       )}
 
-      {/* Brand Atlas entry — renders ONLY the cached scouting result (zero AI
-          calls, zero network on Home). The heavy work — a web-search-backed
-          scouting run — lives behind an explicit tap inside the view. */}
-      {onOpenDiscovery && (
-        <button onClick={onOpenDiscovery}
-          style={{ width: "100%", textAlign: "left", padding: "12px 14px", background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 16, cursor: "pointer" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted }}>✧ BRAND ATLAS</div>
-            <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+      {/* Shopping intelligence — Brand Atlas + Gap Analysis in one cluster.
+          Both rows render from local data only (zero AI calls on Home); the
+          heavy work lives behind explicit taps inside each view. Gap Analysis
+          got a Home entry because it was buried in Settings → More Tools and
+          the owner couldn't find it (2026-08-20: "gap analysis still missing"). */}
+      {(onOpenDiscovery || onOpenShop) && (
+        <section style={{ ...sectionStyle, background: "#fff" }}>
+          <div style={sectionHeader}>SHOP SMARTER</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {onOpenDiscovery && (
+              <button onClick={onOpenDiscovery}
+                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>✧ Brand Atlas</div>
+                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+                </div>
+                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
+                  {brandDiscovery?.brands?.length
+                    ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
+                    : "Lesser-known, international labels scouted live against your closet."}
+                </div>
+              </button>
+            )}
+            {onOpenShop && (
+              <button onClick={onOpenShop}
+                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>◇ Gap Analysis</div>
+                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+                </div>
+                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
+                  Which core colors, categories, and textures your closet is missing — computed live, then shopped by the AI.
+                </div>
+              </button>
+            )}
           </div>
-          <div style={{ fontSize: 12, color: PALETTE.soft, marginTop: 6, lineHeight: 1.45 }}>
-            {brandDiscovery?.brands?.length
-              ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
-              : "Lesser-known, international labels scouted live against your closet."}
-          </div>
-        </button>
+        </section>
       )}
 
       {/* Coming Up — next planned days within the 2-week horizon. Pinned near

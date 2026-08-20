@@ -13,6 +13,7 @@
 
 import { COLOR_FAMILIES, effectiveColorFamily } from "../constants/color.js";
 import { FASHION_COMBOS, TEXTURE_ROSTER } from "../constants/fashion-combos.js";
+import { isComfortCoded } from "./item-helpers.js";
 
 // ── Season ──────────────────────────────────────────────────────────────────
 // Meteorological seasons, month-based (NYC): matches the fashion-combos and
@@ -178,9 +179,22 @@ export function matchesComboSide(item, side) {
   return side.shade.test(item.color || "");
 }
 
+// A color story is a promise about how she can DRESS — so its supporting
+// pieces must be styleable daily garments or real accessories, never
+// activewear/lounge/swim (green leggings + a sports bra are not a "Forest"
+// story — owner screenshot, 2026-08-20) and never occasionwear (a gown's
+// color doesn't make a Tuesday pairing). Shoes/bags/belts/accessories stay
+// eligible: a navy bag legitimately carries a navy story.
+const COMBO_EXCLUDED_CATS = new Set(["Athleisure", "Loungewear", "Swim", "Occasionwear"]);
+function comboEligible(item) {
+  if (COMBO_EXCLUDED_CATS.has(item.category)) return false;
+  return !isComfortCoded(item);
+}
+
 export function comboOwnership(items, combo) {
-  const a = (items || []).filter(it => matchesComboSide(it, combo.a));
-  const b = (items || []).filter(it => matchesComboSide(it, combo.b));
+  const eligible = (items || []).filter(comboEligible);
+  const a = eligible.filter(it => matchesComboSide(it, combo.a));
+  const b = eligible.filter(it => matchesComboSide(it, combo.b));
   return { a, b, owned: a.length > 0 && b.length > 0 };
 }
 
