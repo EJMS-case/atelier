@@ -187,6 +187,84 @@ export const FASHION_COMBOS = [
     seasons: ["summer", "fall"],
     note: "Cherry against cobalt — the confident clash off the runways; both at full saturation, neutrals everywhere else.",
   },
+  {
+    a: { family: "Blue", shade: /navy|midnight|deep blue/i, label: "Navy" },
+    b: { family: "Brown", shade: /chocolate|espresso|cognac|brown/i, label: "Chocolate" },
+    seasons: ["fall", "winter", "spring"],
+    note: "Navy grounded in chocolate — two deep neutrals-that-aren't; the pairing old-money tailoring is built on.",
+  },
+  {
+    a: { family: "Black", label: "Black" },
+    b: { family: "Green", shade: /emerald|forest/i, label: "Emerald" },
+    seasons: ["fall", "winter"],
+    note: "Emerald cut with black — the jewel worn like a neutral; evening depth without evening effort.",
+  },
+  {
+    a: { family: "Black", label: "Black" },
+    b: { family: "Blue", shade: /cobalt|sapphire|royal/i, label: "Cobalt" },
+    seasons: ["spring", "summer", "fall", "winter"],
+    note: "Cobalt on black — the cleanest way to wear electric blue; one saturated piece, black everywhere else.",
+  },
+  {
+    a: { family: "Red", shade: /burgundy|wine|oxblood/i, label: "Burgundy" },
+    b: { family: "Pink", shade: /fuchsia|magenta|hot pink|orchid/i, label: "Fuchsia" },
+    seasons: ["fall", "winter"],
+    note: "Wine shocked by fuchsia — tonal reds pushed to a statement; very Dark Winter, very now.",
+  },
+  {
+    a: { family: "Gray", shade: /gray|grey|slate|charcoal/i, label: "Gray" },
+    b: { family: "Pink", shade: /blush|rose|dusty/i, label: "Blush" },
+    seasons: ["spring", "summer"],
+    note: "Blush against gray flannel — softness with structure; the daytime version of romance.",
+  },
+  {
+    a: { family: "Neutrals", shade: /camel|tan/i, label: "Camel" },
+    b: { family: "Black", label: "Black" },
+    seasons: ["fall", "winter", "spring"],
+    note: "Camel and black — the coat-over-everything formula; warmth against graphic dark.",
+  },
+  {
+    a: { family: "White", shade: /white|ivory|cream/i, label: "White" },
+    b: { family: "Red", shade: /cherry|red|crimson/i, label: "Cherry Red" },
+    seasons: ["spring", "summer"],
+    note: "Cherry red on white — crisp, awake, a little French; summer's easiest statement.",
+  },
+  {
+    a: { family: "Blue", shade: /deep teal|teal/i, label: "Deep Teal" },
+    b: { family: "Blue", shade: /navy|midnight/i, label: "Navy" },
+    seasons: ["fall", "winter"],
+    note: "Teal into navy — tonal blues at different depths; reads like one rich color that moves.",
+  },
+  {
+    a: { family: "Purple", shade: /plum|aubergine|orchid|deep purple/i, label: "Plum" },
+    b: { family: "Pink", shade: /blush|rose|dusty/i, label: "Blush" },
+    seasons: ["fall", "winter"],
+    note: "Plum lightened by blush — the berry gradient; feminine with real depth behind it.",
+  },
+  {
+    a: { family: "Brown", shade: /espresso|chocolate|brown/i, label: "Espresso" },
+    b: { family: "Neutrals", shade: /camel|tan/i, label: "Camel" },
+    seasons: ["fall", "winter"],
+    note: "Espresso to camel — the tonal brown column; texture does the contrast, not color.",
+  },
+  {
+    a: { family: "Blue", shade: /sky|bellflower|periwinkle|light blue/i, label: "Sky Blue" },
+    b: { family: "Blue", shade: /navy|midnight/i, label: "Navy" },
+    seasons: ["spring", "summer"],
+    note: "Sky over navy — tonal blues, air over depth; the shirt-and-trouser move that never dates.",
+  },
+  {
+    a: { family: "Green", shade: /emerald|forest/i, label: "Emerald" },
+    b: { family: "Brown", shade: /chocolate|espresso|cognac/i, label: "Chocolate" },
+    seasons: ["fall", "winter"],
+    note: "Emerald against chocolate — gemstone meets ground; unexpected and completely wearable.",
+  },
+  {
+    a: { family: "Gray", shade: /charcoal|slate/i, label: "Charcoal" },
+    b: { family: "Neutrals", shade: /camel|tan/i, label: "Camel" },
+    seasons: ["fall", "winter"],
+    note: "Charcoal with camel — the menswear-fabric pairing; quiet, moneyed, zero effortful color.",
+  },
 ];
 
 // ── TEXTURE ROSTER ───────────────────────────────────────────────────────────

@@ -2,6 +2,19 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Color Stories: swatches only, more pairings; Shop Smarter to the bottom — 2026-08-20
+
+### Why
+Owner: the clothing thumbnails on Color Stories sometimes read as the wrong color (stored color vs photo mismatch) and weren't tappable — "omit the icons of clothing and just have the swatches"; she wants MORE chic pairings; and Shop Smarter should live at the bottom of Home.
+
+### Changed
+- **Color Stories are swatch-led now**: piece thumbnails removed; swatch dots enlarged (26px); an explicit "Tap a pairing and the stylist builds the look around it" hint added (the whole card was always tappable — now it says so). Six stories instead of four.
+- **Combo library 29 → 43**: fourteen more Dark-Winter-safe pairings across seasons (Navy + Chocolate, Emerald + Black, Cobalt + Black, Wine + Fuchsia, Gray + Blush, Camel + Black, White + Cherry, Deep Teal + Navy, Plum + Blush, Espresso + Camel, Sky + Navy tonals, Emerald + Chocolate, Charcoal + Camel…). Her Home today: Deep Teal + Navy, Cherry Red + Cobalt, Sky Blue + Navy, Cherry Red + Blush, Navy + Blush, Navy + Black.
+- **Shop Smarter moved to the bottom of Home** (after Back in Rotation) — dressing sections first, shopping last.
+
+### Tests
+Full battery (248) + build green; verified visually against her real data.
+
 ## [Unreleased] — Chat replies cut mid-sentence: Sonnet 5's default thinking rides max_tokens — 2026-08-20
 
 ### Why

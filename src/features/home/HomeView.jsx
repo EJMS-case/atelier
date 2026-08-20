@@ -86,24 +86,13 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
   // Color Stories — in-fashion color-blocking pairs her closet can make right
   // now (auto-derived, nothing to type), excluding pairs she already keeps by
   // hand in her Style Profile. Tap one → Style Me pre-briefed with the pair.
-  // Each story carries up to 3 of HER pieces (mixing both sides), deduped
-  // ACROSS stories — the same pink blouse fronting two cards read as filler
-  // (owner screenshot, 2026-08-20).
+  // Swatches only — the piece thumbnails kept surfacing items whose photo
+  // read as the wrong color and weren't tappable, so the owner asked to drop
+  // them (2026-08-20: "omit the icons of clothing and just have the
+  // swatches"). Six stories — she wants MORE chic pairings, not fewer.
   const colorStories = useMemo(() => {
     try {
-      const stories = autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 4 });
-      const used = new Set();
-      return stories.map(story => {
-        const fresh = (list) => (list || []).filter(it => it.image && !used.has(it.id));
-        const a = fresh(story.aItems);
-        const b = fresh(story.bItems);
-        const pieces = [];
-        for (let i = 0; pieces.length < 3 && (i < a.length || i < b.length); i++) {
-          if (a[i] && pieces.length < 3) { pieces.push(a[i]); used.add(a[i].id); }
-          if (b[i] && pieces.length < 3) { pieces.push(b[i]); used.add(b[i].id); }
-        }
-        return { ...story, pieces };
-      });
+      return autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 6 });
     } catch { return []; }
   }, [items]);
 
@@ -166,11 +155,11 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
                 <div style={{ display: "flex", flexShrink: 0 }}>
                   {story.sides.map((side, i) => (
                     <div key={side} style={{
-                      width: 22, height: 22, borderRadius: "50%",
+                      width: 26, height: 26, borderRadius: "50%",
                       background: hexForColorLabel(side),
                       border: "1.5px solid #fff",
-                      marginLeft: i > 0 ? -7 : 0,
-                      boxShadow: "0 0 0 1px rgba(0,0,0,0.06)",
+                      marginLeft: i > 0 ? -8 : 0,
+                      boxShadow: "0 0 0 1px rgba(0,0,0,0.08)",
                     }}/>
                   ))}
                 </div>
@@ -178,55 +167,12 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
                   <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>{story.label}</div>
                   <div style={{ fontSize: 10, color: PALETTE.muted, lineHeight: 1.4, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{story.note}</div>
                 </div>
-                {/* Her actual pieces that make the pairing — not just swatches. */}
-                <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                  {story.pieces.map(it => (
-                    <div key={it.id} style={{ width: 34, height: 34, background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 4, overflow: "hidden" }}>
-                      <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
-                    </div>
-                  ))}
-                </div>
+                <div style={{ fontSize: 11, color: PALETTE.muted, flexShrink: 0 }}>✦</div>
               </button>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* Shopping intelligence — Brand Atlas + Gap Analysis in one cluster.
-          Both rows render from local data only (zero AI calls on Home); the
-          heavy work lives behind explicit taps inside each view. Gap Analysis
-          got a Home entry because it was buried in Settings → More Tools and
-          the owner couldn't find it (2026-08-20: "gap analysis still missing"). */}
-      {(onOpenDiscovery || onOpenShop) && (
-        <section style={{ ...sectionStyle, background: "#fff" }}>
-          <div style={sectionHeader}>SHOP SMARTER</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {onOpenDiscovery && (
-              <button onClick={onOpenDiscovery}
-                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>✧ Brand Atlas</div>
-                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
-                </div>
-                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
-                  {brandDiscovery?.brands?.length
-                    ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
-                    : "Lesser-known, international labels scouted live against your closet."}
-                </div>
-              </button>
-            )}
-            {onOpenShop && (
-              <button onClick={onOpenShop}
-                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>◇ Gap Analysis</div>
-                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
-                </div>
-                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
-                  Which core colors, categories, and textures your closet is missing — computed live, then shopped by the AI.
-                </div>
-              </button>
-            )}
+          <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 8 }}>
+            Tap a pairing and the stylist builds the look around it.
           </div>
         </section>
       )}
@@ -333,6 +279,44 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
           Tap a piece to style it today{neglected.length > 10 ? ` · ${neglected.length - 10} more rotate through daily` : ""}
         </div>
       </section>
+      )}
+
+      {/* Shop Smarter — Brand Atlas + Gap Analysis, at the BOTTOM of Home
+          (owner request 2026-08-20: dressing sections first, shopping last).
+          Both rows render from local data only; the heavy work lives behind
+          explicit taps inside each view. */}
+      {(onOpenDiscovery || onOpenShop) && (
+        <section style={{ ...sectionStyle, background: "#fff" }}>
+          <div style={sectionHeader}>SHOP SMARTER</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {onOpenDiscovery && (
+              <button onClick={onOpenDiscovery}
+                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>✧ Brand Atlas</div>
+                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+                </div>
+                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
+                  {brandDiscovery?.brands?.length
+                    ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
+                    : "Lesser-known, international labels scouted live against your closet."}
+                </div>
+              </button>
+            )}
+            {onOpenShop && (
+              <button onClick={onOpenShop}
+                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>◇ Gap Analysis</div>
+                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+                </div>
+                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
+                  Which core colors, categories, and textures your closet is missing — computed live, then shopped by the AI.
+                </div>
+              </button>
+            )}
+          </div>
+        </section>
       )}
 
       {/* First-wear nudge — replaces the old always-rendered empty Neglected
