@@ -301,9 +301,9 @@ export default function StyleProfileView({
 
       {/* ── About Me ── */}
       <div style={s.settingsCard}>
-        <div style={s.settingsTitle}>✦ About Me</div>
+        <div style={s.settingsTitle}>✦ About Me &amp; Measurements</div>
         <p style={s.settingsSub}>
-          Body descriptors + life context, translated into dress-to-flatter guidance in every generation. Optional — add what's relevant. Stored on this device.
+          Measurements, body descriptors + life context, translated into dress-to-flatter guidance in every generation. Optional — add what's relevant. Stored on this device.
         </p>
         {[
           ["height", "Height", "e.g. 5'7\""],

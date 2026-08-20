@@ -25,6 +25,20 @@ export function seasonForDate(date = new Date()) {
   return "fall";
 }
 
+const SEASON_ORDER = ["winter", "spring", "summer", "fall"];
+export function nextSeason(season) {
+  const i = SEASON_ORDER.indexOf(season);
+  return SEASON_ORDER[(i + 1) % 4];
+}
+
+// Month-based NYC weather-bucket fallback for when the live forecast isn't
+// available — a resurface list must NEVER show August wool just because the
+// forecast fetch failed. Buckets match the app's Hot/Warm/Mild/Cool/Cold.
+const MONTH_BUCKET = ["Cold", "Cold", "Cool", "Mild", "Mild", "Warm", "Hot", "Hot", "Warm", "Cool", "Cool", "Cold"];
+export function seasonalBucketForDate(date = new Date()) {
+  return MONTH_BUCKET[date.getMonth()];
+}
+
 // ── Core palette ────────────────────────────────────────────────────────────
 // Family counts across the closet, plus the dominant shade label per family
 // ("Blue (mostly Navy)") so coverage lines read like a stylist, not a chart.
@@ -182,18 +196,30 @@ function textCoversCombo(text, combo) {
 }
 
 /**
- * In-fashion pairs her closet can make TODAY — both sides owned, in season,
- * not already on her manual list. Sorted by how deep the closet support is.
- * Returns [{ label, note, aItems, bItems }].
+ * In-fashion pairs her closet can make TODAY — both sides owned, in the
+ * current OR upcoming season (late August should already whisper fall), not
+ * already on her manual list. Ranked by closet depth with a strong bonus for
+ * pairs carrying real color — an all-neutral story (Black + White) never
+ * outranks a chromatic one (owner: "color stories are lame").
+ * Returns [{ label, sides, note, aItems, bItems }].
  */
+const NEUTRAL_PAIR_FAMILIES = new Set(["Black", "Gray", "Brown", "Neutrals", "White"]);
+
 export function autoColorPairs(items, { date = new Date(), exclude = [], max = 4 } = {}) {
   const season = seasonForDate(date);
+  const upcoming = nextSeason(season);
+  const score = (x) => {
+    const chromaticSides =
+      (NEUTRAL_PAIR_FAMILIES.has(x.combo.a.family) ? 0 : 1) +
+      (NEUTRAL_PAIR_FAMILIES.has(x.combo.b.family) ? 0 : 1);
+    return chromaticSides * 100 + Math.min(x.a.length, x.b.length);
+  };
   return FASHION_COMBOS
-    .filter(c => c.seasons.includes(season))
+    .filter(c => c.seasons.includes(season) || c.seasons.includes(upcoming))
     .filter(c => !(exclude || []).some(text => textCoversCombo(text, c)))
     .map(c => ({ combo: c, ...comboOwnership(items, c) }))
     .filter(x => x.owned)
-    .sort((x, y) => Math.min(y.a.length, y.b.length) - Math.min(x.a.length, x.b.length))
+    .sort((x, y) => score(y) - score(x))
     .slice(0, max)
     .map(x => ({
       label: comboLabel(x.combo),
@@ -231,8 +257,9 @@ export function hexForColorLabel(label) {
  */
 export function pairUnlocks(items, { date = new Date(), max = 4 } = {}) {
   const season = seasonForDate(date);
+  const upcoming = nextSeason(season);
   return FASHION_COMBOS
-    .filter(c => c.seasons.includes(season))
+    .filter(c => c.seasons.includes(season) || c.seasons.includes(upcoming))
     .map(c => ({ combo: c, ...comboOwnership(items, c) }))
     .filter(x => !x.owned && (x.a.length >= 2) !== (x.b.length >= 2)) // exactly one strong side
     .filter(x => (x.a.length >= 2 ? x.b.length : x.a.length) === 0)   // the other truly absent
@@ -251,7 +278,7 @@ export function pairUnlocks(items, { date = new Date(), max = 4 } = {}) {
 }
 
 export function describePairUnlocks(items, date = new Date()) {
-  const unlocks = pairUnlocks(items, { date });
+  const unlocks = pairUnlocks(items, { date, max: 6 });
   if (unlocks.length === 0) return "";
   const lines = unlocks.map(u =>
     `${u.label}: she owns ${u.haveCount} ${u.haveLabel.toLowerCase()} pieces but nothing in ${u.needLabel.toLowerCase()} — one ${u.needLabel.toLowerCase()} piece unlocks the pairing (${u.note})`

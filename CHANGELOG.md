@@ -2,6 +2,24 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Round 2 on the Home/chatbot audit (owner feedback, same day) — 2026-08-20
+
+### Why
+Owner reviewed the deployed build and was unimpressed, with specifics: still a big blank spot on Home; Brand Atlas ran long then failed; resurface suggestions included tees/lounge/swim/athleisure and weren't weather-relevant; Color Stories "lame and seriously lacking"; Style Profile belongs in Settings with her measurements; "gap analysis didn't move". This round was diagnosed with EYES: her real closet/plans/logs were exported and the app rendered locally under Playwright with the network mocked — the before screenshot showed a 4,120-px page whose bottom third was a wall of 12 huge white resting-item cards, plus a duplicate REDISCOVER strip inside the review card.
+
+### Fixed
+- **The blank spot**: Back in Rotation is now ONE compact horizontal scroller (88-px tap-to-style tiles, cap 10) instead of a 12-card grid; the duplicate REDISCOVER strip in LookBackCard is gone (it repeated the same resting pieces). Page height with her real data: 4,120 → 2,899 px.
+- **Brand Atlas failure root-caused from `ai_errors`**: the run died at `stop_reason: max_tokens` — web-search calls and results ride the assistant turn's OUTPUT budget, and 3,000 tokens were spent before the final JSON began. Now: max_tokens 8000, searches capped at 4, `pause_turn` continuation loop (≤3 rounds), and a tool-free "finish the JSON now" recovery round when the budget still runs out.
+- **Resurface suggestions**: new shared `isResurfaceCandidate` (recapData) — no T-Shirts, no activewear brands (FP Movement, PopFlex, Beyond Yoga…), no comfort-coded names (hoodie/legging/skort/zip-up/swim/lounge…), nothing she filed at formality ≤2 — applied to Home's Back in Rotation AND the recap's challenge + try-instead alternatives. Her resting count went 108 → 26 truly restyle-worthy pieces. Weather relevance is now guaranteed: live forecast bucket when available, month-based NYC bucket (`seasonalBucketForDate`) otherwise — a failed forecast fetch can no longer surface August wool.
+
+### Changed
+- **Color Stories**: combo library 16 → 29 pairs (rich summer + transitional additions in the Dark Winter register); stories blend the current AND upcoming season (late August already whispers fall); chromatic pairings hard-outrank all-neutral ones (Black + White can't lead); each card now shows up to 3 of HER actual pieces that make the pairing; four stories instead of three. With her closet today: Cherry Red + Cobalt, Cherry Red + Blush, Navy + Blush, Forest + Burgundy.
+- **Style Profile moved to Settings** (owner: "settings is a better home for it along with my measurements"): first-class "Style Profile & Measurements" card at the top of Settings; Home card removed; About Me retitled "About Me & Measurements"; Back returns to Settings. (This reverses the 2026-08-19 "Inside Home" placement at her explicit request.)
+- **Gap analysis shows its math**: new WHAT THE NUMBERS SAY panel in Shopping's gap tab — missing core colors per anchor category (with swatches), pairings one purchase away, texture holes for the season — rendered deterministically the moment the tab opens, before any AI runs. The gap prompt now HARD-requires ≥2 recommendations drawn from the coverage lines and ≥1 from the pair unlocks when they exist.
+
+### Tests
+- coverage 10 → 13 (nextSeason/bucket fallback, chromatic ranking, `isResurfaceCandidate`); full battery (248) + build green; before/after verified visually against her real data via the mocked-network Playwright harness.
+
 ## [Unreleased] — Smarter Home + period reviews, coverage-driven gap analysis, builder-chat overhaul, AI readiness audit — 2026-08-20
 
 ### Why

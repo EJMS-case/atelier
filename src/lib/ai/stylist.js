@@ -513,7 +513,7 @@ HER STYLE FINGERPRINT (distilled from what she actually wears — extend this di
 ${fp}
 ` : ""}
 Identify the 5-8 HIGHEST-IMPACT gaps, weighing:
-1. A CORE-PALETTE COLOR MISSING FROM AN ANCHOR CATEGORY is the sharpest kind of gap — if she lives in navy and burgundy but owns no navy bag, a navy bag beats any generic "essential". Read the COLOR × CATEGORY COVERAGE lines and act on them.
+1. A CORE-PALETTE COLOR MISSING FROM AN ANCHOR CATEGORY is the sharpest kind of gap — if she lives in navy and burgundy but owns no navy bag, a navy bag beats any generic "essential". Read the COLOR × CATEGORY COVERAGE lines and act on them. HARD REQUIREMENT: when those lines list missing core colors, at least TWO of your gaps must come directly from them (fewer only if fewer exist), and at least ONE gap must come from IN-FASHION PAIRINGS ONE PURCHASE AWAY when any are listed.
 2. IN-FASHION PAIRINGS ONE PURCHASE AWAY — one right piece that activates a pairing against many pieces she already owns is maximum leverage per dollar.
 3. TEXTURES missing or thin for the season ahead — a wardrobe this considered should have its ${season} textures covered.
 4. MISSING or THIN subcategories that a complete wardrobe needs.

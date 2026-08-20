@@ -1,7 +1,77 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { s, si } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import { generateShoppingRecs } from "../lib/ai/stylist.js";
+import {
+  closetColorProfile, colorCategoryCoverage, pairUnlocks, textureInventory,
+  seasonForDate, hexForColorLabel,
+} from "../utils/wardrobe-coverage.js";
+
+// The deterministic half of the gap analysis, rendered as FACTS before any AI
+// runs (owner, 2026-08-20: "gap analysis didn't move" — the coverage math was
+// feeding the prompt invisibly; now the navy-bag class of finding is on
+// screen the moment the tab opens, and the AI's job is products, not math).
+function CoveragePanel({ items }) {
+  const data = useMemo(() => {
+    try {
+      const season = seasonForDate();
+      const profile = closetColorProfile(items);
+      const coverage = colorCategoryCoverage(items).filter(c => c.missingCore.length > 0);
+      const unlocks = pairUnlocks(items, { max: 3 });
+      const textures = textureInventory(items, { season });
+      return { season, profile, coverage, unlocks, textures };
+    } catch { return null; }
+  }, [items]);
+  if (!data) return null;
+  const { profile, coverage, unlocks, textures, season } = data;
+  const famLabel = (f) => {
+    const shade = profile.dominantShade(f);
+    return shade && shade.toLowerCase() !== f.toLowerCase() ? `${shade}` : f;
+  };
+  const swatch = (label) => (
+    <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8 }}>
+      <span style={{ width: 10, height: 10, borderRadius: "50%", display: "inline-block", background: hexForColorLabel(label), boxShadow: "0 0 0 1px rgba(0,0,0,0.12)" }}/>
+      {label}
+    </span>
+  );
+  return (
+    <div style={{ ...si.card, marginBottom: 16 }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)", marginBottom: 8 }}>
+        WHAT THE NUMBERS SAY · computed from your closet, no AI
+      </div>
+      {coverage.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--color-text-2)", marginBottom: 4 }}>Core colors missing from anchor categories:</div>
+          {coverage.map(c => (
+            <div key={c.category} style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.7 }}>
+              <strong>{c.category}</strong>: no {c.missingCore.map(f => swatch(famLabel(f)))}
+            </div>
+          ))}
+        </div>
+      )}
+      {unlocks.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--color-text-2)", marginBottom: 4 }}>Pairings one purchase away:</div>
+          {unlocks.map(u => (
+            <div key={u.label} style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.55 }}>
+              <strong>{u.label}</strong> — you own {u.haveCount} {u.haveLabel.toLowerCase()} pieces and zero {u.needLabel.toLowerCase()}.
+            </div>
+          ))}
+        </div>
+      )}
+      {(textures.missing.length > 0 || textures.thin.length > 0) && (
+        <div style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.55 }}>
+          <div style={{ fontSize: 11, color: "var(--color-text-2)", marginBottom: 4 }}>Textures for {season}:</div>
+          {textures.missing.length > 0 && <div>Missing: {textures.missing.join(", ")}</div>}
+          {textures.thin.length > 0 && <div style={{ color: "var(--color-text-2)" }}>Thin (1–2 pieces): {textures.thin.join(", ")}</div>}
+        </div>
+      )}
+      {coverage.length === 0 && unlocks.length === 0 && textures.missing.length === 0 && (
+        <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>No structural color or texture holes — the numbers say your closet is covered; the AI hunt below is for upgrades.</div>
+      )}
+    </div>
+  );
+}
 
 export default function ShoppingView({ items, apiKey, onBack }) {
   const [mode, setMode] = useState("gap");
@@ -55,7 +125,10 @@ export default function ShoppingView({ items, apiKey, onBack }) {
       </div>
 
       {mode === "gap" && (
-        <div style={s.advisorNote}>Analyzes your wardrobe against the full taxonomy to find missing and thin categories, then suggests specific pieces to buy.</div>
+        <>
+          <div style={s.advisorNote}>The numbers below are computed live from your closet; Run Gap Analysis turns them (plus taxonomy and season) into specific pieces to buy.</div>
+          <CoveragePanel items={items}/>
+        </>
       )}
 
       {mode === "complete" && (

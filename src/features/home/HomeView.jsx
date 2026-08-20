@@ -10,17 +10,17 @@ import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../w
 import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
 import { fetchNycForecast } from "../../lib/weather.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
-// Categories the "Neglected" list surfaces — real garments only (no
-// accessories/belts/shoes/bags, no swim/lounge/athleisure). Shared with the
-// recap's rediscover/challenge nudges so the two lists never drift.
-import { GARMENT_CATS as NEGLECT_CATS } from "../recap/recapData.js";
+// Resurface eligibility — real restyle-worthy garments only (no tees, no
+// activewear brands, no comfort-coded pieces, nothing she filed at f≤2).
+// Shared with the recap's challenge/alternatives so the lists never drift.
+import { isResurfaceCandidate } from "../recap/recapData.js";
 import { resolveItemIds, filterByWeather } from "../../utils/item-helpers.js";
-import { autoColorPairs, rotateDaily, hexForColorLabel } from "../../utils/wardrobe-coverage.js";
+import { autoColorPairs, rotateDaily, hexForColorLabel, seasonalBucketForDate } from "../../utils/wardrobe-coverage.js";
 import { loadStylePrefs } from "../../utils/storage.js";
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, onOpenProfile, styleFingerprint, brandDiscovery, onOpenDiscovery }) {
+export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -72,16 +72,15 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
     return () => { live = false; };
   }, [todayIso]);
 
-  // Neglected = real garments only. Accessories, belts, shoes, bags repeat by
-  // design, and swim / lounge / athleisure aren't "rediscover" pieces — she
-  // doesn't want any of those cluttering the list (belts were dominating it).
-  // Season-aware (filterByWeather on today's bucket) so August never nags her
-  // about resting wool, and date-seeded rotation so the surfaced dozen changes
-  // every day instead of pinning the same 12 pieces for weeks.
+  // Back in Rotation = restyle-worthy garments only (isResurfaceCandidate: no
+  // tees / activewear / lounge / swim, per the owner). Season-aware ALWAYS —
+  // live forecast bucket when it resolves, month-based NYC bucket otherwise,
+  // so a failed weather fetch can never surface August wool. Date-seeded
+  // rotation keeps the surfaced set fresh daily.
   const neglected = useMemo(() => {
-    const resting = neglectedItems(wearItems, 60).filter(it => NEGLECT_CATS.has(it.category));
-    const inSeason = todayBucket ? filterByWeather(resting, todayBucket) : resting;
-    return rotateDaily(inSeason, todayIso);
+    const resting = neglectedItems(wearItems, 60).filter(isResurfaceCandidate);
+    const bucket = todayBucket || seasonalBucketForDate();
+    return rotateDaily(filterByWeather(resting, bucket), todayIso);
   }, [wearItems, todayBucket, todayIso]);
 
   // Color Stories — in-fashion color-blocking pairs her closet can make right
@@ -89,9 +88,23 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
   // hand in her Style Profile. Tap one → Style Me pre-briefed with the pair.
   const colorStories = useMemo(() => {
     try {
-      return autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 3 });
+      return autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 4 });
     } catch { return []; }
   }, [items]);
+
+  // Up to 3 real pieces per story (mixing both sides) so the pairing reads as
+  // HER clothes, not an abstract swatch exercise.
+  const storyPieces = (story) => {
+    const withImg = (list) => (list || []).filter(it => it.image);
+    const a = withImg(story.aItems);
+    const b = withImg(story.bItems);
+    const picks = [];
+    for (let i = 0; picks.length < 3 && (i < a.length || i < b.length); i++) {
+      if (a[i]) picks.push(a[i]);
+      if (picks.length < 3 && b[i]) picks.push(b[i]);
+    }
+    return picks;
+  };
 
   const itemsWithPrice = useMemo(() => wearItems.filter(it => Number(it.price_paid) > 0), [wearItems]);
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
@@ -109,7 +122,7 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14, marginTop: 4 }}>
         <h2 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 22, color: PALETTE.ink, margin: 0 }}>Today</h2>
         <div style={{ fontSize: 10, letterSpacing: "0.06em", color: PALETTE.muted }}>
-          {items.length} pieces{neglected.length > 0 && ` · ${neglected.length} neglected`}
+          {items.length} pieces{neglected.length > 0 && ` · ${neglected.length} resting`}
         </div>
       </div>
 
@@ -135,24 +148,8 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
         </button>
       )}
 
-      {/* Style Profile entry — her stylist's file (fingerprint, color
-          pairings, About Me), moved out of Settings (roadmap B; placement
-          "Inside Home" chosen by the owner 2026-08-19). One-line teaser from
-          the fingerprint when it exists. */}
-      {onOpenProfile && (
-        <button onClick={onOpenProfile}
-          style={{ width: "100%", textAlign: "left", padding: "12px 14px", background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 16, cursor: "pointer" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted }}>✦ YOUR STYLE PROFILE</div>
-            <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
-          </div>
-          <div style={{ fontSize: 12, color: PALETTE.soft, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {styleFingerprint?.text
-              ? styleFingerprint.text
-              : "Your stylist's read on you — fingerprint, color pairings, and fit notes."}
-          </div>
-        </button>
-      )}
+      {/* Style Profile moved BACK to Settings (owner, 2026-08-20: "settings
+          is a better home for it along with my measurements") — no Home card. */}
 
       {/* Color Stories — in-fashion pairings the closet already supports.
           Auto-derived (autoColorPairs), so she never has to type a color.
@@ -180,7 +177,14 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
                   <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>{story.label}</div>
                   <div style={{ fontSize: 10, color: PALETTE.muted, lineHeight: 1.4, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{story.note}</div>
                 </div>
-                <div style={{ fontSize: 11, color: PALETTE.muted }}>✦</div>
+                {/* Her actual pieces that make the pairing — not just swatches. */}
+                <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                  {storyPieces(story).map(it => (
+                    <div key={it.id} style={{ width: 34, height: 34, background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 4, overflow: "hidden" }}>
+                      <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+                    </div>
+                  ))}
+                </div>
               </button>
             ))}
           </div>
@@ -279,46 +283,33 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
         </section>
       )}
 
-      {/* Neglected pieces — season-filtered (only what's wearable in today's
-          weather) and rotated daily so the same 12 don't pin here for weeks.
-          The whole section disappears when there's nothing to say — an empty
-          gray box was just a gap on the page. */}
+      {/* Back in Rotation — a single compact scroller (the old 12-card grid
+          was a multi-screen wall of white at the bottom of Home; the owner
+          read it as "a big blank spot"). Season-filtered always, rotated
+          daily, restyle-worthy garments only. Tap a piece → Style Me around
+          it; that's the whole point of resurfacing it. */}
       {neglected.length > 0 && (
       <section style={sectionStyle}>
         <div style={sectionHeader}>
-          BACK IN ROTATION · RESTING 60+ DAYS{todayBucket ? ` · ${todayBucket.toUpperCase()}-READY` : ""}
+          BACK IN ROTATION · RESTING 60+ DAYS · {(todayBucket || seasonalBucketForDate()).toUpperCase()}-READY
         </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 10 }}>
-            {neglected.slice(0, 12).map(it => {
-              const cpw = costPerWear(it);
-              return (
-                <div key={it.id} style={{ background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 6, padding: 6 }}>
-                  <button onClick={() => onEditItem?.(it)}
-                    style={{ width: "100%", padding: 0, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
-                    <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                      {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
-                    </div>
-                    <div style={{ fontSize: 10, color: PALETTE.soft, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", marginBottom: 2 }}>{it.name}</div>
-                    <div style={{ fontSize: 9, color: PALETTE.muted, marginBottom: 6 }}>
-                      {it.last_worn ? `last ${it.last_worn}` : "never worn"}
-                      {cpw !== null ? ` · $${cpw.toFixed(2)}/wear` : ""}
-                    </div>
-                  </button>
-                  {onStyleItem && (
-                    <button onClick={() => onStyleItem(it)}
-                      style={{ width: "100%", fontSize: 10, padding: "4px 6px", background: PALETTE.ink, color: PALETTE.cream, border: "none", borderRadius: 4, cursor: "pointer", letterSpacing: "0.05em" }}>
-                      ✦ Style this
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        {neglected.length > 12 && (
-          <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 8, textAlign: "right" }}>
-            and {neglected.length - 12} more — a fresh dozen rotates in daily
-          </div>
-        )}
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {neglected.slice(0, 10).map(it => (
+            <button key={it.id} onClick={() => (onStyleItem || onEditItem)?.(it)}
+              title={`Style ${it.name}`}
+              style={{ flexShrink: 0, width: 88, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+              <div style={{ width: 88, height: 88, background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 6, overflow: "hidden", position: "relative" }}>
+                {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                <div style={{ position: "absolute", bottom: 3, right: 3, background: PALETTE.ink, color: PALETTE.cream, fontSize: 9, lineHeight: 1, padding: "3px 5px", borderRadius: 8 }}>✦</div>
+              </div>
+              <div style={{ fontSize: 10, color: PALETTE.soft, marginTop: 3, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{it.name}</div>
+              <div style={{ fontSize: 9, color: PALETTE.muted }}>{it.last_worn ? `last ${it.last_worn}` : "never worn"}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 6 }}>
+          Tap a piece to style it today{neglected.length > 10 ? ` · ${neglected.length - 10} more rotate through daily` : ""}
+        </div>
       </section>
       )}
 

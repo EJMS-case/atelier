@@ -115,6 +115,78 @@ export const FASHION_COMBOS = [
     seasons: ["spring", "summer", "fall", "winter"],
     note: "Graphic black and white — the highest-contrast story a Dark Winter owns outright.",
   },
+  {
+    a: { family: "Brown", shade: /chocolate|espresso|cocoa|brown/i, label: "Chocolate" },
+    b: { family: "Pink", shade: /blush|rose|dusty/i, label: "Blush" },
+    seasons: ["summer", "fall", "winter"],
+    note: "Chocolate softened by blush — dessert colors worn with a straight face; very now.",
+  },
+  {
+    a: { family: "Blue", shade: /navy|midnight|deep blue/i, label: "Navy" },
+    b: { family: "Pink", shade: /blush|rose|dusty|pink/i, label: "Blush" },
+    seasons: ["spring", "summer", "fall"],
+    note: "Navy with blush — the polished-feminine axis; reads office by day, dinner by night.",
+  },
+  {
+    a: { family: "Black", label: "Black" },
+    b: { family: "Red", shade: /cherry|red|crimson/i, label: "Cherry Red" },
+    seasons: ["summer", "fall", "winter"],
+    note: "Black punctuated by cherry red — one exclamation mark, everything else silent.",
+  },
+  {
+    a: { family: "White", shade: /white|ivory|cream/i, label: "White" },
+    b: { family: "Blue", shade: /cobalt|sapphire|royal/i, label: "Cobalt" },
+    seasons: ["spring", "summer"],
+    note: "Cobalt against white — the saturated summer flex a Dark Winter can carry at full strength.",
+  },
+  {
+    a: { family: "Blue", shade: /deep teal|teal/i, label: "Deep Teal" },
+    b: { family: "White", shade: /ivory|cream|white/i, label: "Ivory" },
+    seasons: ["summer", "fall"],
+    note: "Deep teal cooled by ivory — jewel tone in daylight without the evening weight.",
+  },
+  {
+    a: { family: "Green", shade: /forest|emerald|hunter/i, label: "Forest" },
+    b: { family: "White", shade: /ivory|cream|white/i, label: "Ivory" },
+    seasons: ["spring", "summer"],
+    note: "Forest with ivory — garden-party depth; keeps green sophisticated in the heat.",
+  },
+  {
+    a: { family: "Red", shade: /burgundy|wine|oxblood/i, label: "Burgundy" },
+    b: { family: "White", shade: /ivory|cream|white/i, label: "Ivory" },
+    seasons: ["summer", "fall", "winter"],
+    note: "Burgundy against ivory — the wine tone stays summer-legal when the other half is light.",
+  },
+  {
+    a: { family: "Blue", shade: /sky|bellflower|periwinkle|light blue/i, label: "Sky Blue" },
+    b: { family: "Brown", shade: /chocolate|espresso|brown|cognac/i, label: "Chocolate" },
+    seasons: ["spring", "summer"],
+    note: "Sky blue over chocolate — airy against grounded; the sleeper pairing stylists keep pulling.",
+  },
+  {
+    a: { family: "Blue", shade: /navy|midnight/i, label: "Navy" },
+    b: { family: "Neutrals", shade: /camel|tan/i, label: "Camel" },
+    seasons: ["fall", "winter", "spring"],
+    note: "Navy and camel — the trench-coat axiom; polish that never tries too hard.",
+  },
+  {
+    a: { family: "Gray", shade: /slate|charcoal|gray|grey/i, label: "Slate Gray" },
+    b: { family: "Red", shade: /burgundy|wine|oxblood/i, label: "Burgundy" },
+    seasons: ["fall", "winter"],
+    note: "Slate suiting warmed by burgundy — boardroom color-blocking with zero costume risk.",
+  },
+  {
+    a: { family: "Black", label: "Black" },
+    b: { family: "Pink", shade: /blush|rose|dusty/i, label: "Blush" },
+    seasons: ["spring", "summer", "fall", "winter"],
+    note: "Black sharpened, blush softened — each fixes the other; a Dark Winter's easiest romance.",
+  },
+  {
+    a: { family: "Red", shade: /cherry|red|crimson/i, label: "Cherry Red" },
+    b: { family: "Blue", shade: /cobalt|sapphire|royal/i, label: "Cobalt" },
+    seasons: ["summer", "fall"],
+    note: "Cherry against cobalt — the confident clash off the runways; both at full saturation, neutrals everywhere else.",
+  },
 ];
 
 // ── TEXTURE ROSTER ───────────────────────────────────────────────────────────
