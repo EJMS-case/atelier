@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Round 3: color stories are styleable clothes only; occasionwear rests; Gap Analysis on Home — 2026-08-20
+
+### Why
+Owner's screenshot review of round 2: the same pink blouse fronted two color stories, "Cobalt" was represented by an athletic dress and "Forest" by leggings + a sports bra, the challenge suggested a cocktail dress she'd only wear to fancy events, and "gap analysis still missing" — it was buried in Settings → More Tools where she never found it.
+
+### Fixed
+- **Color-story matching now counts styleable pieces only**: new shared `isComfortCoded` (item-helpers — activewear brand / comfort-coded name / her own formality ≤2) + a category gate (no Athleisure/Lounge/Swim/Occasionwear) applied inside `comboOwnership`, so a pairing can neither qualify NOR be illustrated by activewear. With her closet: Forest + Burgundy correctly disappears (its green side was leggings), Navy + Black takes the slot. Shoes/bags/accessories stay eligible — a navy bag legitimately carries a navy story.
+- **Story exemplars dedupe across cards** — the same blouse can no longer front two pairings.
+- **Occasionwear excluded from resurface surfaces** (Back in Rotation + challenge + try-instead): cocktail dresses and gowns rest by design. Her resting pool: 26 → 19.
+- **"Try instead" swaps stay within the garment's L2 group** — a pencil skirt's alternatives are skirts, not shorts.
+- **"PLANNED FOR TODAY · Today" redundancy dropped.**
+
+### Added
+- **SHOP SMARTER cluster on Home**: Brand Atlas + a new **Gap Analysis** entry (it now opens Shopping directly — previously reachable only via Settings → More Tools). Both rows render from local data; verified via the Playwright harness that the tap lands on the numbers panel — with her real closet it opens on "Bags: no navy · white · green".
+- Coverage-panel failures now log to console instead of silently rendering nothing.
+
+### Tests
+- Full battery (248) + build green; Home and Shopping verified visually against her real data (mocked-network Playwright harness).
+
 ## [Unreleased] — Round 2 on the Home/chatbot audit (owner feedback, same day) — 2026-08-20
 
 ### Why

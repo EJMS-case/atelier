@@ -9,7 +9,8 @@
 
 import { outfitsOf } from "../planner/outfits.js";
 import { asArray } from "../../lib/multitag.js";
-import { filterByWeather } from "../../utils/item-helpers.js";
+import { filterByWeather, isComfortCoded } from "../../utils/item-helpers.js";
+import { getSubcatL2 } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
 
 // Categories that don't count as "leaned-on" garments — belts, jewelry and
@@ -25,24 +26,17 @@ export const GARMENT_CATS = new Set([
   "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
 ]);
 
-// The category gate above wasn't enough (owner, 2026-08-20: "I don't want
-// t-shirts or lounge or swim or active/athleisure in resurface suggestions") —
-// her comfort pieces often live under Sets/Tops/Bottoms, not the Athleisure
-// category. A resurface candidate must be a REAL garment worth restyling:
-//   · no T-Shirts (graphic tees rest on purpose),
-//   · no activewear brands (FP Movement, PopFlex, Beyond Yoga…),
-//   · no comfort-coded names (hoodie, legging, skort, zip-up, swim…),
-//   · nothing she herself filed at formality ≤2 (her lounge tags).
-const COMFORT_BRAND_RE = /fp movement|free people movement|popflex|beyond yoga|alo yoga|lululemon|l\*space/i;
-const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra|zip[- ]?up|athletic|swim|bikini|cover[- ]?up|lounge|pajama|sleep|cozy)\b/i;
+// The category gate above wasn't enough (owner, 2026-08-20 ×2: no t-shirts /
+// lounge / swim / athleisure, and no occasionwear — "a cocktail dress I'd
+// wear only to fancy events" doesn't belong in a wear-it-this-week nudge).
+// Her comfort pieces often live under Sets/Tops/Bottoms, not the Athleisure
+// category, so the shared isComfortCoded heuristic (item-helpers: activewear
+// brand / comfort-coded name / her own formality ≤2) does the real work.
 export function isResurfaceCandidate(it) {
   if (!GARMENT_CATS.has(it.category)) return false;
+  if (it.category === "Occasionwear") return false; // event pieces rest by design
   if ((it.subcategory || "") === "T-Shirts") return false;
-  const f = Number(it.formality);
-  if (Number.isFinite(f) && f <= 2) return false;
-  const text = `${it.brand || ""} ${it.name || ""}`;
-  if (COMFORT_BRAND_RE.test(text) || COMFORT_NAME_RE.test(text)) return false;
-  return true;
+  return !isComfortCoded(it);
 }
 
 function daysAgo(iso, fromIso) {
@@ -143,10 +137,14 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   // hasn't worn this month, favoring hearted then longest-rested. Suggestions
   // are (a) weather-appropriate for the season and (b) NOT reused across pieces,
   // so three overworn tops don't all show the identical three swaps.
+  // "Try instead" swaps stay within the garment's L2 group — a pencil skirt's
+  // alternatives are skirts, not shorts (both live under Bottoms).
   const usedAltIds = new Set();
   const alternativesFor = (target) => {
+    const targetL2 = getSubcatL2(target.category, target.subcategory);
     const picks = forSeason((items || [])
       .filter(it => it.category === target.category && it.id !== target.id
+        && (!targetL2 || getSubcatL2(it.category, it.subcategory) === targetL2)
         && isResurfaceCandidate(it)
         && it.image && !wornThisMonth.has(it.id) && !usedAltIds.has(it.id)))
       .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
