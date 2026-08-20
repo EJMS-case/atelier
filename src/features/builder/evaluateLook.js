@@ -111,13 +111,13 @@ export async function evaluateLook(items, apiKey, opts = {}) {
 
   // No sampling params here: Sonnet 5 removed `temperature` — sending it is a
   // hard 400 ("`temperature` is deprecated for this model") shown to the user.
-  // max_tokens 1400: the response contract budgets ~600-700 tokens of JSON
-  // (280-char headline + 400-char works + 3×400-char tips + 400-char weather)
-  // and 900 was cutting generous evaluations off mid-JSON — the owner's
-  // "Could not parse evaluation response" screenshot (2026-08-19 03:19).
+  // max_tokens 3000: the JSON contract needs ~600-700 tokens, but Sonnet 5
+  // runs adaptive thinking by DEFAULT and its (invisible) thinking tokens
+  // count against max_tokens — the 900→1400 truncation saga (2026-08-19) was
+  // this in disguise, and 1400 still left the JSON racing the thinking.
   const res = await anthropicFetch({
     model: opts.model || MODEL_STRONG,
-    max_tokens: 1400,
+    max_tokens: 3000,
     messages: [{
       role: "user",
       content: `${EVAL_PROMPT}\n${context.length ? `\n${context.join("\n\n")}\n` : ""}\nITEMS ON THE CANVAS:\n${inventory}`,

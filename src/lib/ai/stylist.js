@@ -525,7 +525,10 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
     return invokeShoppingTool({
       apiKey,
       model: MODEL_STRONG,
-      maxTokens: 3000,
+      // Sonnet 5 thinks adaptively by default and thinking tokens ride
+      // max_tokens — headroom above the ~1200-token gaps JSON or the tool
+      // input truncates and the empty-retry wrapper burns a second call.
+      maxTokens: 5000,
       content: [
         // Shopping-safe profile: palette/fit/taste WITHOUT the styling
         // profile's "inventory only / never invent items" rule, which
@@ -573,7 +576,8 @@ Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. B
   return invokeShoppingTool({
     apiKey,
     model: MODEL_STRONG,
-    maxTokens: 2500,
+    // Same thinking-rides-the-budget headroom as gap mode above.
+    maxTokens: 4000,
     content: [
       // Shopping-safe profile — see the gap-mode call above.
       { type: "text", text: `${SHOPPING_STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },

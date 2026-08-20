@@ -143,9 +143,16 @@ export async function sendBuilderMessage({ messages, assembledItems, closetItems
       : { role: m.role, content: m.content }
   );
 
+  // Sonnet 5 runs ADAPTIVE THINKING by default (omitting `thinking` ≠ off),
+  // and thinking tokens count against max_tokens even though they never
+  // render. At 600 the visible reply got whatever the thinking left over —
+  // every chat bubble cut off mid-sentence (owner screenshot, 2026-08-20).
+  // 4000 leaves room for both; effort "low" keeps the thinking shallow so
+  // replies start fast — this is a conversation, not the evaluator.
   const res = await anthropicFetch({
     model: MODEL_STRONG,
-    max_tokens: 600,
+    max_tokens: 4000,
+    output_config: { effort: "low" },
     stream: true,
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: apiMessages,

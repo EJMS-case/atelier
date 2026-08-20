@@ -2,6 +2,20 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Chat replies cut mid-sentence: Sonnet 5's default thinking rides max_tokens — 2026-08-20
+
+### Why
+Owner screenshot: every builder-chat reply cut off mid-sentence ("This whole chat is getting cut off"). Root cause (confirmed against the current API reference): **Sonnet 5 runs adaptive thinking by default even when the request doesn't ask for it**, and those invisible thinking tokens count against `max_tokens`. The chat's 600-token cap was mostly consumed by thinking; the visible reply got the remainder. Every `MODEL_STRONG` (Sonnet 5) call site with a tight cap had the same latent bug — including the 2026-08-19 evaluator "truncation" saga, which was this in disguise.
+
+### Fixed
+- **Builder chat**: `max_tokens` 600 → 4000 + `output_config: {effort: "low"}` — shallow thinking keeps replies starting fast (it's a conversation, not the evaluator) and the budget can no longer starve the visible text.
+- **Evaluate look**: 1400 → 3000 (the JSON needs ~700 tokens; thinking needs the rest).
+- **Shopping recs**: gaps 3000 → 5000, completions 2500 → 4000 (truncated tool input was burning the empty-retry).
+- **Brand Atlas**: main run 8000 → 10000, finish-round 2500 → 4000 (search results AND thinking ride the output budget).
+
+### Notes
+- All raw-fetch call sites on `MODEL_STANDARD` (Sonnet 4.6) are unaffected — that model only thinks when asked.
+
 ## [Unreleased] — Round 3: color stories are styleable clothes only; occasionwear rests; Gap Analysis on Home — 2026-08-20
 
 ### Why

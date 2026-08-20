@@ -110,7 +110,9 @@ export async function generateBrandDiscovery({ items, apiKey, excludeBrands = []
   // with only its opening sentence emitted (ai_errors 2026-08-20 06:20) —
   // hence 8000 here, searches capped at 4, and two recovery paths below.
   const TOOLS = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
-  const baseBody = { model: MODEL_STRONG, max_tokens: 8000 };
+  // 10000: search results AND Sonnet 5's default adaptive thinking both ride
+  // the output budget alongside the final JSON.
+  const baseBody = { model: MODEL_STRONG, max_tokens: 10000 };
   let messages = [{ role: "user", content: prompt }];
 
   // Attempt 1: with the web search server tool. Fallback (only if the API
@@ -148,7 +150,7 @@ export async function generateBrandDiscovery({ items, apiKey, excludeBrands = []
   if (brands.length === 0 && body.stop_reason === "max_tokens") {
     messages = [...messages, { role: "assistant", content: body.content },
       { role: "user", content: "Finish now: output ONLY the complete JSON array of brands in the agreed format — no prose, no searches." }];
-    const res = await anthropicFetch({ model: MODEL_STRONG, max_tokens: 2500, messages }, { apiKey });
+    const res = await anthropicFetch({ model: MODEL_STRONG, max_tokens: 4000, messages }, { apiKey });
     const finishBody = await res.json();
     text = textOf(finishBody) || text;
     brands = parseBrandDiscovery(text);
