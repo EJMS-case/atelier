@@ -31,7 +31,7 @@ export const ISSUE_LABELS = {
   no_image:            "no photo",
   material_missing:    "no material — invisible to texture intelligence",
   formality_missing:   "no formality tag",
-  notes_too_long:      `notes over ${CURATED_NOTES_MAX} chars — excluded from classifiers`,
+  notes_too_long:      `notes over ${CURATED_NOTES_MAX} chars with no stylist line — excluded from classifiers`,
 };
 
 export function auditItem(it) {
@@ -49,7 +49,11 @@ export function auditItem(it) {
   if (MATERIAL_CATS.has(it.category) && !String(it.material || "").trim()) issues.push("material_missing");
   const formality = it.formality === "" || it.formality == null ? NaN : Number(it.formality);
   if (!Number.isFinite(formality)) issues.push("formality_missing");
-  if (String(it.notes || "").length > CURATED_NOTES_MAX) issues.push("notes_too_long");
+  // A stylist_line resolves long notes: classifiers and prompts read the
+  // line, the copy stays for display/search/vision (migration 0018).
+  if (String(it.notes || "").length > CURATED_NOTES_MAX && !String(it.stylist_line || "").trim()) {
+    issues.push("notes_too_long");
+  }
   return issues;
 }
 

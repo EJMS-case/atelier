@@ -26,10 +26,10 @@ import { CATEGORY_ORDER } from "../../constants/taxonomy.js";
 import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
 import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
-// stylistNotes: long pasted product copy is condensed to its stylist-relevant
-// sentences before riding the chat context (up to 40 items per category ×
-// ~1 kB of copy each is real token money); curated notes pass through whole.
-import { stylistNotes } from "../../utils/item-helpers.js";
+// promptNotes: her curated stylist_line when present, else long pasted product
+// copy condensed to its stylist-relevant sentences (up to 40 items per
+// category × ~1 kB of copy each is real token money).
+import { promptNotes } from "../../utils/item-helpers.js";
 
 function formatItem(it) {
   return [
@@ -40,7 +40,7 @@ function formatItem(it) {
     it.pattern && it.pattern !== "solid" ? `pattern: ${it.pattern}` : null,
     it.brand     ? `brand: ${it.brand}`       : null,
     Number.isFinite(it.formality) ? `f${it.formality}` : null,
-    it.notes     ? `notes: ${stylistNotes(it.notes)}` : null,
+    promptNotes(it) ? `notes: ${promptNotes(it)}` : null,
   ].filter(Boolean).join(" | ");
 }
 

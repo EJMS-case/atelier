@@ -70,3 +70,10 @@ test("every issue key has a label and a criticality decision", () => {
     assert.ok(allKeys.includes(key), `critical issue ${key} must have a label`);
   }
 });
+
+test("a stylist_line resolves the long-notes flag", () => {
+  const longNotes = { ...clean, notes: "x".repeat(300) };
+  assert.ok(auditItem(longNotes).includes("notes_too_long"));
+  assert.ok(!auditItem({ ...longNotes, stylist_line: "silk cami, bias cut" }).includes("notes_too_long"));
+  assert.ok(auditItem({ ...longNotes, stylist_line: "   " }).includes("notes_too_long"), "blank line doesn't count");
+});

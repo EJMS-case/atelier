@@ -24,7 +24,7 @@ import { sb } from "../../lib/supabase.js";
 import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
 import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
-import { stylistNotes } from "../../utils/item-helpers.js";
+import { promptNotes } from "../../utils/item-helpers.js";
 import { parseEvalResponse } from "./evalParse.js";
 import { logAiError } from "../../lib/ai/logError.js";
 
@@ -65,7 +65,7 @@ function formatItemLine(it) {
     it.material ? `material: ${it.material}` : null,
     it.brand ? `brand: ${it.brand}` : null,
     it.name,
-    it.notes ? `notes: ${stylistNotes(it.notes, { maxLen: 160 })}` : null,
+    promptNotes(it, { maxLen: 160 }) ? `notes: ${promptNotes(it, { maxLen: 160 })}` : null,
   ].filter(Boolean);
   return parts.join(" | ");
 }

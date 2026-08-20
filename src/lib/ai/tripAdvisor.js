@@ -11,7 +11,7 @@ import { z } from "zod";
 import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
-import { filterByWeather, stylistNotes } from "../../utils/item-helpers.js";
+import { filterByWeather, promptNotes } from "../../utils/item-helpers.js";
 import { loadStylePrefs, loadAboutMe } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
 import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
@@ -170,7 +170,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   const inventory = sampled.map(it => {
     const f = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
     const pat = it.pattern && it.pattern !== "solid" && it.pattern !== "" ? ` | ${it.pattern}` : "";
-    const pn = it.notes ? stylistNotes(it.notes, { maxLen: 120 }) : "";
+    const pn = promptNotes(it, { maxLen: 120 });
     return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}${f} | ${it.name}${it.color ? ` | ${it.color}` : ""}${pat}${it.brand ? ` | ${it.brand}` : ""}${pn ? ` | ${pn}` : ""}`;
   }).join("\n");
 

@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, stylistNotes } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 
@@ -1040,7 +1040,7 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
     // whole inventory's token cost (owner's explicit priority is token cost).
     // Full text stays on the item for display/search surfaces.
     if (it.notes) {
-      const pn = stylistNotes(it.notes);
+      const pn = promptNotes(it);
       if (pn) parts.push(pn);
     }
     // Visual-AI read (when the closet has been enriched): a compact fabric /

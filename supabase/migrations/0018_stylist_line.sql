@@ -1,0 +1,13 @@
+-- 0018 — stylist_line: the curated ≤200-char line the AI reads.
+--
+-- The notes policy (item-helpers.js) excludes >200-char notes (pasted product
+-- copy) from every keyword classifier and digests them for prompts. That
+-- protected the pipeline but left 64 rows "notes-blind" to classifiers. This
+-- column is the designed end state from the HANDOFF's descriptions plan: a
+-- short stylist line the classifiers and prompts read first, while `notes`
+-- keeps the full product copy for display, search, and vision.
+--
+-- classifierNotes()/promptNotes() prefer stylist_line when present; the
+-- EditItemView exposes it; the AI-readiness audit treats a row with a
+-- stylist_line as notes-readable regardless of copy length.
+alter table wardrobe_items add column if not exists stylist_line text;
