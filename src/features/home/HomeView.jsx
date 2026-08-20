@@ -16,7 +16,6 @@ import LookBackCard from "../recap/LookBackCard.jsx";
 import { isResurfaceCandidate } from "../recap/recapData.js";
 import { resolveItemIds, filterByWeather } from "../../utils/item-helpers.js";
 import { autoColorPairs, rotateDaily, hexForColorLabel, seasonalBucketForDate } from "../../utils/wardrobe-coverage.js";
-import { loadStylePrefs } from "../../utils/storage.js";
 import { PALETTE } from "../../constants/palette.js";
 
 
@@ -89,10 +88,13 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
   // Swatches only — the piece thumbnails kept surfacing items whose photo
   // read as the wrong color and weren't tappable, so the owner asked to drop
   // them (2026-08-20: "omit the icons of clothing and just have the
-  // swatches"). Six stories — she wants MORE chic pairings, not fewer.
+  // swatches"). Eight stories, and her hand-picked pairs are NOT excluded
+  // here anymore — hiding them made favorites like Burgundy + Navy invisible
+  // on Home (the exclusion still applies in Style Profile, where it prevents
+  // suggesting a pair she already keeps).
   const colorStories = useMemo(() => {
     try {
-      return autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 6 });
+      return autoColorPairs(items, { max: 8 });
     } catch { return []; }
   }, [items]);
 

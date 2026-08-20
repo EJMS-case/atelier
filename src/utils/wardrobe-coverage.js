@@ -244,23 +244,31 @@ export function autoColorPairs(items, { date = new Date(), exclude = [], max = 4
     }));
 }
 
-// Hex for a combo-side label ("Burgundy", "Cherry Red") — longest shade name
-// wins, family hex as fallback. Local to this module so UI callers (Home's
-// Color Stories swatches) don't have to import the AI chunk's colorHex.
-const LABEL_HEXES = (() => {
-  const entries = [];
-  for (const fam of COLOR_FAMILIES) {
-    entries.push([fam.name, fam.hex]);
-    for (const sh of fam.shades) entries.push([sh.name, sh.hex]);
-  }
-  return entries.sort((a, b) => b[0].length - a[0].length);
+// Hex for a combo-side label ("Burgundy", "Sky Blue") — EXACT name first,
+// then longest-substring fallback. Shades override same-named families in
+// the map: the old longest-substring-only lookup matched "Sky Blue" against
+// the FAMILY "Blue" (whose anchor hex is navy) before the shade "Sky", so
+// the Sky Blue swatch rendered navy (owner, 2026-08-20: "this isn't sky
+// blue!"). Multi-word side labels get explicit entries. Local to this module
+// so UI callers don't import the AI chunk's colorHex.
+const LABEL_HEX_EXACT = (() => {
+  const map = new Map();
+  for (const fam of COLOR_FAMILIES) map.set(fam.name.toLowerCase(), fam.hex);
+  for (const fam of COLOR_FAMILIES) for (const sh of fam.shades) map.set(sh.name.toLowerCase(), sh.hex); // shades win over same-named families
+  map.set("sky blue", "#7CB0DC");
+  map.set("cherry red", "#B71C1C");
+  map.set("slate gray", "#5E6770");
+  map.set("olive", "#6B7248");
+  return map;
 })();
+const LABEL_HEX_KEYS = [...LABEL_HEX_EXACT.keys()].sort((a, b) => b.length - a.length);
 
 export function hexForColorLabel(label) {
   if (!label) return "#C8BFB4";
-  const lower = label.toLowerCase();
-  const hit = LABEL_HEXES.find(([name]) => lower.includes(name.toLowerCase()));
-  return hit ? hit[1] : "#C8BFB4";
+  const lower = String(label).toLowerCase().trim();
+  if (LABEL_HEX_EXACT.has(lower)) return LABEL_HEX_EXACT.get(lower);
+  const hit = LABEL_HEX_KEYS.find(k => lower.includes(k));
+  return hit ? LABEL_HEX_EXACT.get(hit) : "#C8BFB4";
 }
 
 /**
