@@ -21,6 +21,11 @@ import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_STRONG } from "../../constants/models.js";
 import {
+  describeCorePalette, describeColorCoverage, describeTextureCoverage,
+  describePairUnlocks, seasonForDate,
+} from "../../utils/wardrobe-coverage.js";
+import { sb } from "../supabase.js";
+import {
   KnitSchema, KnitTool,
   ColorAnalysisSchema, ColorAnalysisTool,
   GapsSchema, GapsTool,
@@ -475,6 +480,22 @@ export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []
       `${cat}: ${subs.length ? subs.join(", ") : "(no subcategories)"}`
     ).join("\n");
 
+    // Deterministic coverage signals, computed in code so the model reasons
+    // from real numbers instead of eyeballing the summary: her core palette,
+    // where a core color is MISSING from an anchor category ("no navy bag"),
+    // texture holes for the season, and in-fashion pairs one purchase away.
+    const season = seasonForDate(now);
+    const coverageSignals = [
+      describeCorePalette(items),
+      describeColorCoverage(items),
+      describeTextureCoverage(items, season),
+      describePairUnlocks(items, now),
+    ].filter(Boolean).join("\n\n");
+
+    // Her style fingerprint (session-memoized, soft-fail) — recommendations
+    // should extend HER wardrobe's direction, not a generic one.
+    const fp = await sb.fingerprintTextCached(800).catch(() => "");
+
     const dynamic = `You are a wardrobe strategist analyzing gaps in this client's wardrobe. Return your findings through the return_gaps tool.
 
 TODAY: ${dateContext}
@@ -485,13 +506,21 @@ ${taxStr}
 WARDROBE SUMMARY (${items.length} pieces — count, colors, examples per group):
 ${wardrobeSummary}
 
+COVERAGE ANALYSIS (computed from her actual closet — treat these as facts, not suggestions):
+${coverageSignals}
+${fp ? `
+HER STYLE FINGERPRINT (distilled from what she actually wears — extend this direction):
+${fp}
+` : ""}
 Identify the 5-8 HIGHEST-IMPACT gaps, weighing:
-1. MISSING or THIN subcategories that a complete wardrobe needs
-2. Strategic gaps — versatile pieces that would unlock the most new outfits
-3. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't
-4. The season ahead (next 3 months from today's date)
+1. A CORE-PALETTE COLOR MISSING FROM AN ANCHOR CATEGORY is the sharpest kind of gap — if she lives in navy and burgundy but owns no navy bag, a navy bag beats any generic "essential". Read the COLOR × CATEGORY COVERAGE lines and act on them.
+2. IN-FASHION PAIRINGS ONE PURCHASE AWAY — one right piece that activates a pairing against many pieces she already owns is maximum leverage per dollar.
+3. TEXTURES missing or thin for the season ahead — a wardrobe this considered should have its ${season} textures covered.
+4. MISSING or THIN subcategories that a complete wardrobe needs.
+5. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't.
+6. The season ahead (next 3 months from today's date).
 
-For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
+For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
 
     return invokeShoppingTool({
       apiKey,
@@ -517,11 +546,18 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
     `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`
   ).join("\n");
 
+  // Same personal grounding as gap mode — completions should read like her
+  // stylist shopping for her, not a mannequin.
+  const completeFp = await sb.fingerprintTextCached(600).catch(() => "");
+
   const dynamic = `You are completing an outfit. The client has selected these pieces:
 
 SELECTED OUTFIT:
 ${outfitStr}
-
+${completeFp ? `
+HER STYLE FINGERPRINT (distilled from what she actually wears — extend this direction):
+${completeFp}
+` : ""}
 TODAY: ${dateContext}
 
 WARDROBE SUMMARY (what she already owns — don't suggest buying duplicates):

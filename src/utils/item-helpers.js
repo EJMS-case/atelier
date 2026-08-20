@@ -30,10 +30,25 @@ import {
 // reading full notes: matching copy is what a *search* should do.
 // stylistNotes() below is the PROMPT-side counterpart: a bounded digest so
 // long copy doesn't ride the uncached prompt body at full length.
+//
+// stylist_line (2026-08-20, migration 0018) is the designed end state from
+// the descriptions plan: a curated ≤200-char line stored NEXT TO the full
+// copy. When present it outranks notes for classifiers AND prompts —
+// promptNotes() below is the one helper prompt call sites should use.
 export const CURATED_NOTES_MAX = 200;
 export function classifierNotes(item) {
+  const line = item && item.stylist_line ? String(item.stylist_line).trim() : "";
+  if (line) return line.slice(0, CURATED_NOTES_MAX);
   const notes = item && item.notes ? String(item.notes) : "";
   return notes.length <= CURATED_NOTES_MAX ? notes : "";
+}
+
+// The notes text a PROMPT should carry for this item: her curated stylist
+// line when present, otherwise the bounded stylistNotes digest of the notes.
+export function promptNotes(item, { maxLen = PROMPT_NOTES_MAX } = {}) {
+  const line = item && item.stylist_line ? String(item.stylist_line).trim() : "";
+  if (line) return line.slice(0, maxLen);
+  return stylistNotes(item?.notes, { maxLen });
 }
 
 // Prompt digest for long notes. Curated notes (and anything ≤ maxLen) pass

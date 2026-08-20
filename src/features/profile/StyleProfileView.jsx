@@ -20,6 +20,8 @@ import { generateStyleFingerprint } from "../stylist/styleFingerprint.js";
 import { fetchAllPlans } from "../planner/plannerApi.js";
 import { familyForColorString } from "../../constants/color.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
+import { autoColorPairs, hexForColorLabel } from "../../utils/wardrobe-coverage.js";
+import { auditCloset, ISSUE_LABELS, CRITICAL_ISSUES } from "./dataAudit.js";
 import { PALETTE } from "../../constants/palette.js";
 
 // Families that ground a look rather than color-block it — suggestions pair
@@ -57,7 +59,7 @@ function suggestPairsFromLoved(lovedLooks, items, existingPairs) {
 
 export default function StyleProfileView({
   items = [], apiKey, styleFingerprint, setStyleFingerprint,
-  lovedLooks = [], logCount = null, onBack,
+  lovedLooks = [], logCount = null, onBack, onEditItem,
 }) {
   const [prefs, setPrefs] = useState(() => loadStylePrefs());
   const [newPair, setNewPair] = useState("");
@@ -79,6 +81,19 @@ export default function StyleProfileView({
     () => suggestPairsFromLoved(lovedLooks, items, prefs.colorPairs),
     [lovedLooks, items, prefs.colorPairs],
   );
+
+  // In-fashion pairs her closet already supports (auto-derived — she never
+  // has to invent a color pairing again). Style Me, Evaluate, the builder
+  // chat, and trips already read these automatically; adding one here just
+  // promotes it to her standing hand-picked list.
+  const fashionSuggestions = useMemo(
+    () => autoColorPairs(items, { exclude: prefs.colorPairs }),
+    [items, prefs.colorPairs],
+  );
+
+  // AI readiness — which rows the stylist can't fully read, and why.
+  const audit = useMemo(() => auditCloset(items), [items]);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   // "What changed since the last read": outfits logged beyond the count the
   // fingerprint was generated from. The auto-refresh on app load fires at
@@ -189,6 +204,32 @@ export default function StyleProfileView({
             </div>
           </div>
         )}
+        {fashionSuggestions.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={s.fieldLabel}>In fashion now — your closet supports these</div>
+            <p style={{ fontSize: 11, color: "var(--color-text-muted)", margin: "0 0 6px", lineHeight: 1.4 }}>
+              The stylist already uses these automatically. Add one to make it a standing favorite.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {fashionSuggestions.map(fs => (
+                <button key={fs.label} onClick={() => addPair(fs.label)} title={fs.note}
+                  style={{ ...s.btnSecondary, fontSize: 11, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ display: "inline-flex" }}>
+                    {fs.sides.map((side, i) => (
+                      <span key={side} style={{
+                        width: 12, height: 12, borderRadius: "50%", display: "inline-block",
+                        background: hexForColorLabel(side),
+                        marginLeft: i > 0 ? -4 : 0,
+                        border: "1px solid rgba(255,255,255,0.7)",
+                      }}/>
+                    ))}
+                  </span>
+                  ＋ {fs.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{ ...s.fieldLabel, marginTop: 14 }}>Style modes</div>
         {[["monochromaticMode", "Monochromatic looks"], ["tonalPairing", "Tonal pairing (e.g. navy + powder blue)"]].map(([key, label]) => (
@@ -198,6 +239,64 @@ export default function StyleProfileView({
             {label}
           </label>
         ))}
+      </div>
+
+      {/* ── AI Readiness — the color & category audit ── */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>✦ AI Readiness</div>
+        <p style={s.settingsSub}>
+          How much of your closet the stylist can fully read. A piece with an unreadable color or an off-taxonomy subcategory gets styled generically — fix the flagged fields and every AI surface gets sharper.
+        </p>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 26, fontFamily: "'DM Serif Display',Georgia,serif", color: "var(--color-text)" }}>
+            {audit.readinessPct === null ? "—" : `${audit.readinessPct}%`}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+            {audit.criticalClean} of {audit.total} pieces fully readable
+          </div>
+        </div>
+        {Object.keys(audit.counts).length > 0 && (
+          <div style={{ fontSize: 11, color: "var(--color-text-2)", lineHeight: 1.6, marginBottom: 8 }}>
+            {Object.entries(audit.counts)
+              .sort((a, b) => (CRITICAL_ISSUES.has(b[0]) - CRITICAL_ISSUES.has(a[0])) || (b[1] - a[1]))
+              .map(([issue, n]) => (
+                <div key={issue}>
+                  {CRITICAL_ISSUES.has(issue) ? "● " : "○ "}{n} × {ISSUE_LABELS[issue] || issue}
+                </div>
+              ))}
+          </div>
+        )}
+        {audit.flagged.length > 0 && (
+          <>
+            <button style={{ ...s.btnSecondary, width: "100%", fontSize: 12 }} onClick={() => setAuditOpen(o => !o)}>
+              {auditOpen ? "Hide flagged pieces" : `Show flagged pieces (${audit.flagged.length})`}
+            </button>
+            {auditOpen && (
+              <div style={{ marginTop: 8, maxHeight: 320, overflowY: "auto" }}>
+                {audit.flagged.slice(0, 60).map(({ item, issues, critical }) => (
+                  <button key={item.id} onClick={() => onEditItem?.(item)}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 8px", marginBottom: 4, background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: 6, cursor: onEditItem ? "pointer" : "default" }}>
+                    <div style={{ fontSize: 12, color: "var(--color-text)" }}>
+                      {critical ? "● " : "○ "}{item.name || "(unnamed)"}
+                      <span style={{ color: "var(--color-text-muted)" }}> · {item.category}{item.subcategory ? ` > ${item.subcategory}` : ""}</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 2 }}>
+                      {issues.map(i => ISSUE_LABELS[i] || i).join(" · ")}
+                    </div>
+                  </button>
+                ))}
+                {audit.flagged.length > 60 && (
+                  <div style={{ fontSize: 10, color: "var(--color-text-muted)", padding: "4px 2px" }}>
+                    and {audit.flagged.length - 60} more — the worst offenders are listed first
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        {audit.flagged.length === 0 && audit.total > 0 && (
+          <div style={{ fontSize: 12, color: "var(--color-success)" }}>Every piece is fully readable. The stylist sees your whole closet.</div>
+        )}
       </div>
 
       {/* ── About Me ── */}

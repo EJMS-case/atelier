@@ -5,6 +5,11 @@
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
+import { sb } from "../../lib/supabase.js";
+
+// A year of daily looks can be hundreds of candidates — cap the lines sent to
+// the judge, keeping every hearted look and then the most recent of the rest.
+const MAX_CANDIDATES = 80;
 
 function pieceLabel(it) {
   if (!it) return null;
@@ -21,12 +26,12 @@ function pieceLabel(it) {
  * @param {number}   p.topN
  * @returns {Promise<Array<{ index:number, why:string }>>}
  */
-export async function judgeMostStylish({ looks = [], items = [], apiKey, topN = 4 }) {
+export async function judgeMostStylish({ looks = [], items = [], apiKey, topN = 4, periodLabel = "month" }) {
   if (!apiKey) throw new Error("Anthropic API key required");
   const itemMap = {};
   (items || []).forEach(it => { itemMap[it.id] = it; });
 
-  const candidates = looks
+  let candidates = looks
     .map((l, i) => {
       const pieces = (l.itemIds || []).map(id => pieceLabel(itemMap[id])).filter(Boolean);
       if (pieces.length < 2) return null;
@@ -34,8 +39,21 @@ export async function judgeMostStylish({ looks = [], items = [], apiKey, topN = 
     })
     .filter(Boolean);
 
+  if (candidates.length > MAX_CANDIDATES) {
+    const hearted = candidates.filter(c => c.l.hearted);
+    const rest = candidates
+      .filter(c => !c.l.hearted)
+      .sort((a, b) => String(b.l.date).localeCompare(String(a.l.date)))
+      .slice(0, Math.max(0, MAX_CANDIDATES - hearted.length));
+    candidates = [...hearted, ...rest].sort((a, b) => a.i - b.i);
+  }
+
   if (candidates.length === 0) return [];
   const n = Math.min(topN, candidates.length);
+
+  // Her style fingerprint (session-memoized, soft-fail) — the judge should
+  // rank against HER taste, not a generic one.
+  const fp = await sb.fingerprintTextCached(600).catch(() => "");
 
   const lines = candidates.map(({ i, l, line }) => {
     const ctx = [
@@ -49,13 +67,17 @@ export async function judgeMostStylish({ looks = [], items = [], apiKey, topN = 
     return `#${i} — ${ctx} — ${line}`;
   }).join("\n");
 
-  const prompt = `You are her personal stylist reviewing the outfits she actually wore this past month. Pick the ${n} MOST STYLISH — the looks with the best proportion, intention, and finish, the ones a stylist would be proud of.
+  const prompt = `You are her personal stylist reviewing the outfits she actually wore this past ${periodLabel}. Pick the ${n} MOST STYLISH — the looks with the best proportion, intention, and finish, the ones a stylist would be proud of.
 
 Rules:
 - Judge on styling merit (silhouette, tension, cohesion, finish), NOT how dressy or how much effort.
 - A look flagged [❤ hearted] is one she already loves — give it a meaningful boost; only leave it out if a non-hearted look is clearly stronger.
 - [trip] looks are eligible and count fully.
-- Reason must be ONE short clause (≤14 words), specific to that look — name what makes it work.
+- Favor RANGE across the winners — a ${periodLabel} in review should show her best Work look and her best off-duty look, not four variations of one recipe.
+- Reason must be ONE short clause (≤14 words), specific to that look — name what makes it work.${fp ? `
+
+HER STYLE FINGERPRINT (judge against her taste, not a generic one):
+${fp}` : ""}
 
 Return ONLY a JSON array, no prose, highest first:
 [{"index": <the # of the look>, "why": "<one short reason>"}]
@@ -65,7 +87,7 @@ ${lines}`;
 
   const res = await anthropicFetch({
     model: MODEL_STANDARD,
-    max_tokens: 700,
+    max_tokens: 900,
     messages: [{ role: "user", content: prompt }],
   }, { apiKey });
   const data = await res.json();

@@ -24,7 +24,10 @@
     "test:taxonomy": "node scripts/taxonomy.test.mjs",
     "test:matte": "node scripts/alpha-matte.test.mjs",
     "test:evalparse": "node scripts/eval-parse.test.mjs",
-    "test": "npm run test:coerce && npm run test:boxmath && npm run test:validator && npm run test:filters && npm run test:freetext && npm run test:rotation && npm run test:weather && npm run test:packer && npm run test:edits && npm run test:memory && npm run test:silhouette && npm run test:notes && npm run test:taxonomy && npm run test:matte && npm run test:evalparse && npm run test:matrix",
+    "test:coverage": "node scripts/wardrobe-coverage.test.mjs",
+    "test:audit": "node scripts/data-audit.test.mjs",
+    "test:brands": "node scripts/brand-discovery.test.mjs",
+    "test": "npm run test:coerce && npm run test:boxmath && npm run test:validator && npm run test:filters && npm run test:freetext && npm run test:rotation && npm run test:weather && npm run test:packer && npm run test:edits && npm run test:memory && npm run test:silhouette && npm run test:notes && npm run test:taxonomy && npm run test:matte && npm run test:evalparse && npm run test:coverage && npm run test:audit && npm run test:brands && npm run test:matrix",
     "test:freetext": "node scripts/free-text-rescue.test.mjs"
   },
   "dependencies": {

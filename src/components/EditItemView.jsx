@@ -10,6 +10,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
+    stylist_line: item.stylist_line || "",
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable ?? true,
     material: item.material || "",
     pattern: item.pattern || "",
@@ -178,6 +179,16 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
               value={form[field]} onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
           </div>
         ))}
+
+        {/* Stylist line — the short curated line the AI reads (classifiers +
+            prompts). Long pasted product copy in Notes stays for display and
+            search; when this line exists it speaks for the piece instead. */}
+        <div>
+          <div style={s.fieldLabel}>Stylist line · what the AI reads (≤200 chars)</div>
+          <input style={{...s.input, width:"100%"}} maxLength={200}
+            placeholder="e.g. silk cami, bias cut, layers under blazers; not for work alone"
+            value={form.stylist_line} onChange={e=>setForm(f=>({...f,stylist_line:e.target.value}))}/>
+        </div>
 
         {/* Notes gets a real multi-line editor — her notes are sentences
             (fit, care, occasion guidance the stylist reads), and a one-line

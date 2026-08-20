@@ -258,3 +258,19 @@ test("veto: product copy (>200 chars) cannot veto — curated notes only", async
   assert.ok(copy.length > 200);
   assert.equal(noteVetoesOccasion({ name: "X", notes: copy }, "Work"), false);
 });
+
+// ── stylist_line (migration 0018, 2026-08-20) ───────────────────────────────
+// The curated line stored NEXT TO the copy: classifiers and prompt digests
+// read it first; full notes stay for display/search/vision.
+test("stylist_line: classifierNotes prefers the line over long copy", async () => {
+  const { promptNotes } = await import("../src/utils/item-helpers.js");
+  const copy = "Luxurious marketing prose. ".repeat(20); // > CURATED_NOTES_MAX
+  const withLine = { notes: copy, stylist_line: "silk cami, bias cut, layers under blazers" };
+  assert.equal(classifierNotes(withLine), "silk cami, bias cut, layers under blazers");
+  assert.equal(classifierNotes({ notes: copy }), "", "no line → copy still excluded");
+  assert.equal(promptNotes(withLine), "silk cami, bias cut, layers under blazers");
+  assert.equal(promptNotes({ notes: "short curated tags" }), "short curated tags");
+  assert.ok(promptNotes({ notes: copy }).length <= PROMPT_NOTES_MAX, "no line → digest fallback");
+  const longLine = { stylist_line: "x".repeat(300), notes: "" };
+  assert.equal(classifierNotes(longLine).length, CURATED_NOTES_MAX, "line itself is clamped");
+});

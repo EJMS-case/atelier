@@ -330,6 +330,13 @@ function formatStylePrefs(prefs) {
     parts.push(`🎨 HER FAVORITE COLOR PAIRINGS — she chose these herself in Settings; put them to WORK: ${prefs.colorPairs.join(", ")}.
 When a look anchors on a color from one of these pairs, reaching for its partner is a signature move she loves. Neutrals (black, white, cream, grey, camel) are ground for ANY pair — a neutral hero piece (a plain black dress, a cream trouser) WANTS one of these pair colors on the partner piece (the blazer, the shoe, the knit, the bag), and that is the elevated stylist move to reach for BEFORE defaulting to all-neutral safety. Never force a pair against the occasion or weather; the whole closet stays approved.`);
   }
+  if (prefs.autoPairs?.length > 0) {
+    // Derived, not typed: in-fashion pairings her closet already supports
+    // (fashion-combos ∩ closet, computed in wardrobe-coverage.js). Framed a
+    // notch below her hand-picked list — of-the-moment options, not standing
+    // favorites.
+    parts.push(`🪄 IN-FASHION PAIRINGS HER CLOSET SUPPORTS (derived from what she owns — current, editorial, ready to use): ${prefs.autoPairs.join(", ")}. These are live options when a look wants a color story — same rules as her favorites: neutrals ground them, never force one against occasion or weather.`);
+  }
   if (prefs.monochromaticMode) {
     parts.push("She frequently uses the monochrome technique — head-to-toe in one color family with texture variation. Apply this method broadly across the closet, not just for specific colors.");
   }

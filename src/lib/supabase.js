@@ -344,8 +344,37 @@ export const sb = {
   },
 
   // ── User Settings (API key sync) ──
+  // Mount-time batch: App reads api_keys, style_fingerprint, and
+  // rotation_state at startup — three separate GETs against the same table.
+  // The first getter call kicks off ONE key=in.(…) fetch; each key is served
+  // from it exactly once, then falls back to its per-key fetch so refresh
+  // flows (Settings button, post-save re-reads) always hit the network.
+  _settingsBatch: null,
+  _batchServed: new Set(),
+  _settingsRow(key) {
+    if (this._batchServed.has(key)) return null;
+    this._batchServed.add(key);
+    if (!this._settingsBatch) {
+      this._settingsBatch = (async () => {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(api_keys,style_fingerprint,rotation_state,brand_discovery)&select=key,value`, {
+            headers: SB_HEADERS,
+          });
+          if (!res.ok) return null;
+          const rows = await res.json();
+          const map = {};
+          for (const r of rows || []) map[r.key] = r.value ?? null;
+          return map;
+        } catch { return null; }
+      })();
+    }
+    // null map (fetch failed) → caller falls through to its own fetch.
+    return this._settingsBatch.then(map => (map ? { raw: map[key] ?? null } : null));
+  },
   async getSettings() {
     try {
+      const hit = await this._settingsRow("api_keys");
+      if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
       const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.api_keys&select=value`, {
         headers: SB_HEADERS,
       });
@@ -390,6 +419,8 @@ export const sb = {
     if (this._fpInflight) return this._fpInflight;
     const p = (async () => {
       try {
+        const hit = await this._settingsRow("style_fingerprint");
+        if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
         const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
           headers: SB_HEADERS,
         });
@@ -413,12 +444,41 @@ export const sb = {
     } catch { /* swallow — non-fatal, regenerate on demand */ }
   },
 
+  // ── Brand discovery (key='brand_discovery') ──
+  // Cached Brand Atlas result: { brands, generated_at, web, dismissed }.
+  // Cross-device on purpose — a scouting run is a real AI spend; every device
+  // should reuse it. Mount read rides the settings batch above.
+  async getBrandDiscovery() {
+    try {
+      const hit = await this._settingsRow("brand_discovery");
+      if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.brand_discovery&select=value`, {
+        headers: SB_HEADERS,
+      });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+    } catch { return null; }
+  },
+  async saveBrandDiscovery(data) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "brand_discovery", value: JSON.stringify(data) }),
+      });
+      if (!res.ok) console.warn("[sb] saveBrandDiscovery failed:", res.status);
+    } catch { /* swallow — the in-memory copy still renders this session */ }
+  },
+
   // ── Rotation state (key='rotation_state') ──
   // The stylist's anti-repeat memory ({ looks, counts } — see
   // rotation-tracker.js). localStorage is per-device; syncing through
   // user_settings lets the phone see what the laptop already suggested.
   async getRotationState() {
     try {
+      const hit = await this._settingsRow("rotation_state");
+      if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
       const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.rotation_state&select=value`, {
         headers: SB_HEADERS,
       });

@@ -4,20 +4,23 @@
 // Wear sub-tab of Saved (most-worn, neglected, cost-per-wear) plus a quick
 // Style Me CTA and the user's plan for today (if any).
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { flattenPlanItemIds } from "../planner/outfits.js";
 import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
 import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
+import { fetchNycForecast } from "../../lib/weather.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
 // Categories the "Neglected" list surfaces — real garments only (no
 // accessories/belts/shoes/bags, no swim/lounge/athleisure). Shared with the
 // recap's rediscover/challenge nudges so the two lists never drift.
 import { GARMENT_CATS as NEGLECT_CATS } from "../recap/recapData.js";
-import { resolveItemIds } from "../../utils/item-helpers.js";
+import { resolveItemIds, filterByWeather } from "../../utils/item-helpers.js";
+import { autoColorPairs, rotateDaily, hexForColorLabel } from "../../utils/wardrobe-coverage.js";
+import { loadStylePrefs } from "../../utils/storage.js";
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onEditItem, onStyleItem, onOpenProfile, styleFingerprint }) {
+export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, onOpenProfile, styleFingerprint, brandDiscovery, onOpenDiscovery }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -55,13 +58,40 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
   const wearItems = useMemo(() => applyWearStats(items, wearStats || {}), [items, wearStats]);
 
   const topWorn   = useMemo(() => mostWornItems(wearItems, 5), [wearItems]);
+
+  // Today's NYC weather bucket (cached 6h by lib/weather.js) — the neglected
+  // list is only useful if what it surfaces is wearable THIS week, not a wool
+  // coat in August. Null until the forecast resolves (or on failure), in which
+  // case the list simply isn't season-filtered.
+  const [todayBucket, setTodayBucket] = useState(null);
+  useEffect(() => {
+    let live = true;
+    fetchNycForecast()
+      .then(f => { if (live) setTodayBucket(f?.[todayIso]?.bucket || null); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [todayIso]);
+
   // Neglected = real garments only. Accessories, belts, shoes, bags repeat by
   // design, and swim / lounge / athleisure aren't "rediscover" pieces — she
   // doesn't want any of those cluttering the list (belts were dominating it).
-  const neglected = useMemo(
-    () => neglectedItems(wearItems, 60).filter(it => NEGLECT_CATS.has(it.category)),
-    [wearItems],
-  );
+  // Season-aware (filterByWeather on today's bucket) so August never nags her
+  // about resting wool, and date-seeded rotation so the surfaced dozen changes
+  // every day instead of pinning the same 12 pieces for weeks.
+  const neglected = useMemo(() => {
+    const resting = neglectedItems(wearItems, 60).filter(it => NEGLECT_CATS.has(it.category));
+    const inSeason = todayBucket ? filterByWeather(resting, todayBucket) : resting;
+    return rotateDaily(inSeason, todayIso);
+  }, [wearItems, todayBucket, todayIso]);
+
+  // Color Stories — in-fashion color-blocking pairs her closet can make right
+  // now (auto-derived, nothing to type), excluding pairs she already keeps by
+  // hand in her Style Profile. Tap one → Style Me pre-briefed with the pair.
+  const colorStories = useMemo(() => {
+    try {
+      return autoColorPairs(items, { exclude: loadStylePrefs()?.colorPairs || [], max: 3 });
+    } catch { return []; }
+  }, [items]);
 
   const itemsWithPrice = useMemo(() => wearItems.filter(it => Number(it.price_paid) > 0), [wearItems]);
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
@@ -120,6 +150,57 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
             {styleFingerprint?.text
               ? styleFingerprint.text
               : "Your stylist's read on you — fingerprint, color pairings, and fit notes."}
+          </div>
+        </button>
+      )}
+
+      {/* Color Stories — in-fashion pairings the closet already supports.
+          Auto-derived (autoColorPairs), so she never has to type a color.
+          Tap → Style Me pre-briefed to build around the pair. */}
+      {colorStories.length > 0 && (
+        <section style={sectionStyle}>
+          <div style={sectionHeader}>COLOR STORIES · IN FASHION, IN YOUR CLOSET</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {colorStories.map(story => (
+              <button key={story.label}
+                onClick={() => (onStyleRequest || onOpenStyle)?.(`Color-block ${story.label} — build the look around that pairing`)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
+                <div style={{ display: "flex", flexShrink: 0 }}>
+                  {story.sides.map((side, i) => (
+                    <div key={side} style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: hexForColorLabel(side),
+                      border: "1.5px solid #fff",
+                      marginLeft: i > 0 ? -7 : 0,
+                      boxShadow: "0 0 0 1px rgba(0,0,0,0.06)",
+                    }}/>
+                  ))}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>{story.label}</div>
+                  <div style={{ fontSize: 10, color: PALETTE.muted, lineHeight: 1.4, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{story.note}</div>
+                </div>
+                <div style={{ fontSize: 11, color: PALETTE.muted }}>✦</div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Brand Atlas entry — renders ONLY the cached scouting result (zero AI
+          calls, zero network on Home). The heavy work — a web-search-backed
+          scouting run — lives behind an explicit tap inside the view. */}
+      {onOpenDiscovery && (
+        <button onClick={onOpenDiscovery}
+          style={{ width: "100%", textAlign: "left", padding: "12px 14px", background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 10, marginBottom: 16, cursor: "pointer" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div style={{ fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted }}>✧ BRAND ATLAS</div>
+            <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+          </div>
+          <div style={{ fontSize: 12, color: PALETTE.soft, marginTop: 6, lineHeight: 1.45 }}>
+            {brandDiscovery?.brands?.length
+              ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
+              : "Lesser-known, international labels scouted live against your closet."}
           </div>
         </button>
       )}
@@ -198,16 +279,15 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
         </section>
       )}
 
-      {/* Neglected pieces */}
+      {/* Neglected pieces — season-filtered (only what's wearable in today's
+          weather) and rotated daily so the same 12 don't pin here for weeks.
+          The whole section disappears when there's nothing to say — an empty
+          gray box was just a gap on the page. */}
+      {neglected.length > 0 && (
       <section style={sectionStyle}>
-        <div style={sectionHeader}>NEGLECTED · 60+ DAYS</div>
-        {neglected.length === 0 ? (
-          <div style={emptyStyle}>
-            {topWorn.length === 0
-              ? "Log a couple of outfits as worn and your top pieces + neglected list will populate here."
-              : "Nothing neglected. Everything's earning its place."}
-          </div>
-        ) : (
+        <div style={sectionHeader}>
+          BACK IN ROTATION · RESTING 60+ DAYS{todayBucket ? ` · ${todayBucket.toUpperCase()}-READY` : ""}
+        </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 10 }}>
             {neglected.slice(0, 12).map(it => {
               const cpw = costPerWear(it);
@@ -234,13 +314,21 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
               );
             })}
           </div>
-        )}
         {neglected.length > 12 && (
           <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 8, textAlign: "right" }}>
-            and {neglected.length - 12} more
+            and {neglected.length - 12} more — a fresh dozen rotates in daily
           </div>
         )}
       </section>
+      )}
+
+      {/* First-wear nudge — replaces the old always-rendered empty Neglected
+          box (it read as a big blank gap on the page). */}
+      {items.length > 0 && topWorn.length === 0 && (
+        <div style={{ ...emptyStyle, padding: "4px 2px 12px" }}>
+          Log a couple of outfits as worn and your top pieces + resting list will populate here.
+        </div>
+      )}
 
       {/* Empty state for brand-new closets */}
       {topWorn.length === 0 && neglected.length === 0 && items.length === 0 && (
