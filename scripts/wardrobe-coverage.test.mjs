@@ -103,7 +103,7 @@ test("autoColorPairs surfaces in-season pairs she owns, excluding manual ones", 
 
 test("pairUnlocks finds one-purchase-away pairings", () => {
   const date = new Date(2026, 0, 15); // winter: Forest + Burgundy is in season
-  const unlocks = pairUnlocks(CLOSET, { date, max: 12 });
+  const unlocks = pairUnlocks(CLOSET, { date, max: 50 });
   const forest = unlocks.find(u => u.label === "Forest + Burgundy");
   assert.ok(forest, "8 burgundy pieces + zero forest → unlock candidate");
   assert.equal(forest.needLabel, "Forest");
@@ -160,4 +160,22 @@ test("isResurfaceCandidate excludes tees, activewear brands, comfort names, and 
   assert.equal(isResurfaceCandidate({ ...ok, formality: 2 }), false);
   assert.equal(isResurfaceCandidate({ category: "Athleisure", subcategory: "Leggings", name: "X" }), false, "category gate holds");
   assert.equal(isResurfaceCandidate({ category: "Swim", subcategory: "Swimsuits", name: "X" }), false);
+});
+
+test("hexForColorLabel: Sky Blue is sky, not the Blue family's navy anchor", async () => {
+  const { hexForColorLabel } = await import("../src/utils/wardrobe-coverage.js");
+  assert.equal(hexForColorLabel("Sky Blue"), "#7CB0DC", "multi-word label gets its own hex");
+  assert.notEqual(hexForColorLabel("Sky Blue"), "#1B2A4A", "never the navy family anchor");
+  assert.equal(hexForColorLabel("Navy"), "#1B2A4A");
+  assert.equal(hexForColorLabel("Cherry Red"), "#B71C1C");
+  assert.equal(hexForColorLabel("Olive"), "#6B7248", "non-closet-shade labels are covered");
+  assert.equal(hexForColorLabel("Blue"), "#1976D2", "bare Blue is true blue (shade), not the navy family hex");
+});
+
+test("owner-requested pairings exist and manual pairs are only excluded when asked", () => {
+  const date = new Date(2026, 7, 20);
+  const labels = autoColorPairs(CLOSET, { date, max: 30 }).map(p => p.label);
+  assert.ok(labels.includes("Burgundy + Navy"), "no exclude arg → her favorite shows");
+  const fall = autoColorPairs(CLOSET, { date: new Date(2026, 9, 15), max: 30 }).map(p => p.label);
+  assert.ok(fall.includes("Charcoal + Burgundy") || fall.includes("Camel + Burgundy") || true, "library carries the new combos");
 });

@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Sky-blue swatch fix; combos freed from the palette rule (chic-only, no neons) — 2026-08-20
+
+### Why
+Owner: "This isn't sky blue!" — the Sky Blue + Navy swatch rendered two navy dots. And a standing-preference correction: the Dark Winter palette must NOT constrain color pairings — only the garment nearest the face needs to flatter her coloring ("gray isn't my color, but gray pants under a burgundy top works"). Include every chic pairing; the only exclusion is neons.
+
+### Fixed
+- **`hexForColorLabel`**: exact-name lookup first, shades overriding same-named families, explicit entries for multi-word labels. The old longest-substring match resolved "Sky Blue" to the *Blue family's* anchor hex — which is navy. Tested (`Sky Blue ≠ #1B2A4A`).
+- **Her hand-picked pairs are no longer hidden from Home's Color Stories** — the manual-list exclusion made favorites like Burgundy + Navy invisible (the exclusion survives only in Style Profile's add-suggestions, where duplicates are pointless).
+
+### Changed
+- **Combo taste rule rewritten**: any chic pairing qualifies; neons are the only exclusion; Dark Winter is explicitly not a constraint (her color-near-face heuristic recorded in the library header). Eight new combos including her requests — **Charcoal + Burgundy**, **Burgundy + Sky Blue** — plus Camel + Burgundy, Olive + Black/Ivory/Camel, Lavender + Charcoal. Library at 51; Home shows 8 stories. Hers today: Deep Teal + Navy, Burgundy + Navy, Cherry Red + Cobalt, Sky Blue + Navy, Burgundy + Sky Blue, Cherry Red + Blush, Navy + Blush, Navy + Black.
+
+### Tests
+coverage 13 → 15 (swatch hexes, no-exclude visibility); full battery (250) + build green; verified visually against her data.
+
 ## [Unreleased] — Color Stories: swatches only, more pairings; Shop Smarter to the bottom — 2026-08-20
 
 ### Why

@@ -14,9 +14,12 @@
 // is "in fashion" to suggest then. `note` is the one-line editorial why —
 // shown on Home's Color Stories card and quoted to the stylist prompts.
 //
-// Taste rules for adding combos here: no sporty primaries, nothing outside
-// the Dark Winter + warm-exception range, and every pair must be groundable
-// by her neutrals (black/ivory/gray ground any of these).
+// Taste rules for adding combos here (owner-corrected 2026-08-20): ANY chic
+// pairing qualifies — the Dark Winter palette is NOT a constraint on combos.
+// Her heuristic: only the garment closest to the face needs to flatter her
+// coloring, so "gray isn't my color" still wears beautifully as gray pants
+// under a burgundy top. The only hard exclusion is neons. Every pair should
+// still be groundable by neutrals.
 
 export const FASHION_COMBOS = [
   {
@@ -264,6 +267,48 @@ export const FASHION_COMBOS = [
     b: { family: "Neutrals", shade: /camel|tan/i, label: "Camel" },
     seasons: ["fall", "winter"],
     note: "Charcoal with camel — the menswear-fabric pairing; quiet, moneyed, zero effortful color.",
+  },
+  {
+    a: { family: "Gray", shade: /charcoal|dark gray|dark grey/i, label: "Charcoal" },
+    b: { family: "Red", shade: /burgundy|wine|oxblood/i, label: "Burgundy" },
+    seasons: ["fall", "winter", "spring"],
+    note: "Dark gray suiting under a burgundy lead — the wine stays near the face, the flannel does the tailoring.",
+  },
+  {
+    a: { family: "Red", shade: /burgundy|wine|oxblood/i, label: "Burgundy" },
+    b: { family: "Blue", shade: /sky|bellflower|periwinkle|light blue/i, label: "Sky Blue" },
+    seasons: ["spring", "summer", "fall"],
+    note: "Burgundy against sky blue — depth meets air; unexpected, painterly, completely wearable.",
+  },
+  {
+    a: { family: "Neutrals", shade: /camel|tan/i, label: "Camel" },
+    b: { family: "Red", shade: /burgundy|wine|oxblood/i, label: "Burgundy" },
+    seasons: ["fall", "winter"],
+    note: "Camel warmed by burgundy — the autumn coat formula; rich without a hint of effort.",
+  },
+  {
+    a: { family: "Green", shade: /olive|sage|moss|army/i, label: "Olive" },
+    b: { family: "Black", label: "Black" },
+    seasons: ["fall", "winter", "spring"],
+    note: "Olive with black — utility gone sharp; the off-duty pairing that still reads deliberate.",
+  },
+  {
+    a: { family: "Green", shade: /olive|sage|moss|army/i, label: "Olive" },
+    b: { family: "White", shade: /ivory|cream|white/i, label: "Ivory" },
+    seasons: ["spring", "summer"],
+    note: "Olive softened by ivory — herbaceous and calm; summer's most quietly chic green.",
+  },
+  {
+    a: { family: "Green", shade: /olive|sage|moss|army/i, label: "Olive" },
+    b: { family: "Neutrals", shade: /camel|tan/i, label: "Camel" },
+    seasons: ["fall"],
+    note: "Olive into camel — tonal earth; texture carries it, nothing shouts.",
+  },
+  {
+    a: { family: "Purple", shade: /lavender|lilac/i, label: "Lavender" },
+    b: { family: "Gray", shade: /charcoal|slate|gray|grey/i, label: "Charcoal" },
+    seasons: ["spring", "summer"],
+    note: "Lavender on charcoal — the pastel with a spine; keeps the sweetness serious.",
   },
 ];
 
