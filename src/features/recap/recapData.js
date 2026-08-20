@@ -20,10 +20,30 @@ const OVERWEAR_EXCLUDE = new Set(["Belts", "Accessories", "Shoes", "Bags"]);
 // challenge / swap alternatives). Deliberately EXCLUDES accessories, belts,
 // shoes, bags, AND Swim / Loungewear / Athleisure — the user doesn't want those
 // surfaced as "neglected pieces to rediscover" (belts were crowding it out).
-// Exported: HomeView's "Neglected" list applies the same eligibility rule.
+// Exported: HomeView's "Back in Rotation" list applies the same eligibility rule.
 export const GARMENT_CATS = new Set([
   "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
 ]);
+
+// The category gate above wasn't enough (owner, 2026-08-20: "I don't want
+// t-shirts or lounge or swim or active/athleisure in resurface suggestions") —
+// her comfort pieces often live under Sets/Tops/Bottoms, not the Athleisure
+// category. A resurface candidate must be a REAL garment worth restyling:
+//   · no T-Shirts (graphic tees rest on purpose),
+//   · no activewear brands (FP Movement, PopFlex, Beyond Yoga…),
+//   · no comfort-coded names (hoodie, legging, skort, zip-up, swim…),
+//   · nothing she herself filed at formality ≤2 (her lounge tags).
+const COMFORT_BRAND_RE = /fp movement|free people movement|popflex|beyond yoga|alo yoga|lululemon|l\*space/i;
+const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra|zip[- ]?up|athletic|swim|bikini|cover[- ]?up|lounge|pajama|sleep|cozy)\b/i;
+export function isResurfaceCandidate(it) {
+  if (!GARMENT_CATS.has(it.category)) return false;
+  if ((it.subcategory || "") === "T-Shirts") return false;
+  const f = Number(it.formality);
+  if (Number.isFinite(f) && f <= 2) return false;
+  const text = `${it.brand || ""} ${it.name || ""}`;
+  if (COMFORT_BRAND_RE.test(text) || COMFORT_NAME_RE.test(text)) return false;
+  return true;
+}
 
 function daysAgo(iso, fromIso) {
   if (!iso) return Infinity;
@@ -127,6 +147,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   const alternativesFor = (target) => {
     const picks = forSeason((items || [])
       .filter(it => it.category === target.category && it.id !== target.id
+        && isResurfaceCandidate(it)
         && it.image && !wornThisMonth.has(it.id) && !usedAltIds.has(it.id)))
       .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
         || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))
@@ -140,7 +161,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   // Garments only (no accessories/belts/shoes/bags/swim/lounge/athleisure) and
   // season-appropriate, so it stops surfacing a wall of resting belts. ──
   const rediscover = forSeason((items || [])
-    .filter(it => it.image && GARMENT_CATS.has(it.category) && !wornThisMonth.has(it.id) && daysAgo(it.last_worn, endIso) >= 60))
+    .filter(it => it.image && isResurfaceCandidate(it) && !wornThisMonth.has(it.id) && daysAgo(it.last_worn, endIso) >= 60))
     .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
       || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))
     .slice(0, 8);
@@ -149,7 +170,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   const challenge = [];
   const usedCats = new Set();
   for (const it of forSeason((items || [])
-    .filter(it => it.image && GARMENT_CATS.has(it.category) && !wornThisMonth.has(it.id)))
+    .filter(it => it.image && isResurfaceCandidate(it) && !wornThisMonth.has(it.id)))
     .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
       || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))) {
     if (usedCats.has(it.category)) continue;

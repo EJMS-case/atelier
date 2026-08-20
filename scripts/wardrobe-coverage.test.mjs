@@ -103,13 +103,13 @@ test("autoColorPairs surfaces in-season pairs she owns, excluding manual ones", 
 
 test("pairUnlocks finds one-purchase-away pairings", () => {
   const date = new Date(2026, 0, 15); // winter: Forest + Burgundy is in season
-  const unlocks = pairUnlocks(CLOSET, { date });
+  const unlocks = pairUnlocks(CLOSET, { date, max: 12 });
   const forest = unlocks.find(u => u.label === "Forest + Burgundy");
   assert.ok(forest, "8 burgundy pieces + zero forest → unlock candidate");
   assert.equal(forest.needLabel, "Forest");
   assert.equal(forest.haveLabel, "Burgundy");
   assert.ok(forest.haveCount >= 8);
-  assert.match(describePairUnlocks(CLOSET, date), /Forest \+ Burgundy/);
+  assert.match(describePairUnlocks(CLOSET, date), /ONE PURCHASE AWAY/);
 });
 
 test("pairUnlocks ignores combos where both sides exist or the owned side is thin", () => {
@@ -126,4 +126,38 @@ test("rotateDaily is deterministic per day and changes across days", () => {
   assert.deepEqual(a1, a2, "same seed → same order");
   assert.notDeepEqual(a1, b, "different day → different order");
   assert.deepEqual([...a1].sort(), [...b].sort(), "same membership either way");
+});
+
+// ── Round-2 additions (owner feedback 2026-08-20) ───────────────────────────
+test("nextSeason and the month-based bucket fallback", async () => {
+  const { nextSeason, seasonalBucketForDate } = await import("../src/utils/wardrobe-coverage.js");
+  assert.equal(nextSeason("summer"), "fall");
+  assert.equal(nextSeason("winter"), "spring");
+  assert.equal(seasonalBucketForDate(new Date(2026, 7, 20)), "Hot", "August fallback is Hot");
+  assert.equal(seasonalBucketForDate(new Date(2026, 0, 5)), "Cold");
+  assert.equal(seasonalBucketForDate(new Date(2026, 8, 15)), "Warm");
+});
+
+test("autoColorPairs ranks chromatic stories above all-neutral ones and blends next season", () => {
+  const date = new Date(2026, 7, 20); // late August: summer + upcoming fall
+  const pairs = autoColorPairs(CLOSET, { date, max: 6 });
+  const labels = pairs.map(p => p.label);
+  assert.ok(labels.includes("Burgundy + Navy"), "fall combo already visible in late August");
+  const bw = labels.indexOf("Black + White");
+  const chromatic = labels.findIndex(l => l.includes("Burgundy") || l.includes("Navy"));
+  if (bw !== -1) assert.ok(chromatic < bw, "a chromatic pair outranks Black + White");
+});
+
+test("isResurfaceCandidate excludes tees, activewear brands, comfort names, and f<=2", async () => {
+  const { isResurfaceCandidate } = await import("../src/features/recap/recapData.js");
+  const ok = { category: "Tops", subcategory: "Blouses", name: "Silk blouse", brand: "Theory", formality: 6 };
+  assert.equal(isResurfaceCandidate(ok), true);
+  assert.equal(isResurfaceCandidate({ ...ok, subcategory: "T-Shirts" }), false, "no tees");
+  assert.equal(isResurfaceCandidate({ ...ok, brand: "FP Movement" }), false, "activewear brand");
+  assert.equal(isResurfaceCandidate({ ...ok, brand: "PopFlex" }), false);
+  assert.equal(isResurfaceCandidate({ ...ok, name: "Fast Break Zip-Up" }), false, "comfort-coded name");
+  assert.equal(isResurfaceCandidate({ ...ok, formality: 1 }), false, "her own lounge tag");
+  assert.equal(isResurfaceCandidate({ ...ok, formality: 2 }), false);
+  assert.equal(isResurfaceCandidate({ category: "Athleisure", subcategory: "Leggings", name: "X" }), false, "category gate holds");
+  assert.equal(isResurfaceCandidate({ category: "Swim", subcategory: "Swimsuits", name: "X" }), false);
 });

@@ -105,7 +105,7 @@ export default function LookBackCard({ items, favorites = [], apiKey, plans: all
     );
   }
 
-  const { glance, wheres, leanedOn, rediscover, challenge, periodStats } = recap;
+  const { glance, wheres, leanedOn, challenge, periodStats } = recap;
   const topOcc = glance.occasions[0];
   const topWx = glance.weathers[0];
 
@@ -252,21 +252,9 @@ export default function LookBackCard({ items, favorites = [], apiKey, plans: all
             </div>
           )}
 
-          {/* Rediscover */}
-          {rediscover.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div style={label}>REDISCOVER · resting 60+ days</div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-                {rediscover.map(it => (
-                  <button key={it.id} onClick={() => (onStyleItem || onEditItem)?.(it)}
-                    style={{ flexShrink: 0, width: 84, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                    <Img it={it} size={84}/>
-                    <div style={{ fontSize: 10, color: PALETTE.soft, marginTop: 3, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{it.name}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* (The old REDISCOVER strip is gone — it duplicated Home's Back in
+              Rotation scroller, and two resting lists on one page was exactly
+              the "repetitive" the owner flagged.) */}
 
           {/* Challenge */}
           {challenge.length > 0 && (

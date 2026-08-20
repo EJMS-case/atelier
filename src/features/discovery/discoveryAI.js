@@ -104,32 +104,56 @@ export async function generateBrandDiscovery({ items, apiKey, excludeBrands = []
   const exclude = [...new Set([...profile.ownedBrands, ...excludeBrands])];
   const prompt = buildPrompt({ profileLines: profile.lines, excludeBrands: exclude, fingerprint });
 
-  const baseBody = {
-    model: MODEL_STRONG,
-    max_tokens: 3000,
-    messages: [{ role: "user", content: prompt }],
-  };
+  // Web-search turns are expensive in OUTPUT tokens: every search call and
+  // its results ride the assistant turn, so the budget must cover searching
+  // AND the final JSON. The first production run died at max_tokens 3000
+  // with only its opening sentence emitted (ai_errors 2026-08-20 06:20) —
+  // hence 8000 here, searches capped at 4, and two recovery paths below.
+  const TOOLS = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
+  const baseBody = { model: MODEL_STRONG, max_tokens: 8000 };
+  let messages = [{ role: "user", content: prompt }];
 
-  // Attempt 1: with the web search server tool (bounded at 6 searches).
-  // Attempt 2 (only if the API rejects the tool — org not enabled): without
-  // it, flagged web:false so the UI can say the finds weren't verified live.
+  // Attempt 1: with the web search server tool. Fallback (only if the API
+  // rejects the tool — org not enabled): without it, flagged web:false so
+  // the UI says the finds weren't verified live.
   let body = null;
   let usedWeb = true;
   try {
-    const res = await anthropicFetch({
-      ...baseBody,
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
-    }, { apiKey });
+    const res = await anthropicFetch({ ...baseBody, tools: TOOLS, messages }, { apiKey });
     body = await res.json();
   } catch (e) {
     if (!/web_search|tool/i.test(e?.message || "")) throw e;
     usedWeb = false;
-    const res = await anthropicFetch(baseBody, { apiKey });
+    const res = await anthropicFetch({ ...baseBody, messages }, { apiKey });
     body = await res.json();
   }
 
-  const text = (body.content || []).filter(b => b.type === "text").map(b => b.text || "").join("\n");
-  const brands = parseBrandDiscovery(text);
+  // Long server-tool turns can pause; continue until the model actually ends
+  // its turn (bounded — each round is one more API call).
+  let rounds = 0;
+  while (body.stop_reason === "pause_turn" && rounds < 3) {
+    messages = [...messages, { role: "assistant", content: body.content }];
+    const res = await anthropicFetch(
+      { ...baseBody, ...(usedWeb ? { tools: TOOLS } : {}), messages }, { apiKey });
+    body = await res.json();
+    rounds++;
+  }
+
+  const textOf = (b) => (b.content || []).filter(x => x.type === "text").map(x => x.text || "").join("\n");
+  let text = textOf(body);
+  let brands = parseBrandDiscovery(text);
+
+  // Ran out of budget mid-answer? One tool-free continuation: "finish the
+  // JSON now" — the research is already in the turn's context.
+  if (brands.length === 0 && body.stop_reason === "max_tokens") {
+    messages = [...messages, { role: "assistant", content: body.content },
+      { role: "user", content: "Finish now: output ONLY the complete JSON array of brands in the agreed format — no prose, no searches." }];
+    const res = await anthropicFetch({ model: MODEL_STRONG, max_tokens: 2500, messages }, { apiKey });
+    const finishBody = await res.json();
+    text = textOf(finishBody) || text;
+    brands = parseBrandDiscovery(text);
+  }
+
   if (brands.length === 0) {
     logAiError("brand_discovery:parse", {
       stop_reason: body.stop_reason ?? null,

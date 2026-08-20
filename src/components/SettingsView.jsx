@@ -270,6 +270,21 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         <h2 style={s.pageTitle}>Settings</h2>
       </div>
 
+      {/* Style Profile & measurements — moved back from Home (owner,
+          2026-08-20: "settings is a better home for it along with my
+          measurements"). First card so it never gets buried under keys. */}
+      {onNavigate && (
+        <div style={s.settingsCard}>
+          <div style={s.settingsTitle}>✦ Style Profile &amp; Measurements</div>
+          <p style={s.settingsSub}>
+            Your stylist's read, color pairings, About Me &amp; measurements, and the AI Readiness audit. Everything here quietly shapes every look.
+          </p>
+          <button style={{...s.btnPrimary, width:"100%"}} onClick={() => onNavigate("profile")}>
+            Open Style Profile
+          </button>
+        </div>
+      )}
+
       {/* Anthropic key */}
       <div style={s.settingsCard}>
         <div style={{...s.settingsTitle, display: "flex", alignItems: "center", gap: 8}}>
@@ -330,9 +345,6 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           <div style={s.settingsTitle}>✦ More Tools</div>
           <p style={s.settingsSub}>Specialty views you can open without leaving Settings.</p>
           <div style={{display:"flex", flexDirection:"column", gap:8, marginTop:6}}>
-            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("profile")}>
-              ✦ Style Profile — your fingerprint, color pairings & About Me (now on Home)
-            </button>
             <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("color")}>
               ✦ Color Advisor — analyze a piece or audit your wardrobe
             </button>

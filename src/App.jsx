@@ -1362,10 +1362,8 @@ export default function App() {
             onOpenPlanner={() => setView("planner")}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onStyleRequest={(req) => { setRequest(req); setView("style"); setStylePanelOpen(true); }}
-            onOpenProfile={() => setView("profile")}
             brandDiscovery={brandDiscovery}
             onOpenDiscovery={() => setView("discovery")}
-            styleFingerprint={styleFingerprint}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onStyleItem={(item) => {
               setRequest(`Style around my ${item.name}`);
@@ -2083,7 +2081,7 @@ export default function App() {
           setStyleFingerprint={setStyleFingerprint}
           lovedLooks={lovedLooks}
           logCount={wearData.logs ? wearData.logs.length : null}
-          onBack={() => setView("home")}
+          onBack={() => setView("settings")}
           onEditItem={(item) => { setEditItem(item); setEditReturnView("profile"); setView("edit"); }}
         />
       )}
