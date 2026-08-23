@@ -60,7 +60,7 @@ const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView
 const BrandDiscoveryView = lazy(() => import("./features/discovery/BrandDiscoveryView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
-import { unionTags, outfitsOf, buildPlanPayload, newOutfitId } from "./features/planner/outfits.js";
+import { unionTags, outfitsOf, buildPlanPayload, newOutfitId, appendOutfit } from "./features/planner/outfits.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -1706,18 +1706,25 @@ export default function App() {
               const current = outfitsOf(existing);
               // tripOutfitIdx identifies which outfit on a multi-look day is
               // being edited; a plain planner-day edit targets the primary (#0).
+              // An idx past the end APPENDS — that's the calendar's
+              // "build another look for this day" path, which carries the
+              // picked daypart in newOutfitLabel (appendOutfit back-labels the
+              // existing lone look "Day" when an Evening one joins it).
               const idx = editingPlan?.tripOutfitIdx ?? 0;
+              let outfits;
               if (current.length === 0) {
-                current.push({ id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] });
+                outfits = [{ id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] }];
               } else if (current[idx]) {
-                current[idx] = { ...current[idx], items: plan.items || [], occasion: current[idx].occasion || plan.occasion || null };
+                outfits = current.map((o, i) => i === idx
+                  ? { ...o, items: plan.items || [], occasion: o.occasion || plan.occasion || null }
+                  : o);
               } else {
-                current.push({ id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] });
+                outfits = appendOutfit(current, { id: newOutfitId(), label: editingPlan?.newOutfitLabel || "", occasion: plan.occasion || null, items: plan.items || [] });
               }
               const isTrip = editingPlan?.tripOutfitIdx != null || existing?.source === "trip";
               const merged = buildPlanPayload({
                 date: plan.date,
-                outfits: current,
+                outfits,
                 source: existing?.source || (isTrip ? "trip" : plan.source) || "planner",
                 notes: existing?.notes ?? plan.notes ?? null,
                 weather: existing?.weather ?? plan.weather ?? null,
@@ -1899,13 +1906,15 @@ export default function App() {
               setManualBuilderOpen(true);
               setView("style");
             }}
-            onBuildDay={(iso, existingIds, tripOutfitIdx = null) => {
+            onBuildDay={(iso, existingIds, tripOutfitIdx = null, newOutfitLabel = null) => {
               // tripOutfitIdx is set when Build is opened from a specific
               // outfit on a trip-detail day. We carry it through editingPlan
               // so the save path can update outfits[idx] in the JSONB array
               // instead of overwriting the legacy `items` column (which the
               // trip view doesn't read from when outfits[] is present).
-              setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx });
+              // newOutfitLabel rides along when the calendar appends a fresh
+              // look ("Day"/"Evening") so the save path can stamp it.
+              setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx, newOutfitLabel });
               setBuilderReturnView(viewRef.current);
               setManualBuilderOpen(true);
               setView("style");
