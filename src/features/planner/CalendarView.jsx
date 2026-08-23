@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
-import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps } from "./outfits.js";
+import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { fetchNycForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
@@ -152,12 +152,15 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       // saved-look onSchedule path in App.jsx.
       const existing = await existingPlanFor(iso);
       const current = outfitsOf(existing);
-      const outfits = [...current, {
+      const outfits = appendOutfit(current, {
         id: newOutfitId(),
-        label: "",
+        // Daypart chosen in the DayModal ("Day" / "Evening") when the day
+        // already holds a look — appendOutfit back-labels the first look "Day"
+        // when an Evening one joins it.
+        label: overrides.label || "",
         occasion: planOccasion,
         items: log.garment_ids || [],
-      }];
+      });
       const merged = buildPlanPayload({
         date: iso,
         outfits,
@@ -189,7 +192,7 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
   // look straight from the DayModal instead of bouncing through Style Me +
   // Save + come-back-to-pin. Uses the same generateTripDayLook the trip
   // detail view does, with destination null (NYC default).
-  async function handleGenerateForDay(iso, occasion) {
+  async function handleGenerateForDay(iso, occasion, label = "") {
     if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
     const wxBucket = forecast?.[iso]?.bucket || "";
     const look = await generateTripDayLook(items, occasion, wxBucket, null, apiKey, {});
@@ -198,12 +201,12 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
     // multi-outfit day with a fresh single-outfit row.
     const existing = await existingPlanFor(iso);
     const current = outfitsOf(existing);
-    const outfits = [...current, {
+    const outfits = appendOutfit(current, {
       id: newOutfitId(),
-      label: "",
+      label,
       occasion,
       items: look.items || [],
-    }];
+    });
     const merged = buildPlanPayload({
       date: iso,
       outfits,
@@ -232,6 +235,49 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       setSyncError(`Couldn't clear the ${iso} plan — try again.`);
     }
     setActiveDay(null);
+  }
+
+  // Remove ONE look from a multi-look day, keeping the rest. Removing the last
+  // look falls through to handleClear (delete the whole row). The modal stays
+  // open so the remaining look(s) are visible right away.
+  async function handleRemoveOutfit(iso, outfitId) {
+    try {
+      const existing = await existingPlanFor(iso);
+      const current = outfitsOf(existing);
+      const removedIdx = current.findIndex(o => o.id === outfitId);
+      const remaining = current.filter(o => o.id !== outfitId);
+      if (remaining.length === 0) return handleClear(iso);
+      // A lone survivor doesn't need its "Day" tag any more.
+      if (remaining.length === 1 && (remaining[0].label === DAYPART_DAY || remaining[0].label === DAYPART_EVENING)) {
+        remaining[0] = { ...remaining[0], label: "" };
+      }
+      const merged = buildPlanPayload({
+        date: iso,
+        outfits: remaining,
+        source: existing?.source || "planner",
+        notes: existing?.notes ?? null,
+        weather: existing?.weather ?? null,
+        activity: existing?.activity ?? null,
+        day_label: existing?.day_label ?? null,
+        weathers: existing?.weathers,
+        // occasions intentionally re-derived from the remaining outfits —
+        // the removed look's occasion should leave with it.
+      });
+      // The linked-log layout only describes outfit #0 — drop both when the
+      // primary look is the one being removed.
+      if (removedIdx === 0) {
+        merged.outfit_log_id = null;
+        merged.layout_data = null;
+      } else {
+        if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
+        if (existing?.layout_data) merged.layout_data = existing.layout_data;
+      }
+      const saved = await savePlan(merged);
+      setPlans(p => ({ ...p, [iso]: { ...merged, id: saved[0]?.id ?? existing?.id } }));
+      setSyncError("");
+    } catch (e) {
+      setSyncError(`Couldn't remove that look from ${iso} — try again.`);
+    }
   }
 
   const todayIso = nyToday();
@@ -319,6 +365,7 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
             (iso < tripForDay.start_date === false && isoDate(startOfMonth(anchor)) === iso)
           );
           const planItems = resolveItemIds(items, plan?.items);
+          const planOutfits = outfitsOf(plan);
           const isToday = iso === todayIso;
           return (
             <button key={iso}
@@ -339,6 +386,21 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
                   </span>
                 )}
               </div>
+              {/* Multi-look badge — the collage below only shows the primary
+                  look, so surface the extras. A Day+Evening pair gets the
+                  sun/moon glyphs; anything else a plain +N count. */}
+              {planOutfits.length > 1 && (
+                <span style={{
+                  position: "absolute", top: 3, right: 3, zIndex: 2,
+                  background: PALETTE.ink, color: "#fff", borderRadius: 8,
+                  padding: "1px 5px", fontSize: 8, fontWeight: 600, letterSpacing: "0.04em",
+                  lineHeight: 1.4,
+                }}>
+                  {planOutfits.length === 2 && planOutfits.some(o => o.label === DAYPART_EVENING)
+                    ? "☀ ☾"
+                    : `+${planOutfits.length - 1}`}
+                </span>
+              )}
               {planItems.length > 0 && (
                 <div style={{ position: "relative", flex: 1, marginTop: 2 }}>
                   <EditorialCollage
@@ -360,7 +422,7 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       {activeDay && (() => {
         // Days in the visible month that actually have an outfit, sorted — lets
         // the day view flip prev/next through them without closing + reopening.
-        const outfitDays = Object.keys(plans).filter(d => (plans[d]?.items?.length || 0) > 0).sort();
+        const outfitDays = Object.keys(plans).filter(d => outfitsOf(plans[d]).length > 0).sort();
         const idx = outfitDays.indexOf(activeDay);
         const prevDay = idx > 0 ? outfitDays[idx - 1] : null;
         const nextDay = idx >= 0 && idx < outfitDays.length - 1 ? outfitDays[idx + 1] : null;
@@ -377,15 +439,28 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
           onNext={nextDay ? () => setActiveDay(nextDay) : undefined}
           onClose={() => setActiveDay(null)}
           onPickSaved={(log, overrides) => handleAssignSaved(activeDay, log, overrides)}
-          onGenerate={(occasion) => handleGenerateForDay(activeDay, occasion)}
+          onGenerate={(occasion, label) => handleGenerateForDay(activeDay, occasion, label)}
           onGoToStyleMe={() => { setActiveDay(null); onGoToStyleMe?.(); }}
           onClear={() => handleClear(activeDay)}
+          onRemoveOutfit={(outfitId) => handleRemoveOutfit(activeDay, outfitId)}
           onEditItem={onEditItem ? (it) => { setActiveDay(null); onEditItem(it); } : undefined}
-          onEditPlan={onEditPlan ? () => { const p = plans[activeDay]; setActiveDay(null); onEditPlan(activeDay, p); } : undefined}
-          onBuildDay={onBuildDay ? () => {
-            const existing = plans[activeDay]?.items || [];
+          onEditOutfit={(onEditPlan || onBuildDay) ? (outfit, idx) => {
+            const p = plans[activeDay];
             setActiveDay(null);
-            onBuildDay(activeDay, existing);
+            // Outfit #0 goes through the plan editor (keeps the row's saved
+            // layout); every other slot opens the builder targeted at its
+            // index in outfits[] — same path trip-day edits use.
+            if (idx === 0 && onEditPlan) onEditPlan(activeDay, p);
+            else if (onBuildDay) onBuildDay(activeDay, outfit.items || [], idx);
+          } : undefined}
+          onBuildDay={onBuildDay ? (label) => {
+            // "Build manually" — on an empty day it starts the day's first
+            // look; on a planned day it APPENDS a new look (with the picked
+            // daypart) instead of silently editing the primary one.
+            const current = outfitsOf(plans[activeDay]);
+            setActiveDay(null);
+            if (current.length === 0) onBuildDay(activeDay, []);
+            else onBuildDay(activeDay, [], current.length, label || "");
           } : undefined}
         />
         );
@@ -417,8 +492,9 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
 // success the modal closes and the new look is pinned to the day.
 // Build manually opens SilhouetteBuilder pre-loaded with the day so the
 // user can save → schedule from there.
-function GenerateForDay({ iso, isPast, forecast, hasApiKey, onGenerate, onGoToStyleMe, onBuildDay }) {
-  const [occasion, setOccasion] = useState("Casual");
+function GenerateForDay({ iso, isPast, hasExisting, forecast, hasApiKey, onGenerate, onGoToStyleMe, onBuildDay }) {
+  // A second look on a planned day is usually the dinner/evening one.
+  const [occasion, setOccasion] = useState(hasExisting ? "Dinner" : "Casual");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const wxBucket = forecast?.[iso]?.bucket || "";
@@ -455,7 +531,9 @@ function GenerateForDay({ iso, isPast, forecast, hasApiKey, onGenerate, onGoToSt
         style={{ ...btnPrimary, width: "100%", opacity: busy || !hasApiKey ? 0.6 : 1, cursor: (busy || !hasApiKey) ? "default" : "pointer" }}>
         {busy
           ? <><span style={{ marginRight: 8, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span>Styling…</>
-          : isPast ? `✦ Generate ${occasion} look for this day` : `✦ Generate & pin to this day`}
+          : isPast ? `✦ Generate ${occasion} look for this day`
+          : hasExisting ? `✦ Generate & add to this day`
+          : `✦ Generate & pin to this day`}
       </button>
 
       {onBuildDay && (
@@ -479,7 +557,7 @@ function GenerateForDay({ iso, isPast, forecast, hasApiKey, onGenerate, onGoToSt
   );
 }
 
-function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onEditItem, onEditPlan, onBuildDay }) {
+function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
   // Language adapts to past/today/future. Past = "What you wore" (a log, not
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
@@ -497,10 +575,28 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
   const friendly = friendlyDate(iso); // "Today" / "Tomorrow" / weekday-month-day
   const fullLabel = new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" });
   const headerEyebrow = isPast ? "WORN" : isToday ? "TODAY" : "PLAN";
-  const planItems = resolveItemIds(items, plan?.items);
+  // Every look on the day — not just the legacy `items` mirror (outfit #0).
+  const planOutfits = outfitsOf(plan);
+  const hasLooks = planOutfits.length > 0;
+  // Daypart for the NEXT look added — only offered once the day already has
+  // one (the second look is usually the evening one, so default there).
+  const [daypart, setDaypart] = useState(DAYPART_EVENING);
   const planLayout = plan?.layout_data
     || (plan?.outfit_log_id && (outfitLogs || []).find(l => l.id === plan.outfit_log_id)?.layout_data)
     || null;
+
+  // Eyebrow for one look's card: "PLANNED LOOK · ☾ EVENING". The daypart /
+  // occasion tag only appears when it distinguishes (multiple looks, or a
+  // single look that carries an explicit label like a trip "Pool" look).
+  const cardHeading = (o, idx) => {
+    const base = isPast ? "WHAT YOU WORE" : isToday ? "TODAY'S LOOK" : "PLANNED LOOK";
+    if (planOutfits.length === 1 && !o.label) return base;
+    const glyph = daypartGlyph(o.label);
+    const tag = o.label
+      ? `${glyph ? `${glyph} ` : ""}${o.label.toUpperCase()}`
+      : (o.occasion ? o.occasion.toUpperCase() : `LOOK ${idx + 1}`);
+    return `${base} · ${tag}`;
+  };
 
   return (
     <div style={backdropStyle} onClick={onClose}>
@@ -533,25 +629,61 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
           </div>
         </div>
 
-        {planItems.length > 0 && (
-          <div style={{ marginBottom: 16, padding: 12, background: PALETTE.cream, borderRadius: 6 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>
-              {isPast ? "WHAT YOU WORE" : isToday ? "TODAY'S LOOK" : "PLANNED LOOK"}
+        {planOutfits.map((o, idx) => {
+          const outfitItems = resolveItemIds(items, o.items);
+          if (outfitItems.length === 0) return null;
+          return (
+            <div key={o.id || idx} style={{ marginBottom: 12, padding: 12, background: PALETTE.cream, borderRadius: 6 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 6 }}>
+                {cardHeading(o, idx)}
+              </div>
+              <EditorialCollage
+                lookItems={outfitItems}
+                layoutOverride={idx === 0 ? planLayout : null}
+                onItemClick={onEditItem ? (it) => onEditItem(it) : undefined}/>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                {onEditOutfit && (
+                  <button onClick={() => onEditOutfit(o, idx)} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
+                    ✎ Edit
+                  </button>
+                )}
+                {planOutfits.length > 1 ? (
+                  <button onClick={() => onRemoveOutfit?.(o.id)} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
+                    ✕ Remove this look
+                  </button>
+                ) : (
+                  <button onClick={onClear} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
+                    {isPast ? "Remove this log" : "Clear this day"}
+                  </button>
+                )}
+              </div>
             </div>
-            <EditorialCollage
-              lookItems={planItems}
-              layoutOverride={planLayout}
-              onItemClick={onEditItem ? (it) => onEditItem(it) : undefined}/>
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              {onEditPlan && (
-                <button onClick={onEditPlan} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
-                  ✎ Edit
-                </button>
-              )}
-              <button onClick={onClear} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
-                {isPast ? "Remove this log" : "Clear this day"}
+          );
+        })}
+        {planOutfits.length > 1 && (
+          <button onClick={onClear}
+            style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 11, cursor: "pointer", display: "block", margin: "0 0 14px auto", textDecoration: "underline" }}>
+            {isPast ? "Remove all logs for this day" : "Clear this day"}
+          </button>
+        )}
+
+        {/* Adding to an already-planned (or already-logged) day → let the user
+            tag the new look Day or Evening. Applies to both tabs below
+            (saved + generate) and to Build manually. */}
+        {hasLooks && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 10, letterSpacing: "0.14em", color: PALETTE.muted }}>{isPast ? "LOG A LOOK FOR" : "ADD A LOOK FOR"}</span>
+            {[DAYPART_DAY, DAYPART_EVENING].map(dp => (
+              <button key={dp} onClick={() => setDaypart(dp)}
+                style={{
+                  ...btnSecondary, padding: "5px 12px", fontSize: 11,
+                  borderColor: daypart === dp ? PALETTE.ink : PALETTE.line,
+                  color: daypart === dp ? PALETTE.ink : PALETTE.muted,
+                  fontWeight: daypart === dp ? 600 : 400,
+                }}>
+                {daypartGlyph(dp)} {dp}
               </button>
-            </div>
+            ))}
           </div>
         )}
 
@@ -596,7 +728,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
             {matching.map(log => {
               const logItems = resolveItemIds(items, log.garment_ids).slice(0, 4);
               return (
-                <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather })}
+                <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather, label: hasLooks ? daypart : "" })}
                   style={{ display: "flex", gap: 10, width: "100%", padding: 10, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, marginBottom: 8, cursor: "pointer", alignItems: "center", textAlign: "left" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, width: 56, height: 56, flexShrink: 0 }}>
                     {logItems.map(it => (
@@ -623,11 +755,12 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
           <GenerateForDay
             iso={iso}
             isPast={isPast}
+            hasExisting={hasLooks}
             forecast={forecast}
             hasApiKey={hasApiKey}
-            onGenerate={onGenerate}
+            onGenerate={onGenerate ? (occasion) => onGenerate(occasion, hasLooks ? daypart : "") : undefined}
             onGoToStyleMe={onGoToStyleMe}
-            onBuildDay={onBuildDay}
+            onBuildDay={onBuildDay ? () => onBuildDay(hasLooks ? daypart : "") : undefined}
           />
         )}
       </div>

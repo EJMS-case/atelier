@@ -44,6 +44,26 @@ export function outfitsOf(plan) {
   return [];
 }
 
+// ── Day / evening dayparts ───────────────────────────────────────────────────
+// A second look on a calendar day is usually "the evening outfit" (dinner after
+// a day out). The outfit `label` field carries the daypart — free text on trip
+// days ("Pool"), but the calendar's add-a-look flow offers exactly these two.
+export const DAYPART_DAY = "Day";
+export const DAYPART_EVENING = "Evening";
+export const daypartGlyph = (label) =>
+  label === DAYPART_DAY ? "☀" : label === DAYPART_EVENING ? "☾" : "";
+
+// Append a look to a day's outfits. When an Evening look joins a day whose
+// only existing look is unlabeled, that first look implicitly becomes the
+// daytime one — label it so the pair reads Day / Evening everywhere.
+export function appendOutfit(current, outfit) {
+  const next = [...current, outfit];
+  if (current.length === 1 && !current[0].label && outfit.label === DAYPART_EVENING) {
+    next[0] = { ...current[0], label: DAYPART_DAY };
+  }
+  return next;
+}
+
 // Flatten every itemId used across every outfit on a plan — primary use is the
 // trip packing list. De-dupes silently.
 export function flattenPlanItemIds(plan) {
