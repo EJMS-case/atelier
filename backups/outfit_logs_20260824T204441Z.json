@@ -1,0 +1,3514 @@
+[
+ {
+  "id": "057674ee-e24c-40a7-ae19-5cd5dbdbf73a",
+  "collage_url": "{\"look_name\":\"Slate Silhouette\",\"mood\":\"Modern Minimalist\",\"why\":\"Army green bodysuit creates a second-skin base under navy wide-leg trousers — the restraint is in the monochromatic coolness and the clean lines. The sculptural quality comes from fit (contoured) meeting volume (wide leg). No decoration, just proportion.\"}",
+  "garment_ids": [
+   "1774888715538_172740",
+   "1774888715538_196777",
+   "1774888715538_189236",
+   "1774888715539_170850",
+   "1774888715538_162364"
+  ],
+  "date_worn": "2026-04-13",
+  "occasion": "Executive",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-13T05:19:39.465579+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "087e8f84-5741-4397-9696-aaa7b3f5ede5",
+  "collage_url": "{\"look_name\":\"Cool Red Statement\",\"mood\":\"Relaxed polish\",\"styling\":\"The red suede bomber transforms jean shorts and a white tee into an intentional look. The jacket's relaxed volume contrasts with the fitted tee and casual shorts underneath. Tan block-heel mules and the handmade Italian red leather bag echo the warm red family while staying summer-appropriate. This feels like grabbing your favorite jacket on the way out - elevated but never overdone.\"}",
+  "garment_ids": [
+   "1774888715539_168890",
+   "1776139920864_ghngvcv",
+   "1774888715539_172764",
+   "1774888715539_170849",
+   "1774888715538_196454"
+  ],
+  "date_worn": "2026-04-19",
+  "occasion": "Daytime",
+  "notes": "Partners retreat",
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-19T13:08:54.921687+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "0882261e-77d7-47f5-9f18-fc57f8656fa1",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"The ripped 501 cutoffs lead, kept sharp against a fitted black knit collared polo. A taupe leather mule and the structured black bag finish it with quiet polish. Easy, but every piece is considered.\"}",
+  "garment_ids": [
+   "1774888715539_168890",
+   "1774888715539_172748",
+   "1774888715539_171757",
+   "1774888715538_189236"
+  ],
+  "date_worn": "2026-06-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-26T02:30:52.32184+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "0b1ca8dd-4613-4509-86b8-a701ca81f189",
+  "collage_url": "{\"look_name\":\"Fringe Mono Edge\",\"mood\":\"Modern Minimalist\",\"styling\":\"Bodysuit tucked into wide-leg ponte for a clean waistline, fringe jacket worn open to show the sleek column underneath. Slingback flats keep the proportions grounded and modern.\"}",
+  "garment_ids": [
+   "1774888715538_172741",
+   "1774888715538_162341",
+   "1774888715539_162335",
+   "1774888715538_189236"
+  ],
+  "date_worn": "2026-04-11",
+  "occasion": "Daytime",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-11T16:24:37.585505+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "1024b1d3-bb2b-4824-b8be-48fb767854b5",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The teal ponte top carries the whole look, tucked crisp into the pleated black trousers for a fitted-to-fluid line. A slingback pump and structured black bag keep it executive, and the fine silver choker is the only finishing note it needs.\"}",
+  "garment_ids": [
+   "item-1784120407718-wgcyvbwo46",
+   "1774888715538_162338",
+   "1774888715539_170850",
+   "1774888715538_189236",
+   "item-1775523864389-0a3boctwwj5t"
+  ],
+  "date_worn": "2026-07-21",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-21T08:33:44.841388+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "1611ce9a-9f4b-4cf1-b2a9-da32d90cfb9e",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=103943>",
+  "garment_ids": [
+   "1774888715539_168868",
+   "item-1785687448757-7zk26wh0nvy",
+   "item-1775523864389-0a3boctwwj5t",
+   "item-1787423384050-6vmbygvlb3t",
+   "item-1775523864389-vejya2deqw"
+  ],
+  "date_worn": null,
+  "occasion": "Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-22T18:34:23.746166+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Dinner"
+  ],
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 41.50061274509804,
+    "w": 52.079200307574006,
+    "x": 35.931372549019606,
+    "y": 25.110294117647058,
+    "z": 2,
+    "id": "1774888715539_168868"
+   },
+   {
+    "h": 44.85375816993463,
+    "w": 44.85375816993463,
+    "x": 0,
+    "y": 0,
+    "z": 3,
+    "id": "item-1785687448757-7zk26wh0nvy"
+   },
+   {
+    "h": 26.46641289259066,
+    "w": 35.70990635059994,
+    "x": 53.15359477124183,
+    "y": 2.911482734686799,
+    "z": 6,
+    "id": "item-1775523864389-0a3boctwwj5t"
+   },
+   {
+    "h": 21.701439592230336,
+    "w": 57.735294117647065,
+    "x": 0.5163398692810475,
+    "y": 47.247549019607845,
+    "z": 4,
+    "id": "item-1787423384050-6vmbygvlb3t"
+   },
+   {
+    "h": 24,
+    "w": 45.83783783783784,
+    "x": 46.06209150326797,
+    "y": 57.80147058823529,
+    "z": 5,
+    "id": "item-1775523864389-vejya2deqw"
+   }
+  ]
+ },
+ {
+  "id": "1933a730-f791-4f94-9422-202e910ba192",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"The red gold-button blazer is the whole outfit — everything underneath exists to let it land. A black silk tank and baby pink wide-legs keep the palette tight and the proportions easy, while silver flat sandals and a burgundy leather bag add the finishing edge without overcomplicating it.\"}",
+  "garment_ids": [
+   "1774888715538_162347",
+   "1774888715539_196588",
+   "1774888715538_195963",
+   "1774888715539_170852",
+   "1774888715538_162499"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T15:18:08.031085+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "1e964b93-7d4e-4596-9ce1-9fec9752fba0",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=132571>",
+  "garment_ids": [
+   "1774888715538_162494",
+   "1774888715538_195960",
+   "item-1785686216630-63j6wcs1m05",
+   "1774888715538_171516",
+   "1776139920864_ghngvcv",
+   "item-1775523864389-vejya2deqw"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T01:45:39.507702+00:00",
+  "weather": "Mild",
+  "occasions": [
+   "Work",
+   "Work Dinner"
+  ],
+  "weathers": [
+   "Mild"
+  ],
+  "layout_data": [
+   {
+    "h": 57.99999999999999,
+    "w": 25.874686716791977,
+    "x": 54.647058823529406,
+    "y": 27.906862745098053,
+    "z": 2,
+    "id": "1774888715538_162494"
+   },
+   {
+    "h": 42.94458463858916,
+    "w": 48.222222222222214,
+    "x": 29.96405228758171,
+    "y": 5.514705882352931,
+    "z": 3,
+    "id": "1774888715538_195960"
+   },
+   {
+    "h": 3.9375,
+    "w": 28,
+    "x": 26.660130718954253,
+    "y": 64.91911764705883,
+    "z": 6,
+    "id": "item-1785686216630-63j6wcs1m05"
+   },
+   {
+    "h": 12.810000000000002,
+    "w": 28,
+    "x": 13.016339869281055,
+    "y": 48.595588235294116,
+    "z": 4,
+    "id": "1774888715538_171516"
+   },
+   {
+    "h": 42.08026960784314,
+    "w": 60.294117647058826,
+    "x": 0,
+    "y": 2.267156862745095,
+    "z": 1,
+    "id": "1776139920864_ghngvcv"
+   },
+   {
+    "h": 14.073529411764707,
+    "w": 31.867249602543723,
+    "x": 18.529411764705877,
+    "y": 73.79411764705881,
+    "z": 5,
+    "id": "item-1775523864389-vejya2deqw"
+   }
+  ]
+ },
+ {
+  "id": "1fc3cf1a-6219-4d1f-bc9f-3dd8e64cbcd8",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=70487>",
+  "garment_ids": [
+   "1774888715538_196955",
+   "item-1778947749465-yntdehqssn8",
+   "item-1779415884953-chxppya8ms"
+  ],
+  "date_worn": "2026-05-26",
+  "occasion": "Casual",
+  "notes": "Minnie",
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-22T02:14:02.324346+00:00",
+  "weather": "Warm",
+  "occasions": [
+   "Casual",
+   "Active"
+  ],
+  "weathers": [
+   "Warm"
+  ],
+  "layout_data": [
+   {
+    "h": 33.326379388964895,
+    "w": 63.74509803921569,
+    "x": 21.803921568627445,
+    "y": 44.69607843137254,
+    "z": 4,
+    "id": "1774888715538_196955"
+   },
+   {
+    "h": 13.566176470588237,
+    "w": 42.84313725490196,
+    "x": 8.496732026143789,
+    "y": 60.31372549019608,
+    "z": 5,
+    "id": "item-1778947749465-yntdehqssn8"
+   },
+   {
+    "h": 49.41421568627452,
+    "w": 53.12418300653595,
+    "x": 13.225490196078432,
+    "y": 2.686274509803919,
+    "z": 3,
+    "id": "item-1779415884953-chxppya8ms"
+   }
+  ]
+ },
+ {
+  "id": "28e7fcdc-e94a-4867-ad97-a9933c78c534",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"Royal blue fine-knit polo tucked into wide-leg black linen trousers — the cobalt saturates the whole look from the shoulders down while the fluid linen below keeps it weekend-easy. Black ballet flats and the YSL chain crossbody in black hold the bottom half together in one clean line, so the polo's colour does all the talking.\"}",
+  "garment_ids": [
+   "1776139920864_sws39xg",
+   "1774888715538_172745",
+   "1774888715539_177611",
+   "1774888715538_171656"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T15:28:25.508989+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "2a89ba16-fe83-41da-98b6-c82dbbe93f87",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"The red ruffle-trim blouse brings color and movement against black crepe trousers and a sharp tailored blazer. Soft ballet flats and structured leather bag ground the drama with polished ease.\"}",
+  "garment_ids": [
+   "1774888715538_197119",
+   "1774888715538_171401",
+   "1774888715538_162348",
+   "1774888715539_177611",
+   "1774888715538_189236"
+  ],
+  "date_worn": "2026-05-11",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-11T18:14:49.077303+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "2a9e64ce-44df-4d76-bd68-b52922a5bd58",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=70731>",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "item-1786338982712-ul7svhy55db",
+   "item-1787123664680-0cxkgteg25qu",
+   "item-1775526216129-p8qn3dehlw",
+   "item-1785686216630-3ddz7e094ud"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T07:21:44.396769+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Work"
+  ],
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 45,
+    "w": 31.30977130977131,
+    "x": 34.34511434511435,
+    "y": 40,
+    "z": 2,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 23.820895522388064,
+    "w": 28.000000000000004,
+    "x": 36,
+    "y": 9.08955223880597,
+    "z": 3,
+    "id": "item-1786338982712-ul7svhy55db"
+   },
+   {
+    "h": 17.745,
+    "w": 26,
+    "x": 68,
+    "y": 71.1275,
+    "z": 4,
+    "id": "item-1787123664680-0cxkgteg25qu"
+   },
+   {
+    "h": 9.473684210526317,
+    "w": 24,
+    "x": 66,
+    "y": 42.26315789473685,
+    "z": 4,
+    "id": "item-1775526216129-p8qn3dehlw"
+   },
+   {
+    "h": 24,
+    "w": 49.06100795755968,
+    "x": 20,
+    "y": 76,
+    "z": 5,
+    "id": "item-1785686216630-3ddz7e094ud"
+   }
+  ]
+ },
+ {
+  "id": "2b7a3aa2-20eb-4eb9-8eda-09d2a6564482",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"An easy navy-on-navy build — the soft roll-tab blouse tucked into the high-waist wide-leg trousers for a long, streamlined line. The tan slingback pump lifts it just enough for dinner, with the espresso leather shoulder bag keeping everything quietly polished.\"}",
+  "garment_ids": [
+   "1774888715538_196711",
+   "1774888715538_196652",
+   "1774888715539_170851",
+   "1774888715538_162506"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T15:29:02.237491+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "2c10971d-030c-46bd-bc04-ac0c47a88024",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The navy pinstripe skort does all the talking, kept easy with a soft tan crop and woven slides. The tan pouch echoes the shoe so nothing competes — polished but built for a real Saturday.\"}",
+  "garment_ids": [
+   "item-1783380100536-jw208rcmbzg",
+   "1774888715539_169590",
+   "1774888715539_162381",
+   "1774888715538_162509"
+  ],
+  "date_worn": "2026-07-17",
+  "occasion": "Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-17T17:46:35.015346+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "2f48db4d-4fe2-45ba-8722-a011558a95d5",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"The burgundy blazer gets worn open and loose over a simple white knit top, so it reads as a finishing layer rather than a heat trap. Slim burgundy knit trousers keep the bottom lean and quiet under all that volume up top, and the chocolate slingback flat and bucket bag ground everything in warm neutrals. It's the kind of proportion play that looks easy but is completely considered.\"}",
+  "garment_ids": [
+   "1774888715539_196706",
+   "1774888715538_162333",
+   "1774888715538_162505"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-02T18:48:16.673617+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 45,
+    "w": 35,
+    "x": 40,
+    "y": 30,
+    "id": "1774888715539_196706"
+   },
+   {
+    "h": 45,
+    "w": 40,
+    "x": 35,
+    "y": 65,
+    "id": "item-1778972252717-thrahkajopm"
+   },
+   {
+    "h": 20,
+    "w": 25,
+    "x": 20,
+    "y": 85,
+    "id": "1774888715538_162333"
+   },
+   {
+    "h": 22,
+    "w": 22,
+    "x": 70,
+    "y": 75,
+    "id": "1774888715538_162505"
+   }
+  ]
+ },
+ {
+  "id": "2fabfd5a-ce8a-439b-8bfe-a0dbe8630de1",
+  "collage_url": "{\"mood\":\"Quiet Luxury\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "1774888715538_172747",
+   "1774888715539_196340",
+   "1774888715538_171516",
+   "1774888715538_197075"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:19:26.229431+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": [
+   {
+    "h": 45,
+    "w": 34,
+    "x": 30,
+    "y": 45,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 38,
+    "w": 30,
+    "x": 33,
+    "y": 5,
+    "id": "1774888715538_172747"
+   },
+   {
+    "h": 24,
+    "w": 24,
+    "x": 5,
+    "y": 60,
+    "id": "1774888715539_196340"
+   },
+   {
+    "h": 30,
+    "w": 26,
+    "x": 66,
+    "y": 55,
+    "id": "1774888715538_171516"
+   },
+   {
+    "h": 16,
+    "w": 16,
+    "x": 68,
+    "y": 20,
+    "id": "1774888715538_197075"
+   }
+  ]
+ },
+ {
+  "id": "32b60598-956a-4d8a-a2f9-0e67346d14cf",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"The deep teal bodysuit sings against warm camel trousers — one clean color hit at the face, everything else quiet. A slim suede belt defines the waist and the tan stiletto with a brown bucket bag keeps the finish soft and considered.\"}",
+  "garment_ids": [
+   "1774888715538_172741",
+   "1774888715538_165118",
+   "1774888715539_170851",
+   "1774888715538_162505",
+   "item-1775526216129-p8qn3dehlw"
+  ],
+  "date_worn": "2026-07-06",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-06T23:36:11.000646+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "3703c761-8dd2-44ed-a9a9-02367f21fe2e",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"A navy column built for a hot day — the royal-blue knit polo is the whole story, tucked into matte navy ponte wide-legs that fall clean and easy. The powder-blue raffia slide keeps it breezy and the little chain bag pulls it sharp. All one family, all texture.\"}",
+  "garment_ids": [
+   "1776139920864_sws39xg",
+   "1774888715538_196652",
+   "item-1779138384093-swtfltns42q",
+   "1774888715538_171656"
+  ],
+  "date_worn": "2026-06-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-26T02:25:16.657688+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "3a262308-9ef1-45cb-a26a-4c3eef2e4ab2",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"An easy navy column for a hot day out — the fine-knit polka-dot polo tucked into wide navy trousers that move with you. The black leather slingback and crossbody keep it clean and considered, never fussy.\"}",
+  "garment_ids": [
+   "1776139920864_yq2y7b1",
+   "1774888715538_196777",
+   "1774888715538_171516",
+   "1774888715539_162335"
+  ],
+  "date_worn": "2026-06-27",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-27T14:32:50.42668+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "4008ee1b-f356-4f18-8bab-d62875f74a4e",
+  "collage_url": "{\"mood\":\"Editorial\",\"styling\":\"The one-shoulder ivory-and-black scarf top is the whole story here, its asymmetric drape doing all the talking. We kept everything below it hushed — a fluid black satin wide-leg pant, a black leather slingback flat, and a sleek black crossbody — so the print never has to compete. A fine silver choker adds the one glint of jewelry without adding noise.\"}",
+  "garment_ids": [
+   "1776139920864_vk7e367",
+   "1774888715538_169727",
+   "1774888715538_171516",
+   "1774888715539_162335",
+   "item-1775523864389-0a3boctwwj5t"
+  ],
+  "date_worn": null,
+  "occasion": "Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-01T08:08:23.599776+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "444d8442-69fc-455f-a352-a4571f814538",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=86519>",
+  "garment_ids": [
+   "1774888715539_196705",
+   "1774888715539_162500",
+   "1774888715538_162506",
+   "1774888715539_162360"
+  ],
+  "date_worn": null,
+  "occasion": "Casual",
+  "notes": "Birthday drinks @ home",
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-21T02:33:52.753014+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": [
+   "Casual"
+  ],
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": [
+   {
+    "h": 85.98972464598857,
+    "w": 58.12145032898046,
+    "x": 41.87854967101954,
+    "y": 14.010275354011426,
+    "z": 2,
+    "id": "1774888715539_196705"
+   },
+   {
+    "h": 31.309842111070353,
+    "w": 32.57071936215958,
+    "x": 12.66304347826086,
+    "y": 68.69015788892965,
+    "z": 5,
+    "id": "1774888715539_162500"
+   },
+   {
+    "h": 37.606508949425226,
+    "w": 40.08882432292207,
+    "x": 13.199275362318836,
+    "y": 29.801329002399,
+    "z": 4,
+    "id": "1774888715538_162506"
+   },
+   {
+    "h": 41.3183374900463,
+    "w": 76,
+    "x": 0,
+    "y": 0,
+    "z": 3,
+    "id": "1774888715539_162360"
+   }
+  ]
+ },
+ {
+  "id": "452e8c17-4cc8-4485-8c98-a2cc016346ff",
+  "collage_url": "{\"look_name\":\"Denim Romantic Ease\",\"mood\":\"Soft feminine\",\"styling\":\"Client requested jean shorts — this honors that while maintaining romantic mood through pearl earrings and the woven beaded bucket bag with fringe detail. White tank is simple but the sleeveless cut and clean lines feel considered. Tan woven slides and cream beaded bag create tonal harmony. This is effortless summer dressing with a feminine, collected edge — not basic, but not trying too hard.\"}",
+  "garment_ids": [
+   "1774888715539_168892",
+   "1774888715539_162377",
+   "1774888715539_162381"
+  ],
+  "date_worn": "2026-04-20",
+  "occasion": "Daytime",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-19T13:10:54.520922+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "4562ece1-f16a-45ab-ae04-80042e255b0f",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"Easy summer denim done quietly — the camel square-neck crop tucked into the ripped 501 cutoffs. A slim suede belt marks the waist and the woven slides keep it barefoot-cool.\"}",
+  "garment_ids": [
+   "1774888715539_168890",
+   "1774888715539_169590",
+   "1774888715538_162766",
+   "1774888715539_162381",
+   "1774888715538_162497"
+  ],
+  "date_worn": "2026-06-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-26T02:28:02.927229+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "460f0a26-a3ae-40e6-9b2f-464230197903",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"A clean red-and-black column for a hot day out — the red linen skort leads, with the slim black lace-trim cami keeping it streamlined up top. The raffia slide and YSL crossbody finish it with quiet polish.\"}",
+  "garment_ids": [
+   "1776139920864_2uuc10d",
+   "item-1778972252717-lqcxz0lti1",
+   "item-1778947749465-yntdehqssn8",
+   "1774888715538_171656"
+  ],
+  "date_worn": "2026-06-27",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-27T14:35:36.624901+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "468d8f38-809b-46d3-91fc-41eb73251a6f",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=76867>",
+  "garment_ids": [
+   "1774888715538_165118",
+   "1774888715538_172741",
+   "1774888715539_170850",
+   "1774888715538_189236",
+   "item-1785686216630-63j6wcs1m05"
+  ],
+  "date_worn": "2026-05-13",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T03:09:29.826914+00:00",
+  "weather": "Mild",
+  "occasions": [
+   "Work",
+   "Dinner"
+  ],
+  "weathers": [
+   "Mild"
+  ],
+  "layout_data": [
+   {
+    "h": 68.41666666666666,
+    "w": 32.099777995125216,
+    "x": 24.66339869281046,
+    "y": 31.583333333333343,
+    "z": 4,
+    "id": "1774888715538_165118"
+   },
+   {
+    "h": 45.915196078431364,
+    "w": 41.6045751633987,
+    "x": 11.509803921568622,
+    "y": 1.6446078431372584,
+    "z": 3,
+    "id": "1774888715538_172741"
+   },
+   {
+    "h": 23.387254901960755,
+    "w": 43.61075330375459,
+    "x": 7.33660130718954,
+    "y": 46.28186274509801,
+    "z": 5,
+    "id": "1774888715539_170850"
+   },
+   {
+    "h": 26.235616438356168,
+    "w": 28,
+    "x": 52.9673202614379,
+    "y": 26.59803921568627,
+    "z": 4,
+    "id": "1774888715538_189236"
+   },
+   {
+    "h": 3.9375,
+    "w": 28,
+    "x": 30.745098039215684,
+    "y": 32.01470588235294,
+    "z": 6,
+    "id": "item-1785686216630-63j6wcs1m05"
+   }
+  ]
+ },
+ {
+  "id": "46aad895-3260-4301-b38d-26b437c07d3c",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=109523>",
+  "garment_ids": [
+   "1774888715538_169583",
+   "item-1779138384093-ahvoasnhj1r",
+   "1774888715538_162499",
+   "1774888715538_196964"
+  ],
+  "date_worn": "2026-05-17",
+  "occasion": "Casual",
+  "notes": "Neighbor Brunch",
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-18T21:13:40.120494+00:00",
+  "weather": "Warm",
+  "occasions": [
+   "Casual",
+   "Dinner"
+  ],
+  "weathers": [
+   "Warm"
+  ],
+  "layout_data": [
+   {
+    "h": 84.13970588235294,
+    "w": 62.06953931196975,
+    "x": 13.062091503267975,
+    "y": 1.093137254901965,
+    "z": 2,
+    "id": "1774888715538_169583"
+   },
+   {
+    "h": 19.588235294117645,
+    "w": 47.25138260432379,
+    "x": 50.06535947712418,
+    "y": 76.61274509803923,
+    "z": 5,
+    "id": "item-1779138384093-ahvoasnhj1r"
+   },
+   {
+    "h": 31.340101522842644,
+    "w": 28,
+    "x": 9.666666666666671,
+    "y": 42.89705882352941,
+    "z": 4,
+    "id": "1774888715538_162499"
+   },
+   {
+    "h": 40.79797979797981,
+    "w": 28,
+    "x": 68,
+    "y": 14,
+    "z": 6,
+    "id": "1774888715538_196964"
+   }
+  ]
+ },
+ {
+  "id": "46d7a954-5221-4c8c-9dd6-4a51136f929d",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The red-striped poplin shirt is left open over a plain black tank, sleeves pushed up, so the ivory Paulina shorts get to be the quiet hero underneath — a breezy, undone-on-purpose combo for a hot August day out. A black raffia slide and the black shoulder bag keep the palette grounded so nothing reads too sweet.\"}",
+  "garment_ids": [
+   "1774888715538_162391",
+   "1774888715539_171389",
+   "1774888715539_162640",
+   "item-1778947749465-yntdehqssn8",
+   "item-1787464080905-0nts7gkooqsf"
+  ],
+  "date_worn": null,
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-23T16:19:10.348771+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 40,
+    "w": 40,
+    "x": 30,
+    "y": 10,
+    "id": "1774888715538_162391"
+   },
+   {
+    "h": 35,
+    "w": 30,
+    "x": 40,
+    "y": 20,
+    "id": "1774888715539_171389"
+   },
+   {
+    "h": 30,
+    "w": 40,
+    "x": 35,
+    "y": 50,
+    "id": "1774888715539_162640"
+   },
+   {
+    "h": 15,
+    "w": 25,
+    "x": 15,
+    "y": 85,
+    "id": "item-1778947749465-yntdehqssn8"
+   },
+   {
+    "h": 20,
+    "w": 25,
+    "x": 70,
+    "y": 75,
+    "id": "item-1787464080905-0nts7gkooqsf"
+   }
+  ]
+ },
+ {
+  "id": "490554c9-6442-4d0a-9dd1-6b4cfca44e92",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"An all-black column with the black satin wide-leg pant as the quiet star, topped by a fitted ponte tee tucked in clean. The soft-bow ballet flat and a slim leather belt keep it easy, with a silver pendant on a leather cord as the single sharp finish.\"}",
+  "garment_ids": [
+   "1774888715538_169727",
+   "1774888715539_162360",
+   "1774888715539_177611",
+   "1774888715538_162364",
+   "item-1778553264030-kfksi6pwlpq"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T15:29:32.320466+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "4a90c2f5-2c25-4b98-9437-c5f1469ccc8c",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"The red wide-leg ponte pant is the statement here, worn high and fluid. A navy satin short-sleeve shirt tucks in for a cool jewel-tone-meets-neutral pairing, and the tan slingback flat and black bucket bag keep it grounded and effortless.\"}",
+  "garment_ids": [
+   "1774888715538_162359",
+   "1774888715538_196395",
+   "1774888715539_162334",
+   "1774888715538_162503"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-01T08:10:37.869416+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "4b935982-6034-4b22-a7f2-f3ffbd823387",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The ripped medium-wash 501s are the whole story, grounded by a crisp white crew tucked in for an easy high-low line. A slim brown suede belt punctuates the waist, and the fringed suede bag with a low brown thong sandal keep everything warm and unhurried.\"}",
+  "garment_ids": [
+   "1774888715539_168890",
+   "1774888715539_189233",
+   "item-1775526216129-p8qn3dehlw",
+   "1774888715539_162660",
+   "1774888715538_162497"
+  ],
+  "date_worn": "2026-06-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-26T02:26:50.438529+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "55b24978-c088-4ca4-b5d5-d3dac50c4bbe",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=70027>",
+  "garment_ids": [
+   "1776139920864_5ecsimu",
+   "item-1781117235376-rmb2tsrd2r",
+   "1774888715539_162335",
+   "1774888715538_162508"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T15:31:03.781974+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Work",
+   "Casual"
+  ],
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 57.99999999999999,
+    "w": 36.43373923417133,
+    "x": 12,
+    "y": 42,
+    "z": 2,
+    "id": "1776139920864_5ecsimu"
+   },
+   {
+    "h": 77.02866231622362,
+    "w": 76,
+    "x": 12,
+    "y": 12,
+    "z": 3,
+    "id": "item-1781117235376-rmb2tsrd2r"
+   },
+   {
+    "h": 24,
+    "w": 26.76800920797563,
+    "x": 20,
+    "y": 76,
+    "z": 5,
+    "id": "1774888715539_162335"
+   },
+   {
+    "h": 12.539396641402886,
+    "w": 28,
+    "x": 68,
+    "y": 44,
+    "z": 4,
+    "id": "1774888715538_162508"
+   }
+  ]
+ },
+ {
+  "id": "56fc0e2d-ab6a-4eb1-9660-41047e1f3237",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"Slouchy washed-black bow jeans meet a neat little polka-dot polo — the oversized-versus-fitted tension is the whole look. A structured black top-handle bag and bow flats keep it polished, never sloppy.\"}",
+  "garment_ids": [
+   "1776139920864_yq2y7b1",
+   "1774888715538_169318",
+   "1774888715538_189236",
+   "1774888715539_177611"
+  ],
+  "date_worn": "2026-07-17",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-17T17:52:23.588953+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "58ad0b57-a1c5-44db-8152-304c0951cb2e",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The ivory Paulina short gets a crisp, easy partner in the navy ponte top, tucked in and left slightly loose at the waist for that undone-but-considered look. A pearl brooch pinned near the collar and the black envelope crossbody keep it grounded — effortless summer polish, not trying too hard.\"}",
+  "garment_ids": [
+   "1774888715539_162640",
+   "1774888715539_196651",
+   "item-1787463836909-z9dp69hfcg",
+   "1774888715538_171656",
+   "1774888715538_197075"
+  ],
+  "date_worn": null,
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-23T16:27:11.959482+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 35,
+    "w": 40,
+    "x": 30,
+    "y": 55,
+    "id": "1774888715539_162640"
+   },
+   {
+    "h": 35,
+    "w": 40,
+    "x": 30,
+    "y": 15,
+    "id": "1774888715539_196651"
+   },
+   {
+    "h": 20,
+    "w": 25,
+    "x": 65,
+    "y": 75,
+    "id": "item-1787463836909-z9dp69hfcg"
+   },
+   {
+    "h": 20,
+    "w": 25,
+    "x": 10,
+    "y": 75,
+    "id": "1774888715538_171656"
+   },
+   {
+    "h": 10,
+    "w": 15,
+    "x": 55,
+    "y": 10,
+    "id": "1774888715538_197075"
+   }
+  ]
+ },
+ {
+  "id": "5bfc0ff6-59bc-48cd-adb2-82e1af36546e",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=110151>",
+  "garment_ids": [
+   "1774888715538_168913",
+   "1774888715539_172750",
+   "item-1775523864389-vejya2deqw",
+   "1774888715538_171516"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Dinner",
+  "notes": "Wohoo Dinner",
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-17T07:05:06.443671+00:00",
+  "weather": "Warm",
+  "occasions": [
+   "Dinner"
+  ],
+  "weathers": [
+   "Warm"
+  ],
+  "layout_data": [
+   {
+    "h": 88,
+    "w": 48.8888888888889,
+    "x": 18.5359477124183,
+    "y": 5.933823529411765,
+    "z": 4,
+    "id": "1774888715538_168913"
+   },
+   {
+    "h": 48.05299188640972,
+    "w": 44.790849673202615,
+    "x": 0,
+    "y": 3.2990196078431406,
+    "z": 3,
+    "id": "1774888715539_172750"
+   },
+   {
+    "h": 24,
+    "w": 45.83783783783784,
+    "x": 43.93790849673202,
+    "y": 67.54411764705883,
+    "z": 5,
+    "id": "item-1775523864389-vejya2deqw"
+   },
+   {
+    "h": 22.30754901960784,
+    "w": 41.39869281045752,
+    "x": 55.41830065359477,
+    "y": 38.0563725490196,
+    "z": 4,
+    "id": "1774888715538_171516"
+   }
+  ]
+ },
+ {
+  "id": "5c8327cc-5d76-451a-9868-f09754504e41",
+  "collage_url": "{\"mood\":\"Editorial\",\"styling\":\"Burgundy tailored blazer over a teal bodysuit and black ponte pencil skirt — jewel tones meet architectural precision. A black croc-embossed belt punctuates the waist; black slingbacks and a mini bucket bag finish the statement.\"}",
+  "garment_ids": [
+   "1774888715538_191033",
+   "1774888715538_172741",
+   "1774888715539_168888",
+   "1774888715539_170850",
+   "1774888715538_162503",
+   "1774888715538_162366"
+  ],
+  "date_worn": "2026-05-11",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-11T20:03:47.539698+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "632faa98-146a-4043-a16b-e78a2ebde763",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The royal-blue lace-flounce blouse is the whole story here, tucked into high-waisted black pleated trousers that move as you walk. A navy pointed pump and a structured black top-handle bag keep everything grounded, and the silver pendant on a leather cord adds one quiet finishing note.\"}",
+  "garment_ids": [
+   "1774888715538_196653",
+   "1774888715538_162338",
+   "1774888715539_196340",
+   "1774888715538_189236",
+   "item-1778553264030-kfksi6pwlpq"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-01T08:11:27.011792+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "633506be-2779-4cd9-8906-a0775223a89b",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"Breezy black-and-white polka-dot palazzos do all the talking, balanced by a clean white tank tucked in. A tan slingback flat and structured black bag keep it polished without trying.\"}",
+  "garment_ids": [
+   "1776139920864_jjow2vs",
+   "1774888715539_162377",
+   "1774888715539_162334",
+   "1774888715538_189236"
+  ],
+  "date_worn": "2026-06-27",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-27T14:32:21.673707+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "651f6558-77f9-4d01-ac46-6192ed5baeb9",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=107151>",
+  "garment_ids": [
+   "item-1785685995335-tjwx66ydxm9",
+   "item-1787115972667-ctuocpkphz",
+   "1774888715539_170851",
+   "1774888715538_191033",
+   "1774888715538_162499"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:47:42.566267+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Work"
+  ],
+  "weathers": [
+   "Hot (85°F+)",
+   "Warm",
+   "Hot"
+  ],
+  "layout_data": [
+   {
+    "h": 51.289560445927776,
+    "w": 49.11258419610062,
+    "x": 34.885620915032675,
+    "y": 0,
+    "z": 3,
+    "id": "item-1785685995335-tjwx66ydxm9"
+   },
+   {
+    "h": 71.0051460823373,
+    "w": 49.403441903441895,
+    "x": 50.596558096558105,
+    "y": 28.994853917662695,
+    "z": 4,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 21.156709558823525,
+    "w": 36.516435052985585,
+    "x": 12.745098039215698,
+    "y": 78.84329044117648,
+    "z": 5,
+    "id": "1774888715539_170851"
+   },
+   {
+    "h": 55.81937078109933,
+    "w": 50.165475029790926,
+    "x": 4.818636478532476,
+    "y": 0,
+    "z": 1,
+    "id": "1774888715538_191033"
+   },
+   {
+    "h": 44.954706628844434,
+    "w": 40.163615446178476,
+    "x": 21.104575163398692,
+    "y": 37.995098039215655,
+    "z": 4,
+    "id": "1774888715538_162499"
+   }
+  ]
+ },
+ {
+  "id": "65684d6e-58e5-4368-ba8e-8ddd329c1824",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The dusty rose trouser gets the editorial treatment: tucked-in navy satin blouse half-tucked with sleeves left loose, a slim black belt cinching the waist for shape. Black slingback stilettos and a black tote keep the palette quiet so the wool trouser's muted rose reads as the one color moment — polished, not corporate, exactly the effortless-powerful register she wears to the office.\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "1774888715538_162359",
+   "item-1785686216630-acyg99eevp8",
+   "item-1785297228628-7ihxdvok3o7",
+   "1774888715538_162361"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T07:22:45.641828+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 45,
+    "w": 40,
+    "x": 30,
+    "y": 55,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 40,
+    "w": 40,
+    "x": 30,
+    "y": 15,
+    "id": "1774888715538_162359"
+   },
+   {
+    "h": 20,
+    "w": 25,
+    "x": 70,
+    "y": 75,
+    "id": "item-1785686216630-acyg99eevp8"
+   },
+   {
+    "h": 25,
+    "w": 25,
+    "x": 5,
+    "y": 60,
+    "id": "item-1785297228628-7ihxdvok3o7"
+   },
+   {
+    "h": 8,
+    "w": 12,
+    "x": 45,
+    "y": 58,
+    "id": "1774888715538_162361"
+   }
+  ]
+ },
+ {
+  "id": "6c37450c-582a-4541-90b2-a498bd0e34ea",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"The white-dotted black shorts do all the talking, tucked with a boxy black ponte tee for an easy tucked line. A chocolate brown slingback flat and matching bucket bag warm the black base, and a fine silver choker adds the one considered glint.\"}",
+  "garment_ids": [
+   "item-1776829224213-9qgpnw3k61n",
+   "1774888715539_162360",
+   "1774888715538_162333",
+   "1774888715538_162505",
+   "item-1775523864389-0a3boctwwj5t"
+  ],
+  "date_worn": "2026-07-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-26T15:53:01.530812+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "70ea34f9-4805-480d-a304-c5e3138f9e7b",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"A short red knit tucked into the black satin shorts — saturated and luxe without trying. The lace hem does the talking; a slim black heeled sandal and the chain crossbody keep it sharp and effortless.\"}",
+  "garment_ids": [
+   "item-1778972252717-ro1s6eqpxjg",
+   "1774888715539_196660",
+   "item-1779138384093-ahvoasnhj1r",
+   "1774888715538_171656"
+  ],
+  "date_worn": "2026-06-27",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-27T17:09:57.147787+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "71d91bdb-05b9-4a2b-a275-4c4e7981d7a5",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The abstract satin palazzo is the whole story here — fluid and easy against a crisp black knit tee tucked at the waist. The structured black leather bag and pointed slingback flat keep it polished without competing.\"}",
+  "garment_ids": [
+   "1776139920864_5ecsimu",
+   "1774888715539_162360",
+   "1774888715538_189236",
+   "1774888715538_162333"
+  ],
+  "date_worn": "2026-07-17",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-17T17:52:45.52654+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "73056e72-6a95-47dc-b95a-3b84d93a73bf",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"The deep teal ponte trousers do all the talking here, given room to move while a fine black knit top keeps things quiet up top. A slim brown belt cinches the waist and the chocolate bucket bag and espresso slingback pump ground it in warm neutrals. It's polished enough for a boardroom but never stiff.\"}",
+  "garment_ids": [
+   "item-1784120407718-4hj6mhq5yfb",
+   "1774888715539_197071",
+   "1774888715538_162505",
+   "item-1775526216129-p8qn3dehlw"
+  ],
+  "date_worn": "2026-07-27",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-27T03:22:42.202802+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "74be0cbb-b068-48bb-83f7-5666e900a019",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"A quiet camel column lets the sky-blue lace blouse do all the talking — tuck it in fully and let the shoulder detail catch the light. The croc belt closes the waist and the black slingback and mini bucket keep it sharp, the tonal restraint you reach for at the office.\"}",
+  "garment_ids": [
+   "1774888715538_170570",
+   "item-1784120676562-znrg6a3mufo",
+   "item-1785686216630-acyg99eevp8",
+   "1774888715538_162503",
+   "1774888715538_191378"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-20T05:45:01.792961+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "77ac1764-3d33-443e-92d1-4d83cfd9c90b",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The navy linen jumpsuit is effortless drama on its own — clean lines, high slit, nothing added underneath. A fine silver choker at the neck and the black leather crossbody with strappy flat sandals keep it sharp for a hot day out.\"}",
+  "garment_ids": [
+   "1774888715538_196962",
+   "1774888715538_171656",
+   "item-1779138384093-5jy765xujvp",
+   "item-1775523864389-0a3boctwwj5t"
+  ],
+  "date_worn": "2026-07-17",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-17T17:52:52.580428+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "794d4f91-9664-41fb-84eb-89a8cff7c610",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The navy satin polka-dot maxi is the whole story — everything else steps back. A white featherweight tee keeps the top half quiet and the silhouette easy, while the tan block-heel mule and a compact black bag finish it with just enough polish for a long Saturday out.\"}",
+  "garment_ids": [
+   "1774888715539_169323",
+   "1774888715539_172764",
+   "1774888715539_170849",
+   "1774888715538_162503"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T15:18:14.972108+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "7cd04dbe-5d53-42aa-9ece-f5663763530e",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"Dark brown wide-legs paired with the tie-front brown top make a quietly tonal column — rich and considered without being matchy. The black leather belt cinches the waist with architectural precision, and the burgundy shoulder bag is the one deliberate color move that makes the whole thing feel styled.\"}",
+  "garment_ids": [
+   "1774888715538_196396",
+   "1774888715539_190932",
+   "1774888715539_170849",
+   "1774888715538_162499",
+   "1774888715538_162365"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T15:29:34.361389+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "7d04733b-e06c-47cb-b51d-a6e1f92aa03a",
+  "collage_url": "{\"mood\":\"Quiet Luxury\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "1774888715539_170860",
+   "1774888715538_195960",
+   "item-1785686216630-3ddz7e094ud",
+   "1774888715538_162497"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:08:46.292581+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "7d19bb4f-02ab-42be-82b7-86ae3382533f",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=104739>",
+  "garment_ids": [
+   "1774888715538_165118",
+   "1774888715538_172742",
+   "1774888715539_170850",
+   "1774888715538_171516",
+   "item-1785686216630-63j6wcs1m05",
+   "1776139920864_c3n8zy0"
+  ],
+  "date_worn": "2026-05-14",
+  "occasion": "Work Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T03:11:22.583802+00:00",
+  "weather": "Mild",
+  "occasions": [
+   "Work Dinner",
+   "Work"
+  ],
+  "weathers": [
+   "Mild"
+  ],
+  "layout_data": [
+   {
+    "h": 72.33823529411764,
+    "w": 30.977521811266044,
+    "x": 49.203284954674665,
+    "y": 27.661764705882362,
+    "z": 4,
+    "id": "1774888715538_165118"
+   },
+   {
+    "h": 46.34212654133819,
+    "w": 45.75156074722974,
+    "x": 35.17160524730015,
+    "y": 0,
+    "z": 3,
+    "id": "1774888715538_172742"
+   },
+   {
+    "h": 18.585872512179193,
+    "w": 36.17611278087878,
+    "x": 9.787581699346394,
+    "y": 46.29284805763588,
+    "z": 5,
+    "id": "1774888715539_170850"
+   },
+   {
+    "h": 15.464127317147694,
+    "w": 33.80065359477125,
+    "x": 14.241830065359483,
+    "y": 71.22685791005364,
+    "z": 4,
+    "id": "1774888715538_171516"
+   },
+   {
+    "h": 3.0625650170902072,
+    "w": 28.000000000000004,
+    "x": 56.15359477124184,
+    "y": 27.979134158121568,
+    "z": 6,
+    "id": "item-1785686216630-63j6wcs1m05"
+   },
+   {
+    "h": 46.290236496289836,
+    "w": 58.269639479017634,
+    "x": 1.2164874500336624,
+    "y": 1.6053921568627523,
+    "z": 1,
+    "id": "1776139920864_c3n8zy0"
+   }
+  ]
+ },
+ {
+  "id": "7f8d1256-940f-40a5-94e9-0748497f7b8c",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"The one-shoulder satin scarf top does all the talking here — its ivory-and-black draping poured over the high-waisted deep teal ponte pants. A slim silver choker sharpens the neckline while the chocolate brown slingback and matching bucket bag ground everything in something quietly warm.\"}",
+  "garment_ids": [
+   "1776139920864_vk7e367",
+   "item-1784120407718-4hj6mhq5yfb",
+   "1774888715538_162333",
+   "1774888715538_162505",
+   "item-1775523864389-0a3boctwwj5t"
+  ],
+  "date_worn": "2026-07-24",
+  "occasion": "Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-24T21:30:01.784338+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "8447cc97-a801-4e48-91a4-b07caad6bd49",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"A saturated teal ponte tee anchored by a sleek black pencil skirt — jewel-tone richness held by a dark neutral base, slim and editorial head to toe. The brown mesh pointed pump adds a whisper of sheen and the checkered brown leather tote grounds it. Interest comes from color and texture, never volume.\"}",
+  "garment_ids": [
+   "item-1784120407718-wgcyvbwo46",
+   "1774888715539_168888",
+   "1774888715539_170859",
+   "1774888715538_162507"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T15:31:09.345294+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "855b8f3f-16cc-41a8-b9b4-8837cd0ae193",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"Deep teal satin blouse meets dark brown wide-leg trousers for unexpected richness. The oversized cocoon coat in matching teal adds drama; chocolate accessories ground the palette.\"}",
+  "garment_ids": [
+   "item-1775527119780-0ttl1kps1gyf",
+   "1774888715538_196396",
+   "1774888715538_162369",
+   "1774888715538_162505",
+   "1774888715538_162333"
+  ],
+  "date_worn": "2026-05-06",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-06T04:00:17.198995+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "8623528e-e559-4abb-b7e5-57829e9967c5",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"The sky-blue Harlea blouse is the whole story here, its lace shoulder left to breathe with the sleeves gently cuffed and a clean front tuck into the camel pleated trousers. Brown suede slingbacks and a matching chocolate leather tote keep it warm and grounded — your effortless one-color-hit-on-neutral move.\"}",
+  "garment_ids": [
+   "1774888715538_170570",
+   "1774888715538_165118",
+   "item-1785686216630-3ddz7e094ud",
+   "item-1787123664680-0cxkgteg25qu",
+   "1774888715538_162366"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-20T05:45:39.056965+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "8d9c98cc-af41-4008-89b7-acd74a3554ec",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"A sleeveless black a-line midi does all the work, cropped and cleaned up under a short notch-lapel blazer for a little executive sharpness. The brown suede slingback and deep brown fringe bag warm the whole thing up. Easy for the desk, easy for a meeting that runs late.\"}",
+  "garment_ids": [
+   "1774888715538_168913",
+   "1774888715538_162349",
+   "item-1785686216630-3ddz7e094ud",
+   "1774888715538_162497"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-02T16:12:39.110989+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "8e221d36-d799-44c8-90b2-bf17f24bbc92",
+  "collage_url": "{\"look_name\":\"Architectural Neutrals\",\"mood\":\"Modern Minimalist\",\"why\":\"White sleeveless tank as the base layer creates negative space under the tan blazer — the simplicity is the statement. Wide leg pressed pleat trousers in neutral continue the elongated minimalist line. Tan slingback flats echo the blazer without matching. The brown leather bag adds one grounding element to an otherwise monastic palette.\"}",
+  "garment_ids": [
+   "1774888715539_162377",
+   "1774888715538_165118",
+   "1774888715538_162642",
+   "1774888715539_162334",
+   "1774888715538_162506"
+  ],
+  "date_worn": "2026-04-13",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-13T05:15:28.611916+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "8fd4e75d-4e6c-4930-a572-5910b0d8ab75",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The navy satin short-sleeve shirt does the talking here, tucked into wide camel pleated trousers for that easy desk-to-dinner line. A tan pointed slingback and slim brown pouch keep everything grounded and quiet. The silver pendant is the one deliberate finish.\"}",
+  "garment_ids": [
+   "1774888715538_162359",
+   "1774888715538_165118",
+   "1774888715539_162334",
+   "1774888715538_162509",
+   "item-1778553264030-kfksi6pwlpq"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T07:25:33.649702+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "902ff746-1e46-4e61-92b1-dd23e2724d3b",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"A black tee tucked into the vegan leather mini keeps it easy but sharp, the kind of head-to-toe black that reads considered rather than plain. The little bucket bag and red thong sandal are the only punctuation — one quiet, one a touch daring.\"}",
+  "garment_ids": [
+   "1774888715539_162635",
+   "1774888715539_171752",
+   "1774888715538_162503",
+   "item-1779579416091-xld294wwmop"
+  ],
+  "date_worn": "2026-07-17",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-17T17:51:51.131201+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "93083e08-618e-44fc-b695-dfe72b714194",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The ruffle-strap mini nap dress is the whole look — smocked, tiered, effortlessly feminine. The polka-dot silk neckerchief tied loosely adds a considered graphic moment without competing. Woven slides and the black bucket bag keep everything grounded and easy.\"}",
+  "garment_ids": [
+   "1774888715538_169586",
+   "1774888715539_162381",
+   "1774888715538_162503",
+   "1774888715538_196964"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T15:29:41.826346+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "95003400-ff87-46cd-97d6-47122050bc51",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The black-and-ivory geometric satin trousers do all the talking here, so the silk tank stays simple and tucked in clean. A pointed brown slingback flat and the little chocolate bucket bag keep it grounded and unfussed — thrown-on but considered.\"}",
+  "garment_ids": [
+   "1774888715539_196588",
+   "1776139920864_5ecsimu",
+   "1774888715538_162333",
+   "1774888715538_162505"
+  ],
+  "date_worn": "2026-07-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-26T15:37:35.001216+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "98ca8ba5-1ef5-4895-aa1b-d0d244aba13e",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=71755>",
+  "garment_ids": [
+   "item-1775524838233-obbdxxxxbm",
+   "item-1779138384093-5jy765xujvp",
+   "1774888715538_171656"
+  ],
+  "date_worn": "2026-04-23",
+  "occasion": "Occasion",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-18T21:08:54.199907+00:00",
+  "weather": "Warm",
+  "occasions": [
+   "Occasion"
+  ],
+  "weathers": [
+   "Warm"
+  ],
+  "layout_data": [
+   {
+    "h": 88,
+    "w": 37.997627520759195,
+    "x": 12,
+    "y": 12,
+    "z": 2,
+    "id": "item-1775524838233-obbdxxxxbm"
+   },
+   {
+    "h": 24,
+    "w": 43.468671679197996,
+    "x": 32.745098039215684,
+    "y": 68.3406862745098,
+    "z": 5,
+    "id": "item-1779138384093-5jy765xujvp"
+   },
+   {
+    "h": 55.58256880733946,
+    "w": 28,
+    "x": 50.76143790849674,
+    "y": 15.813725490196092,
+    "z": 4,
+    "id": "1774888715538_171656"
+   }
+  ]
+ },
+ {
+  "id": "9e8d7004-b625-4fe8-8205-0a6588ccc2b1",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"The red suede bomber is the whole point here — thrown over a silky black tank and worn-in denim cutoffs, it reads high-summer cool without any effort. The espresso shoulder bag and the black-and-cream zebra raffia slide keep everything grounded and easy. It's the kind of thing that looks tossed together but isn't.\"}",
+  "garment_ids": [
+   "item-1785685995335-4rsrpgfv4mb",
+   "1774888715539_168890",
+   "1776139920864_ghngvcv",
+   "item-1779138384093-61e0s4pp62s",
+   "1774888715538_162506"
+  ],
+  "date_worn": null,
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-08T08:01:37.470038+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 35,
+    "w": 30,
+    "x": 30,
+    "y": 5,
+    "id": "item-1785685995335-4rsrpgfv4mb"
+   },
+   {
+    "h": 38,
+    "w": 32,
+    "x": 32,
+    "y": 38,
+    "id": "1774888715539_168890"
+   },
+   {
+    "h": 40,
+    "w": 28,
+    "x": 5,
+    "y": 8,
+    "id": "1776139920864_ghngvcv"
+   },
+   {
+    "h": 26,
+    "w": 26,
+    "x": 62,
+    "y": 45,
+    "id": "item-1779138384093-61e0s4pp62s"
+   },
+   {
+    "h": 32,
+    "w": 28,
+    "x": 64,
+    "y": 8,
+    "id": "1774888715538_162506"
+   }
+  ]
+ },
+ {
+  "id": "a08cca77-0a7f-4fe0-9d74-f6ff150384da",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The striped silk shorts do all the talking — the white tank keeps everything clean and lets the lace-trimmed hem be the moment. Black raffia slides and a compact bucket bag ground the look without competing.\"}",
+  "garment_ids": [
+   "item-1778972252717-o83drbkoqa",
+   "1774888715539_162377",
+   "item-1778947749465-yntdehqssn8",
+   "1774888715538_162503"
+  ],
+  "date_worn": "2026-05-18",
+  "occasion": "Vacation",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-18T20:52:46.574905+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "a14baac9-41ec-4a4e-b282-74cba82a99a2",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=76619>",
+  "garment_ids": [
+   "1774888715538_172739",
+   "1774888715538_162499"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-02T18:43:50.248907+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Work"
+  ],
+  "weathers": [
+   "Hot (85°F+)",
+   "Hot"
+  ],
+  "layout_data": [
+   {
+    "h": 59.225951637899925,
+    "w": 61.17753623188405,
+    "x": 0,
+    "y": 0,
+    "z": 3,
+    "id": "1774888715538_172739"
+   },
+   {
+    "h": 59.25323227819884,
+    "w": 51.41304347826087,
+    "x": 26.08695652173914,
+    "y": 40.74676772180116,
+    "z": 2,
+    "id": "item-1778972252717-thrahkajopm"
+   },
+   {
+    "h": 34.67422457168333,
+    "w": 37.30072463768116,
+    "x": 54.43840579710145,
+    "y": 4.536759866675183,
+    "z": 4,
+    "id": "1774888715538_162499"
+   }
+  ]
+ },
+ {
+  "id": "a269311d-e7eb-453f-904e-08e1d34168f5",
+  "collage_url": "{\"look_name\":\"Royal Blue Ease\",\"mood\":\"Off-Duty Cool\",\"styling\":\"Cream knit cropped naturally at waist, blazer worn open and relaxed over light-wash baggy jeans with a subtle cuff. Ballet flats keep it grounded and effortless.\"}",
+  "garment_ids": [
+   "1774888715538_162353",
+   "1774888715539_197067",
+   "1774888715538_197030",
+   "1774888715538_162331",
+   "1774888715538_162509"
+  ],
+  "date_worn": "2026-04-11",
+  "occasion": "Lunch/Brunch",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-11T17:38:21.185403+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "a719ab6d-dbc6-4d88-8409-b3d7965263e8",
+  "collage_url": "{\"mood\":\"Quiet Luxury\"}",
+  "garment_ids": [
+   "item-1786581312690-m9au0g761gs",
+   "1774888715539_196588",
+   "item-1786338569991-w11t86o1tb",
+   "1774888715539_196340",
+   "1774888715538_189236"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-13T00:38:46.650804+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": [
+   {
+    "h": 46,
+    "w": 40,
+    "x": 8,
+    "y": 6,
+    "id": "item-1786581312690-m9au0g761gs"
+   },
+   {
+    "h": 34,
+    "w": 30,
+    "x": 50,
+    "y": 10,
+    "id": "1774888715539_196588"
+   },
+   {
+    "h": 44,
+    "w": 34,
+    "x": 8,
+    "y": 52,
+    "id": "item-1786338569991-w11t86o1tb"
+   },
+   {
+    "h": 26,
+    "w": 30,
+    "x": 62,
+    "y": 56,
+    "id": "1774888715539_196340"
+   },
+   {
+    "h": 16,
+    "w": 30,
+    "x": 62,
+    "y": 82,
+    "id": "1774888715538_189236"
+   }
+  ]
+ },
+ {
+  "id": "a726f66f-97db-463f-b655-831a11613e38",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"The plum wool wide-legs take the lead with a crisp navy blazer squared at the shoulder, sleeves pushed back over a black silk tank for that desk-to-meeting sharpness you reach for. The navy stiletto and black chain bag keep the line streamlined and considered.\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "item-1786581312690-m9au0g761gs",
+   "1774888715539_196588",
+   "1774888715539_196340",
+   "1774888715538_171656"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:09:15.893849+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "b6d6fe0d-7639-4666-a104-58a30b597a8b",
+  "collage_url": "{\"mood\":\"Romantic\",\"styling\":\"This one leans into a single color story from top to toe — the navy jumpsuit's slinky, wide-leg drape gets an oversized lift from the light blue open-knit cardigan tossed over the shoulders, undone and easy. A pointed pump and a smooth leather bag keep the finish polished, and a silver choker adds the one glint of jewelry the look wants. It's soft, a little undone, and unmistakably her.\"}",
+  "garment_ids": [
+   "item-1785272978817-3dryy4bo0qg",
+   "1774888715539_170315",
+   "1774888715539_170850",
+   "1774888715538_171516",
+   "item-1775523864389-0a3boctwwj5t"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-01T08:17:09.789436+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "ba5e1681-090a-48ba-9936-cd36ad5c45c2",
+  "collage_url": "{\"mood\":\"Romantic\",\"styling\":\"Rich chocolate from collar to hem — the dark brown long-sleeve top tucks cleanly into the brown satin midi skirt, letting the black lace trim do the edge work. A slim suede belt marks the waist with just enough architecture, the fringe crossbody adds tactile depth, and the chocolate slingback flat keeps the whole thing grounded and wearable. Quiet, considered, and a little romantic.\"}",
+  "garment_ids": [
+   "1774888715539_168911",
+   "1774888715539_162653",
+   "1774888715538_162333",
+   "1774888715538_162497",
+   "1774888715538_162766"
+  ],
+  "date_worn": "2026-05-17",
+  "occasion": "Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-17T15:39:06.644332+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "bb82c554-2cf4-4204-914d-b081869b73f3",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=121487>",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "item-1786177029994-wlnpf09yq5",
+   "1774888715538_170571",
+   "item-1785297228628-7ihxdvok3o7",
+   "1774888715538_162361"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T07:08:18.786619+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Work",
+   "Work Dinner"
+  ],
+  "weathers": [
+   "Hot (85°F+)",
+   "Hot",
+   "Warm",
+   "Mild",
+   "Cool"
+  ],
+  "layout_data": [
+   {
+    "h": 92.09202406062028,
+    "w": 64.07511583982172,
+    "x": 35.92488416017828,
+    "y": 7.907975939379725,
+    "z": 2,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 15.917380731820293,
+    "w": 55.38376309427883,
+    "x": 3.169934640522884,
+    "y": 82.3669329936699,
+    "z": 5,
+    "id": "item-1786177029994-wlnpf09yq5"
+   },
+   {
+    "h": 58.36914522058825,
+    "w": 62.63623900264332,
+    "x": 0,
+    "y": 0.9093137254901986,
+    "z": 3,
+    "id": "1774888715538_170571"
+   },
+   {
+    "h": 44.576875942684765,
+    "w": 52.08983256223837,
+    "x": 0,
+    "y": 32.66421568627449,
+    "z": 4,
+    "id": "item-1785297228628-7ihxdvok3o7"
+   },
+   {
+    "h": 13.636363636363638,
+    "w": 40,
+    "x": 55.98039215686275,
+    "y": 4.338235294117659,
+    "z": 4,
+    "id": "1774888715538_162361"
+   }
+  ]
+ },
+ {
+  "id": "bbef1aba-e2f4-4d9b-ab40-8c7534b263ca",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"A cobalt knit tank as the single hit of color against a slim black pencil skirt — the tension is a soft, relaxed strap top against sharp tailoring. The Saint Laurent chain bag and a clean flat finish it with restraint.\"}",
+  "garment_ids": [
+   "item-1783380100536-m7f4xbaa8ln",
+   "item-1781117235376-o2bup0rh06a",
+   "1774888715538_171656",
+   "1774888715539_177611"
+  ],
+  "date_worn": "2026-07-22",
+  "occasion": "Work Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-22T08:17:30.361851+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "bdd09022-12e0-4aab-a10e-5fee5cda09c0",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=95787>",
+  "garment_ids": [
+   "1774888715538_162353",
+   "1774888715539_168868",
+   "1774888715538_172756",
+   "1774888715538_162503",
+   "item-1779138384093-ahvoasnhj1r"
+  ],
+  "date_worn": "2026-06-01",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-01T07:41:26.025653+00:00",
+  "weather": null,
+  "occasions": [
+   "Casual",
+   "Dinner"
+  ],
+  "weathers": [],
+  "layout_data": [
+   {
+    "h": 73.96705093093857,
+    "w": 62.19263756793478,
+    "x": 5.797101449275357,
+    "y": 0,
+    "z": 1,
+    "id": "1774888715538_162353"
+   },
+   {
+    "h": 50.45907903955161,
+    "w": 51.862528165587065,
+    "x": 38.58695652173914,
+    "y": 49.54092096044839,
+    "z": 2,
+    "id": "1774888715539_168868"
+   },
+   {
+    "h": 70.81213510816721,
+    "w": 52.990289855072454,
+    "x": 41.03144927536231,
+    "y": 4.687599515954398,
+    "z": 1,
+    "id": "1774888715538_172756"
+   },
+   {
+    "h": 17.678946745885156,
+    "w": 28,
+    "x": 69.26811594202898,
+    "y": 41.82604080419505,
+    "z": 4,
+    "id": "1774888715538_162503"
+   },
+   {
+    "h": 24,
+    "w": 57.483809554803436,
+    "x": 11.628509285776286,
+    "y": 66.76067341782901,
+    "z": 5,
+    "id": "item-1779138384093-ahvoasnhj1r"
+   }
+  ]
+ },
+ {
+  "id": "bf813598-4213-4d8b-9c2d-6d51c3054900",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"Your dusty-rose wool trousers get the lightest possible partners — a fluid ivory silk shell tucked high to raise the waist, sleeves-free for the heat. Leave the shell's self-ties loose at the neck and let the brown suede flat and matching brown pouch keep it warm and unfussy.\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "item-1786581095309-y2x3xgpid5o",
+   "1774888715538_162331",
+   "1774888715538_162509",
+   "item-1786592519257-p6nnh8ggjw"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T07:02:12.550683+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 45,
+    "w": 34,
+    "x": 30,
+    "y": 45,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 34,
+    "w": 30,
+    "x": 33,
+    "y": 8,
+    "id": "item-1786581095309-y2x3xgpid5o"
+   },
+   {
+    "h": 20,
+    "w": 22,
+    "x": 8,
+    "y": 62,
+    "id": "1774888715538_162331"
+   },
+   {
+    "h": 24,
+    "w": 26,
+    "x": 66,
+    "y": 55,
+    "id": "1774888715538_162509"
+   },
+   {
+    "h": 14,
+    "w": 20,
+    "x": 68,
+    "y": 12,
+    "id": "item-1786592519257-p6nnh8ggjw"
+   }
+  ]
+ },
+ {
+  "id": "c08d1b4b-b441-482c-bb08-10031f50fe86",
+  "collage_url": "{\"mood\":\"Effortless\",\"styling\":\"The lighter 501 cutoffs anchor a warm tonal play — a clean white tank tucked in, espresso slingback flat and matching shoulder bag. The slim brown belt with its gold buckle pulls the whole thing taut.\"}",
+  "garment_ids": [
+   "1774888715539_168892",
+   "1774888715539_162377",
+   "1774888715539_162334",
+   "1774888715538_162506",
+   "1774888715538_162374"
+  ],
+  "date_worn": "2026-06-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-26T02:31:10.153618+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "c280e0dc-1428-4912-a37c-471bcb14119f",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=122927>",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "item-1786581095309-y2x3xgpid5o",
+   "1774888715538_162331",
+   "item-1786592519257-p6nnh8ggjw",
+   "1774888715538_162350",
+   "1774888715538_162505"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T07:10:16.048799+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Work"
+  ],
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 69.7323695414421,
+    "w": 48.517878738466976,
+    "x": 51.482121261533024,
+    "y": 30.267630458557903,
+    "z": 4,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 53.898897058823536,
+    "w": 45.617779966851174,
+    "x": 38.02367326515934,
+    "y": 1.7156862745098005,
+    "z": 3,
+    "id": "item-1786581095309-y2x3xgpid5o"
+   },
+   {
+    "h": 38,
+    "w": 16.97685185185185,
+    "x": 46.39515250544663,
+    "y": 62,
+    "z": 5,
+    "id": "1774888715538_162331"
+   },
+   {
+    "h": 14.000000000000002,
+    "w": 17.018480492813147,
+    "x": 79.0495832830052,
+    "y": 3.115196078431376,
+    "z": 6,
+    "id": "item-1786592519257-p6nnh8ggjw"
+   },
+   {
+    "h": 58.184037753919036,
+    "w": 52.48368854788291,
+    "x": 0,
+    "y": 0,
+    "z": 1,
+    "id": "1774888715538_162350"
+   },
+   {
+    "h": 30.994868491203132,
+    "w": 47.16920216362408,
+    "x": 0,
+    "y": 56.076209940169406,
+    "z": 4,
+    "id": "1774888715538_162505"
+   }
+  ]
+ },
+ {
+  "id": "c2fa5f00-855c-4f04-a214-4ba0089da62c",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=120415>",
+  "garment_ids": [
+   "1776139920864_5ecsimu",
+   "1774888715539_170308",
+   "1774888715539_162381",
+   "item-1778947749465-yntdehqssn8",
+   "1774888715538_162503"
+  ],
+  "date_worn": "2026-05-16",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-16T15:16:13.933828+00:00",
+  "weather": null,
+  "occasions": [
+   "Casual"
+  ],
+  "weathers": [],
+  "layout_data": [
+   {
+    "h": 57.99999999999999,
+    "w": 34.85161341823648,
+    "x": 26.67391304347825,
+    "y": 38.059698957603565,
+    "z": 2,
+    "id": "1776139920864_5ecsimu"
+   },
+   {
+    "h": 42.00067426703181,
+    "w": 50.003623188405804,
+    "x": 25.94927536231884,
+    "y": 2.488928518353383,
+    "z": 4,
+    "id": "1774888715539_175127"
+   },
+   {
+    "h": 36.72784493556674,
+    "w": 55.71014492753623,
+    "x": 0,
+    "y": 2.2851198437466795,
+    "z": 3,
+    "id": "1774888715539_170308"
+   },
+   {
+    "h": 16.295678133087144,
+    "w": 44.51086956521739,
+    "x": 54.782608695652186,
+    "y": 48.417892703224844,
+    "z": 5,
+    "id": "1774888715539_162381"
+   },
+   {
+    "h": 17.23901687291055,
+    "w": 44.51086956521739,
+    "x": 53.5144927536232,
+    "y": 66.89654586756681,
+    "z": 5,
+    "id": "item-1778947749465-yntdehqssn8"
+   },
+   {
+    "h": 26.029634467877315,
+    "w": 41.134057971014485,
+    "x": 0,
+    "y": 60.712311317750455,
+    "z": 4,
+    "id": "1774888715538_162503"
+   }
+  ]
+ },
+ {
+  "id": "c32dd59c-1734-4d59-850a-63644d87f50e",
+  "collage_url": "{\"look_name\":\"Architectural Silence\",\"mood\":\"Modern Minimalist\",\"why\":\"Deep teal bodysuit creates a sleek second-skin base against the architectural volume of wide-leg neutral trousers. The silhouette is all about the clean vertical line broken only by the waist. Slingback flats keep it grounded and modern — no heel needed when the proportions do the talking. YSL crossbody as the punctuation mark.\"}",
+  "garment_ids": [
+   "1774888715538_172741",
+   "1774888715538_165118",
+   "1774888715538_171656",
+   "1774888715539_162335",
+   "1774888715538_162364"
+  ],
+  "date_worn": "2026-04-13",
+  "occasion": "Executive",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-13T05:17:50.822414+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "c353d8ef-70fc-4e32-b12b-d3e7a0564895",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"A deep teal knit tee does all the talking, tucked into high-waisted black wide-legs for that easy column line. Tan slingback pumps and a black leather tote keep the base quiet, and a pair of silver double hoops finishes it near the face.\"}",
+  "garment_ids": [
+   "item-1784120407718-wgcyvbwo46",
+   "1774888715538_162341",
+   "1774888715539_170851",
+   "item-1785297228628-7ihxdvok3o7",
+   "item-1785275462015-enequctlbhp"
+  ],
+  "date_worn": null,
+  "occasion": "Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-01T08:10:11.590038+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "c9858b1d-1fcd-4bb6-8d22-781b44715caf",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"The burgundy bodysuit anchors a striking cool-toned look against baby pink wide-leg trousers. The oxblood bag and nude slingbacks keep it polished, while the silk twilly adds a finishing flourish.\"}",
+  "garment_ids": [
+   "1774888715538_172739",
+   "1774888715538_195963",
+   "1774888715538_162499",
+   "1774888715539_170851",
+   "1774888715538_195964"
+  ],
+  "date_worn": "2026-05-06",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-06T04:00:08.198638+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "d0164b58-e177-4928-8595-43059deb8e47",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The black satin shirt brings a liquid sheen that plays beautifully against the matte camel ponte pencil skirt underneath. Tan slingback flats keep it light for the heat while the structured black bag grounds the whole look. It's an easy, elevated way to do polish without a single stitch of wool or knit weighing her down.\"}",
+  "garment_ids": [
+   "1774888715538_162356",
+   "item-1784120676562-znrg6a3mufo",
+   "1774888715539_162334",
+   "1774888715538_189236"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T15:30:39.092316+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "d2fcff39-755d-48ee-ae25-0069aec50045",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"A whole look in deep teal, layered for texture rather than color. The satin blouse tucks into the slim ponte trousers, and the cocoon coat draws the eye up to the face. Black slingback pumps and the chain-strap crossbody keep the line sharp and quietly luxe.\"}",
+  "garment_ids": [
+   "1774888715538_162369",
+   "item-1775527119780-0ttl1kps1gyf",
+   "item-1784120407718-4hj6mhq5yfb",
+   "1774888715539_170850",
+   "1774888715538_171656"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T07:14:34.127618+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": [],
+  "layout_data": null
+ },
+ {
+  "id": "d5c8625e-a3c1-4319-ac01-c01f5c93816b",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"This is the trouser's easy-day side: a relaxed brown flare-sleeve cardigan worn open over a plain layer, sleeves pushed to the elbow, with the mahogany belt cinching just enough to keep the proportion intentional rather than sloppy. The brown tote and matching black ballet flat ground the whole look in her signature warm-neutral pairing, letting the dusty rose trouser carry the color story on its own.\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "1774888715539_171787",
+   "1774888715539_177611",
+   "1774888715538_162507",
+   "1774888715538_162362"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T07:22:41.857334+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 45,
+    "w": 40,
+    "x": 30,
+    "y": 55,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 45,
+    "w": 45,
+    "x": 25,
+    "y": 10,
+    "id": "1774888715539_171787"
+   },
+   {
+    "h": 18,
+    "w": 22,
+    "x": 68,
+    "y": 78,
+    "id": "1774888715539_177611"
+   },
+   {
+    "h": 25,
+    "w": 25,
+    "x": 5,
+    "y": 55,
+    "id": "1774888715538_162507"
+   },
+   {
+    "h": 8,
+    "w": 12,
+    "x": 45,
+    "y": 58,
+    "id": "1774888715538_162362"
+   }
+  ]
+ },
+ {
+  "id": "d7a0120c-d101-4124-bbf5-6c317a5434ca",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The dusty rose wide-leg trouser gets its lightest possible partner for August heat: a black satin shirt worn open at the collar with sleeves pushed up, so the wool-blend pant reads warm-weather rather than wintry. A silver corded pendant and the sleek black crossbody keep the finishing quiet, letting the trouser's color do the talking.\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "1774888715538_162356",
+   "item-1785686216630-acyg99eevp8",
+   "1774888715538_171656",
+   "item-1778553264030-kfksi6pwlpq"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:25:44.391767+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": [
+   {
+    "h": 55,
+    "w": 45,
+    "x": 30,
+    "y": 45,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 45,
+    "w": 50,
+    "x": 25,
+    "y": 5,
+    "id": "1774888715538_162356"
+   },
+   {
+    "h": 20,
+    "w": 25,
+    "x": 60,
+    "y": 80,
+    "id": "item-1785686216630-acyg99eevp8"
+   },
+   {
+    "h": 20,
+    "w": 20,
+    "x": 75,
+    "y": 50,
+    "id": "1774888715538_171656"
+   },
+   {
+    "h": 15,
+    "w": 15,
+    "x": 45,
+    "y": 10,
+    "id": "item-1778553264030-kfksi6pwlpq"
+   }
+  ]
+ },
+ {
+  "id": "d9816b0d-3394-401f-9b29-bcc099ee5a49",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"A single red column does all the talking, the fluid silk shell tucked high into the wide-leg ponte to lengthen the leg the way you like. Leave the self-ties on the shell undone for an easy, undone finish and let the black flat and pouch stay quietly matched.\"}",
+  "garment_ids": [
+   "1774888715538_196395",
+   "item-1786581095309-y2x3xgpid5o",
+   "1774888715539_177611",
+   "1774888715538_162508"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-15T15:53:04.248898+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 50,
+    "w": 34,
+    "x": 34,
+    "y": 40,
+    "id": "1774888715538_196395"
+   },
+   {
+    "h": 34,
+    "w": 32,
+    "x": 33,
+    "y": 6,
+    "id": "item-1786581095309-y2x3xgpid5o"
+   },
+   {
+    "h": 20,
+    "w": 24,
+    "x": 10,
+    "y": 74,
+    "id": "1774888715539_177611"
+   },
+   {
+    "h": 22,
+    "w": 26,
+    "x": 66,
+    "y": 70,
+    "id": "1774888715538_162508"
+   }
+  ]
+ },
+ {
+  "id": "dd07510f-f32f-4977-9c34-9acbdd6b3491",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"The camel blazer carries the whole look, its easy shoulder softening the tailored dusty-rose wool while the navy square-neck bodysuit keeps the line long and lean — leave the blazer open with the sleeves pushed to the forearm. It's your tonal-neutral-plus-one-quiet-color habit, powerful and effortless, with the tan slingback and warm brown bucket reading as a matched pair.\"}",
+  "garment_ids": [
+   "1774888715538_162642",
+   "1774888715538_172757",
+   "item-1787115972667-ctuocpkphz",
+   "1774888715539_170851",
+   "1774888715538_162505"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:22:04.439441+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": [
+   {
+    "h": 42,
+    "w": 40,
+    "x": 8,
+    "y": 6,
+    "id": "1774888715538_162642"
+   },
+   {
+    "h": 34,
+    "w": 30,
+    "x": 50,
+    "y": 8,
+    "id": "1774888715538_172757"
+   },
+   {
+    "h": 48,
+    "w": 38,
+    "x": 30,
+    "y": 46,
+    "id": "item-1787115972667-ctuocpkphz"
+   },
+   {
+    "h": 22,
+    "w": 24,
+    "x": 70,
+    "y": 52,
+    "id": "1774888715539_170851"
+   },
+   {
+    "h": 22,
+    "w": 24,
+    "x": 70,
+    "y": 74,
+    "id": "1774888715538_162505"
+   }
+  ]
+ },
+ {
+  "id": "defd4d22-f48d-41cb-9e9e-3beaac39330f",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=91687>",
+  "garment_ids": [
+   "1774888715538_169586",
+   "1774888715538_189234",
+   "1774888715539_162335",
+   "1774888715538_189236",
+   "1774888715538_162499",
+   "1774888715538_196454"
+  ],
+  "date_worn": "2026-04-11",
+  "occasion": "Lunch/Brunch",
+  "notes": "Partners retreat",
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-11T16:14:40.555615+00:00",
+  "weather": "Hot",
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "dfc6c3c5-8f51-4204-89b7-bdca8df3ea61",
+  "collage_url": "{\"look_name\":\"Fringe Column Black\",\"mood\":\"Italian Elegance\",\"styling\":\"Tuck the polo fully into the high-rise jeans for clean elongation. Let the fringe jacket hang open and oversized — never close it.\"}",
+  "garment_ids": [
+   "1774888715538_169318",
+   "1774888715539_162500",
+   "1774888715538_162506"
+  ],
+  "date_worn": "2026-04-11",
+  "occasion": "Lunch/Brunch",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-11T17:50:10.156672+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "e046d87d-fd58-4c20-81dd-72bcb521f9f0",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=81231>",
+  "garment_ids": [
+   "1774888715538_169729",
+   "1776139920864_3oyzk1c",
+   "item-1779138384093-5jy765xujvp",
+   "item-1775523864389-0a3boctwwj5t"
+  ],
+  "date_worn": "2026-05-18",
+  "occasion": "Occasion",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-05-18T21:10:06.110368+00:00",
+  "weather": "Warm",
+  "occasions": [
+   "Occasion"
+  ],
+  "weathers": [
+   "Warm"
+  ],
+  "layout_data": [
+   {
+    "h": 88,
+    "w": 36.326109391124874,
+    "x": 12,
+    "y": 12,
+    "z": 2,
+    "id": "1774888715538_169729"
+   },
+   {
+    "h": 14.111617312072891,
+    "w": 28,
+    "x": 38.83333333333334,
+    "y": 48.411764705882355,
+    "z": 4,
+    "id": "1776139920864_3oyzk1c"
+   },
+   {
+    "h": 24,
+    "w": 43.468671679197996,
+    "x": 29.395424836601308,
+    "y": 62.274509803921575,
+    "z": 5,
+    "id": "item-1779138384093-5jy765xujvp"
+   },
+   {
+    "h": 20.752212389380535,
+    "w": 28,
+    "x": 43.245098039215684,
+    "y": 23.31372549019607,
+    "z": 6,
+    "id": "item-1775523864389-0a3boctwwj5t"
+   }
+  ]
+ },
+ {
+  "id": "e1f0794a-4b61-4aa3-b1f7-0ea9b2d09e37",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"Easy Saturday denim done right — the baggy medium-wash jeans slouch against a snug camel crop, that big-jean-tiny-top tension doing all the work. A woven tan slide and the brown checkered tote keep it grounded and lived-in, with a braided brown belt drawing the waist.\"}",
+  "garment_ids": [
+   "1774888715538_169319",
+   "1774888715539_169590",
+   "1774888715539_162381",
+   "1774888715538_162507"
+  ],
+  "date_worn": "2026-07-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-26T15:17:39.259414+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "e48bb27a-478c-4dd7-a4d9-0729e771596c",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"A quiet burgundy column — the matte silk tank tucked high into the wide-leg cherry trousers so the leg runs long and clean. Push the sleeves aside and let the black leather belt, pump and bag do the grounding; it's your tonal-burgundy habit sharpened for the office.\"}",
+  "garment_ids": [
+   "1774888715538_196703",
+   "item-1786601425919-seax94pklme",
+   "item-1783380193297-c7ujtgot6i",
+   "item-1786596018318-2tn7n3o9ek7",
+   "1774888715538_162503"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T01:41:27.733494+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "e78c0677-315d-4436-9fe2-c7b549b06dd2",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"Navy played all the way down — the ponte tank tucked into her high-waisted wide-leg ponte pant, with the sapphire blazer bringing the lift. The black block-heel sandal and the structured black top-handle bag keep it sharp and effortless, powerful without a trace of stiffness.\"}",
+  "garment_ids": [
+   "1774888715538_162353",
+   "item-1781117235376-uy78mswasga",
+   "1774888715538_196652",
+   "item-1779138384093-ahvoasnhj1r",
+   "1774888715538_189236"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-03T02:57:28.251868+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "e9d6c094-db3a-41bc-9318-ba89314e7c8c",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The dark plum wool trouser leads, its tailored wide leg played against the fluid ivory silk shell half-tucked at the front. A burgundy blazer worn open and the fine platinum bar necklace at the collarbone finish it in that tonal, jewel-anchored way you gravitate toward.\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "item-1786581095309-y2x3xgpid5o",
+   "1774888715538_191033",
+   "1774888715539_170851",
+   "1774888715538_189236",
+   "item-1786592519257-p6nnh8ggjw"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:10:01.338912+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "ed2f79ea-bfa9-4fa8-8eb6-2a5ee3a9f373",
+  "collage_url": "{\"mood\":\"Downtown Cool\",\"styling\":\"Ripped medium-wash cutoffs are the whole mood, grounded by a delicate lace-trim cami so it reads considered, not careless. The fringe suede bag and a slim belt add a little texture and edge; soft bow flats keep it easy.\"}",
+  "garment_ids": [
+   "1776139920864_2uuc10d",
+   "1774888715539_168890",
+   "1774888715539_177611",
+   "1774888715538_162497",
+   "1774888715538_162365"
+  ],
+  "date_worn": "2026-06-26",
+  "occasion": "Casual",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-06-26T02:26:08.266204+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "eec458ea-d6b6-43c5-96bb-f55679eaf4c8",
+  "collage_url": "{\"mood\":\"Quiet Luxury\",\"styling\":\"The black bodycon midi does all the work here — clean, sharp, and dinner-ready without needing a jacket in this heat. A chocolate suede slingback and the chocolate leather bucket bag warm up the black with a soft brown note and a change of texture, while a silver scarf ring at the neckline adds one quiet glint of jewelry. Effortless, monochrome, and still unmistakably polished for a client dinner.\"}",
+  "garment_ids": [
+   "1774888715538_168913",
+   "1774888715538_162505",
+   "1774888715538_197076"
+  ],
+  "date_worn": "2026-07-23",
+  "occasion": "Work Dinner",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-23T15:05:22.848129+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "ef4260d4-7f23-447a-af03-4090d6a2f8f2",
+  "collage_url": "<data-uri elided from file export; full copy in DB snapshot outfit_logs_backup_20260824; length=123679>",
+  "garment_ids": [
+   "item-1786580830381-r61n5stl2zr",
+   "item-1786339759611-0b5xy6irh1no",
+   "1774888715539_170851",
+   "1774888715538_162499",
+   "item-1786592519257-p6nnh8ggjw",
+   "item-1783380100536-itvdx7zirq"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-16T15:42:01.00129+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": [
+   "Work"
+  ],
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": [
+   {
+    "h": 89.44364816349074,
+    "w": 60.22284513615782,
+    "x": 39.77715486384218,
+    "y": 10.556351836509265,
+    "z": 2,
+    "id": "item-1786580830381-r61n5stl2zr"
+   },
+   {
+    "h": 62.78834190626922,
+    "w": 71.25598089108416,
+    "x": 0,
+    "y": 5.224578939412501e-15,
+    "z": 3,
+    "id": "item-1786339759611-0b5xy6irh1no"
+   },
+   {
+    "h": 24,
+    "w": 41.42394822006472,
+    "x": 23.349673202614376,
+    "y": 62.64215686274508,
+    "z": 5,
+    "id": "1774888715539_170851"
+   },
+   {
+    "h": 39.0406277993431,
+    "w": 34.87983526744031,
+    "x": 4.2483660130718945,
+    "y": 60.9593722006569,
+    "z": 4,
+    "id": "1774888715538_162499"
+   },
+   {
+    "h": 23.033783783783786,
+    "w": 28.000000000000004,
+    "x": 2.150326797385617,
+    "y": 0,
+    "z": 6,
+    "id": "item-1786592519257-p6nnh8ggjw"
+   },
+   {
+    "h": 9.524207686546841,
+    "w": 27.498464297999902,
+    "x": 59.65686274509803,
+    "y": 13.835784313725483,
+    "z": 4,
+    "id": "item-1783380100536-itvdx7zirq"
+   }
+  ]
+ },
+ {
+  "id": "f26af4bf-3c84-4020-8ff3-00654a64a9d4",
+  "collage_url": "{\"look_name\":\"Brown Red Ease\",\"mood\":\"Elevated Basics\",\"styling\":\"Cropped brown sweater hits at natural waist, showing the high-rise red ponte pant. Belt cinches waist for architectural definition.\"}",
+  "garment_ids": [
+   "1774888715539_168914",
+   "1774888715538_162341",
+   "1774888715538_162333",
+   "1774888715538_162506",
+   "item-1775526216129-p8qn3dehlw"
+  ],
+  "date_worn": "2026-04-11",
+  "occasion": "Daytime",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-11T16:24:28.177301+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "f369f1c0-3b73-4831-a967-c633527a02ee",
+  "collage_url": "{\"mood\":\"Romantic\",\"styling\":\"The black satin wide-leg pant does the talking here — fluid and elegant, with the pink pintuck blouse tucked in soft at the waist. A tan slingback pump and the bright red leather crossbody keep it feminine but a little sharp, with silver hoops as the final light touch.\"}",
+  "garment_ids": [
+   "1774888715538_169727",
+   "1774888715538_190936",
+   "1774888715539_170851",
+   "1774888715538_196454",
+   "item-1785275462015-enequctlbhp"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-01T08:19:12.70017+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "f9a370f2-2deb-4f0a-b3ee-2e94365757b6",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"Your tonal-layering habit at work — a wine contour bodysuit tucked clean into the wide plum trousers so the color lives in one deep register head to hip, sleeves pushed up to the forearm. The pointed black pump and top-zip bag keep it sharp and quietly powerful.\"}",
+  "garment_ids": [
+   "item-1787115972667-ctuocpkphz",
+   "1774888715538_172739",
+   "item-1786596018318-2tn7n3o9ek7",
+   "1774888715538_171516"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-19T06:12:20.252726+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "fa5dfbca-0564-4a48-870d-91b75e42a77b",
+  "collage_url": "{\"look_name\":\"Burgundy Bomber Ease\",\"mood\":\"Parisian Casual\",\"styling\":\"Bodysuit tucked into high-rise baggy jeans, bomber left unzipped and sleeves pushed to three-quarter length. Let the fitted-wide contrast do the work—no belt, no fuss.\"}",
+  "garment_ids": [
+   "1774888715538_162372",
+   "1774888715538_172739",
+   "1774888715538_169318",
+   "1774888715538_162331",
+   "1774888715538_162499"
+  ],
+  "date_worn": "2026-04-11",
+  "occasion": "Lunch/Brunch",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-04-11T17:39:53.346427+00:00",
+  "weather": null,
+  "occasions": null,
+  "weathers": null,
+  "layout_data": null
+ },
+ {
+  "id": "fbc5c0db-1e4c-48e9-b7c9-5d883370458e",
+  "collage_url": "{\"mood\":\"Power Dressing\",\"styling\":\"The sapphire skort is the whole story here — saturated and sharp, worn against a fitted black square-neck bodysuit that keeps the top half clean and quiet. The black slingback stiletto and pebbled black tote ground all that color at the base. Fitted-on-top, flippy-below is exactly her column with a little edge.\"}",
+  "garment_ids": [
+   "1774888715539_168868",
+   "1774888715538_172742",
+   "item-1785686216630-acyg99eevp8",
+   "item-1785297228628-7ihxdvok3o7"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-02T16:12:14.792782+00:00",
+  "weather": "Warm (70-84°F)",
+  "occasions": null,
+  "weathers": [
+   "Warm (70-84°F)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "fbe2c306-ec18-4312-b801-2b7c3cfb6cbb",
+  "collage_url": "{\"mood\":\"Modern Minimal\",\"styling\":\"The teal ponte tee brings all the color, tucked clean into a slim black pencil skirt for a streamlined desk-to-day column. A slim black croc belt defines the waist since the top and skirt share the black-and-jewel story. Pointed black slingbacks and a compact black clutch keep everything quiet and considered around that one saturated note.\"}",
+  "garment_ids": [
+   "item-1784120407718-wgcyvbwo46",
+   "item-1781117235376-o2bup0rh06a",
+   "1774888715539_170850",
+   "1774888715538_162508",
+   "1774888715538_191378"
+  ],
+  "date_worn": "2026-07-27",
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-07-27T03:21:58.669862+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ },
+ {
+  "id": "fd6144b8-7a52-414b-81f6-4184ad698867",
+  "collage_url": "{\"mood\":\"Power Dressing\"}",
+  "garment_ids": [
+   "1774888715538_162359",
+   "1774888715538_196777",
+   "item-1775523864389-cleacs1pxcg",
+   "1774888715538_171516"
+  ],
+  "date_worn": null,
+  "occasion": "Work",
+  "notes": null,
+  "is_favorite": false,
+  "spend_actual": null,
+  "spend_estimated": null,
+  "created_at": "2026-08-01T21:13:43.049131+00:00",
+  "weather": "Hot (85°F+)",
+  "occasions": null,
+  "weathers": [
+   "Hot (85°F+)"
+  ],
+  "layout_data": null
+ }
+]
