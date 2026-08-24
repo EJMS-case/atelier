@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
+import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
 
-export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
+export default function EditItemView({ item, allItems, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
     stylist_line: item.stylist_line || "",
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable ?? true,
+    closet_id: item.closet_id || DEFAULT_CLOSET_ID,
     material: item.material || "",
     pattern: item.pattern || "",
     price_paid: item.price_paid ?? null,
@@ -344,6 +346,30 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
             Show as individual piece in its own category (separable)
           </label>
         ) : null}
+      </div>
+
+      {/* Closet assignment (multi-closet, Phase A) — saving with a different
+          closet moves the piece there via the normal onSave path. */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>Closet</div>
+        <p style={s.settingsSub}>Which closet does this piece live in? Saving moves it.</p>
+        <div style={s.fieldLabel}>Closet</div>
+        <select style={{...s.select, width:"100%"}}
+          value={form.closet_id}
+          onChange={e => setForm(f => ({ ...f, closet_id: e.target.value }))}>
+          {(() => {
+            const list = (closets && closets.length > 0) ? closets : SEED_CLOSETS;
+            const options = list.map(c => (
+              <option key={c.id} value={c.id}>{c.name}{c.city ? ` — ${c.city}` : ""}</option>
+            ));
+            // Safety net: an id no listed closet matches (stale cache) still
+            // renders instead of the select silently showing the first option.
+            if (form.closet_id && !list.some(c => c.id === form.closet_id)) {
+              options.unshift(<option key={form.closet_id} value={form.closet_id}>Unknown closet</option>);
+            }
+            return options;
+          })()}
+        </select>
       </div>
 
       {/* "In Your Looks" — worn/planned/saved outfits featuring this piece,

@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Multi-closet Phase A: NYC + Arizona closets, one mode switch — 2026-08-24
+
+### Why
+Owner brief: part of the wardrobe lives at her mom's in Arizona (Scottsdale — confirmed with her). One wardrobe split across two rooms; the app should only show the room she's standing in. Phase A is the closets layer; Phase B (trips + outfit-first packing) follows after her report-back.
+
+### Added
+- **Migrations 0019/0020** (applied to live DB after a verified backup — `/backups/*_20260824T204441Z.json` + DB snapshots `*_backup_20260824`, counts 480/41/101 confirmed): `closets` table (NYC default + Arizona — Mom's, fixed ids, per-closet lat/lon/timezone) and `wardrobe_items.closet_id`, backfilled to NYC (480/480 verified), then NOT NULL with NYC default so the deployed client keeps working.
+- **Header closet chip** — a mode switch next to the brand, not a filter: popover lists closets (✓ + city); switching flips the app's entire universe and persists per device (`atelier:active-closet:v1`).
+- **One scoping point**: `closetItems` memo in App is THE place closet filtering happens; grid, search, FilterBar, sets, Style Me, planner, Home, Saved, Insights, Shopping, profile/discovery/vision/color views all consume it. Full `items` reserved for sync machinery and Settings' closet-agnostic orphan scan (`sb.fetchAll` stays unfiltered — mergeItems would prune other closets from the local cache otherwise).
+- **Edit form "Closet" select** (moves a piece on save) and **bulk move**: Select toggle on the closet grid → tap-to-✓ cards → sticky bar "Move to <closet>" via one `id=in.(…)` PATCH (`sb.setClosetBulk`), optimistic with targeted revert on failure.
+- **Weather follows the active closet** (`fetchClosetForecast`, per-closet cache keys): Style Me auto-chip, planner pill + day-assign suggestion (label now shows the closet's city), and Home's Back-in-Rotation season filter all read Scottsdale when the Arizona closet is active. Trip destination forecasts unchanged.
+- New items (add/bulk-add) land in the active closet; `closet_id` missing locally = NYC.
+
+### Out of scope (per brief)
+Geolocation, outfit_logs changes, third closet types, anything in Style Intelligence/Shopping beyond scoping. Phase B (trips/packing) not started — trips table will be EXTENDED (owner-confirmed), not replaced.
+
+### Tests
+Full battery (19 suites) + build green.
+
 ## [Unreleased] — Sky-blue swatch fix; combos freed from the palette rule (chic-only, no neons) — 2026-08-20
 
 ### Why

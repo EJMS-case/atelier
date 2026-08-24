@@ -70,6 +70,8 @@ export const sb = {
     if (payload.set_id === "") payload.set_id = null;
     // Empty strings reach numeric columns as `""` and PG rejects them.
     if (payload.price_paid === "") payload.price_paid = null;
+    // Same for the uuid closet_id column (multi-closet, Phase A).
+    if (payload.closet_id === "") payload.closet_id = null;
 
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
@@ -89,6 +91,17 @@ export const sb = {
       throw new Error(`Upsert failed: ${err.message || res.status}`);
     }
     throw new Error("Upsert failed after stripping unknown columns");
+  },
+
+  // ── Closets (multi-closet, Phase A) ──
+  // Full read of the small `closets` table (two seeded rows + any future
+  // additions). Callers cache the result (see utils/storage.js loadClosets).
+  async fetchClosets() {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/closets?select=*&order=created_at.asc`, {
+      headers: SB_HEADERS,
+    });
+    if (!res.ok) throw new Error("Fetch closets failed");
+    return res.json();
   },
 
   async remove(id) {
@@ -321,6 +334,19 @@ export const sb = {
       body: JSON.stringify({ last_worn: date }),
     });
     if (!res.ok) throw new Error("Bulk last_worn update failed");
+  },
+  // Move many items to a closet in ONE request — same id=in.(…) bulk-PATCH
+  // pattern as setLastWornBulk (multi-closet, Phase A).
+  async setClosetBulk(ids = [], closetId) {
+    const list = [...new Set(ids)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=in.(${inList})`, {
+      method: "PATCH",
+      headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+      body: JSON.stringify({ closet_id: closetId }),
+    });
+    if (!res.ok) throw new Error("Bulk closet move failed");
   },
   // Persist the one-time Visual-AI descriptor for a single item. Best-effort
   // per item so a batch enrichment can continue past one failure.

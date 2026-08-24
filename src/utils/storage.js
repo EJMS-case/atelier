@@ -9,6 +9,7 @@
 
 import { normalizeItem } from "./item-helpers.js";
 import { STYLE_PREFS } from "../constants/styling.js";
+import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 
 const STORAGE_KEY           = "atelier:wardrobe:v1";
 const API_KEY_STORE         = "atelier:api-key";
@@ -16,6 +17,8 @@ const RMBG_KEY_STORE        = "atelier:rmbg-key";
 const SETS_META_KEY         = "atelier:sets-meta:v1";
 const STYLE_PREFS_KEY       = "atelier:style-prefs:v1";
 const ABOUT_ME_KEY          = "atelier:about-me:v1";
+const ACTIVE_CLOSET_KEY     = "atelier:active-closet:v1";
+const CLOSETS_KEY           = "atelier:closets:v1";
 export const RECENT_LOOKS_KEY      = "atelier:recent-looks";
 const INSIGHTS_DISMISSED_KEY = "atelier:insights-dismissed";
 export const RECENT_ITEMS_KEY      = "atelier:recently-suggested-items";
@@ -102,6 +105,28 @@ export function loadAboutMe() {
   catch { return {}; }
 }
 export function saveAboutMe(data) { localStorage.setItem(ABOUT_ME_KEY, JSON.stringify(data)); }
+
+// ── Multi-closet (Phase A) ──
+// Active closet id persists per device; the closets list is a cache of the
+// Supabase `closets` table with the hardcoded seed pair as the offline /
+// pre-fetch default so closet UI always has something to render.
+export function loadActiveClosetId() {
+  try { return localStorage.getItem(ACTIVE_CLOSET_KEY) || DEFAULT_CLOSET_ID; }
+  catch { return DEFAULT_CLOSET_ID; }
+}
+export function saveActiveClosetId(id) {
+  try { localStorage.setItem(ACTIVE_CLOSET_KEY, id); } catch {}
+}
+
+export function loadClosets() {
+  try {
+    const list = JSON.parse(localStorage.getItem(CLOSETS_KEY) || "null");
+    return Array.isArray(list) && list.length > 0 ? list : SEED_CLOSETS;
+  } catch { return SEED_CLOSETS; }
+}
+export function saveClosets(list) {
+  try { localStorage.setItem(CLOSETS_KEY, JSON.stringify(list)); } catch {}
+}
 
 export function loadInsightsDismissed() {
   try { return JSON.parse(localStorage.getItem(INSIGHTS_DISMISSED_KEY) || "[]"); }

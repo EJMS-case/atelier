@@ -7,7 +7,7 @@ import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } 
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
-import { fetchNycForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
+import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
@@ -73,7 +73,7 @@ const btnSecondary = {
 // scoped (a full page reload sensibly starts back at today).
 let lastAnchorTime = null;
 
-export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
+export default function CalendarView({ items, activeCloset, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
   const [anchor, setAnchor] = useState(() => lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date()));
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
@@ -83,11 +83,13 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
   const [activeTrip, setActiveTrip] = useState(null); // trip object → show TripDetailView
   const [syncError, setSyncError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  // NYC daily-high forecast for the next ~16 days, keyed by iso date.
-  // Used to (a) auto-suggest a weather bucket when assigning a plan, and
-  // (b) show today's temp + weather pill at the top of the planner.
+  // Active-closet daily-high forecast for the next ~16 days, keyed by iso
+  // date (falls back to NYC when the closet lacks coords). Used to (a) auto-
+  // suggest a weather bucket when assigning a plan, and (b) show today's
+  // temp + weather pill at the top of the planner.
   const [forecast, setForecast] = useState(null);
-  useEffect(() => { fetchNycForecast().then(setForecast); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchClosetForecast(activeCloset).then(setForecast); }, [activeCloset?.id]);
 
   const refreshPlans = async () => {
     setRefreshing(true);
@@ -300,7 +302,7 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
       {/* NYC location + today + forecast pill — anchors the planner to the
           user's actual locale (rather than the browser's timezone). */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, fontSize: 11, color: PALETTE.muted, letterSpacing: "0.06em" }}>
-        <span>📍 {CITY} · {friendlyDate(todayIso)}</span>
+        <span>📍 {activeCloset?.city || CITY} · {friendlyDate(todayIso)}</span>
         {forecast?.[todayIso] && (
           <span>
             Today {forecast[todayIso].high}°F · {forecast[todayIso].bucket}
@@ -434,6 +436,7 @@ export default function CalendarView({ items, outfitLogs, apiKey, onGoToStyleMe,
           items={items}
           outfitLogs={outfitLogs}
           forecast={forecast}
+          forecastLabel={`${activeCloset?.name || "NYC"} forecast`}
           hasApiKey={!!apiKey}
           onPrev={prevDay ? () => setActiveDay(prevDay) : undefined}
           onNext={nextDay ? () => setActiveDay(nextDay) : undefined}
@@ -557,7 +560,7 @@ function GenerateForDay({ iso, isPast, hasExisting, forecast, hasApiKey, onGener
   );
 }
 
-function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
+function DayModal({ iso, plan, items, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
   // Language adapts to past/today/future. Past = "What you wore" (a log, not
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
@@ -706,7 +709,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, hasApiKey, onPrev, o
               {["Hot","Warm","Mild","Cool","Cold"].map(w => <option key={w}>{w}</option>)}
             </select>
             {suggested && pickedWeather === suggested && (
-              <span style={{ fontSize: 10, color: PALETTE.muted }}>NYC forecast</span>
+              <span style={{ fontSize: 10, color: PALETTE.muted }}>{forecastLabel || "NYC forecast"}</span>
             )}
           </div>
         )}

@@ -19,11 +19,13 @@ import {
   RECENT_LOOKS_KEY,
   loadLocalItems, saveLocalItems, loadApiKey, saveApiKey, loadRmbgKey, saveRmbgKey,
   loadSetsMeta, saveSetsMeta, loadStylePrefs, loadAboutMe,
+  loadActiveClosetId, saveActiveClosetId, loadClosets, saveClosets,
   migrateLocalStorage,
 } from "./utils/storage.js";
+import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
-import { fetchNycForecast } from "./lib/weather.js";
+import { fetchClosetForecast } from "./lib/weather.js";
 import { nyToday } from "./lib/time.js";
 // The AI layer (stylist.js → prompts / sampler / validator / zod) is imported
 // dynamically at the call sites below so its ~170kB of schema + prompt code
@@ -38,7 +40,7 @@ import FilterBar from "./components/FilterBar.jsx";
 import SetCard from "./components/SetCard.jsx";
 import ItemCard from "./components/ItemCard.jsx";
 import RouteFallback from "./components/RouteFallback.jsx";
-import { forgetThumb } from "./components/Thumb.jsx";
+import Thumb, { forgetThumb } from "./components/Thumb.jsx";
 import LookCard from "./components/LookCard.jsx";
 
 // Code-split everything else. Each chunk only ships when the matching view
@@ -143,6 +145,16 @@ async function unpinWornFromDate({ date, itemIds }) {
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
+  // ── Multi-closet (Phase A) ──
+  // `closets` is the cached list of closet rows (seed pair until the fetch
+  // lands); `activeClosetId` is the device-persisted mode switch.
+  const [closets, setClosets] = useState(() => loadClosets());
+  const [activeClosetId, setActiveClosetId] = useState(() => loadActiveClosetId());
+  const [closetMenuOpen, setClosetMenuOpen] = useState(false);
+  // Bulk "move to closet" select mode on the closet grid.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [moveBusy, setMoveBusy] = useState(false);
   const [view,       setViewRaw]    = useState("home");
   const closetScrollRef = useRef(0);
   const viewRef = useRef("home");
@@ -281,11 +293,51 @@ export default function App() {
     return p;
   }, []);
 
-  // ── Auto-populate today's weather from the NYC forecast on first mount.
-  // Weather stays editable — the user can override any chip at any time.
-  // Only fires when the Set is empty (fresh load or after user clears to "Any").
+  // ── Multi-closet plumbing (Phase A) ─────────────────────────────────────
+  // Refresh the closets list from Supabase once on mount; the cached copy
+  // (seed pair by default) keeps everything rendering offline/pre-migration.
   useEffect(() => {
-    fetchNycForecast().then(forecast => {
+    sb.fetchClosets().then(rows => {
+      if (Array.isArray(rows) && rows.length > 0) {
+        setClosets(rows);
+        saveClosets(rows);
+      }
+    }).catch(() => { /* offline / table not migrated yet — cached list stands */ });
+  }, []);
+
+  const activeCloset =
+    closets.find(c => c.id === activeClosetId) ||
+    closets.find(c => c.id === DEFAULT_CLOSET_ID) ||
+    closets[0] || SEED_CLOSETS[0];
+
+  const switchCloset = useCallback((id) => {
+    setActiveClosetId(id);
+    saveActiveClosetId(id);
+    setClosetMenuOpen(false);
+    // Leaving a closet ends any in-progress bulk selection, and clearing the
+    // weather chip lets the effect below re-fill it from the NEW location.
+    setSelectMode(false);
+    setSelectedIds([]);
+    setWeather(new Set());
+  }, []);
+
+  // THE one place closet scoping happens: every closet-scoped consumer (the
+  // grid, FilterBar, sets, Style Me, planner, Home, insights, shopping, …)
+  // receives this array instead of `items`. Missing closet_id = NYC — locally
+  // cached pre-migration rows haven't been stamped yet. Full `items` stays
+  // reserved for App-internal sync machinery (persistItems / mergeItems /
+  // forceSyncAll) and SettingsView's closet-agnostic orphan scan.
+  const closetItems = useMemo(
+    () => items.filter(it => (it.closet_id || DEFAULT_CLOSET_ID) === activeClosetId),
+    [items, activeClosetId],
+  );
+
+  // ── Auto-populate today's weather from the active closet's forecast.
+  // Weather stays editable — the user can override any chip at any time.
+  // Only fires when the Set is empty (fresh load, after user clears to "Any",
+  // or right after a closet switch — switchCloset empties it on purpose).
+  useEffect(() => {
+    fetchClosetForecast(activeCloset).then(forecast => {
       if (!forecast) return;
       const today = nyToday();
       const bucket = forecast[today]?.bucket;
@@ -300,7 +352,7 @@ export default function App() {
       if (chip) setWeather(prev => prev.size === 0 ? new Set([chip]) : prev);
     }).catch(() => { /* best-effort; weather stays "Any" on failure */ });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeClosetId]);
 
   // ── Persist allLooks to localStorage so anti-repeat history survives reloads
   useEffect(() => {
@@ -512,7 +564,9 @@ export default function App() {
     // logic uses this flag to preserve local-only items on reload — without
     // it, an item uploaded optimistically could be dropped as "deleted
     // elsewhere" if the user reloads before upsert finishes.
-    const pendingNew = newItems.map(it => ({ ...it, pending_sync: true }));
+    // New items land in the ACTIVE closet unless they already carry one
+    // (e.g. server rows re-added by the Settings recovery flow).
+    const pendingNew = newItems.map(it => ({ ...it, closet_id: it.closet_id || activeClosetId, pending_sync: true }));
     const optimistic = [...items, ...pendingNew];
     setItems(optimistic);
     saveLocalItems(optimistic);
@@ -562,7 +616,7 @@ export default function App() {
     } else {
       anyFailed ? flashSync("error") : flashSync("synced");
     }
-  }, [items]);
+  }, [items, activeClosetId]);
 
   // Returns { ok, error, imageUploadFailed }. Callers can choose to await and
   // surface failure to the user (the EditItemView keeps the form open on
@@ -701,6 +755,46 @@ export default function App() {
     } catch { flashSync("error"); }
   }, [items, persistItems]);
 
+  // ── Bulk "move to closet" (Phase A §6) ──
+  const toggleSelected = useCallback((id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }, []);
+
+  const moveSelectedToCloset = useCallback(async (closetId) => {
+    const ids = selectedIds;
+    if (ids.length === 0 || moveBusy) return;
+    const idSet = new Set(ids);
+    // Remember each moved row's original closet so a failed PATCH can revert
+    // JUST closet_id — restoring a whole-array snapshot could clobber
+    // unrelated item updates that land while the request is in flight.
+    const prevClosetById = new Map(
+      items.filter(it => idSet.has(it.id)).map(it => [it.id, it.closet_id || null]),
+    );
+    const moved = items.map(it => idSet.has(it.id) ? { ...it, closet_id: closetId } : it);
+    setMoveBusy(true);
+    // Optimistic: the rows leave the active closet's grid immediately.
+    persistItems(moved);
+    flashSync("syncing");
+    try {
+      await sb.setClosetBulk(ids, closetId);
+      setSelectMode(false);
+      setSelectedIds([]);
+      flashSync("synced");
+    } catch (e) {
+      console.error("Bulk closet move failed:", e);
+      setItems(prev => {
+        const reverted = prev.map(it =>
+          prevClosetById.has(it.id) ? { ...it, closet_id: prevClosetById.get(it.id) } : it);
+        saveLocalItems(reverted);
+        return reverted;
+      });
+      flashSync("error");
+      alert("⚠️ Couldn't move those items to the other closet — check your connection and try again.");
+    } finally {
+      setMoveBusy(false);
+    }
+  }, [selectedIds, moveBusy, items, persistItems]);
+
   // Pre-fill the Style Me request with a phrasing the sampler / validator
   // can recognize, then jump to the panel. Used by ItemCard's spark button.
   const styleWithItem = useCallback((it) => {
@@ -762,7 +856,7 @@ export default function App() {
   const { recentItems, uncategorized } = useMemo(() => {
     const now = Date.now();
     const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
-    const stamped = items
+    const stamped = closetItems
       .map(it => ({ it, t: it.created_at ? Date.parse(it.created_at) : NaN }))
       .filter(x => Number.isFinite(x.t) && now - x.t < TWO_WEEKS)
       .sort((a, b) => b.t - a.t);
@@ -771,9 +865,9 @@ export default function App() {
       // True uncategorized = missing top-level category. Subcategory is not
       // always available (Belts/Jumpsuits have no subcategory list in
       // taxonomy.js, so checking !it.subcategory left them stranded).
-      uncategorized: items.filter(it => !it.category),
+      uncategorized: closetItems.filter(it => !it.category),
     };
-  }, [items]);
+  }, [closetItems]);
 
   const toggleFav = useCallback(async (type, refId) => {
     const existing = favorites.find(f => f.type === type && f.reference_id === refId);
@@ -872,7 +966,7 @@ export default function App() {
       // Overlay calendar-derived wear so the stylist sees accurate last_worn
       // (drives the [RESTING] rediscovery tag). Falls back to the item as-is
       // when there's no wear record.
-      const itemsForStyling = applyWearStats(items, wearStatsRef.current);
+      const itemsForStyling = applyWearStats(closetItems, wearStatsRef.current);
       // Auto color pairs — in-fashion pairs her closet already supports,
       // merged alongside her hand-picked list (deterministic, zero AI calls).
       // She asked to stop having to type her own colors; this is that.
@@ -965,7 +1059,7 @@ export default function App() {
 
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
-    if (items.length < 3) { setStyleErr(`Add at least 3 items first (you have ${items.length}).`); return; }
+    if (closetItems.length < 3) { setStyleErr(`Add at least 3 items to this closet first (you have ${closetItems.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null);
     await generateAndAppendLooks(1, "fresh");
     setStyling(false);
@@ -985,7 +1079,7 @@ export default function App() {
   const isSetView = activeFilters.category?.includes("Sets");
   const setGroupsRaw = isSetView ? (() => {
     const groups = {};
-    items.filter(it => it.set_id).forEach(it => {
+    closetItems.filter(it => it.set_id).forEach(it => {
       if (!groups[it.set_id]) groups[it.set_id] = [];
       groups[it.set_id].push(it);
     });
@@ -1030,7 +1124,7 @@ export default function App() {
   // e.g. the sync-status flash timer).
   const deferredSearch = useDeferredValue(closetSearch);
   const filtered = useMemo(() => {
-    let base = items;
+    let base = closetItems;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
     // subcatMatches is L2-aware (2026-08-13): selecting "Hosiery"/"Skirts"
@@ -1100,7 +1194,7 @@ export default function App() {
       });
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
-  }, [items, activeFilters, deferredSearch, isSetView]);
+  }, [closetItems, activeFilters, deferredSearch, isSetView]);
 
   // Sync status indicator
   const syncLabel = syncStatus === "syncing" ? "⟳ syncing"
@@ -1115,8 +1209,8 @@ export default function App() {
   // each group the most-worn types lead. Falls back to the full static list
   // until items load. activeKeys keeps a toggled chip visible regardless.
   const filterChips = useMemo(
-    () => computeFilterChips(items, wearData.stats || {}, styleExcludes),
-    [items, wearData.stats, styleExcludes],
+    () => computeFilterChips(closetItems, wearData.stats || {}, styleExcludes),
+    [closetItems, wearData.stats, styleExcludes],
   );
 
   // Style Me generator — rendered on both Closet and Style views via
@@ -1263,6 +1357,40 @@ export default function App() {
     </div>
   );
 
+  // One closet-grid card renderer for all three grid sections. In select
+  // mode the card becomes a tap-to-toggle target with a ✓ badge (same
+  // pattern as ShoppingView's "Complete a Look" picker) and the per-item
+  // action buttons are suppressed; otherwise it's the normal ItemCard.
+  const renderClosetGridItem = (item) => {
+    if (!selectMode) {
+      return (
+        <ItemCard key={item.id} item={item} allItems={closetItems}
+          onDelete={deleteItem}
+          onEdit={handleEditItemCard}
+          isFavorited={favPieceIds.has(item.id)}
+          onToggleFav={handleToggleFavPiece}
+          onStyleItem={styleWithItem}/>
+      );
+    }
+    const isSelected = selectedIds.includes(item.id);
+    return (
+      <div key={item.id}
+        style={{...s.card, border: isSelected ? "2px solid var(--color-ink)" : "1px solid var(--color-border)", cursor:"pointer"}}
+        onClick={() => toggleSelected(item.id)}>
+        <div style={s.cardImg}>
+          {item.image
+            ? <Thumb item={item} alt={item.name} style={s.cardPhoto}/>
+            : <div style={s.cardPlaceholder}>{item.category?.[0] || "?"}</div>}
+          {isSelected && <div style={s.selectBadge}>✓</div>}
+        </div>
+        <div style={s.cardBody}>
+          <div style={s.cardCat}>{item.category}{item.subcategory ? ` · ${item.subcategory}` : ""}</div>
+          <div style={s.cardName}>{item.name}</div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={s.app}>
       {/* GLOBAL KEYFRAMES */}
@@ -1294,8 +1422,8 @@ export default function App() {
           >
             <span style={s.brandMark}>✦</span>
             <span style={s.brandName}>ATELIER</span>
-            {items.length > 0 && (
-              <span style={s.badge}>{items.length}</span>
+            {closetItems.length > 0 && (
+              <span style={s.badge}>{closetItems.length}</span>
             )}
             {syncLabel && (
               <span
@@ -1305,6 +1433,40 @@ export default function App() {
               >{syncStatus === "error" ? "⚠ offline — tap to retry" : syncLabel}</span>
             )}
           </button>
+          {/* Active-closet chip — a mode switch, not a filter. Tapping opens
+              a small popover listing every closet (✓ on the active one). */}
+          <div style={{ position:"relative", flexShrink:1, minWidth:0, zIndex:2 }}>
+            <button
+              style={s.closetChip}
+              onClick={() => setClosetMenuOpen(v => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={closetMenuOpen}
+              title={`Closet: ${activeCloset.name} — tap to switch`}
+            >
+              <span style={s.closetChipName}>{activeCloset.name}</span>
+              <span style={{ fontSize:7, flexShrink:0 }}>▼</span>
+            </button>
+            {closetMenuOpen && (
+              <>
+                {/* Invisible backdrop: any outside tap closes the popover. */}
+                <div style={{ position:"fixed", inset:0, zIndex:-1 }} onClick={() => setClosetMenuOpen(false)}/>
+                <div style={s.closetMenu} role="listbox" aria-label="Switch closet">
+                  {closets.map(c => (
+                    <button
+                      key={c.id}
+                      role="option"
+                      aria-selected={c.id === activeClosetId}
+                      style={c.id === activeClosetId ? {...s.closetMenuItem, ...s.closetMenuItemActive} : s.closetMenuItem}
+                      onClick={() => switchCloset(c.id)}
+                    >
+                      <span>{c.id === activeClosetId ? "✓ " : ""}{c.name}</span>
+                      {c.city && <span style={s.closetMenuCity}>{c.city}</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <nav style={s.nav}>
             {/* "Closet" link removed — the ATELIER brand button now takes
                 users to the full closet grid. Home (the curated dashboard)
@@ -1353,7 +1515,8 @@ export default function App() {
             <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Atelier</h2>
           </div>
           <HomeView
-            items={items}
+            items={closetItems}
+            activeCloset={activeCloset}
             favorites={favorites}
             apiKey={apiKey}
             plans={wearData.plans}
@@ -1377,7 +1540,7 @@ export default function App() {
 
       {view === "closet" && (
         <div style={s.page}>
-          <FilterBar items={items} activeFilters={activeFilters} onChange={setActiveFilters}/>
+          <FilterBar items={closetItems} activeFilters={activeFilters} onChange={setActiveFilters}/>
 
           {/* Global search bar */}
           <div style={{ position:"relative", marginBottom: 12 }}>
@@ -1409,6 +1572,18 @@ export default function App() {
           {closetSearch.trim() && (
             <div style={{ fontSize:11, color:"var(--color-text-muted)", marginBottom:8 }}>
               {filtered.length} result{filtered.length !== 1 ? "s" : ""} for "{closetSearch.trim()}"
+            </div>
+          )}
+
+          {/* Bulk "move to closet" — Select toggles a multi-select mode on
+              the grids below; the sticky bottom bar does the actual move. */}
+          {!isSetView && closetItems.length > 0 && closets.length > 1 && (
+            <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+              <button
+                style={selectMode ? {...s.chip, ...s.chipActive} : s.chip}
+                onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}>
+                {selectMode ? "✕ Cancel select" : "Select"}
+              </button>
             </div>
           )}
 
@@ -1471,8 +1646,8 @@ export default function App() {
               <SetEditModal
                 setId={editingSet}
                 meta={setsMeta[editingSet] || { name: "", tags: [] }}
-                groupItems={items.filter(it => it.set_id === editingSet)}
-                allItems={items}
+                groupItems={closetItems.filter(it => it.set_id === editingSet)}
+                allItems={closetItems}
                 onSave={(data) => { updateSetMeta(editingSet, data); setEditingSet(null); }}
                 onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
                 onClose={() => setEditingSet(null)}
@@ -1496,14 +1671,7 @@ export default function App() {
                       Recently Added
                     </div>
                     <div style={s.grid}>
-                      {recentItems.map(item => (
-                        <ItemCard key={item.id} item={item} allItems={items}
-                          onDelete={deleteItem}
-                          onEdit={handleEditItemCard}
-                          isFavorited={favPieceIds.has(item.id)}
-                          onToggleFav={handleToggleFavPiece}
-                          onStyleItem={styleWithItem}/>
-                      ))}
+                      {recentItems.map(renderClosetGridItem)}
                     </div>
                   </div>
                 )}
@@ -1513,14 +1681,7 @@ export default function App() {
                       Needs Categorizing
                     </div>
                     <div style={s.grid}>
-                      {uncategorized.map(item => (
-                        <ItemCard key={item.id} item={item} allItems={items}
-                          onDelete={deleteItem}
-                          onEdit={handleEditItemCard}
-                          isFavorited={favPieceIds.has(item.id)}
-                          onToggleFav={handleToggleFavPiece}
-                          onStyleItem={styleWithItem}/>
-                      ))}
+                      {uncategorized.map(renderClosetGridItem)}
                     </div>
                   </div>
                 )}
@@ -1536,34 +1697,52 @@ export default function App() {
             </div>
           ) : (
             <div style={s.grid}>
-              {filtered.map(item => (
-                <ItemCard key={item.id} item={item} allItems={items}
-                  onDelete={deleteItem}
-                  onEdit={handleEditItemCard}
-                  isFavorited={favPieceIds.has(item.id)}
-                  onToggleFav={handleToggleFavPiece}
-                  onStyleItem={styleWithItem}/>
-              ))}
+              {filtered.map(renderClosetGridItem)}
             </div>
           ))}
 
-          {/* Empty wardrobe state */}
-          {items.length === 0 && (
+          {/* Empty closet state */}
+          {closetItems.length === 0 && (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
-              <p style={s.emptyText}>Your wardrobe is empty — add your first piece.</p>
+              <p style={s.emptyText}>This closet is empty — add your first piece.</p>
               <button style={s.btnPrimary} onClick={() => setView("add")}>
                 <Icon path={icons.plus} size={15}/> Add Items
               </button>
             </div>
           )}
 
-          {stylePanelNode}
+          {/* Select mode swaps the bottom chrome (Style Me panel + FAB) for
+              the sticky move bar so the two never overlap. */}
+          {!selectMode && stylePanelNode}
+
+          {selectMode && (
+            <div style={s.bulkBar}>
+              <span style={{ fontSize:12, color:"var(--color-text-2)", flexShrink:0 }}>
+                {selectedIds.length} selected
+              </span>
+              {closets.filter(c => c.id !== activeClosetId).map(c => (
+                <button key={c.id}
+                  style={{...s.btnPrimary, padding:"8px 14px", opacity: selectedIds.length === 0 || moveBusy ? 0.5 : 1}}
+                  disabled={selectedIds.length === 0 || moveBusy}
+                  onClick={() => moveSelectedToCloset(c.id)}>
+                  {moveBusy ? <><span style={s.spinnerSmLight}/> Moving…</> : `Move to ${c.name}`}
+                </button>
+              ))}
+              <button
+                style={{...s.btnSecondary, padding:"8px 14px", marginLeft:"auto"}}
+                onClick={() => { setSelectMode(false); setSelectedIds([]); }}>
+                Cancel
+              </button>
+            </div>
+          )}
 
           {/* FAB */}
-          <button style={s.fab} onClick={() => setView("add")}>
-            <Icon path={icons.plus} size={22}/>
-          </button>
+          {!selectMode && (
+            <button style={s.fab} onClick={() => setView("add")}>
+              <Icon path={icons.plus} size={22}/>
+            </button>
+          )}
         </div>
       )}
 
@@ -1586,6 +1765,7 @@ export default function App() {
         <EditItemView
           item={editItem}
           allItems={items}
+          closets={closets}
           setsMeta={setsMeta}
           onSaveSetMeta={updateSetMeta}
           logs={wearData.logs}
@@ -1604,7 +1784,7 @@ export default function App() {
       {/* ── LOOKS ── */}
       {view === "style" && manualBuilderOpen && (
         <SilhouetteBuilder
-          items={items}
+          items={closetItems}
           setsMeta={setsMeta}
           apiKey={apiKey}
           initialLook={editingPlan ? {
@@ -1792,7 +1972,7 @@ export default function App() {
             </div>
           )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={items}
+            <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={closetItems}
               onEditItem={handleEditItemCard}
               onEditInBuilder={(lk) => {
                 const ids = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
@@ -1885,7 +2065,7 @@ export default function App() {
 
       {/* ── COLOR ADVISOR ── */}
       {view === "color" && (
-        <ColorAdvisorView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <ColorAdvisorView items={closetItems} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── PLANNER (F3) ── */}
@@ -1896,7 +2076,8 @@ export default function App() {
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
           <PlannerWrapper
-            items={items}
+            items={closetItems}
+            activeCloset={activeCloset}
             apiKey={apiKey}
             onGoToStyleMe={() => setView("style")}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
@@ -1926,7 +2107,7 @@ export default function App() {
       {/* ── SAVED (Looks / History / Favorites) ── */}
       {view === "favorites" && (
         <SavedView
-          items={items}
+          items={closetItems}
           apiKey={apiKey}
           favorites={favorites}
           toggleFav={toggleFav}
@@ -2052,12 +2233,12 @@ export default function App() {
 
       {/* ── INSIGHTS ── */}
       {view === "insights" && (
-        <StyleInsightsView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <StyleInsightsView items={closetItems} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── SHOPPING ── */}
       {view === "shop" && (
-        <ShoppingView items={items} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <ShoppingView items={closetItems} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── SETTINGS ── */}
@@ -2085,7 +2266,7 @@ export default function App() {
              pointer in Settings; placement "Inside Home" chosen by owner) ── */}
       {view === "profile" && (
         <StyleProfileView
-          items={items}
+          items={closetItems}
           apiKey={apiKey}
           styleFingerprint={styleFingerprint}
           setStyleFingerprint={setStyleFingerprint}
@@ -2100,7 +2281,7 @@ export default function App() {
              on explicit tap inside the view) ── */}
       {view === "discovery" && (
         <BrandDiscoveryView
-          items={items}
+          items={closetItems}
           apiKey={apiKey}
           discovery={brandDiscovery}
           setDiscovery={setBrandDiscovery}
@@ -2110,7 +2291,7 @@ export default function App() {
 
       {view === "visionpilot" && (
         <VisionPilotView
-          items={items}
+          items={closetItems}
           apiKey={apiKey}
           onBack={() => setView("settings")}
           onEnriched={(id, vd) => setItems(prev => prev.map(it => it.id === id ? { ...it, vision_data: vd } : it))}
