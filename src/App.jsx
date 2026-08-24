@@ -26,7 +26,7 @@ import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import { fetchClosetForecast } from "./lib/weather.js";
-import { nyToday } from "./lib/time.js";
+import { nyToday, todayInTz } from "./lib/time.js";
 // The AI layer (stylist.js → prompts / sampler / validator / zod) is imported
 // dynamically at the call sites below so its ~170kB of schema + prompt code
 // stays out of the initial bundle — it only loads on the first Style Me tap
@@ -327,9 +327,12 @@ export default function App() {
   // cached pre-migration rows haven't been stamped yet. Full `items` stays
   // reserved for App-internal sync machinery (persistItems / mergeItems /
   // forceSyncAll) and SettingsView's closet-agnostic orphan scan.
+  // Filter by the RESOLVED closet (not the raw persisted id): a stale
+  // localStorage id would otherwise render every surface empty while the
+  // chip and weather claim NYC.
   const closetItems = useMemo(
-    () => items.filter(it => (it.closet_id || DEFAULT_CLOSET_ID) === activeClosetId),
-    [items, activeClosetId],
+    () => items.filter(it => (it.closet_id || DEFAULT_CLOSET_ID) === activeCloset.id),
+    [items, activeCloset.id],
   );
 
   // ── Auto-populate today's weather from the active closet's forecast.
@@ -339,7 +342,10 @@ export default function App() {
   useEffect(() => {
     fetchClosetForecast(activeCloset).then(forecast => {
       if (!forecast) return;
-      const today = nyToday();
+      // The forecast map is keyed by the closet's LOCAL dates — index it with
+      // the closet's "today", not NY's (NY rolls past midnight ~2-3h early
+      // for Arizona evenings).
+      const today = todayInTz(activeCloset.timezone);
       const bucket = forecast[today]?.bucket;
       const BUCKET_TO_CHIP = {
         "Hot":  "Hot (85°F+)",
@@ -352,7 +358,7 @@ export default function App() {
       if (chip) setWeather(prev => prev.size === 0 ? new Set([chip]) : prev);
     }).catch(() => { /* best-effort; weather stays "Any" on failure */ });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeClosetId]);
+  }, [activeCloset.id]);
 
   // ── Persist allLooks to localStorage so anti-repeat history survives reloads
   useEffect(() => {
@@ -566,7 +572,7 @@ export default function App() {
     // elsewhere" if the user reloads before upsert finishes.
     // New items land in the ACTIVE closet unless they already carry one
     // (e.g. server rows re-added by the Settings recovery flow).
-    const pendingNew = newItems.map(it => ({ ...it, closet_id: it.closet_id || activeClosetId, pending_sync: true }));
+    const pendingNew = newItems.map(it => ({ ...it, closet_id: it.closet_id || activeCloset.id, pending_sync: true }));
     const optimistic = [...items, ...pendingNew];
     setItems(optimistic);
     saveLocalItems(optimistic);
@@ -616,7 +622,7 @@ export default function App() {
     } else {
       anyFailed ? flashSync("error") : flashSync("synced");
     }
-  }, [items, activeClosetId]);
+  }, [items, activeCloset.id]);
 
   // Returns { ok, error, imageUploadFailed }. Callers can choose to await and
   // surface failure to the user (the EditItemView keeps the form open on
@@ -1077,6 +1083,17 @@ export default function App() {
 
   // Apply multi-select filters
   const isSetView = activeFilters.category?.includes("Sets");
+
+  // Bulk-select mode only makes sense over the item grids on the closet view;
+  // entering the Sets view (or navigating away) hides those grids AND the
+  // Select toggle, so without this the sticky move bar would linger over a
+  // view that can't see the selection.
+  useEffect(() => {
+    if (selectMode && (isSetView || view !== "closet")) {
+      setSelectMode(false);
+      setSelectedIds([]);
+    }
+  }, [selectMode, isSetView, view]);
   const setGroupsRaw = isSetView ? (() => {
     const groups = {};
     closetItems.filter(it => it.set_id).forEach(it => {
@@ -1455,11 +1472,11 @@ export default function App() {
                     <button
                       key={c.id}
                       role="option"
-                      aria-selected={c.id === activeClosetId}
-                      style={c.id === activeClosetId ? {...s.closetMenuItem, ...s.closetMenuItemActive} : s.closetMenuItem}
+                      aria-selected={c.id === activeCloset.id}
+                      style={c.id === activeCloset.id ? {...s.closetMenuItem, ...s.closetMenuItemActive} : s.closetMenuItem}
                       onClick={() => switchCloset(c.id)}
                     >
-                      <span>{c.id === activeClosetId ? "✓ " : ""}{c.name}</span>
+                      <span>{c.id === activeCloset.id ? "✓ " : ""}{c.name}</span>
                       {c.city && <span style={s.closetMenuCity}>{c.city}</span>}
                     </button>
                   ))}
@@ -1721,7 +1738,7 @@ export default function App() {
               <span style={{ fontSize:12, color:"var(--color-text-2)", flexShrink:0 }}>
                 {selectedIds.length} selected
               </span>
-              {closets.filter(c => c.id !== activeClosetId).map(c => (
+              {closets.filter(c => c.id !== activeCloset.id).map(c => (
                 <button key={c.id}
                   style={{...s.btnPrimary, padding:"8px 14px", opacity: selectedIds.length === 0 || moveBusy ? 0.5 : 1}}
                   disabled={selectedIds.length === 0 || moveBusy}

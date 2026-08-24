@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
-import { nyToday, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
+import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
@@ -283,6 +283,10 @@ export default function CalendarView({ items, activeCloset, outfitLogs, apiKey, 
   }
 
   const todayIso = nyToday();
+  // The forecast map is keyed by the active closet's LOCAL dates, so the
+  // "Today X°F" pill looks up the closet's today; the calendar grid itself
+  // stays NY-anchored like every other date in the app.
+  const forecastTodayIso = todayInTz(activeCloset?.timezone);
 
   // When a trip chip is tapped, render TripDetailView instead of the calendar
   if (activeTrip) {
@@ -303,10 +307,10 @@ export default function CalendarView({ items, activeCloset, outfitLogs, apiKey, 
           user's actual locale (rather than the browser's timezone). */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, fontSize: 11, color: PALETTE.muted, letterSpacing: "0.06em" }}>
         <span>📍 {activeCloset?.city || CITY} · {friendlyDate(todayIso)}</span>
-        {forecast?.[todayIso] && (
+        {forecast?.[forecastTodayIso] && (
           <span>
-            Today {forecast[todayIso].high}°F · {forecast[todayIso].bucket}
-            {isNotableCondition(forecast[todayIso].condition) && ` · ${forecast[todayIso].condition}`}
+            Today {forecast[forecastTodayIso].high}°F · {forecast[forecastTodayIso].bucket}
+            {isNotableCondition(forecast[forecastTodayIso].condition) && ` · ${forecast[forecastTodayIso].condition}`}
           </span>
         )}
       </div>

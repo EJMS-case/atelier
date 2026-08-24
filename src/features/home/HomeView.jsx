@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { flattenPlanItemIds } from "../planner/outfits.js";
 import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
-import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
+import { nyToday, todayInTz, friendlyDate, addDaysIso } from "../../lib/time.js";
 import { fetchClosetForecast } from "../../lib/weather.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
 // Resurface eligibility — real restyle-worthy garments only (no tees, no
@@ -67,7 +67,9 @@ export default function HomeView({ items, activeCloset, favorites, apiKey, plans
   useEffect(() => {
     let live = true;
     fetchClosetForecast(activeCloset)
-      .then(f => { if (live) setTodayBucket(f?.[todayIso]?.bucket || null); })
+      // The forecast map is keyed by the closet's LOCAL dates — look up the
+      // closet's "today", not NY's.
+      .then(f => { if (live) setTodayBucket(f?.[todayInTz(activeCloset?.timezone)]?.bucket || null); })
       .catch(() => {});
     return () => { live = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps

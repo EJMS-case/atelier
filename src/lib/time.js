@@ -16,6 +16,17 @@ export function nyToday() {
   return fmt.format(new Date());
 }
 
+// "YYYY-MM-DD" in an arbitrary IANA timezone, defaulting to NYC. Forecast maps
+// fetched for a non-NYC closet are keyed by that closet's local dates, so
+// looking up "today" in them must use the closet's timezone — NY has already
+// rolled past midnight while Phoenix is still on the previous evening.
+export function todayInTz(tz) {
+  if (!tz || tz === TZ) return nyToday();
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+  } catch { return nyToday(); }
+}
+
 // Day part: "past" | "today" | "future" — used to pick UI language.
 export function dayPart(iso) {
   const today = nyToday();
