@@ -14,6 +14,7 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps } from "./outfits.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES } from "./tripPacker.js";
+import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 
@@ -72,13 +73,18 @@ function healPlan(r) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 /**
- * @param {Object}   props.trip       - { id, start_date, end_date, destination, notes }
- * @param {Object[]} props.items      - full wardrobe
+ * @param {Object}   props.trip       - { id, start_date, end_date, destination, notes,
+ *                                       destination_closet_id, destination_city, status }
+ * @param {Object[]} props.items      - the app's scoped pool (active closet, or the
+ *                                      trip pool while a trip is active)
+ * @param {Object[]} [props.allItems] - the FULL wardrobe — source of destination-
+ *                                      closet pieces when the trip has one (Phase B)
+ * @param {Object[]} [props.closets]  - closet rows, to name the destination closet
  * @param {string}   props.apiKey
  * @param {Function} props.onBack
  * @param {Function} props.onBuildDay - (iso, existingItemIds) → opens SilhouetteBuilder
  */
-export default function TripDetailView({ trip: initialTrip, items, apiKey, onBack, onBuildDay }) {
+export default function TripDetailView({ trip: initialTrip, items, allItems, closets, apiKey, onBack, onBuildDay }) {
   // Local copy so "+ Add day" can mutate end_date without re-fetching the
   // trip list. Re-syncs to the parent's prop if the user picks a different
   // trip (handled by the useEffect on initialTrip.id below).
@@ -195,9 +201,29 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
   const tempHighForDay = (iso) =>
     forecast?.[iso]?.high ?? brief?.tempHighF ?? null;
 
+  // ── Generation pool (Phase B) ──────────────────────────────────────────
+  // With a destination closet: merge its items (from the full wardrobe) into
+  // the scoped `items` prop and prefer them when scoring/generating — packing
+  // cost zero. Same rule as TripModal's preview pool. Without one, this is
+  // just `items` and no preference (pre-Phase-B behavior).
+  const closetOf = (it) => it?.closet_id || DEFAULT_CLOSET_ID;
+  const destClosetId = trip.destination_closet_id || null;
+  const { genItems, preferItemIds } = useMemo(() => {
+    if (!destClosetId) return { genItems: items, preferItemIds: null };
+    const seen = new Set(items.map(it => it.id));
+    const extra = (allItems || []).filter(it => closetOf(it) === destClosetId && !seen.has(it.id));
+    const pool = [...items, ...extra];
+    return {
+      genItems: pool,
+      preferItemIds: new Set(pool.filter(it => closetOf(it) === destClosetId).map(it => it.id)),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, allItems, destClosetId]);
+
   // Resolve item-id list to item objects, dropping anything missing from the
-  // current wardrobe (deleted items, etc.).
-  const resolveItems = (ids) => resolveItemIds(items, ids);
+  // trip pool (deleted items, etc.). Resolves against the MERGED pool so a
+  // destination-closet piece renders even while the home closet is active.
+  const resolveItems = (ids) => resolveItemIds(genItems, ids);
 
   // Build the priorDays array (everything ALREADY planned on other days)
   // that the AI uses to avoid repeating the hero piece across the trip.
@@ -256,7 +282,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
       const weather   = weatherForDay(iso);
       const priorDays = buildPriorDays(iso, plans);
       const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
-      const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity });
+      const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity, preferItemIds });
       if (!look) { setError("Couldn't generate a look — try again."); return; }
 
       let nextOutfits;
@@ -298,7 +324,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
         const weather   = weatherForDay(iso);
         const priorDays = buildPriorDays(iso, running);
         const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
-        const look = await generateTripDayLook(items, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity });
+        const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity, preferItemIds });
         if (!look) continue;
         const outfits = [{ id: newOutfitId(), label: "", occasion, items: look.items }];
         const payload = buildPlanPayload({
@@ -489,13 +515,19 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
     });
 
     const allIds = Object.keys(itemDays);
-    const allItems = resolveItemIds(items, allIds);
+    const usedItems = resolveItemIds(genItems, allIds);
 
+    // Pulled vs at-destination (Phase B): pieces already living in the trip's
+    // destination closet don't need carrying — they get a badge instead of a
+    // slot in the suitcase count. (Wave 2 builds the real checklist.)
     const byCategory = {};
-    allItems.forEach(it => {
+    let pulledCount = 0;
+    usedItems.forEach(it => {
       const cat = it.category || "Other";
+      const atDest = !!destClosetId && closetOf(it) === destClosetId;
+      if (!atDest) pulledCount++;
       if (!byCategory[cat]) byCategory[cat] = [];
-      byCategory[cat].push({ item: it, days: [...itemDays[it.id]].sort((a, b) => a - b) });
+      byCategory[cat].push({ item: it, days: [...itemDays[it.id]].sort((a, b) => a - b), atDest });
     });
 
     const sorted = CAT_ORDER
@@ -523,9 +555,12 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
     return {
       categories: [...sorted, ...extra],
       totalItems: allIds.length,
+      pulledCount,
+      atDestinationCount: usedItems.length - pulledCount,
       warnings,
     };
-  }, [plans, days, items]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plans, days, genItems, destClosetId]);
 
   const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
   const weatherBucket = brief ? bucketFromHigh(brief.tempHighF) : null;
@@ -892,15 +927,29 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
       {tab === "packing" && (
         <div style={{ padding: "16px 16px 0" }}>
 
-          {/* Summary bar */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-            <div style={{ padding: "6px 12px", background: PALETTE.cream, borderRadius: 20, fontSize: 11, color: PALETTE.ink }}>
-              {packingData.totalItems} items total
-            </div>
-            <div style={{ padding: "6px 12px", background: packingData.totalItems <= 15 ? "#E8F5E9" : "#FBE9E7", borderRadius: 20, fontSize: 11, color: packingData.totalItems <= 15 ? "#2E7D32" : PALETTE.accent }}>
-              {packingData.totalItems <= 15 ? "✓ Carry-on friendly" : `⚠ ${packingData.totalItems - 15} over carry-on limit`}
-            </div>
-          </div>
+          {/* Summary bar — with a destination closet the suitcase counts only
+              the PULLED pieces; the rest already live there. */}
+          {(() => {
+            const carryCount = destClosetId ? packingData.pulledCount : packingData.totalItems;
+            const destName = destClosetId
+              ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination")
+              : null;
+            return (
+              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                <div style={{ padding: "6px 12px", background: PALETTE.cream, borderRadius: 20, fontSize: 11, color: PALETTE.ink }}>
+                  {destClosetId ? `${carryCount} to pack` : `${packingData.totalItems} items total`}
+                </div>
+                {destClosetId && packingData.atDestinationCount > 0 && (
+                  <div style={{ padding: "6px 12px", background: PALETTE.cream, borderRadius: 20, fontSize: 11, color: PALETTE.muted }}>
+                    {packingData.atDestinationCount} already at {destName}
+                  </div>
+                )}
+                <div style={{ padding: "6px 12px", background: carryCount <= 15 ? "#E8F5E9" : "#FBE9E7", borderRadius: 20, fontSize: 11, color: carryCount <= 15 ? "#2E7D32" : PALETTE.accent }}>
+                  {carryCount <= 15 ? "✓ Carry-on friendly" : `⚠ ${carryCount - 15} over carry-on limit`}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Coverage warnings */}
           {packingData.warnings.length > 0 && (
@@ -925,7 +974,7 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                 {category} ({entries.length})
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {entries.map(({ item, days: wornDays }) => (
+                {entries.map(({ item, days: wornDays, atDest }) => (
                   <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: PALETTE.cream, borderRadius: 6 }}>
                     <div style={{ width: 44, height: 52, flexShrink: 0, borderRadius: 4, overflow: "hidden", background: "#fff", border: `1px solid ${PALETTE.line}` }}>
                       {item.image
@@ -940,6 +989,11 @@ export default function TripDetailView({ trip: initialTrip, items, apiKey, onBac
                         worn day{wornDays.length === 1 ? "" : "s"} {wornDays.join(", ")}
                       </div>
                     </div>
+                    {atDest && (
+                      <div style={{ fontSize: 9, letterSpacing: "0.06em", color: PALETTE.muted, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: "2px 7px", flexShrink: 0 }}>
+                        at destination
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, fontWeight: 600, color: wornDays.length > 1 ? PALETTE.accent : PALETTE.muted, flexShrink: 0 }}>
                       ×{wornDays.length}
                     </div>

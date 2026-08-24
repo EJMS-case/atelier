@@ -23,6 +23,7 @@ import {
   migrateLocalStorage,
 } from "./utils/storage.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
+import { resolveVisibleWardrobe } from "./features/closet/useVisibleWardrobe.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import { fetchClosetForecast } from "./lib/weather.js";
@@ -151,6 +152,12 @@ export default function App() {
   const [closets, setClosets] = useState(() => loadClosets());
   const [activeClosetId, setActiveClosetId] = useState(() => loadActiveClosetId());
   const [closetMenuOpen, setClosetMenuOpen] = useState(false);
+  // ── Trip mode (Phase B) ──
+  // The single status='active' trip row (null when none) + its trip_items.
+  // While a trip is active the visible pool is destination closet ∪ packed
+  // items — see the closetItems memo below.
+  const [activeTrip, setActiveTrip] = useState(null);
+  const [activeTripItems, setActiveTripItems] = useState([]);
   // Bulk "move to closet" select mode on the closet grid.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -305,6 +312,17 @@ export default function App() {
     }).catch(() => { /* offline / table not migrated yet — cached list stands */ });
   }, []);
 
+  // Trip mode (Phase B): pull the active trip + its trip_items on mount.
+  // Passed down to the planner — wave 2's activation / suitcase-close flows
+  // call it after flipping trip status so the pool updates app-wide.
+  const refreshActiveTrip = useCallback(async () => {
+    const trip = await sb.fetchActiveTrip();   // soft-fails to null
+    setActiveTrip(trip);
+    const rows = trip ? await sb.fetchTripItems(trip.id).catch(() => []) : [];
+    setActiveTripItems(rows || []);
+  }, []);
+  useEffect(() => { refreshActiveTrip().catch(() => {}); }, [refreshActiveTrip]);
+
   const activeCloset =
     closets.find(c => c.id === activeClosetId) ||
     closets.find(c => c.id === DEFAULT_CLOSET_ID) ||
@@ -321,18 +339,21 @@ export default function App() {
     setWeather(new Set());
   }, []);
 
-  // THE one place closet scoping happens: every closet-scoped consumer (the
-  // grid, FilterBar, sets, Style Me, planner, Home, insights, shopping, …)
-  // receives this array instead of `items`. Missing closet_id = NYC — locally
-  // cached pre-migration rows haven't been stamped yet. Full `items` stays
-  // reserved for App-internal sync machinery (persistItems / mergeItems /
-  // forceSyncAll) and SettingsView's closet-agnostic orphan scan.
-  // Filter by the RESOLVED closet (not the raw persisted id): a stale
+  // THE one place wardrobe scoping happens: every scoped consumer (the grid,
+  // FilterBar, sets, Style Me, planner, Home, insights, shopping, …) receives
+  // this array instead of `items`, so the whole app follows the pool rule
+  // automatically. The rule itself lives in resolveVisibleWardrobe (Phase B):
+  // active closet normally; destination closet ∪ packed trip items while a
+  // trip is active (activeCloset is deliberately ignored then). Missing
+  // closet_id = NYC. Full `items` stays reserved for App-internal sync
+  // machinery (persistItems / mergeItems / forceSyncAll), SettingsView's
+  // closet-agnostic orphan scan, and the planner's cross-closet trip pool.
+  // Scope by the RESOLVED closet (not the raw persisted id): a stale
   // localStorage id would otherwise render every surface empty while the
   // chip and weather claim NYC.
   const closetItems = useMemo(
-    () => items.filter(it => (it.closet_id || DEFAULT_CLOSET_ID) === activeCloset.id),
-    [items, activeCloset.id],
+    () => resolveVisibleWardrobe({ items, activeClosetId: activeCloset.id, activeTrip, tripItems: activeTripItems }),
+    [items, activeCloset.id, activeTrip, activeTripItems],
   );
 
   // ── Auto-populate today's weather from the active closet's forecast.
@@ -1451,16 +1472,23 @@ export default function App() {
             )}
           </button>
           {/* Active-closet chip — a mode switch, not a filter. Tapping opens
-              a small popover listing every closet (✓ on the active one). */}
+              a small popover listing every closet (✓ on the active one).
+              During an active trip the chip reads as trip mode: the pool is
+              destination closet + packed items, and switching closets only
+              takes effect once the trip ends (the popover says so). */}
           <div style={{ position:"relative", flexShrink:1, minWidth:0, zIndex:2 }}>
             <button
               style={s.closetChip}
               onClick={() => setClosetMenuOpen(v => !v)}
               aria-haspopup="listbox"
               aria-expanded={closetMenuOpen}
-              title={`Closet: ${activeCloset.name} — tap to switch`}
+              title={activeTrip
+                ? `Trip mode: ${activeTrip.destination || activeTrip.destination_city || "trip"}`
+                : `Closet: ${activeCloset.name} — tap to switch`}
             >
-              <span style={s.closetChipName}>{activeCloset.name}</span>
+              <span style={s.closetChipName}>
+                {activeTrip ? `✈ ${activeTrip.destination || activeTrip.destination_city || "Trip"}` : activeCloset.name}
+              </span>
               <span style={{ fontSize:7, flexShrink:0 }}>▼</span>
             </button>
             {closetMenuOpen && (
@@ -1468,6 +1496,14 @@ export default function App() {
                 {/* Invisible backdrop: any outside tap closes the popover. */}
                 <div style={{ position:"fixed", inset:0, zIndex:-1 }} onClick={() => setClosetMenuOpen(false)}/>
                 <div style={s.closetMenu} role="listbox" aria-label="Switch closet">
+                  {activeTrip && (
+                    <div style={{ ...s.closetMenuItem, cursor:"default", borderBottom:"1px solid var(--color-border)", borderRadius:0, marginBottom:4 }}>
+                      <span style={{ fontWeight:600 }}>
+                        ✈ Trip mode — pool = {closets.find(c => c.id === activeTrip.destination_closet_id)?.name || "suitcase only"} + packed items
+                      </span>
+                      <span style={s.closetMenuCity}>Closet switches take effect after the trip.</span>
+                    </div>
+                  )}
                   {closets.map(c => (
                     <button
                       key={c.id}
@@ -2094,7 +2130,10 @@ export default function App() {
           </div>
           <PlannerWrapper
             items={closetItems}
+            allItems={items}
+            closets={closets}
             activeCloset={activeCloset}
+            onRefreshActiveTrip={refreshActiveTrip}
             apiKey={apiKey}
             onGoToStyleMe={() => setView("style")}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}

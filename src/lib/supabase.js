@@ -615,14 +615,31 @@ export const sb = {
     );
     return res.ok;
   },
+  // Trips carry the Phase B columns (destination_closet_id, destination_city,
+  // status) when the caller provides them. Self-healing like savePlan: on
+  // PGRST204 (column unknown to an un-migrated project) strip it and retry so
+  // the base trip row still saves.
   async saveTrip(trip) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(trip),
-    });
-    if (!res.ok) throw new Error(`saveTrip failed ${res.status}`);
-    return res.json();
+    let payload = { ...trip };
+    // Empty string reaches the uuid destination_closet_id column and PG
+    // rejects it — same normalization as `upsert`'s closet_id.
+    if (payload.destination_closet_id === "") payload.destination_closet_id = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`saveTrip failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(err?.message || `saveTrip failed ${res.status}`);
+    }
+    throw new Error("saveTrip failed after stripping unknown columns");
   },
   async fetchTripsBetween(startIso, endIso) {
     const res = await fetch(
@@ -633,19 +650,87 @@ export const sb = {
     return res.json().catch(() => []);
   },
   async updateTrip(id, patch) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) throw new Error(`updateTrip failed ${res.status}`);
-    return res.json();
+    let payload = { ...patch };
+    if (payload.destination_closet_id === "") payload.destination_closet_id = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`updateTrip failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(err?.message || `updateTrip failed ${res.status}`);
+    }
+    throw new Error("updateTrip failed after stripping unknown columns");
   },
   async deleteTrip(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
       method: "DELETE", headers: SB_HEADERS,
     });
     return res.ok;
+  },
+
+  // ── Trip items (Phase B — trips + packing) ──
+  // The single ACTIVE trip, if any. Pool resolution (useVisibleWardrobe.js)
+  // keys off this row; soft-fails to null so the app boots closet-scoped when
+  // offline or on a pre-migration project.
+  async fetchActiveTrip() {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/trips?status=eq.active&order=start_date.desc&limit=1`,
+        { headers: SB_HEADERS },
+      );
+      if (!res.ok) return null;
+      const rows = await res.json().catch(() => []);
+      return (Array.isArray(rows) && rows[0]) || null;
+    } catch { return null; }
+  },
+  async fetchTripItems(tripId) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&select=*`,
+      { headers: SB_HEADERS },
+    );
+    if (!res.ok) return [];
+    return res.json().catch(() => []);
+  },
+  // Replace a trip's trip_items wholesale: DELETE then bulk POST (PostgREST
+  // accepts an array body). Used when (re)pinning a trip's outfits — the row
+  // set is derived from the outfits, so a full rewrite is the honest shape.
+  async replaceTripItems(tripId, rows = []) {
+    const del = await fetch(`${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}`, {
+      method: "DELETE", headers: SB_HEADERS,
+    });
+    if (!del.ok) throw new Error(`replaceTripItems delete failed ${del.status}`);
+    if (!rows.length) return [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trip_items`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) throw new Error(`replaceTripItems insert failed ${res.status}`);
+    return res.json();
+  },
+  // Bulk status flip (suggested | packed | left_behind) — same id=in.(…)
+  // pattern as setLastWornBulk. item_id is TEXT (wardrobe ids), so encode.
+  async setTripItemStatus(tripId, itemIds = [], status) {
+    const list = [...new Set(itemIds)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=in.(${inList})`,
+      {
+        method: "PATCH",
+        headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+        body: JSON.stringify({ status }),
+      },
+    );
+    if (!res.ok) throw new Error(`setTripItemStatus failed ${res.status}`);
   },
 
   // ── Look feedback (thumbs up/down on generated looks) ──

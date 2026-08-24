@@ -125,6 +125,9 @@ const TripLooksTool = {
  * @param {Object}   [opts.brief]    - destination brief { climate, weatherNotes,
  *                   packingTip, tempHighF, tempLowF } — strengthens destination
  *                   weighting so a Lisbon trip isn't styled like Manhattan.
+ * @param {Set<string>} [opts.preferItemIds] - ids already at the trip's
+ *                   destination closet (Phase B): tagged AT DESTINATION in the
+ *                   inventory and soft-preferred, since they pack for free.
  */
 export async function generateTripDayLook(items, occasion, weather, destination, apiKey, opts = {}) {
   if (!apiKey || !items?.length) return null;
@@ -157,6 +160,17 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   const CAT_CAP = { Outerwear: 6, Dresses: 8, Jumpsuits: 3, Tops: 12, Knits: 6, Bottoms: 10, Shoes: 8, Bags: 5, Accessories: 5, Belts: 2 };
   const byCat = {};
   eligible.forEach(it => { (byCat[it.category] ||= []).push(it); });
+  // Destination-closet preference (Phase B): float preferred items to the
+  // front of each category bucket so the per-category cap never drops them
+  // (stable sort keeps the original order within each half).
+  const prefer = opts.preferItemIds instanceof Set && opts.preferItemIds.size > 0
+    ? opts.preferItemIds
+    : null;
+  if (prefer) {
+    for (const arr of Object.values(byCat)) {
+      arr.sort((a, b) => (prefer.has(b.id) ? 1 : 0) - (prefer.has(a.id) ? 1 : 0));
+    }
+  }
   const sampled = [
     ...CAT_ORDER.flatMap(cat => (byCat[cat] || []).slice(0, CAT_CAP[cat] ?? 5)),
     // categories not in CAT_ORDER (Sets, Athleisure, Swim on beach days…)
@@ -171,7 +185,8 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     const f = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
     const pat = it.pattern && it.pattern !== "solid" && it.pattern !== "" ? ` | ${it.pattern}` : "";
     const pn = promptNotes(it, { maxLen: 120 });
-    return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}${f} | ${it.name}${it.color ? ` | ${it.color}` : ""}${pat}${it.brand ? ` | ${it.brand}` : ""}${pn ? ` | ${pn}` : ""}`;
+    const dest = prefer?.has(it.id) ? " | AT DESTINATION" : "";
+    return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}${f} | ${it.name}${it.color ? ` | ${it.color}` : ""}${pat}${it.brand ? ` | ${it.brand}` : ""}${pn ? ` | ${pn}` : ""}${dest}`;
   }).join("\n");
 
   // ── Destination context block: feed the brief in so the AI weighs the city
@@ -260,12 +275,18 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   }
   const personalBlock = personalBits.length ? `\n${personalBits.join("\n\n")}\n` : "";
 
+  // Soft preference, not a rule — a look that genuinely needs a pulled piece
+  // should still get it (each unmarked piece costs suitcase space).
+  const preferBlock = prefer
+    ? `\nPACKING PREFERENCE: Items marked "AT DESTINATION" already live at the destination and cost nothing to pack. When two pieces suit the day equally well, pick the AT DESTINATION one; reach for unmarked pieces only when the look genuinely needs them.\n`
+    : "";
+
   const destNote = destination ? ` in ${destination}` : "";
   const prompt = `You are her personal stylist building ONE complete outfit for a trip day${destNote}.
 
 OCCASION: ${occasion}
 WEATHER: ${weather} (around ${highF}°F)${heatNote}
-${destBlock}${activityBlock}${varietyBlock}${personalBlock}
+${destBlock}${activityBlock}${preferBlock}${varietyBlock}${personalBlock}
 WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register):
 ${inventory}
 

@@ -3,7 +3,8 @@
 // Trip modal lives in this file too.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween } from "./plannerApi.js";
+import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
+import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
@@ -73,7 +74,11 @@ const btnSecondary = {
 // scoped (a full page reload sensibly starts back at today).
 let lastAnchorTime = null;
 
-export default function CalendarView({ items, activeCloset, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
+// `allItems` (the FULL wardrobe) + `closets` feed trip planning across both
+// closets; `onRefreshActiveTrip` re-syncs App's trip-mode pool — wave 2's
+// activation / suitcase-close flows call it after flipping trip status.
+export default function CalendarView({ items, allItems, closets, activeCloset, onRefreshActiveTrip, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
+  void onRefreshActiveTrip; // plumbed for wave 2 (trip activation), unused in wave 1
   const [anchor, setAnchor] = useState(() => lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date()));
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
@@ -294,6 +299,8 @@ export default function CalendarView({ items, activeCloset, outfitLogs, apiKey, 
       <TripDetailView
         trip={activeTrip}
         items={items}
+        allItems={allItems}
+        closets={closets}
         apiKey={apiKey}
         onBack={() => { setActiveTrip(null); refreshPlans(); }}
         onBuildDay={onBuildDay}
@@ -476,6 +483,9 @@ export default function CalendarView({ items, activeCloset, outfitLogs, apiKey, 
       {showTrip && (
         <TripModal
           items={items}
+          allItems={allItems}
+          closets={closets}
+          activeCloset={activeCloset}
           apiKey={apiKey}
           onClose={() => setShowTrip(false)}
           onAssign={async (rangePlans, savedTrip) => {
@@ -783,10 +793,17 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, forecastLabel, hasAp
 //   • shuffle a day's outfit, swap any single item, or remove an item
 // All edits stay local until "Pin to calendar".
 
-function TripModal({ items, apiKey, onClose, onAssign }) {
+function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, onAssign }) {
   const [start, setStart] = useState(isoDate(new Date()));
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
+  // Closet at the destination (Phase B). "" = none. Auto-preselected from the
+  // typed destination (see the effect below) until the user picks manually.
+  const [destClosetId, setDestClosetId] = useState("");
+  const [destClosetTouched, setDestClosetTouched] = useState(false);
+  // Geocode hit for the destination — its `name` is the canonical city we
+  // persist as trips.destination_city.
+  const [geo, setGeo] = useState(null);
   // Trip-level Activity is the DEFAULT applied to every day at preview time.
   // Each day's card can override it. Persisted on the trip row so the
   // AI generation in TripDetailView can honor it later.
@@ -832,18 +849,59 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
   // TripDetailView uses (PR #54). Trips beyond the 16-day forecast horizon
   // get null entries — those days fall back to the trip-level brief temp.
   useEffect(() => {
-    if (!destination.trim()) { setPerDayForecast(null); return; }
+    if (!destination.trim()) { setPerDayForecast(null); setGeo(null); return; }
     let cancelled = false;
+    // Clear the previous hit up front so a failed lookup for the NEW text
+    // can't leave a stale city on the saved trip.
+    setGeo(null);
     (async () => {
-      const geo = await geocodeDestination(destination.trim());
-      if (!geo || cancelled) return;
-      const fc = await fetchTripForecast(geo.lat, geo.lon, geo.timezone);
+      const g = await geocodeDestination(destination.trim());
+      if (!g || cancelled) return;
+      setGeo(g);
+      const fc = await fetchTripForecast(g.lat, g.lon, g.timezone);
       if (!cancelled) setPerDayForecast(fc);
     })();
     return () => { cancelled = true; };
   }, [destination]);
 
+  // Auto-preselect the destination closet when the typed destination mentions
+  // a closet's city or name ("Scottsdale" / "Arizona" → the Arizona closet).
+  // Matching tokens: the city up to its comma (not the literal first word —
+  // "New" would make "New Orleans" light up the New York closet) plus the
+  // closet name's first word, min 3 chars. A manual pick always wins.
+  useEffect(() => {
+    if (destClosetTouched) return;
+    const q = destination.trim().toLowerCase();
+    if (!q) { setDestClosetId(""); return; }
+    const match = (closets || []).find(c => {
+      const tokens = [
+        (c.city || "").split(",")[0].trim(),
+        ((c.name || "").split(/\s+/)[0] || "").replace(/[^\w]/g, ""),
+      ].filter(t => t.length >= 3);
+      return tokens.some(t => q.includes(t.toLowerCase()));
+    });
+    setDestClosetId(match ? match.id : "");
+  }, [destination, closets, destClosetTouched]);
+
   const dayCount = Math.max(1, Math.round((new Date(end) - new Date(start)) / (24 * 60 * 60 * 1000)) + 1);
+
+  // ── Generation pool (Phase B) ──────────────────────────────────────────
+  // With a destination closet: generate from destination-closet ∪ ACTIVE
+  // (home) closet items, preferring pieces already at the destination —
+  // packing cost zero (tripPacker's preferItemIds). Without one: the scoped
+  // `items` prop, no preference (pre-Phase-B behavior).
+  const closetOf = (it) => it.closet_id || DEFAULT_CLOSET_ID;
+  const homeClosetId = activeCloset?.id || DEFAULT_CLOSET_ID;
+  const { genItems, preferItemIds } = useMemo(() => {
+    if (!destClosetId) return { genItems: items, preferItemIds: null };
+    const source = Array.isArray(allItems) && allItems.length ? allItems : items;
+    const pool = source.filter(it => closetOf(it) === destClosetId || closetOf(it) === homeClosetId);
+    return {
+      genItems: pool,
+      preferItemIds: new Set(pool.filter(it => closetOf(it) === destClosetId).map(it => it.id)),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destClosetId, allItems, items, homeClosetId]);
 
   // If user re-runs Preview the working copy is rebuilt — but vibe/weather
   // edits made in the preview don't auto-clear it.
@@ -921,12 +979,13 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     const prevDayIds = dayIdx != null && dayIdx > 0
       ? (dayLooks?.[dayIdx - 1] || []).flatMap(o => (o.items || []).map(it => it.id))
       : [];
-    const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
+    const single = buildDailyOutfits(genItems, [perDayHigh(dayIso)], {
       occasions: [occasion],
       activities: [dayAct],
       priorUse: usageExcluding(dayIdx, excludeOutfitIdx),
       prevDayIds,
       tripDayCount: dayCount,
+      preferItemIds,
     });
     const outfitItems = single.dailyOutfits?.[0] || [];
     if (!outfitItems.length) return null;
@@ -948,14 +1007,15 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
       // Per-day activity defaults to the trip-level activity for every day.
       // The user can override individual days from the preview cards.
       const activities = Array.from({ length: dayCount }, () => activity);
-      const { dailyOutfits, poolSuits } = buildDailyOutfits(items, highs, {
+      const { dailyOutfits, poolSuits } = buildDailyOutfits(genItems, highs, {
         occasions,
         activity,
         activities,
+        preferItemIds,
       });
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
       if (totalItems === 0) {
-        setPreviewError(`No outfits could be built — your wardrobe has ${items.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
+        setPreviewError(`No outfits could be built — the trip pool has ${genItems.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
         return;
       }
       // Wrap each day's items as a single OutfitDraft. The user can add
@@ -1010,12 +1070,13 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     // regular rebuild can no longer produce swim at all.
     const isPool = (target.items || []).length > 0 && target.items.every(it => it.category === "Swim");
     if (isPool) {
-      const single = buildDailyOutfits(items, [perDayHigh(dayIso)], {
+      const single = buildDailyOutfits(genItems, [perDayHigh(dayIso)], {
         occasions: [target.occasion || "Casual"],
         activities: [dayAct],
         priorUse: usageExcluding(dayIdx, outfitIdx),
         tripDayCount: dayCount,
         rebuildSuit: true,
+        preferItemIds,
       });
       const suit = single.poolSuits?.[0];
       if (suit?.length) mutateOutfit(dayIdx, outfitIdx, prev => ({ ...prev, items: suit }));
@@ -1104,10 +1165,12 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
     }));
   }
 
-  // Derive the packing list (union of all items used across every outfit on
-  // every day) from the working copy.
-  const packingList = useMemo(() => {
-    if (!dayLooks) return [];
+  // Derive the packing list from the working copy. The list is what you
+  // CARRY: the deduplicated set of used items that are NOT already at the
+  // destination closet (with one, pieces living there pack themselves —
+  // they're only counted). No destination closet → everything used is carried.
+  const { packingList, atDestinationCount } = useMemo(() => {
+    if (!dayLooks) return { packingList: [], atDestinationCount: 0 };
     const seen = new Set();
     const list = [];
     for (const day of dayLooks) {
@@ -1117,8 +1180,11 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         }
       }
     }
-    return list;
-  }, [dayLooks]);
+    if (!destClosetId) return { packingList: list, atDestinationCount: 0 };
+    const pulled = list.filter(it => closetOf(it) !== destClosetId);
+    return { packingList: pulled, atDestinationCount: list.length - pulled.length };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayLooks, destClosetId]);
 
   // Outfits missing core coverage (no shoes / no top+bottom / no dress) —
   // shared slot-based rule (outfits.js). Returns a Set of "dayIdx:outfitIdx".
@@ -1152,6 +1218,12 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
           start_date: start,
           end_date: end,
           destination: destination || null,
+          // Phase B columns: the closet at the destination + the canonical
+          // geocoded city. Status starts at 'planning' — activation is a
+          // wave-2 flow. trips.notes stays reserved for the climate brief.
+          destination_closet_id: destClosetId || null,
+          destination_city: geo?.name || (destination ? destination.split(",")[0].trim() : null),
+          status: "planning",
           // Persist the brief so TripDetailView can reuse it without a re-fetch.
           notes: brief ? JSON.stringify(brief) : null,
           // Trip-level activity drives the per-day AI generation in
@@ -1161,6 +1233,34 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         });
         savedTrip = Array.isArray(rows) ? rows[0] : rows;
       } catch { /* non-fatal */ }
+
+      // Record the pulled pieces as trip_items (status 'suggested'): every
+      // item used by any generated outfit that is NOT already at the
+      // destination closet, linked to the outfit ids that require it. These
+      // outfit ids are the same ones buildPlanPayload persists below, so the
+      // links survive the round-trip. Best-effort — the trip and the pinned
+      // days matter more than the checklist rows (wave 2 rebuilds them).
+      if (savedTrip?.id) {
+        try {
+          const outfitIdsByItem = new Map();
+          for (const day of dayLooks) {
+            for (const o of day) {
+              for (const it of (o.items || [])) {
+                if (destClosetId && closetOf(it) === destClosetId) continue; // lives there already
+                if (!outfitIdsByItem.has(it.id)) outfitIdsByItem.set(it.id, new Set());
+                outfitIdsByItem.get(it.id).add(o.id);
+              }
+            }
+          }
+          const tripItemRows = [...outfitIdsByItem].map(([itemId, outfitIds]) => ({
+            trip_id: savedTrip.id,
+            item_id: itemId,
+            status: "suggested",
+            outfit_ids: [...outfitIds],
+          }));
+          await replaceTripItems(savedTrip.id, tripItemRows);
+        } catch { /* non-fatal — see note above */ }
+      }
 
       const plans = dayLooks.map((looks, i) => {
         const dayIso = isoDate(addDays(new Date(start), i));
@@ -1221,6 +1321,24 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
             style={{ ...dateInput, fontSize: 13 }}/>
         </label>
 
+        {/* Closet at destination (Phase B) — outfit generation prefers pieces
+            already living there; the packing list becomes just what to carry. */}
+        <label style={{ fontSize: 11, color: PALETTE.muted, display: "block", marginTop: 10 }}>
+          Closet at destination
+          <select value={destClosetId}
+            onChange={e => { setDestClosetId(e.target.value); setDestClosetTouched(true); invalidatePreview(); }}
+            style={dateInput}>
+            <option value="">None — pack everything</option>
+            {(closets || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        {destClosetId && (
+          <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic", lineHeight: 1.5 }}>
+            Looks will prefer pieces already in {(closets || []).find(c => c.id === destClosetId)?.name || "that closet"};
+            the packing list shows only what to carry.
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
             Default activity
@@ -1280,6 +1398,7 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
           <div ref={previewRef} style={{ marginTop: 16 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted, marginBottom: 8 }}>
               {packingList.length} ITEMS TO PACK
+              {atDestinationCount > 0 && ` · ${atDestinationCount} already at destination`}
               {uncoveredDayCount > 0 && ` · ${uncoveredDayCount} day${uncoveredDayCount === 1 ? "" : "s"} may need more`}
             </div>
 
@@ -1428,7 +1547,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
               return (
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted }}>PACKING LIST · {packingList.length} ITEMS</div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", color: PALETTE.muted }}>
+                      PACKING LIST · {packingList.length} ITEMS
+                      {atDestinationCount > 0 && <span style={{ letterSpacing: "0.02em" }}> (+{atDestinationCount} already at destination)</span>}
+                    </div>
                     <div style={{ padding: "2px 8px", borderRadius: 12, fontSize: 10, background: carryOnOk ? "#E8F5E9" : "#FBE9E7", color: carryOnOk ? "#2E7D32" : PALETTE.accent }}>
                       {carryOnOk ? "✓ Carry-on" : `⚠ +${packingList.length - 15} over`}
                     </div>
@@ -1460,7 +1582,8 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
         {swapTarget && (
           <SwapPicker
             target={swapTarget}
-            items={items}
+            items={genItems}
+            preferItemIds={preferItemIds}
             currentDayItems={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.items || []}
             weather={perDayBucket(isoDate(addDays(new Date(start), swapTarget.dayIdx)))}
             occasion={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.occasion}
@@ -1474,10 +1597,10 @@ function TripModal({ items, apiKey, onClose, onAssign }) {
 }
 
 // ── Swap picker (per-item replacement modal) ─────────────────────────────────
-function SwapPicker({ target, items, currentDayItems, weather, occasion, onPick, onClose }) {
+function SwapPicker({ target, items, preferItemIds, currentDayItems, weather, occasion, onPick, onClose }) {
   const excludeIds = currentDayItems.map(it => it.id);
   const candidates = alternativesFor(items, target.item, {
-    weather, occasion, exclude: excludeIds,
+    weather, occasion, exclude: excludeIds, preferItemIds,
   });
 
   return (
