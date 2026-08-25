@@ -1,0 +1,436 @@
+[
+ {
+  "id": "0108af95-93c0-49c3-80c4-2caa65552e14",
+  "name": "Navy Striped Palazzo Pant Set",
+  "tags": [
+   "Travel",
+   "Seasonal",
+   "Date Night",
+   "Evening",
+   "Weekend",
+   "Casual",
+   "Vacation"
+  ],
+  "created_at": "2026-05-10T19:54:10.975274+00:00"
+ },
+ {
+  "id": "01a599e8-aaf4-468c-9b87-651ceda5ba5f",
+  "name": "Mumu Argyle Wool Set",
+  "tags": [
+   "Work",
+   "Weekend",
+   "Evening",
+   "Casual",
+   "Date Night",
+   "Seasonal"
+  ],
+  "created_at": "2026-04-21T14:21:54.904095+00:00"
+ },
+ {
+  "id": "03178e40-b20c-4d78-a263-fae325ef9565",
+  "name": "Geometric H&M Set",
+  "tags": [
+   "Casual",
+   "Vacation",
+   "Seasonal",
+   "Weekend",
+   "Evening",
+   "Date Night"
+  ],
+  "created_at": "2026-04-21T14:21:54.301665+00:00"
+ },
+ {
+  "id": "07d46093-db4f-4935-b772-e513c4d9d196",
+  "name": "Fast Break - Peach/Orange",
+  "tags": [
+   "Travel",
+   "Seasonal",
+   "Casual",
+   "Vacation",
+   "Weekend"
+  ],
+  "created_at": "2026-04-21T14:21:54.30942+00:00"
+ },
+ {
+  "id": "0feee5cc-cf21-44c3-a731-c0b30fbf0adf",
+  "name": "Good Karma Set - Cobalt",
+  "tags": [
+   "Weekend",
+   "Casual",
+   "Travel"
+  ],
+  "created_at": "2026-04-21T14:21:54.923965+00:00"
+ },
+ {
+  "id": "1045ab1f-89e9-4a28-a4fd-012711a85acd",
+  "name": "Ripley Rader Black",
+  "tags": [
+   "Work",
+   "Weekend",
+   "Evening",
+   "Casual",
+   "Date Night",
+   "Vacation"
+  ],
+  "created_at": "2026-04-21T14:21:55.009557+00:00"
+ },
+ {
+  "id": "122f6a82-aa4c-4ee9-b668-61a2fd2b872c",
+  "name": "Camila Coelho Periwinkle Set",
+  "tags": [
+   "Weekend",
+   "Evening",
+   "Casual",
+   "Date Night",
+   "Seasonal",
+   "Vacation"
+  ],
+  "created_at": "2026-04-21T14:21:54.961925+00:00"
+ },
+ {
+  "id": "1742cdd1-d68a-4a56-94eb-438af76af88a",
+  "name": "Tularosa Set - Knot Squares",
+  "tags": [
+   "Weekend",
+   "Evening",
+   "Travel",
+   "Casual",
+   "Date Night",
+   "Seasonal",
+   "Vacation"
+  ],
+  "created_at": "2026-05-06T05:57:17.500107+00:00"
+ },
+ {
+  "id": "1e16f601-6099-4cfd-8183-728f1a89ca61",
+  "name": "Phoebe Set - Brown Houndstooth",
+  "tags": [
+   "Work",
+   "Seasonal",
+   "Evening",
+   "Date Night"
+  ],
+  "created_at": "2026-04-21T14:21:55.236342+00:00"
+ },
+ {
+  "id": "1e95b821-6d7e-4e97-81af-369f78a57ceb",
+  "name": "Paige Bobbi Set",
+  "tags": [
+   "Work",
+   "Evening",
+   "Date Night",
+   "Seasonal",
+   "Weekend"
+  ],
+  "created_at": "2026-04-21T14:21:54.982263+00:00"
+ },
+ {
+  "id": "1ed16e83-a7fe-4990-a1cf-4f22579f8dda",
+  "name": "Yllw the Label Sweater/Skirt Set",
+  "tags": [
+   "Evening",
+   "Weekend",
+   "Date Night",
+   "Vacation"
+  ],
+  "created_at": "2026-05-23T23:43:34.892006+00:00"
+ },
+ {
+  "id": "249e219f-d088-4935-864f-f7451303f9ef",
+  "name": "Free People Knit Set - Camel",
+  "tags": [],
+  "created_at": "2026-07-29T15:06:36.70328+00:00"
+ },
+ {
+  "id": "2f13b31c-42ec-438c-a672-bd504309b66f",
+  "name": "Good Karma - Washed Navy",
+  "tags": [
+   "Weekend",
+   "Casual"
+  ],
+  "created_at": "2026-04-21T14:21:54.338117+00:00"
+ },
+ {
+  "id": "3171674f-a383-404a-accc-35d89b0912c7",
+  "name": "FP Movement Set - Black",
+  "tags": [],
+  "created_at": "2026-07-29T15:06:34.76342+00:00"
+ },
+ {
+  "id": "3271ee25-99e4-45c2-84af-d50360116111",
+  "name": "Ripley Rader Ponte Set - Peachy Pink",
+  "tags": [],
+  "created_at": "2026-07-29T15:06:37.564909+00:00"
+ },
+ {
+  "id": "3f6a9bd9-9a29-4a42-bade-fcdccc1cf1a9",
+  "name": "Never Better - Navy Set",
+  "tags": [
+   "Casual",
+   "Travel",
+   "Weekend"
+  ],
+  "created_at": "2026-04-21T14:21:54.607018+00:00"
+ },
+ {
+  "id": "56ed84b2-3cf1-4c5d-9c91-6c9af503bb1f",
+  "name": "Ripley Rader Red",
+  "tags": [
+   "Vacation",
+   "Casual",
+   "Work",
+   "Date Night",
+   "Weekend",
+   "Evening"
+  ],
+  "created_at": "2026-04-21T14:21:54.868599+00:00"
+ },
+ {
+  "id": "61b688a2-205b-436c-9994-c82e0b2d5d9b",
+  "name": "Fast Break - Purple",
+  "tags": [
+   "Travel",
+   "Weekend",
+   "Casual",
+   "Vacation"
+  ],
+  "created_at": "2026-04-21T14:21:54.30266+00:00"
+ },
+ {
+  "id": "640b2db3-5d2c-4a9b-9a8e-e2860c8f141b",
+  "name": "Good Karma Set - Washed Black",
+  "tags": [
+   "Casual",
+   "Weekend",
+   "Travel"
+  ],
+  "created_at": "2026-04-21T14:21:55.236853+00:00"
+ },
+ {
+  "id": "658a6ed2-6abb-4774-b2d0-951c6cd81560",
+  "name": "Popflex - Pine Green",
+  "tags": [
+   "Weekend",
+   "Casual",
+   "Vacation",
+   "Seasonal"
+  ],
+  "created_at": "2026-04-24T16:17:40.736087+00:00"
+ },
+ {
+  "id": "67d379ed-ce15-45d8-b6d6-70b74dba9545",
+  "name": "Fast Break Set - Gray",
+  "tags": [
+   "Weekend",
+   "Casual",
+   "Vacation",
+   "Travel"
+  ],
+  "created_at": "2026-05-05T13:04:23.732246+00:00"
+ },
+ {
+  "id": "6cfa3ad5-5a50-4ebb-be3b-ffb56750a6b9",
+  "name": "Favorite Daughter Tailored Tan",
+  "tags": [
+   "Work"
+  ],
+  "created_at": "2026-04-21T14:21:54.882578+00:00"
+ },
+ {
+  "id": "7185b8f2-b4b4-4baf-ba03-61b9f586223f",
+  "name": "Lace Combo Lounge Set",
+  "tags": [
+   "Weekend",
+   "Travel",
+   "Casual",
+   "Vacation"
+  ],
+  "created_at": "2026-05-05T13:03:24.245125+00:00"
+ },
+ {
+  "id": "78532799-2b8c-429b-8ed8-918970cc0992",
+  "name": "Never Better - Dark Gray",
+  "tags": [
+   "Weekend",
+   "Travel",
+   "Casual"
+  ],
+  "created_at": "2026-04-24T16:17:22.187289+00:00"
+ },
+ {
+  "id": "88683e7a-6825-40ef-9b53-6c09343a3c93",
+  "name": "Barefoot Dreams CozyChic Set - Cream",
+  "tags": [],
+  "created_at": "2026-07-29T15:06:33.169148+00:00"
+ },
+ {
+  "id": "8f686f3b-798f-4b68-b0e2-f1890a4c4ccc",
+  "name": "Fast Break Set - Ivory",
+  "tags": [
+   "Casual",
+   "Vacation",
+   "Travel"
+  ],
+  "created_at": "2026-05-23T23:41:12.750198+00:00"
+ },
+ {
+  "id": "962386b8-1ec5-47aa-9cab-45d18f701a79",
+  "name": "Good Karma Set - Burgundy",
+  "tags": [
+   "Casual",
+   "Weekend",
+   "Travel"
+  ],
+  "created_at": "2026-04-21T14:21:54.982441+00:00"
+ },
+ {
+  "id": "a5c1b3b4-3d6d-404f-ad17-80793e9f133c",
+  "name": "Favorite Daughter Polka Dot Skirt Set",
+  "tags": [
+   "Work",
+   "Weekend",
+   "Evening",
+   "Casual",
+   "Vacation",
+   "Date Night",
+   "Seasonal"
+  ],
+  "created_at": "2026-04-21T14:21:54.556181+00:00"
+ },
+ {
+  "id": "aba5e02f-7053-41f9-b531-7abf9d3502d1",
+  "name": "In-Stride Set - Gray",
+  "tags": [
+   "Weekend",
+   "Travel",
+   "Casual",
+   "Seasonal",
+   "Vacation"
+  ],
+  "created_at": "2026-05-06T05:56:54.866679+00:00"
+ },
+ {
+  "id": "abd63640-e6a4-48c6-b991-3ba5e94566e4",
+  "name": "In-Stride Set - Black",
+  "tags": [
+   "Travel",
+   "Seasonal",
+   "Casual",
+   "Weekend",
+   "Vacation"
+  ],
+  "created_at": "2026-05-10T19:54:31.324917+00:00"
+ },
+ {
+  "id": "c5641e9d-d4ce-482c-aba8-ac6e47b1bd37",
+  "name": "Ripley Rader - Teal",
+  "tags": [
+   "Work",
+   "Weekend",
+   "Evening",
+   "Travel",
+   "Date Night",
+   "Vacation"
+  ],
+  "created_at": "2026-07-15T13:05:40.204139+00:00"
+ },
+ {
+  "id": "c9851dd0-9e45-4a09-9e21-3a064a15b553",
+  "name": "Joe’s Jeans Houndstooth Skort & Blazer Set",
+  "tags": [
+   "Work",
+   "Evening",
+   "Date Night",
+   "Seasonal"
+  ],
+  "created_at": "2026-04-21T14:21:54.30264+00:00"
+ },
+ {
+  "id": "d4ec1492-5a6a-4ba1-ba82-be90ad2bc88d",
+  "name": "L*Space Striped Diamond Eyes Set",
+  "tags": [],
+  "created_at": "2026-07-29T11:36:25.971997+00:00"
+ },
+ {
+  "id": "d7fd5630-898d-49f0-9330-6beec2de036a",
+  "name": "Ripley Rader Navy",
+  "tags": [
+   "Work",
+   "Weekend",
+   "Evening",
+   "Casual",
+   "Date Night",
+   "Vacation"
+  ],
+  "created_at": "2026-04-21T14:21:55.022337+00:00"
+ },
+ {
+  "id": "dd5c6d19-7759-41a3-a295-72fd75c09875",
+  "name": "Never Better Set - Brown",
+  "tags": [
+   "Weekend",
+   "Travel",
+   "Casual",
+   "Vacation"
+  ],
+  "created_at": "2026-04-21T14:21:55.236213+00:00"
+ },
+ {
+  "id": "dec175ba-e010-471b-acd0-6cdd1d0213b0",
+  "name": "Polka dot sweatpants set",
+  "tags": [
+   "Travel",
+   "Casual",
+   "Weekend"
+  ],
+  "created_at": "2026-05-23T23:40:07.474595+00:00"
+ },
+ {
+  "id": "df3059d4-e315-4872-9cf9-78298f382d8f",
+  "name": "Favorite Set - Black",
+  "tags": [
+   "Work",
+   "Date Night",
+   "Evening"
+  ],
+  "created_at": "2026-04-21T14:21:54.987368+00:00"
+ },
+ {
+  "id": "dfaa5900-2a01-45a1-9ced-53f4077b86a0",
+  "name": "Popflex Go with the Flow - Forest Green",
+  "tags": [],
+  "created_at": "2026-07-29T11:36:25.043668+00:00"
+ },
+ {
+  "id": "f0576ea8-6ac6-4801-8aa7-cfa2131ea211",
+  "name": "Theory Crepe Staple - Black",
+  "tags": [
+   "Work"
+  ],
+  "created_at": "2026-08-10T05:10:44.422588+00:00"
+ },
+ {
+  "id": "f625edd7-9dbe-462e-9bf2-52bee8999aab",
+  "name": "Never Better - Black Set",
+  "tags": [
+   "Travel",
+   "Casual",
+   "Vacation"
+  ],
+  "created_at": "2026-04-21T14:21:54.869512+00:00"
+ },
+ {
+  "id": "ffa3ff29-cdf8-4c5a-815e-4c30e4c369f9",
+  "name": "Suits You Set - Sapphire",
+  "tags": [
+   "Weekend",
+   "Evening",
+   "Date Night",
+   "Vacation",
+   "Casual",
+   "Work",
+   "Seasonal"
+  ],
+  "created_at": "2026-04-21T14:21:54.955535+00:00"
+ }
+]

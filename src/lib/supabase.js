@@ -70,6 +70,8 @@ export const sb = {
     if (payload.set_id === "") payload.set_id = null;
     // Empty strings reach numeric columns as `""` and PG rejects them.
     if (payload.price_paid === "") payload.price_paid = null;
+    // Same for the uuid closet_id column (multi-closet, Phase A).
+    if (payload.closet_id === "") payload.closet_id = null;
 
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
@@ -89,6 +91,17 @@ export const sb = {
       throw new Error(`Upsert failed: ${err.message || res.status}`);
     }
     throw new Error("Upsert failed after stripping unknown columns");
+  },
+
+  // ── Closets (multi-closet, Phase A) ──
+  // Full read of the small `closets` table (two seeded rows + any future
+  // additions). Callers cache the result (see utils/storage.js loadClosets).
+  async fetchClosets() {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/closets?select=*&order=created_at.asc`, {
+      headers: SB_HEADERS,
+    });
+    if (!res.ok) throw new Error("Fetch closets failed");
+    return res.json();
   },
 
   async remove(id) {
@@ -321,6 +334,19 @@ export const sb = {
       body: JSON.stringify({ last_worn: date }),
     });
     if (!res.ok) throw new Error("Bulk last_worn update failed");
+  },
+  // Move many items to a closet in ONE request — same id=in.(…) bulk-PATCH
+  // pattern as setLastWornBulk (multi-closet, Phase A).
+  async setClosetBulk(ids = [], closetId) {
+    const list = [...new Set(ids)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=in.(${inList})`, {
+      method: "PATCH",
+      headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+      body: JSON.stringify({ closet_id: closetId }),
+    });
+    if (!res.ok) throw new Error("Bulk closet move failed");
   },
   // Persist the one-time Visual-AI descriptor for a single item. Best-effort
   // per item so a batch enrichment can continue past one failure.
@@ -589,14 +615,31 @@ export const sb = {
     );
     return res.ok;
   },
+  // Trips carry the Phase B columns (destination_closet_id, destination_city,
+  // status) when the caller provides them. Self-healing like savePlan: on
+  // PGRST204 (column unknown to an un-migrated project) strip it and retry so
+  // the base trip row still saves.
   async saveTrip(trip) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(trip),
-    });
-    if (!res.ok) throw new Error(`saveTrip failed ${res.status}`);
-    return res.json();
+    let payload = { ...trip };
+    // Empty string reaches the uuid destination_closet_id column and PG
+    // rejects it — same normalization as `upsert`'s closet_id.
+    if (payload.destination_closet_id === "") payload.destination_closet_id = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`saveTrip failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(err?.message || `saveTrip failed ${res.status}`);
+    }
+    throw new Error("saveTrip failed after stripping unknown columns");
   },
   async fetchTripsBetween(startIso, endIso) {
     const res = await fetch(
@@ -607,19 +650,136 @@ export const sb = {
     return res.json().catch(() => []);
   },
   async updateTrip(id, patch) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) throw new Error(`updateTrip failed ${res.status}`);
-    return res.json();
+    let payload = { ...patch };
+    if (payload.destination_closet_id === "") payload.destination_closet_id = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`updateTrip failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(err?.message || `updateTrip failed ${res.status}`);
+    }
+    throw new Error("updateTrip failed after stripping unknown columns");
   },
   async deleteTrip(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
       method: "DELETE", headers: SB_HEADERS,
     });
     return res.ok;
+  },
+
+  // ── Trip items (Phase B — trips + packing) ──
+  // The single ACTIVE trip, if any. Pool resolution (useVisibleWardrobe.js)
+  // keys off this row; soft-fails to null so the app boots closet-scoped when
+  // offline or on a pre-migration project.
+  // Soft-fails to null by default (App's mount fetch). Pass {strict: true}
+  // where "couldn't read" must NOT be mistaken for "no active trip" — the
+  // only-one-active-trip guard in Start Trip fails closed on it.
+  async fetchActiveTrip({ strict = false } = {}) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/trips?status=eq.active&order=start_date.desc&limit=1`,
+        { headers: SB_HEADERS },
+      );
+      if (!res.ok) throw new Error("Fetch active trip failed");
+      const rows = await res.json();
+      return (Array.isArray(rows) && rows[0]) || null;
+    } catch (e) {
+      if (strict) throw e;
+      return null;
+    }
+  },
+  // outfit_ids-only refresh for an EXISTING trip_items row. A PATCH (not an
+  // upsert) so a status change racing in from the packing checklist is never
+  // clobbered back by a reconcile.
+  async updateTripItemOutfits(tripId, itemId, outfitIds) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=eq.${encodeURIComponent(itemId)}`,
+      {
+        method: "PATCH",
+        headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+        body: JSON.stringify({ outfit_ids: outfitIds }),
+      },
+    );
+    if (!res.ok) throw new Error("Trip item outfit_ids update failed");
+  },
+  // Throws on failure (rather than soft-[] like the fetchers above): the
+  // wave-2 reconcile must distinguish "no rows" from "couldn't read" — an
+  // error mistaken for an empty list would clobber packed statuses. Both
+  // callers catch (App soft-fails to [], TripDetailView keeps its last copy).
+  async fetchTripItems(tripId) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&select=*`,
+      { headers: SB_HEADERS },
+    );
+    if (!res.ok) throw new Error(`fetchTripItems failed ${res.status}`);
+    return res.json();
+  },
+  // Replace a trip's trip_items wholesale: DELETE then bulk POST (PostgREST
+  // accepts an array body). Used when (re)pinning a trip's outfits — the row
+  // set is derived from the outfits, so a full rewrite is the honest shape.
+  async replaceTripItems(tripId, rows = []) {
+    const del = await fetch(`${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}`, {
+      method: "DELETE", headers: SB_HEADERS,
+    });
+    if (!del.ok) throw new Error(`replaceTripItems delete failed ${del.status}`);
+    if (!rows.length) return [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trip_items`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) throw new Error(`replaceTripItems insert failed ${res.status}`);
+    return res.json();
+  },
+  // Targeted upsert (wave 2 reconcile): insert new rows / refresh outfit_ids
+  // on existing ones without the full DELETE+POST of replaceTripItems —
+  // a wholesale replace would wipe packed statuses the reconcile must keep.
+  async upsertTripItems(rows = []) {
+    if (!rows.length) return [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trip_items?on_conflict=trip_id,item_id`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) throw new Error(`upsertTripItems failed ${res.status}`);
+    return res.json();
+  },
+  // Targeted delete (wave 2 reconcile): rows no longer referenced by any
+  // outfit come off the list. item_id is TEXT (wardrobe ids), so encode.
+  async deleteTripItems(tripId, itemIds = []) {
+    const list = [...new Set(itemIds)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=in.(${inList})`,
+      { method: "DELETE", headers: SB_HEADERS },
+    );
+    if (!res.ok) throw new Error(`deleteTripItems failed ${res.status}`);
+  },
+  // Bulk status flip (suggested | packed | left_behind) — same id=in.(…)
+  // pattern as setLastWornBulk. item_id is TEXT (wardrobe ids), so encode.
+  async setTripItemStatus(tripId, itemIds = [], status) {
+    const list = [...new Set(itemIds)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=in.(${inList})`,
+      {
+        method: "PATCH",
+        headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+        body: JSON.stringify({ status }),
+      },
+    );
+    if (!res.ok) throw new Error(`setTripItemStatus failed ${res.status}`);
   },
 
   // ── Look feedback (thumbs up/down on generated looks) ──

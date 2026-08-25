@@ -16,6 +16,8 @@ import { LAT, LON, nyToday } from "./time.js";
 // requesting weathercode + precipitation_probability_max.
 const NYC_CACHE_KEY  = "atelier:weather:nyc:v2";
 const TRIP_CACHE_KEY = "atelier:weather:trip:v2";
+// Per-closet cache keys: atelier:weather:closet:<id>:v2 (multi-closet, Phase A).
+const CLOSET_CACHE_PREFIX = "atelier:weather:closet";
 const TTL_MS         = 6 * 60 * 60 * 1000;
 // Open-Meteo's forecast endpoint serves 16 days ahead at most.
 export const FORECAST_HORIZON_DAYS = 16;
@@ -68,6 +70,23 @@ export function isNotableCondition(condition) {
 // next ~16 days at NYC. Falls back to null on network failure.
 export async function fetchNycForecast() {
   return fetchForecastAt(LAT, LON, "America/New_York", NYC_CACHE_KEY);
+}
+
+/**
+ * Per-day forecast for the ACTIVE CLOSET's location (multi-closet, Phase A).
+ * `closet` is a row from the `closets` table ({ id, lat, lon, timezone, … }).
+ * Cached per closet id so switching closets never stomps the other closet's
+ * forecast. Falls back to the NYC path when the closet is missing or lacks
+ * usable coordinates.
+ */
+export async function fetchClosetForecast(closet) {
+  const lat = Number(closet?.lat);
+  const lon = Number(closet?.lon);
+  if (!closet?.id || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return fetchNycForecast();
+  }
+  return fetchForecastAt(lat, lon, closet.timezone || "America/New_York",
+    `${CLOSET_CACHE_PREFIX}:${closet.id}:v2`);
 }
 
 /**

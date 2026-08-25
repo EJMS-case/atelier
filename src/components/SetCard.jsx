@@ -1,6 +1,8 @@
 import { ss } from "../ui/styles.js";
 
-export default function SetCard({ group, index, onEdit }) {
+// `isSplit` (wave 2 — B6): the set's pieces span more than one closet. Surface
+// only — a visible, non-blocking flag; nothing is auto-fixed.
+export default function SetCard({ group, index, isSplit, onEdit }) {
   const thumbItems = group.items.slice(0, 4);
   const name = group.name || `Set ${index + 1}`;
   return (
@@ -31,6 +33,11 @@ export default function SetCard({ group, index, onEdit }) {
       <div style={ss.cardBody}>
         <div style={ss.cardName}>{name}</div>
         <div style={ss.cardCount}>{group.items.length} piece{group.items.length !== 1 ? "s" : ""}</div>
+        {isSplit && (
+          <div style={ss.splitFlag} title="This set's pieces live in different closets">
+            ⚠ split across closets
+          </div>
+        )}
         {group.tags.length > 0 && (
           <div style={ss.cardTags}>
             {group.tags.map(t => <span key={t} style={ss.tagChip}>{t}</span>)}

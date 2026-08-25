@@ -7,8 +7,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { flattenPlanItemIds } from "../planner/outfits.js";
 import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
-import { nyToday, friendlyDate, addDaysIso } from "../../lib/time.js";
-import { fetchNycForecast } from "../../lib/weather.js";
+import { nyToday, todayInTz, friendlyDate, addDaysIso } from "../../lib/time.js";
+import { fetchClosetForecast } from "../../lib/weather.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
 // Resurface eligibility — real restyle-worthy garments only (no tees, no
 // activewear brands, no comfort-coded pieces, nothing she filed at f≤2).
@@ -19,7 +19,7 @@ import { autoColorPairs, rotateDaily, hexForColorLabel, seasonalBucketForDate } 
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop }) {
+export default function HomeView({ items, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -58,18 +58,22 @@ export default function HomeView({ items, favorites, apiKey, plans, wearStats, o
 
   const topWorn   = useMemo(() => mostWornItems(wearItems, 5), [wearItems]);
 
-  // Today's NYC weather bucket (cached 6h by lib/weather.js) — the neglected
-  // list is only useful if what it surfaces is wearable THIS week, not a wool
-  // coat in August. Null until the forecast resolves (or on failure), in which
-  // case the list simply isn't season-filtered.
+  // Today's weather bucket at the ACTIVE CLOSET's location (cached 6h by
+  // lib/weather.js; NYC fallback when the closet lacks coords) — the
+  // neglected list is only useful if what it surfaces is wearable THIS week,
+  // not a wool coat in August. Null until the forecast resolves (or on
+  // failure), in which case the list simply isn't season-filtered.
   const [todayBucket, setTodayBucket] = useState(null);
   useEffect(() => {
     let live = true;
-    fetchNycForecast()
-      .then(f => { if (live) setTodayBucket(f?.[todayIso]?.bucket || null); })
+    fetchClosetForecast(activeCloset)
+      // The forecast map is keyed by the closet's LOCAL dates — look up the
+      // closet's "today", not NY's.
+      .then(f => { if (live) setTodayBucket(f?.[todayInTz(activeCloset?.timezone)]?.bucket || null); })
       .catch(() => {});
     return () => { live = false; };
-  }, [todayIso]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayIso, activeCloset?.id]);
 
   // Back in Rotation = restyle-worthy garments only (isResurfaceCandidate: no
   // tees / activewear / lounge / swim, per the owner). Season-aware ALWAYS —

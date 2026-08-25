@@ -14,7 +14,10 @@ import Thumb from "./Thumb.jsx";
 // lose her words.
 const NOTES_CLAMP_CHARS = 60;
 
-function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, onStyleItem }) {
+// `isPacked` (wave 2, trips): true while the item sits in the active trip's
+// suitcase — shows a subtle 🧳 corner badge so packed pieces read apart from
+// destination-closet ones during a trip.
+function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, isPacked, onToggleFav, onStyleItem }) {
   const [confirm,   setConfirm]   = useState(false);
   const [showSet,   setShowSet]   = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -31,6 +34,9 @@ function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, 
             onClick={e => { e.stopPropagation(); setShowSet(v => !v); }}>
             Part of Set
           </button>
+        )}
+        {isPacked && (
+          <div style={s.packedBadge} title="Packed for your trip">🧳</div>
         )}
       </div>
       {showSet && <SetPanel item={item} allItems={allItems} onClose={() => setShowSet(false)}/>}

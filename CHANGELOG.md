@@ -2,6 +2,44 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Multi-closet Phase B: trips bridge the closets, packing is outfit-first — 2026-08-25
+
+### Why
+Owner brief Phase B (owner: "Go ahead with phase B!"). Trips are the temporary bridge between closets: in Arizona she dresses from mom's closet + whatever she packed, as one flat pool; the packing list exists only because specific outfits need specific pieces.
+
+### Added
+- **Migration 0021** (applied live): trips gains `user_id` / `destination_closet_id` / `destination_city` / `status` (planning | active | complete — existing 4 trips backfilled); new `trip_items` (trip_id, item_id, status suggested | packed | left_behind, `outfit_ids` linking each piece to the outfits that require it).
+- **THE pool rule** (`useVisibleWardrobe.js`, unit-tested): no active trip → active closet; active trip → destination closet ∪ packed items (suitcase-only when no destination closet). App's one scoping memo delegates to it; the header chip shows ✈ trip mode and explains that closet switches wait until the trip ends.
+- **Outfit-first packing**: the trip packer and per-day AI generation prefer pieces already at the destination (`PREFER_BONUS` calibrated under occasion/capsule penalties, over tie-jitter/reuse); only what a look can't source there gets pulled from home. Pinning a trip records every pulled piece as a 'suggested' trip_item with its outfit links; TripModal's packing preview shows pulled-only + an "already at destination" count.
+- **Packing checklist** (TripDetailView): tick = packed, untick = suggested (optimistic, reverting). **Unticking regenerates every outfit that depended on the piece** (pool = destination ∪ packed ∪ suggested minus it) and a single reconcile site (`packingSync.js`, 25 tests) keeps trip_items ≡ outfit references — a piece no outfit needs leaves the list (packed ones surface "no longer needed — unpack it"). Close suitcase = "Everything's packed" or "Close with N unpacked" (regenerates around them).
+- **Trip lifecycle**: Start trip (blocks if another is active — strict read, fails closed) → ✈ active; Mark complete → **"Anything staying in <destination>?"** modal over packed pieces: flagged → left_behind + `closet_id` permanently moved to the destination closet; everything else needs no change (packing never moved closets). Pool reverts to the active closet.
+- **🧳 badge** on wardrobe-grid cards for packed pieces during an active trip; **"⚠ split across closets"** flag on set cards whose members span closets (surface only — no auto-fix, no blocking).
+
+### Review pass
+Independent review found four issues, fixed: a pending reconcile could mutate a just-completed trip (status now read through a ref + effect dep), a reconcile upsert could clobber a concurrent 'packed' tick (existing rows now get outfit_ids-only PATCHes), the one-active-trip guard silently passed on read failure (now strict), and a third copy of the temperature-fallback chain (deduped).
+
+### Tests
+packing-sync 25, visible-wardrobe 12, trip-packer 73 (+12 preference); full battery + build green.
+
+## [Unreleased] — Multi-closet Phase A: NYC + Arizona closets, one mode switch — 2026-08-24
+
+### Why
+Owner brief: part of the wardrobe lives at her mom's in Arizona (Scottsdale — confirmed with her). One wardrobe split across two rooms; the app should only show the room she's standing in. Phase A is the closets layer; Phase B (trips + outfit-first packing) follows after her report-back.
+
+### Added
+- **Migrations 0019/0020** (applied to live DB after a verified backup — `/backups/*_20260824T204441Z.json` + DB snapshots `*_backup_20260824`, counts 480/41/101 confirmed): `closets` table (NYC default + Arizona — Mom's, fixed ids, per-closet lat/lon/timezone) and `wardrobe_items.closet_id`, backfilled to NYC (480/480 verified), then NOT NULL with NYC default so the deployed client keeps working.
+- **Header closet chip** — a mode switch next to the brand, not a filter: popover lists closets (✓ + city); switching flips the app's entire universe and persists per device (`atelier:active-closet:v1`).
+- **One scoping point**: `closetItems` memo in App is THE place closet filtering happens; grid, search, FilterBar, sets, Style Me, planner, Home, Saved, Insights, Shopping, profile/discovery/vision/color views all consume it. Full `items` reserved for sync machinery and Settings' closet-agnostic orphan scan (`sb.fetchAll` stays unfiltered — mergeItems would prune other closets from the local cache otherwise).
+- **Edit form "Closet" select** (moves a piece on save) and **bulk move**: Select toggle on the closet grid → tap-to-✓ cards → sticky bar "Move to <closet>" via one `id=in.(…)` PATCH (`sb.setClosetBulk`), optimistic with targeted revert on failure.
+- **Weather follows the active closet** (`fetchClosetForecast`, per-closet cache keys): Style Me auto-chip, planner pill + day-assign suggestion (label now shows the closet's city), and Home's Back-in-Rotation season filter all read Scottsdale when the Arizona closet is active. Trip destination forecasts unchanged.
+- New items (add/bulk-add) land in the active closet; `closet_id` missing locally = NYC.
+
+### Out of scope (per brief)
+Geolocation, outfit_logs changes, third closet types, anything in Style Intelligence/Shopping beyond scoping. Phase B (trips/packing) not started — trips table will be EXTENDED (owner-confirmed), not replaced.
+
+### Tests
+Full battery (19 suites) + build green.
+
 ## [Unreleased] — Sky-blue swatch fix; combos freed from the palette rule (chic-only, no neons) — 2026-08-20
 
 ### Why

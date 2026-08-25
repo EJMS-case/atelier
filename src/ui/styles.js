@@ -24,6 +24,21 @@ export const s = {
   navActive: { color:"var(--color-surface)" },
   badge: { background:"var(--color-accent)", color:"var(--color-ink)", borderRadius:10, padding:"1px 6px", fontSize:10, fontFamily:"sans-serif" },
 
+  // Active-closet chip + switcher popover (multi-closet, Phase A). The chip
+  // sits in the header next to the brand and reads as a mode switch — the
+  // name truncates on narrow phones instead of pushing the nav off-screen.
+  closetChip: { display:"flex", alignItems:"center", gap:4, background:"var(--color-ink-2)", border:"1px solid var(--color-border-muted)", color:"var(--color-surface)", borderRadius:12, padding:"3px 9px", fontSize:10, letterSpacing:"0.06em", cursor:"pointer", flexShrink:1, minWidth:0, maxWidth:120 },
+  closetChipName: { overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
+  closetMenu: { position:"absolute", top:"calc(100% + 6px)", left:0, background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, boxShadow:"0 8px 24px rgba(0,0,0,0.18)", padding:4, minWidth:180, zIndex:120 },
+  closetMenuItem: { display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1, width:"100%", background:"none", border:"none", borderRadius:6, padding:"8px 10px", fontSize:12, color:"var(--color-ink)", cursor:"pointer", textAlign:"left" },
+  closetMenuItemActive: { background:"var(--color-surface)", fontWeight:600 },
+  closetMenuCity: { fontSize:10, color:"var(--color-text-muted)", fontWeight:400 },
+
+  // Bulk "move to closet" select mode (closet grid). ✓ overlay badge on
+  // selected cards + the sticky bottom action bar.
+  selectBadge: { position:"absolute", top:6, right:6, background:"var(--color-ink)", color:"var(--color-surface)", borderRadius:"50%", width:22, height:22, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12 },
+  bulkBar: { position:"fixed", bottom:0, left:0, right:0, zIndex:70, background:"#fff", borderTop:"1px solid var(--color-border)", boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", padding:"10px 16px calc(10px + env(safe-area-inset-bottom))", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" },
+
   // Page
   page: { maxWidth:900, margin:"0 auto", padding:"24px 20px 160px", position:"relative" },
   pageHeader: { display:"flex", alignItems:"center", gap:14, marginBottom:24 },
@@ -164,6 +179,9 @@ export const s = {
 
   // ── Sets
   setBadge: { position:"absolute", top:6, left:6, background:"rgba(28,24,20,0.75)", color:"var(--color-surface)", fontSize:8, letterSpacing:"0.1em", padding:"3px 7px", borderRadius:3, border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
+  // Packed-for-trip marker (wave 2): subtle 🧳 corner mini-badge on closet-grid
+  // cards while a trip is active — mirrors setBadge's chrome, opposite corner.
+  packedBadge: { position:"absolute", top:6, right:6, background:"rgba(28,24,20,0.55)", borderRadius:10, padding:"2px 6px", fontSize:10, lineHeight:1, pointerEvents:"none" },
   setPanel: { background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, margin:"0 0 10px", padding:"12px 14px", animation:"fadeIn 0.2s ease" },
   setPanelHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 },
   setPanelTitle: { fontSize:10, letterSpacing:"0.18em", color:"var(--color-text-2)" },
@@ -277,6 +295,9 @@ export const ss = {
   cardBody: { padding: "10px 12px 12px" },
   cardName: { fontSize: 14, fontWeight: 500, color: "var(--color-ink)", letterSpacing: "0.02em", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'DM Sans',sans-serif" },
   cardCount: { fontSize: 10, color: "var(--color-text-muted)", letterSpacing: "0.08em", marginBottom: 6 },
+  // B6 split-sets flag: visible but non-blocking — amber matches the app's
+  // other soft warnings (gapAlert / colorException).
+  splitFlag: { fontSize: 9, letterSpacing: "0.06em", color: "#8B6914", marginBottom: 6 },
   cardTags: { display: "flex", gap: 4, flexWrap: "wrap" },
   tagChip: { fontSize: 9, letterSpacing: "0.06em", color: "var(--color-text-2)", background: "var(--color-surface)", borderRadius: 10, padding: "2px 8px" },
   modalItem: { display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", background: "var(--color-surface-2)", borderRadius: 6, cursor: "pointer", border: "1px solid var(--color-border-soft)" },
