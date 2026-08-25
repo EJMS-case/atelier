@@ -23,7 +23,7 @@ import {
   migrateLocalStorage,
 } from "./utils/storage.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
-import { resolveVisibleWardrobe } from "./features/closet/useVisibleWardrobe.js";
+import { resolveVisibleWardrobe, packedItemIds } from "./features/closet/useVisibleWardrobe.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import { fetchClosetForecast } from "./lib/weather.js";
@@ -355,6 +355,40 @@ export default function App() {
     () => resolveVisibleWardrobe({ items, activeClosetId: activeCloset.id, activeTrip, tripItems: activeTripItems }),
     [items, activeCloset.id, activeTrip, activeTripItems],
   );
+
+  // Suitcase pieces during an ACTIVE trip (wave 2 — packed-item marker). The
+  // closet grid badges these 🧳 so packed pieces read apart from destination-
+  // closet ones at a glance. null when no trip → no markers anywhere.
+  const packedIds = useMemo(
+    () => (activeTrip ? packedItemIds(activeTripItems) : null),
+    [activeTrip, activeTripItems],
+  );
+
+  // Coord sets split across closets (wave 2 — B6). Computed over the FULL
+  // wardrobe (a split is invisible from inside one closet by definition);
+  // missing closet_id counts as the default/NYC closet, same as everywhere.
+  const splitSetIds = useMemo(() => {
+    const closetsBySet = new Map();
+    for (const it of items) {
+      if (!it.set_id) continue;
+      const c = it.closet_id || DEFAULT_CLOSET_ID;
+      if (!closetsBySet.has(it.set_id)) closetsBySet.set(it.set_id, new Set());
+      closetsBySet.get(it.set_id).add(c);
+    }
+    return new Set([...closetsBySet].filter(([, cs]) => cs.size > 1).map(([id]) => id));
+  }, [items]);
+
+  // B5 trip-complete hygiene: after left-behind pieces are reassigned on the
+  // server (sb.setClosetBulk in TripDetailView), mirror the closet change into
+  // App's local items so the grids agree without a full reload.
+  const applyItemsClosetChange = useCallback((ids, closetId) => {
+    const idSet = new Set(ids);
+    setItems(prev => {
+      const next = prev.map(it => idSet.has(it.id) ? { ...it, closet_id: closetId } : it);
+      saveLocalItems(next);
+      return next;
+    });
+  }, []);
 
   // ── Auto-populate today's weather from the active closet's forecast.
   // Weather stays editable — the user can override any chip at any time.
@@ -1406,6 +1440,7 @@ export default function App() {
           onDelete={deleteItem}
           onEdit={handleEditItemCard}
           isFavorited={favPieceIds.has(item.id)}
+          isPacked={!!packedIds?.has(item.id)}
           onToggleFav={handleToggleFavPiece}
           onStyleItem={styleWithItem}/>
       );
@@ -1687,6 +1722,7 @@ export default function App() {
                       key={group.setId}
                       group={group}
                       index={gi}
+                      isSplit={splitSetIds.has(group.setId)}
                       onEdit={() => setEditingSet(group.setId)}
                     />
                   ))}
@@ -2134,6 +2170,7 @@ export default function App() {
             closets={closets}
             activeCloset={activeCloset}
             onRefreshActiveTrip={refreshActiveTrip}
+            onItemsClosetChanged={applyItemsClosetChange}
             apiKey={apiKey}
             onGoToStyleMe={() => setView("style")}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}

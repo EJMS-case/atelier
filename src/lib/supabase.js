@@ -680,24 +680,48 @@ export const sb = {
   // The single ACTIVE trip, if any. Pool resolution (useVisibleWardrobe.js)
   // keys off this row; soft-fails to null so the app boots closet-scoped when
   // offline or on a pre-migration project.
-  async fetchActiveTrip() {
+  // Soft-fails to null by default (App's mount fetch). Pass {strict: true}
+  // where "couldn't read" must NOT be mistaken for "no active trip" — the
+  // only-one-active-trip guard in Start Trip fails closed on it.
+  async fetchActiveTrip({ strict = false } = {}) {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/trips?status=eq.active&order=start_date.desc&limit=1`,
         { headers: SB_HEADERS },
       );
-      if (!res.ok) return null;
-      const rows = await res.json().catch(() => []);
+      if (!res.ok) throw new Error("Fetch active trip failed");
+      const rows = await res.json();
       return (Array.isArray(rows) && rows[0]) || null;
-    } catch { return null; }
+    } catch (e) {
+      if (strict) throw e;
+      return null;
+    }
   },
+  // outfit_ids-only refresh for an EXISTING trip_items row. A PATCH (not an
+  // upsert) so a status change racing in from the packing checklist is never
+  // clobbered back by a reconcile.
+  async updateTripItemOutfits(tripId, itemId, outfitIds) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=eq.${encodeURIComponent(itemId)}`,
+      {
+        method: "PATCH",
+        headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+        body: JSON.stringify({ outfit_ids: outfitIds }),
+      },
+    );
+    if (!res.ok) throw new Error("Trip item outfit_ids update failed");
+  },
+  // Throws on failure (rather than soft-[] like the fetchers above): the
+  // wave-2 reconcile must distinguish "no rows" from "couldn't read" — an
+  // error mistaken for an empty list would clobber packed statuses. Both
+  // callers catch (App soft-fails to [], TripDetailView keeps its last copy).
   async fetchTripItems(tripId) {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&select=*`,
       { headers: SB_HEADERS },
     );
-    if (!res.ok) return [];
-    return res.json().catch(() => []);
+    if (!res.ok) throw new Error(`fetchTripItems failed ${res.status}`);
+    return res.json();
   },
   // Replace a trip's trip_items wholesale: DELETE then bulk POST (PostgREST
   // accepts an array body). Used when (re)pinning a trip's outfits — the row
@@ -715,6 +739,31 @@ export const sb = {
     });
     if (!res.ok) throw new Error(`replaceTripItems insert failed ${res.status}`);
     return res.json();
+  },
+  // Targeted upsert (wave 2 reconcile): insert new rows / refresh outfit_ids
+  // on existing ones without the full DELETE+POST of replaceTripItems —
+  // a wholesale replace would wipe packed statuses the reconcile must keep.
+  async upsertTripItems(rows = []) {
+    if (!rows.length) return [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trip_items?on_conflict=trip_id,item_id`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) throw new Error(`upsertTripItems failed ${res.status}`);
+    return res.json();
+  },
+  // Targeted delete (wave 2 reconcile): rows no longer referenced by any
+  // outfit come off the list. item_id is TEXT (wardrobe ids), so encode.
+  async deleteTripItems(tripId, itemIds = []) {
+    const list = [...new Set(itemIds)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=in.(${inList})`,
+      { method: "DELETE", headers: SB_HEADERS },
+    );
+    if (!res.ok) throw new Error(`deleteTripItems failed ${res.status}`);
   },
   // Bulk status flip (suggested | packed | left_behind) — same id=in.(…)
   // pattern as setLastWornBulk. item_id is TEXT (wardrobe ids), so encode.

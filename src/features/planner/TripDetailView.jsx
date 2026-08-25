@@ -3,8 +3,13 @@
 // plus a packing tab that groups all unique items by category with worn-day
 // counts and coverage warnings.
 
-import { useEffect, useMemo, useState } from "react";
-import { fetchPlansBetween, savePlan, deletePlan, updateTrip, deleteTrip } from "./plannerApi.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  fetchPlansBetween, savePlan, deletePlan, updateTrip, deleteTrip,
+  fetchActiveTrip, fetchTripItems, upsertTripItems, deleteTripItems, setTripItemStatus, updateTripItemOutfits,
+} from "./plannerApi.js";
+import { sb } from "../../lib/supabase.js";
+import { reconcileTripItems } from "./packingSync.js";
 import { analyzeTripDestination, generateTripDayLook } from "../../lib/ai/tripAdvisor.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
@@ -13,7 +18,7 @@ import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps } from "./outfits.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
-import { TRIP_ACTIVITIES } from "./tripPacker.js";
+import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
@@ -83,8 +88,12 @@ function healPlan(r) {
  * @param {string}   props.apiKey
  * @param {Function} props.onBack
  * @param {Function} props.onBuildDay - (iso, existingItemIds) → opens SilhouetteBuilder
+ * @param {Function} [props.onRefreshActiveTrip] - re-syncs App's trip-mode pool after
+ *                                      status/packing changes (wave 2)
+ * @param {Function} [props.onItemsClosetChanged] - (ids, closetId) → patch App's local
+ *                                      items state after a bulk closet reassign (B5)
  */
-export default function TripDetailView({ trip: initialTrip, items, allItems, closets, apiKey, onBack, onBuildDay }) {
+export default function TripDetailView({ trip: initialTrip, items, allItems, closets, apiKey, onBack, onBuildDay, onRefreshActiveTrip, onItemsClosetChanged }) {
   // Local copy so "+ Add day" can mutate end_date without re-fetching the
   // trip list. Re-syncs to the parent's prop if the user picks a different
   // trip (handled by the useEffect on initialTrip.id below).
@@ -93,6 +102,17 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
 
   const [tab, setTab] = useState("looks");
   const [plans, setPlans] = useState({});       // { iso: plan }
+  // True only after a SUCCESSFUL plans fetch — the trip_items reconcile below
+  // must never run against an empty map that just means "offline".
+  const [plansLoaded, setPlansLoaded] = useState(false);
+  // ── Packing checklist state (wave 2 — B4) ──
+  const [tripItems, setTripItems] = useState([]);          // trip_items rows
+  const [tripItemsLoaded, setTripItemsLoaded] = useState(false);
+  const [packedNote, setPackedNote] = useState("");        // "no longer needed" notice
+  const [statusBusy, setStatusBusy] = useState(false);     // start / complete in flight
+  const [closeBusy, setCloseBusy] = useState(false);       // suitcase-close in flight
+  const [completeModalOpen, setCompleteModalOpen] = useState(false);
+  const [stayingIds, setStayingIds] = useState(new Set()); // B5 "staying behind" picks
   const [brief, setBrief] = useState(() => parseBrief(trip.notes));
   const [briefLoading, setBriefLoading] = useState(false);
   const [generatingDay, setGeneratingDay] = useState(null); // iso
@@ -151,10 +171,27 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
         }
       }
       setPlans(map);
+      setPlansLoaded(true);
     } catch { /* silent — planner still usable offline */ }
   };
 
-  useEffect(() => { refreshPlans(); /* eslint-disable-line */ }, [trip.id]);
+  useEffect(() => { setPlansLoaded(false); refreshPlans(); /* eslint-disable-line */ }, [trip.id]);
+
+  // Fetch the trip's checklist rows. fetchTripItems THROWS on failure so an
+  // unreadable list is never mistaken for an empty one — tripItemsLoaded
+  // stays false and the reconcile below won't run against a lie.
+  const refreshTripItems = async () => {
+    try {
+      const rows = await fetchTripItems(trip.id);
+      setTripItems(Array.isArray(rows) ? rows : []);
+      setTripItemsLoaded(true);
+    } catch { /* leave whatever we had */ }
+  };
+  useEffect(() => {
+    setTripItems([]); setTripItemsLoaded(false); setPackedNote("");
+    refreshTripItems();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip.id]);
 
   // Fetch destination brief once, save to trips.notes so it's free next time
   useEffect(() => {
@@ -224,6 +261,339 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // trip pool (deleted items, etc.). Resolves against the MERGED pool so a
   // destination-closet piece renders even while the home closet is active.
   const resolveItems = (ids) => resolveItemIds(genItems, ids);
+
+  // FULL-wardrobe lookup — the packing checklist + reconcile must see every
+  // item regardless of the current pool scoping (during an ACTIVE trip the
+  // scoped `items` prop excludes still-suggested home pieces, which are
+  // exactly the rows the checklist is about).
+  const wardrobeAll = (allItems && allItems.length) ? allItems : items;
+  const itemsById = useMemo(
+    () => new Map(wardrobeAll.map(it => [it.id, it])),
+    [wardrobeAll],
+  );
+
+  // ── Trip_items reconcile (wave 2 — B4) ────────────────────────────────────
+  // ONE reconcile site for the whole view (per the handoff warning about the
+  // 7 drifting copies elsewhere): a debounced effect watches `plans` and
+  // diffs the outfits against trip_items via the pure packingSync helper —
+  // newly pulled pieces appear as 'suggested', rows nothing references any
+  // more are deleted (packed ones surface a "no longer needed" note). Every
+  // mutation path (AI regen, build, move, untick regeneration, close
+  // suitcase) funnels through here just by updating `plans`.
+  const plansRef = useRef(plans);
+  plansRef.current = plans;
+  const tripItemsRef = useRef(tripItems);
+  tripItemsRef.current = tripItems;
+  // Status read through a ref: a debounced/chained reconcile must see the
+  // status at EXECUTION time, not the render it was scheduled in — otherwise
+  // a pending run could mutate trip_items on a just-completed trip.
+  const tripStatusRef = useRef(trip.status);
+  tripStatusRef.current = trip.status;
+  // Serialize runs so overlapping plan updates can't interleave diffs.
+  const reconcileChainRef = useRef(Promise.resolve());
+
+  async function applyReconcile() {
+    if (tripStatusRef.current === "complete") return;
+    // Cold-start guard: an unloaded wardrobe would read as "every item was
+    // deleted" and wipe the checklist. No items → no reconcile.
+    if (itemsById.size === 0) return;
+    // Snapshot BEFORE the optimistic apply below: the insert/update split in
+    // the write phase must reflect what the SERVER knows, and the ref may
+    // re-render to include the optimistic rows before the writes run.
+    const priorRows = tripItemsRef.current || [];
+    const { rowsToUpsert, idsToDelete, removedPackedIds } = reconcileTripItems({
+      tripId: trip.id,
+      plans: plansRef.current,
+      tripItems: priorRows,
+      destClosetId,
+      itemsById,
+    });
+    if (rowsToUpsert.length === 0 && idsToDelete.length === 0) return;
+    // Optimistic local apply; a failed remote write re-syncs from the server.
+    setTripItems(prev => {
+      const del = new Set(idsToDelete);
+      const upsertBy = new Map(rowsToUpsert.map(r => [r.item_id, r]));
+      const seen = new Set();
+      const next = prev
+        .filter(r => !del.has(r.item_id))
+        .map(r => { seen.add(r.item_id); return upsertBy.has(r.item_id) ? { ...r, ...upsertBy.get(r.item_id) } : r; });
+      for (const r of rowsToUpsert) if (!seen.has(r.item_id)) next.push(r);
+      return next;
+    });
+    if (removedPackedIds.length > 0) {
+      const names = removedPackedIds.map(id => itemsById.get(id)?.name || id).join(", ");
+      setPackedNote(`${names} — no longer needed by any outfit. Unpack ${removedPackedIds.length === 1 ? "it" : "them"}.`);
+    }
+    try {
+      // Existing rows get an outfit_ids-only PATCH so a status tick racing in
+      // from the checklist is never clobbered back to 'suggested'; only rows
+      // the server hasn't seen are POSTed whole.
+      const known = new Set(priorRows.map(r => r.item_id));
+      const inserts = rowsToUpsert.filter(r => !known.has(r.item_id));
+      const updates = rowsToUpsert.filter(r => known.has(r.item_id));
+      if (inserts.length) await upsertTripItems(inserts);
+      for (const r of updates) await updateTripItemOutfits(trip.id, r.item_id, r.outfit_ids);
+      if (idsToDelete.length) await deleteTripItems(trip.id, idsToDelete);
+      if (tripStatusRef.current === "active") onRefreshActiveTrip?.();
+    } catch {
+      refreshTripItems();
+    }
+  }
+  const runReconcile = () => {
+    reconcileChainRef.current = reconcileChainRef.current
+      .then(() => applyReconcile())
+      .catch(() => {});
+    return reconcileChainRef.current;
+  };
+  useEffect(() => {
+    if (!plansLoaded || !tripItemsLoaded || trip.status === "complete") return;
+    const t = setTimeout(runReconcile, 600);
+    // trip.status in the deps: completing the trip cancels a pending run
+    // (and the status ref stops any already-queued chain entry).
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plans, plansLoaded, tripItemsLoaded, trip.status]);
+
+  // Packing temperature for one day — tempHighForDay's forecast→brief chain
+  // with the seasonal last resort (one priority rule, defined once above).
+  const highForDay = (iso) =>
+    tempHighForDay(iso) ?? SEASONAL_HIGHS[new Date(iso + "T00:00:00Z").getMonth()];
+
+  // Which outfit ids currently reference an item (across the whole trip).
+  const outfitIdsFor = (itemId) => {
+    const out = new Set();
+    for (const iso of days) {
+      for (const o of outfitsOf(plans[iso])) {
+        if ((o.items || []).includes(itemId)) out.add(o.id);
+      }
+    }
+    return [...out].sort();
+  };
+
+  // ── Untick regeneration (wave 2 — the "broken outfit" rule) ───────────────
+  // Pool for rebuilding outfits that lost a piece: destination-closet items
+  // ∪ everything still in the suitcase (packed + suggested) MINUS the pieces
+  // being excluded. Deliberately NOT the whole home closet — mid-packing the
+  // suitcase is committed; regeneration works with what's actually coming.
+  function regenPool(excludedIds) {
+    const inSuitcase = new Set(
+      tripItemsRef.current
+        .filter(r => r.status === "packed" || r.status === "suggested")
+        .map(r => r.item_id),
+    );
+    return wardrobeAll.filter(it =>
+      !excludedIds.has(it.id) &&
+      ((destClosetId && closetOf(it) === destClosetId) || inSuitcase.has(it.id)),
+    );
+  }
+
+  // Single-outfit rebuild through the tripPacker (same shape as the
+  // TripModal's buildOneOutfit): one-day build seeded with the rest of the
+  // trip's wear counts so the capsule holds together.
+  function buildReplacementItems(pool, iso, outfit, runningPlans) {
+    const priorUse = {};
+    for (const d of days) {
+      for (const o of outfitsOf(runningPlans[d])) {
+        if (o.id === outfit.id) continue;
+        for (const id of (o.items || [])) priorUse[id] = (priorUse[id] || 0) + 1;
+      }
+    }
+    const dayIdx = days.indexOf(iso);
+    const prevDayIds = dayIdx > 0
+      ? outfitsOf(runningPlans[days[dayIdx - 1]]).flatMap(o => o.items || [])
+      : [];
+    const single = buildDailyOutfits(pool, [highForDay(iso)], {
+      occasions: [normalizeOccasion(outfit.occasion) || "Casual"],
+      activities: [dayActivity[iso] || trip.activity || "Sightseeing"],
+      priorUse,
+      prevDayIds,
+      tripDayCount: days.length,
+      preferItemIds,
+    });
+    return (single.dailyOutfits?.[0] || []).map(it => it.id);
+  }
+
+  // Rebuild every outfit that references any of `excluded`, persisting each
+  // affected day through the existing persistPlan path. The reconcile effect
+  // (plus the explicit runReconcile below) then drops the excluded rows.
+  async function regenerateWithout(excluded) {
+    const pool = regenPool(excluded);
+    const running = { ...plansRef.current };
+    for (const iso of days) {
+      const existing = outfitsOf(running[iso]);
+      if (existing.length === 0) continue;
+      let dayChanged = false;
+      const next = existing.map(o => {
+        if (!(o.items || []).some(id => excluded.has(id))) return o;
+        dayChanged = true;
+        // An all-swim "Pool" look can't be rebuilt by the regular composer —
+        // just drop the excluded piece(s) from it.
+        const resolved = resolveItemIds(wardrobeAll, o.items);
+        const isPool = resolved.length > 0 && resolved.every(it => it.category === "Swim");
+        const kept = (o.items || []).filter(id => !excluded.has(id));
+        if (isPool) return { ...o, items: kept };
+        const rebuilt = buildReplacementItems(pool, iso, o, running).filter(id => !excluded.has(id));
+        // Empty rebuild (pool too thin) → keep the outfit minus the piece
+        // rather than blanking the day.
+        return { ...o, items: rebuilt.length ? rebuilt : kept };
+      });
+      if (!dayChanged) continue;
+      try {
+        const merged = await persistPlan(iso, next);
+        running[iso] = merged;
+      } catch (e) {
+        setError(e.message || `Couldn't restyle ${iso}.`);
+      }
+    }
+    // Early-sync the ref so the immediate reconcile sees the just-persisted
+    // outfits even if React hasn't re-rendered yet (the debounced effect
+    // re-runs with the settled state afterwards either way).
+    plansRef.current = running;
+    await runReconcile();
+  }
+
+  // ── Checkbox tick / untick (wave 2 — B4) ──────────────────────────────────
+  async function handleTickItem(itemId) {
+    const prev = tripItems;
+    const row = tripItems.find(r => r.item_id === itemId);
+    try {
+      if (row) {
+        setTripItems(ts => ts.map(r => r.item_id === itemId ? { ...r, status: "packed" } : r));
+        await setTripItemStatus(trip.id, [itemId], "packed");
+      } else {
+        // Row not reconciled yet (fresh outfit) — create it directly.
+        const newRow = { trip_id: trip.id, item_id: itemId, status: "packed", outfit_ids: outfitIdsFor(itemId) };
+        setTripItems(ts => [...ts, newRow]);
+        await upsertTripItems([newRow]);
+      }
+      if (trip.status === "active") onRefreshActiveTrip?.();
+    } catch {
+      setTripItems(prev);
+      alert("⚠️ Couldn't update the packing list — check your connection and try again.");
+    }
+  }
+
+  async function handleUntickItem(itemId) {
+    const item = itemsById.get(itemId);
+    const affected = outfitIdsFor(itemId).length;
+    const name = item?.name || "this piece";
+    const msg = affected > 0
+      ? `Take "${name}" out of the suitcase? ${affected} outfit${affected === 1 ? "" : "s"} using it will be restyled without it, and it comes off the list.`
+      : `Take "${name}" out of the suitcase?`;
+    if (!window.confirm(msg)) return;
+    const prev = tripItems;
+    // Status flip first (optimistic): if the regeneration below fails, the
+    // outfits are unchanged and a 'suggested' row is still consistent.
+    setTripItems(ts => ts.map(r => r.item_id === itemId ? { ...r, status: "suggested" } : r));
+    try {
+      await setTripItemStatus(trip.id, [itemId], "suggested");
+    } catch {
+      setTripItems(prev);
+      alert("⚠️ Couldn't update the packing list — check your connection and try again.");
+      return;
+    }
+    if (trip.status === "active") onRefreshActiveTrip?.();
+    await regenerateWithout(new Set([itemId]));
+  }
+
+  // ── Close suitcase (wave 2 — B4) ──────────────────────────────────────────
+  const suggestedRows = tripItems.filter(r => r.status === "suggested");
+  const packedRows = tripItems.filter(r => r.status === "packed");
+  const tripItemById = new Map(tripItems.map(r => [r.item_id, r]));
+
+  async function handleEverythingPacked() {
+    if (closeBusy || suggestedRows.length === 0) return;
+    const ids = suggestedRows.map(r => r.item_id);
+    const prev = tripItems;
+    setCloseBusy(true);
+    setTripItems(ts => ts.map(r => r.status === "suggested" ? { ...r, status: "packed" } : r));
+    try {
+      await setTripItemStatus(trip.id, ids, "packed");
+      if (trip.status === "active") onRefreshActiveTrip?.();
+    } catch {
+      setTripItems(prev);
+      alert("⚠️ Couldn't update the packing list — check your connection and try again.");
+    } finally {
+      setCloseBusy(false);
+    }
+  }
+
+  async function handleCloseWithUnpacked() {
+    if (closeBusy || suggestedRows.length === 0) return;
+    const n = suggestedRows.length;
+    if (!window.confirm(
+      `Close the suitcase without ${n} piece${n === 1 ? "" : "s"}? Outfits using them will be restyled from what's packed${destClosetId ? " and what's already at the destination" : ""}, and they come off the list.`,
+    )) return;
+    setCloseBusy(true);
+    try {
+      await regenerateWithout(new Set(suggestedRows.map(r => r.item_id)));
+    } finally {
+      setCloseBusy(false);
+    }
+  }
+
+  // ── Trip activation + completion (wave 2 — status transitions) ────────────
+  async function handleStartTrip() {
+    if (statusBusy) return;
+    setStatusBusy(true);
+    setError("");
+    try {
+      // Only one active trip at a time — block with a clear message rather
+      // than silently demoting the other one. Strict: a failed read must NOT
+      // pass as "no other active trip" (fail closed into the catch below).
+      const other = await fetchActiveTrip({ strict: true });
+      if (other && other.id !== trip.id) {
+        alert(`Finish or complete "${other.destination || other.destination_city || "your other trip"}" first — only one trip can be active at a time.`);
+        return;
+      }
+      await updateTrip(trip.id, { status: "active" });
+      setTrip(prev => ({ ...prev, status: "active" }));
+      await onRefreshActiveTrip?.();
+    } catch (e) {
+      setError(e.message || "Couldn't start the trip.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  function handleCompleteClick() {
+    if (statusBusy) return;
+    // The staying-behind prompt (B5) only makes sense when the trip HAS a
+    // destination closet and something was actually packed.
+    if (destClosetId && packedRows.length > 0) {
+      setStayingIds(new Set());
+      setCompleteModalOpen(true);
+      return;
+    }
+    if (window.confirm("Mark this trip complete? Your closet pool goes back to the active closet.")) {
+      finishTrip([]);
+    }
+  }
+
+  async function finishTrip(stayingIdList) {
+    if (statusBusy) return;
+    setStatusBusy(true);
+    setError("");
+    try {
+      if (destClosetId && stayingIdList.length > 0) {
+        // Data hygiene (B5): pieces staying at the destination get flagged
+        // AND move closets — everything else keeps its home closet_id
+        // (packing never changed it).
+        await setTripItemStatus(trip.id, stayingIdList, "left_behind");
+        await sb.setClosetBulk(stayingIdList, destClosetId);
+        setTripItems(ts => ts.map(r => stayingIdList.includes(r.item_id) ? { ...r, status: "left_behind" } : r));
+        onItemsClosetChanged?.(stayingIdList, destClosetId);
+      }
+      await updateTrip(trip.id, { status: "complete" });
+      setTrip(prev => ({ ...prev, status: "complete" }));
+      setCompleteModalOpen(false);
+      await onRefreshActiveTrip?.();
+    } catch (e) {
+      setError(e.message || "Couldn't complete the trip.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
 
   // Build the priorDays array (everything ALREADY planned on other days)
   // that the AI uses to avoid repeating the hero piece across the trip.
@@ -515,7 +885,9 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
     });
 
     const allIds = Object.keys(itemDays);
-    const usedItems = resolveItemIds(genItems, allIds);
+    // Resolve against the FULL wardrobe: during an ACTIVE trip the scoped
+    // pool excludes still-suggested home pieces — exactly the checklist rows.
+    const usedItems = resolveItemIds(wardrobeAll, allIds);
 
     // Pulled vs at-destination (Phase B): pieces already living in the trip's
     // destination closet don't need carrying — they get a badge instead of a
@@ -560,7 +932,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       warnings,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plans, days, genItems, destClosetId]);
+  }, [plans, days, genItems, wardrobeAll, destClosetId]);
 
   const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
   const weatherBucket = brief ? bucketFromHigh(brief.tempHighF) : null;
@@ -593,6 +965,37 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
             {" · "}{days.length} day{days.length === 1 ? "" : "s"}
             {" · "}{plannedCount}/{days.length} looks planned
           </div>
+        </div>
+
+        {/* ── Trip status (wave 2): planning → Start trip; active → badge +
+            Mark complete; complete → read-only badge. ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0 6px", flexWrap: "wrap" }}>
+          {trip.status === "active" && (
+            <span style={{ padding: "4px 10px", background: PALETTE.ink, color: PALETTE.bg, borderRadius: 12, fontSize: 10, letterSpacing: "0.1em", fontWeight: 600 }}>
+              ✈ ACTIVE TRIP
+            </span>
+          )}
+          {trip.status === "complete" && (
+            <span style={{ padding: "4px 10px", background: PALETTE.cream, color: PALETTE.muted, border: `1px solid ${PALETTE.line}`, borderRadius: 12, fontSize: 10, letterSpacing: "0.1em", fontWeight: 600 }}>
+              ✓ TRIP COMPLETE
+            </span>
+          )}
+          {trip.status === "active" ? (
+            <button onClick={handleCompleteClick} disabled={statusBusy}
+              style={{ padding: "5px 12px", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: statusBusy ? "default" : "pointer", opacity: statusBusy ? 0.6 : 1 }}>
+              {statusBusy ? "Saving…" : "✓ Mark trip complete"}
+            </button>
+          ) : trip.status !== "complete" ? (
+            <button onClick={handleStartTrip} disabled={statusBusy}
+              style={{ padding: "5px 12px", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: statusBusy ? "default" : "pointer", opacity: statusBusy ? 0.6 : 1 }}>
+              {statusBusy ? "Starting…" : "✈ Start trip"}
+            </button>
+          ) : null}
+          {trip.status === "active" && (
+            <span style={{ fontSize: 10, color: PALETTE.muted }}>
+              Pool = {destClosetId ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination closet") : "suitcase only"} + packed pieces
+            </span>
+          )}
         </div>
 
         {/* Climate brief */}
@@ -951,6 +1354,36 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
             );
           })()}
 
+          {/* ── Suitcase checklist summary + close actions (wave 2 — B4) ── */}
+          {packedNote && (
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "#FFF8EC", border: "1px solid #E8D5A0", borderRadius: 6, fontSize: 11, color: "#8B6914", lineHeight: 1.5 }}>
+              🧳 {packedNote}
+              <button onClick={() => setPackedNote("")} style={{ marginLeft: 8, background: "none", border: "none", color: "#8B6914", cursor: "pointer", fontSize: 11, padding: 0 }}>✕</button>
+            </div>
+          )}
+          {trip.status !== "complete" && tripItemsLoaded && (packedRows.length > 0 || suggestedRows.length > 0) && (
+            <div style={{ marginBottom: 14, padding: "10px 12px", background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: PALETTE.ink, fontWeight: 500, marginBottom: suggestedRows.length > 0 ? 8 : 0 }}>
+                🧳 Suitcase: {packedRows.length} packed
+                {suggestedRows.length > 0
+                  ? ` · ${suggestedRows.length} still unpacked`
+                  : packedRows.length > 0 ? " · all set ✓" : ""}
+              </div>
+              {suggestedRows.length > 0 && (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={handleEverythingPacked} disabled={closeBusy}
+                    style={{ flex: 1, padding: "7px 0", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.08em", cursor: closeBusy ? "default" : "pointer", opacity: closeBusy ? 0.6 : 1 }}>
+                    ✓ Everything's packed
+                  </button>
+                  <button onClick={handleCloseWithUnpacked} disabled={closeBusy}
+                    style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.08em", cursor: closeBusy ? "default" : "pointer", opacity: closeBusy ? 0.6 : 1 }}>
+                    {closeBusy ? "Restyling…" : `Close with ${suggestedRows.length} unpacked`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Coverage warnings */}
           {packingData.warnings.length > 0 && (
             <div style={{ marginBottom: 14, padding: "10px 12px", background: "#FBE9E7", borderLeft: `3px solid ${PALETTE.accent}`, borderRadius: "0 6px 6px 0" }}>
@@ -974,8 +1407,28 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
                 {category} ({entries.length})
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {entries.map(({ item, days: wornDays, atDest }) => (
-                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: PALETTE.cream, borderRadius: 6 }}>
+                {entries.map(({ item, days: wornDays, atDest }) => {
+                  const row = tripItemById.get(item.id);
+                  const isPacked = row?.status === "packed";
+                  const isLeftBehind = row?.status === "left_behind";
+                  return (
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: PALETTE.cream, borderRadius: 6, opacity: isLeftBehind ? 0.6 : 1 }}>
+                    {/* Checklist checkbox (wave 2): pulled pieces only — the
+                        at-destination group needs no packing. ticked = 'packed',
+                        untick = out of the suitcase (regenerates its outfits). */}
+                    {!atDest && trip.status !== "complete" && (
+                      <input type="checkbox"
+                        checked={isPacked}
+                        disabled={!tripItemsLoaded}
+                        onChange={() => isPacked ? handleUntickItem(item.id) : handleTickItem(item.id)}
+                        title={isPacked ? "Packed — untick to take it out of the suitcase" : "Tick when it's in the suitcase"}
+                        style={{ width: 16, height: 16, flexShrink: 0, accentColor: PALETTE.ink, cursor: "pointer" }}/>
+                    )}
+                    {!atDest && trip.status === "complete" && (
+                      <span style={{ fontSize: 11, flexShrink: 0, width: 16, textAlign: "center", color: isPacked ? "#2E7D32" : PALETTE.muted }} title={isLeftBehind ? "Left at the destination" : isPacked ? "Packed" : ""}>
+                        {isLeftBehind ? "↩" : isPacked ? "✓" : ""}
+                      </span>
+                    )}
                     <div style={{ width: 44, height: 52, flexShrink: 0, borderRadius: 4, overflow: "hidden", background: "#fff", border: `1px solid ${PALETTE.line}` }}>
                       {item.image
                         ? <TrimmedImage src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
@@ -994,16 +1447,90 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
                         at destination
                       </div>
                     )}
+                    {isLeftBehind && (
+                      <div style={{ fontSize: 9, letterSpacing: "0.06em", color: PALETTE.muted, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: "2px 7px", flexShrink: 0 }}>
+                        stayed behind
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, fontWeight: 600, color: wornDays.length > 1 ? PALETTE.accent : PALETTE.muted, flexShrink: 0 }}>
                       ×{wornDays.length}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* ── Trip-complete modal (wave 2 — B5 data hygiene) ──
+          "Anything staying at the destination?" — packed pieces only, none
+          preselected. Flagged pieces get status 'left_behind' AND move to the
+          destination closet; everything else keeps its home closet. */}
+      {completeModalOpen && (() => {
+        const destName = (closets || []).find(c => c.id === destClosetId)?.name || trip.destination_city || trip.destination || "the destination";
+        const packedItems = packedRows
+          .map(r => ({ row: r, item: itemsById.get(r.item_id) }))
+          .filter(x => x.item);
+        return (
+          <div onClick={() => !statusBusy && setCompleteModalOpen(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(28,24,20,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: PALETTE.bg, width: "100%", maxWidth: 520, maxHeight: "85vh", overflowY: "auto", borderRadius: "14px 14px 0 0", padding: 20, boxShadow: "0 -4px 20px rgba(0,0,0,0.15)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.18em", color: PALETTE.muted }}>COMPLETE TRIP</div>
+                  <div style={{ fontSize: 17, fontFamily: "serif", color: PALETTE.ink }}>
+                    Anything staying in {destName}?
+                  </div>
+                  <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.5 }}>
+                    Tap the packed pieces you're leaving there — they'll move to that closet. Everything else comes home with you.
+                  </div>
+                </div>
+                <button onClick={() => setCompleteModalOpen(false)} disabled={statusBusy}
+                  style={{ background: "none", border: "none", color: PALETTE.muted, fontSize: 22, cursor: "pointer", padding: 0 }}>×</button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                {packedItems.map(({ item }) => {
+                  const staying = stayingIds.has(item.id);
+                  return (
+                    <button key={item.id}
+                      onClick={() => setStayingIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+                        return next;
+                      })}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: staying ? `${PALETTE.accent}12` : "#fff", border: staying ? `1px solid ${PALETTE.accent}` : `1px solid ${PALETTE.line}`, borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ width: 40, height: 48, flexShrink: 0, borderRadius: 4, overflow: "hidden", background: PALETTE.cream, border: `1px solid ${PALETTE.line}` }}>
+                        {item.image
+                          ? <TrimmedImage src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                          : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: PALETTE.muted }}>{item.category?.[0] || "?"}</div>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
+                        <div style={{ fontSize: 10, color: PALETTE.muted }}>{item.category}{item.color ? ` · ${item.color}` : ""}</div>
+                      </div>
+                      <span style={{ fontSize: 11, flexShrink: 0, color: staying ? PALETTE.accent : PALETTE.muted }}>
+                        {staying ? "staying" : "coming home"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button onClick={() => finishTrip([...stayingIds])} disabled={statusBusy}
+                style={{ width: "100%", padding: "10px 0", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 8, fontSize: 11, letterSpacing: "0.12em", cursor: statusBusy ? "default" : "pointer", opacity: statusBusy ? 0.6 : 1 }}>
+                {statusBusy ? "Completing…"
+                  : stayingIds.size > 0
+                    ? `Leave ${stayingIds.size} in ${destName} & complete trip`
+                    : "Nothing's staying — complete trip"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

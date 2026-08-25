@@ -15,4 +15,7 @@ export const deleteTrip = sb.deleteTrip.bind(sb);
 export const fetchActiveTrip = sb.fetchActiveTrip.bind(sb);
 export const fetchTripItems = sb.fetchTripItems.bind(sb);
 export const replaceTripItems = sb.replaceTripItems.bind(sb);
+export const upsertTripItems = sb.upsertTripItems.bind(sb);
+export const deleteTripItems = sb.deleteTripItems.bind(sb);
+export const updateTripItemOutfits = sb.updateTripItemOutfits.bind(sb);
 export const setTripItemStatus = sb.setTripItemStatus.bind(sb);

@@ -179,6 +179,9 @@ export const s = {
 
   // ── Sets
   setBadge: { position:"absolute", top:6, left:6, background:"rgba(28,24,20,0.75)", color:"var(--color-surface)", fontSize:8, letterSpacing:"0.1em", padding:"3px 7px", borderRadius:3, border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
+  // Packed-for-trip marker (wave 2): subtle 🧳 corner mini-badge on closet-grid
+  // cards while a trip is active — mirrors setBadge's chrome, opposite corner.
+  packedBadge: { position:"absolute", top:6, right:6, background:"rgba(28,24,20,0.55)", borderRadius:10, padding:"2px 6px", fontSize:10, lineHeight:1, pointerEvents:"none" },
   setPanel: { background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, margin:"0 0 10px", padding:"12px 14px", animation:"fadeIn 0.2s ease" },
   setPanelHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 },
   setPanelTitle: { fontSize:10, letterSpacing:"0.18em", color:"var(--color-text-2)" },
@@ -292,6 +295,9 @@ export const ss = {
   cardBody: { padding: "10px 12px 12px" },
   cardName: { fontSize: 14, fontWeight: 500, color: "var(--color-ink)", letterSpacing: "0.02em", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'DM Sans',sans-serif" },
   cardCount: { fontSize: 10, color: "var(--color-text-muted)", letterSpacing: "0.08em", marginBottom: 6 },
+  // B6 split-sets flag: visible but non-blocking — amber matches the app's
+  // other soft warnings (gapAlert / colorException).
+  splitFlag: { fontSize: 9, letterSpacing: "0.06em", color: "#8B6914", marginBottom: 6 },
   cardTags: { display: "flex", gap: 4, flexWrap: "wrap" },
   tagChip: { fontSize: 9, letterSpacing: "0.06em", color: "var(--color-text-2)", background: "var(--color-surface)", borderRadius: 10, padding: "2px 8px" },
   modalItem: { display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", background: "var(--color-surface-2)", borderRadius: 6, cursor: "pointer", border: "1px solid var(--color-border-soft)" },

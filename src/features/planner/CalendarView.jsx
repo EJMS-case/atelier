@@ -77,8 +77,9 @@ let lastAnchorTime = null;
 // `allItems` (the FULL wardrobe) + `closets` feed trip planning across both
 // closets; `onRefreshActiveTrip` re-syncs App's trip-mode pool — wave 2's
 // activation / suitcase-close flows call it after flipping trip status.
-export default function CalendarView({ items, allItems, closets, activeCloset, onRefreshActiveTrip, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
-  void onRefreshActiveTrip; // plumbed for wave 2 (trip activation), unused in wave 1
+// `onItemsClosetChanged` patches App's local items after the trip-complete
+// flow reassigns left-behind pieces to the destination closet (B5).
+export default function CalendarView({ items, allItems, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
   const [anchor, setAnchor] = useState(() => lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date()));
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
@@ -304,6 +305,8 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
         apiKey={apiKey}
         onBack={() => { setActiveTrip(null); refreshPlans(); }}
         onBuildDay={onBuildDay}
+        onRefreshActiveTrip={onRefreshActiveTrip}
+        onItemsClosetChanged={onItemsClosetChanged}
       />
     );
   }
@@ -352,7 +355,11 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
               borderRadius: "0 6px 6px 0",
               fontSize: 11, color: PALETTE.ink, cursor: "pointer", textAlign: "left",
             }}>
-              <span style={{ fontWeight: 600 }}>{trip.destination || "Trip"}</span>
+              <span style={{ fontWeight: 600 }}>
+                {/* Status glyph (wave 2): ✈ active · ✓ complete · nothing for planning */}
+                {trip.status === "active" ? "✈ " : trip.status === "complete" ? "✓ " : ""}
+                {trip.destination || "Trip"}
+              </span>
               <span style={{ color: PALETTE.muted }}>·</span>
               <span style={{ color: PALETTE.muted }}>{formatTripRange(trip.start_date, trip.end_date)}</span>
               <span style={{ marginLeft: "auto", color: PALETTE.muted, fontSize: 10 }}>View →</span>
