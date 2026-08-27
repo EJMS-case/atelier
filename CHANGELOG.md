@@ -2,6 +2,20 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Duplicate athleisure/lounge pieces into the other closet — 2026-08-26
+
+### Why
+Owner request: many athleisure and lounge pieces were bought in twos — one kept in NYC, one at mom's in Arizona — and cataloguing the Arizona twin meant re-photographing and re-entering it. She also asked that the option disappear once a piece has been duplicated.
+
+### Added
+- **Migration 0022** (applied live): `wardrobe_items.duplicate_of` (text — the base table's id column is text, FK → wardrobe_items ON DELETE SET NULL) — stamped on the copy, pointing at its source. This one nullable column is the whole "offer once" mechanism: the ⧉ button hides on any item that has a twin or is one, and deleting either side re-offers it on the survivor.
+- **⧉ button on wardrobe cards** (Athleisure + Loungewear only — the categories she doubles; the gate is `DUPLICATABLE_CATEGORIES` in `features/closet/duplicate.js` if she wants more): two-tap confirm like delete, then the item copies into the other closet (NYC ↔ Arizona) with a fresh id, `duplicate_of` link, zeroed wear history, re-stamped created_at, and everything else verbatim.
+- **`sb.copyImage`**: server-side Storage copy so the twin owns its own image object — deleting the original (which removes its image) can't blank the twin's photo. Falls back to sharing the source URL if the copy fails; thumbs regenerate lazily per the new id.
+- Pure logic in `src/features/closet/duplicate.js`; insert rides the existing `addItems` path (optimistic state, pending_sync, sync flash — no new persistence code).
+
+### Tests
+duplicate 23 (new `npm run test:duplicate`, wired into the battery); full battery + build green.
+
 ## [Unreleased] — Multi-closet Phase B: trips bridge the closets, packing is outfit-first — 2026-08-25
 
 ### Why

@@ -219,6 +219,22 @@ export const sb = {
     return thumbUrl(itemId);
   },
 
+  // Server-side copy of an item's full image to a new object key (closet
+  // duplication). The twin must own its own bytes — deleting the original
+  // later calls removeImage(originalId), which would otherwise blank the
+  // twin's photo too. Thumbs are NOT copied: Thumb.jsx derives one lazily
+  // for the new id. Returns the copy's public URL (same ?v= cache-buster
+  // convention as uploadImage).
+  async copyImage(fromId, toId) {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/copy`, {
+      method: "POST",
+      headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ bucketId: BUCKET, sourceKey: String(fromId), destinationKey: String(toId) }),
+    });
+    if (!res.ok) throw new Error(`Image copy failed (HTTP ${res.status})`);
+    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${toId}?v=${Date.now()}`;
+  },
+
   async removeImage(itemId) {
     await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
       method: "DELETE",
