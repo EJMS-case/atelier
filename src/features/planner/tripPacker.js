@@ -12,7 +12,7 @@
 // all-sneaker trip) is still allowed to add the right new piece. See
 // capsuleTargets() + the scoring notes inside pick().
 
-import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, classifierNotes } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 
@@ -24,6 +24,123 @@ import { outfitCoverageGaps } from "./outfits.js";
 // New default: every day starts as "Casual"; user adjusts per-day.
 export function defaultOccasions(dayCount) {
   return Array.from({ length: dayCount }, () => "Casual");
+}
+
+// ── RELAXED DESTINATIONS ─────────────────────────────────────────────────────
+// Some destinations are simply not "outfit" trips. The owner on her Arizona
+// closet: "generally very casual there, usually lounging about", "just cute
+// outfits", "I typically only need 3-4 dinner outfits. In December I need
+// more." An all-Casual week (defaultOccasions) under-serves that in one
+// direction and a Lounge day would over-serve it in the other.
+//
+// Deliberately NOT a hardcoded "Arizona" check — the signal is the closet she
+// actually keeps there. A destination closet that is predominantly Athleisure
+// + Loungewear IS a relaxed destination, whatever it's called; one that holds
+// a normal spread of tops/bottoms/dresses is a regular trip.
+//
+// Her real Arizona closet: 17 Athleisure + 7 Loungewear + 6 Shoes + 3
+// Jumpsuits + 1 Outerwear = 24/34 = 0.706 ≥ 0.6 → relaxed.
+// Shoes and other support pieces stay in the denominator on purpose: a closet
+// is relaxed when the CLOTHES you'd reach for are relaxed, and every closet
+// carries shoes regardless of register, so excluding them would let 3 lounge
+// tops and 6 pairs of shoes read as "relaxed".
+export const RELAXED_DEST_SHARE = 0.6;
+const RELAXED_CATEGORIES = new Set(["Athleisure", "Loungewear"]);
+
+/**
+ * Is this destination closet a "relaxed" one? Pure + exported so it is unit
+ * testable and so CalendarView can call it with the items it already has.
+ * @param {Object[]} destItems - items whose closet_id is the destination's
+ * @returns {boolean} false for an empty list / no destination closet
+ */
+export function isRelaxedDestinationCloset(destItems) {
+  const list = Array.isArray(destItems) ? destItems.filter(Boolean) : [];
+  if (!list.length) return false;
+  const relaxed = list.filter(it => RELAXED_CATEGORIES.has(it.category)).length;
+  return relaxed / list.length >= RELAXED_DEST_SHARE;
+}
+
+// ── DINNER-NIGHT PLAN ────────────────────────────────────────────────────────
+// "I typically only need 3-4 dinner outfits. In December I need more."
+//   normal month : N = clamp(round(dayCount / 2), 1, 4)   → 7 days ⇒ 4
+//   December     : N = clamp(round(dayCount * 0.7), 2, 6) → 7 days ⇒ 5
+// December counts when the trip STARTS in December or merely OVERLAPS it —
+// the holiday season is the reason for the extra dinners, and a Nov 28 → Dec 4
+// trip is squarely in it.
+const DINNER_MIN = 1, DINNER_MAX = 4;
+const DEC_DINNER_RATE = 0.7, DEC_DINNER_MIN = 2, DEC_DINNER_MAX = 6;
+
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+// Accepts a Date or an ISO "YYYY-MM-DD" string. ISO strings are parsed as
+// LOCAL dates: `new Date("2026-12-01")` is UTC midnight, which reads as
+// November 30 in every western timezone — exactly the off-by-one that would
+// silently drop a December trip out of the holiday branch.
+function parseTripDate(d) {
+  if (d instanceof Date) return Number.isNaN(d.getTime()) ? null : new Date(d.getTime());
+  const s = String(d ?? "").trim();
+  if (!s) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+// Does any day of the trip fall in December? Walks the days rather than
+// comparing start/end months so a Nov → Jan trip still counts.
+function tripTouchesDecember(startDate, dayCount) {
+  const start = parseTripDate(startDate);
+  if (!start) return false;
+  for (let i = 0; i < dayCount; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    if (d.getMonth() === 11) return true;
+  }
+  return false;
+}
+
+// Which day indices get a Dinner. Spread EVENLY across the trip rather than
+// clustered (four dinners in a row is one dinner wardrobe, not four), and off
+// the arrival day for any trip long enough to have a spare day — you land,
+// you don't go straight out. Placement is the midpoint of each of N equal
+// slices of the eligible window, which keeps every gap between consecutive
+// dinners within 1 day of every other gap.
+export function dinnerDayIndices(dayCount, nights) {
+  const offset = dayCount >= 3 ? 1 : 0;            // skip the arrival day
+  const span = dayCount - offset;
+  const n = clamp(nights, 0, span);
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const idx = offset + Math.floor((k + 0.5) * span / n);
+    out.push(Math.min(dayCount - 1, idx));
+  }
+  return [...new Set(out)];
+}
+
+/**
+ * The per-day occasion plan for a trip. The richer entry point beside
+ * defaultOccasions(dayCount), which stays exactly as it was for its callers.
+ *
+ * A relaxed trip is Casual every day EXCEPT its dinner nights. It never emits
+ * "Lounge": that occasion's rules prefer sweats/hoodies, which is not what she
+ * means by "just cute outfits" — Casual plus the destination-closet
+ * preference already surfaces her athleisure without dressing her in it.
+ *
+ * @param {Object} o
+ * @param {number}  o.dayCount
+ * @param {Date|string} [o.startDate] - trip start; only used to detect December
+ * @param {boolean} [o.relaxed]       - see isRelaxedDestinationCloset
+ * @returns {string[]} one occasion per day
+ */
+export function tripDayOccasions({ dayCount, startDate, relaxed = false } = {}) {
+  const days = Math.max(0, Math.floor(dayCount) || 0);
+  const plan = Array.from({ length: days }, () => "Casual");
+  if (!relaxed || days === 0) return plan;
+  const december = tripTouchesDecember(startDate, days);
+  const nights = december
+    ? clamp(Math.round(days * DEC_DINNER_RATE), DEC_DINNER_MIN, DEC_DINNER_MAX)
+    : clamp(Math.round(days / 2), DINNER_MIN, DINNER_MAX);
+  for (const idx of dinnerDayIndices(days, nights)) plan[idx] = "Dinner";
+  return plan;
 }
 
 // Which item slots are "appropriate" for an occasion. Used to bias selection
@@ -103,6 +220,122 @@ function formalityDistance(item, occasion) {
        : 0;
 }
 
+// ── SCORCHING-HEAT TERM ──────────────────────────────────────────────────────
+// Owner report (2026-08-28, 7 days in Scottsdale at ~103°F): the forecast
+// bucket was right — every day came back "Hot" — but the picks weren't. A
+// CLOSED ballet flat was chosen on all 7 days despite 5 pairs of sandals
+// sitting in the destination closet, because filterByWeather only EXCLUDES
+// the clearly-wrong things in Hot (knits, boots, long sleeves, heavy
+// outerwear, on-body leather). Everything that survives scores identically,
+// so a closed flat and an open sandal were a pure tie — and shoes are a
+// capsule slot, so one unlucky coin-flip repeated for the whole trip.
+//
+// The fix is a RANKING term, not another exclusion: above SCORCHING_F the
+// day's actual high nudges the score toward what you'd actually wear at
+// 103°F. It is driven by the DAY'S high (dailyHighsF), not the trip bucket:
+// "Hot" spans 85°F to 115°F+, and an 86°F day genuinely doesn't care.
+//
+// 95°F is the threshold: 10° above the Hot floor (bucketFromHigh returns Hot
+// at ≥85), i.e. the top third of the bucket — the range where an open shoe
+// stops being a style choice and becomes a comfort requirement. Below it the
+// term is exactly zero, so nothing about Warm/Mild/Cool packing moves.
+export const SCORCHING_F = 95;
+
+// Open (airflow) vs closed (no airflow) footwear FORM. Boots are already gone
+// from the Hot pool, so this is only ever sandals/slides/espadrilles against
+// flats/loafers/sneakers/pumps. isSandalFormItem carries the L3-aware half
+// (her heeled thongs are filed under Kitten/Block); the regex adds the open
+// forms that aren't sandals. Order matters — open is tested FIRST so
+// "Strappy Flat Sandal" reads open, not closed via its "Flat".
+const OPEN_SHOE_RE = /\b(espadrilles?|open.?toe|peep.?toe|strappy|gladiator|huaraches?|fisherman)\b/i;
+const CLOSED_SHOE_RE = /\b(ballet|flats?|loafers?|sneakers?|trainers?|pumps?|oxfords?|derby|moccasins?|closed.?toe|boat)\b/i;
+
+// Fabric hand. NOTES POLICY (item-helpers): classifierNotes, never raw notes —
+// pasted product copy that merely *styles against* a leather jacket must not
+// make a cotton tank read as heat-trapping. Deliberately narrow lists; denim
+// is in NEITHER, so ordinary denim shorts score 0 rather than being punished
+// for a fabric that's perfectly normal in the desert. An item matching both
+// ("cotton knit") nets out to 0, which is the honest answer.
+const BREATHABLE_RE = /\b(linen|cotton|jersey|mesh|gauze|gauzy|seersucker)\b/i;
+const HEAT_TRAPPING_RE = /\b(knit|knits|knitted|ponte|leather|suede)\b/i;
+
+// ── HEAT-TERM CALIBRATION ────────────────────────────────────────────────────
+// Sized against the occasion terms in scoreForOccasion (same style as the
+// PREFER_BONUS block below). The binding constraint is the owner's dinner
+// rule: a Dinner / Work Dinner / Occasion day must STILL pick the heel over a
+// flat sandal, however hot it is.
+//
+//   occasion swing on a shoe = preferShoeSub (+3) − avoidShoeSub (−3) = 6.0
+//   heat swing on a shoe     = open (+2) − closed (−1.5)          = 3.5
+//                            + Light (+1) − Medium (−0.5)         = 1.5
+//                                                          total  = 5.0
+//   → Dinner @103°F, worst case (Light-tagged sandal vs Medium-tagged pump):
+//       pump   +3.0 − 1.5 − 0.5 = +1.0
+//       sandal −3.0 + 2.0 + 1.0 =  0.0     margin +1.0  > 0.6 jitter ✓
+//     Typical case (neither tagged): +1.5 vs −1.0, margin 2.5.
+//
+//   This is exactly why the FABRIC term skips Shoes/Bags/Belts/Accessories
+//   (the LEATHER_OK_IN_HEAT set filterByWeather already uses: the rule is
+//   about leather ON the body, not leather you carry or step in). Letting it
+//   reach shoes would push the heat swing to 5.0 + 1.5 = 6.5 > 6.0 and flip
+//   the dinner heel — the one outcome the owner explicitly does not want.
+//
+//   → Casual @103°F, the reported bug: both the sandal and the ballet flat
+//     match Casual's preferShoeSub (/sneaker|flat|loafer|sandal|ballet/, +3),
+//     so before this term they tied at +3.0 and jitter decided.
+//       sandal +3.0 + 2.0 = +5.0
+//       flat   +3.0 − 1.5 = +1.5           margin +3.5  ≫ 0.6 jitter ✓
+//     A repeated capsule shoe is now a decision, not a coin flip.
+//
+//   → season_weight: Light +1 / Medium −0.5. Asymmetric on purpose — Heavy
+//     and Winter are already filtered out of Hot, so Medium is the *heaviest*
+//     thing left and deserves only a nudge, while Light is a real signal.
+//   → fabric: ±0.75, small enough that it only ever breaks ties between
+//     otherwise-equivalent garments (a linen short over a ponte short) and
+//     never outranks an occasion or formality term.
+const HEAT_OPEN_SHOE = 2;
+const HEAT_CLOSED_SHOE = -1.5;
+const HEAT_SEASON_LIGHT = 1;
+const HEAT_SEASON_MEDIUM = -0.5;
+const HEAT_FABRIC = 0.75;
+
+// Categories whose fabric is not worn against the skin — see the calibration
+// note above. Mirrors filterByWeather's LEATHER_OK_IN_HEAT.
+const FABRIC_TERM_SKIP = new Set(["Shoes", "Bags", "Belts", "Accessories", "Swim"]);
+
+/**
+ * Score adjustment for a genuinely scorching day. Zero below SCORCHING_F and
+ * zero when the caller passes no high, so every existing 2-arg caller and
+ * every non-desert trip is bit-for-bit unchanged.
+ */
+export function heatScore(item, highF) {
+  if (!item || !Number.isFinite(highF) || highF < SCORCHING_F) return 0;
+  let s = 0;
+  const text = ((item.name || "") + " " + (item.subcategory || "") + " " +
+                classifierNotes(item) + " " + (item.material || ""));
+  if (item.category === "Shoes") {
+    if (isSandalFormItem(item) || OPEN_SHOE_RE.test(text)) s += HEAT_OPEN_SHOE;
+    else if (CLOSED_SHOE_RE.test(text)) s += HEAT_CLOSED_SHOE;
+  }
+  const season = (item.season_weight || "").toLowerCase();
+  if (season === "light") s += HEAT_SEASON_LIGHT;
+  else if (season === "medium") s += HEAT_SEASON_MEDIUM;
+  if (!FABRIC_TERM_SKIP.has(item.category)) {
+    if (BREATHABLE_RE.test(text)) s += HEAT_FABRIC;
+    if (HEAT_TRAPPING_RE.test(text)) s -= HEAT_FABRIC;
+  }
+  return s;
+}
+
+/**
+ * @param {Object} item
+ * @param {string} occasion
+ * @param {Object} [opts]
+ * @param {boolean} [opts.atDestination] - item already lives at the destination
+ * @param {number}  [opts.highF]         - THAT DAY's forecast high, °F. Drives
+ *   the scorching-heat term above. Omitted → no heat term (the 2-arg call
+ *   signature every earlier caller and test uses stays exactly as it was).
+ */
 export function scoreForOccasion(item, occasion, opts = {}) {
   const rules = occasionPriorityRegex(occasion);
   const name = ((item.name || "") + " " + (item.subcategory || "")).toLowerCase();
@@ -145,6 +378,9 @@ export function scoreForOccasion(item, occasion, opts = {}) {
     if (opts.atDestination && dist <= DEST_ADEQUATE_DIST) penalty *= DEST_FORMALITY_RELIEF;
     s -= penalty;
   }
+  // Scorching-day term — see the HEAT-TERM CALIBRATION block above. No-op
+  // unless the caller threads the day's actual high through opts.highF.
+  s += heatScore(item, opts.highF);
   return s;
 }
 
@@ -489,10 +725,14 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const pick = (candidates, occasion, currentOutfit = [], slot = null, dayIdx = 0) => {
     if (!candidates.length) return null;
     const alreadyHasStatement = currentOutfit.some(isStatement);
+    // THIS day's forecast high (not the trip's bucket) drives the scorching-
+    // heat term. dayPools is indexed by the same dayIdx every pick() call
+    // already passes, including single-day rebuilds (which build one pool).
+    const highF = dayPools[dayIdx]?.hi;
     const scored = candidates.map(c => {
       const wears = useCount.get(c.id) || 0;
       const atDest = !!prefer?.has(c.id);
-      let s = scoreForOccasion(c, occasion, { atDestination: atDest });
+      let s = scoreForOccasion(c, occasion, { atDestination: atDest, highF });
       // Already at the destination — packing cost zero (see PREFER_BONUS).
       if (atDest) s += destinationBonus(c, occasion);
       if (alreadyHasStatement && isStatement(c)) s -= 15;
@@ -733,7 +973,9 @@ export function alternativesFor(items, currentItem, opts = {}) {
       const atDest = !!prefer?.has(it.id);
       return {
         item: it,
-        score: scoreForOccasion(it, occasion, { atDestination: atDest })
+        // opts.highF (the day's actual high) is optional here too — swap
+        // sheets that only know the bucket simply get no heat term.
+        score: scoreForOccasion(it, occasion, { atDestination: atDest, highF: opts.highF })
              + (atDest ? destinationBonus(it, occasion) : 0),
       };
     })
