@@ -71,9 +71,15 @@ Conventions worth knowing:
 
 ## Keys and data
 
-- The **Supabase anon key is committed on purpose** in `src/lib/supabase.js`.
-  It is a public key; row-level policies enforce access server-side. Don't treat
-  it as a leak, and don't move it to an env var without changing the policy story.
+- The **Supabase anon key is committed** in `src/lib/supabase.js`. The comment
+  there says row-level policies enforce access server-side. **They currently
+  don't** — every policy in `supabase/migrations/` is
+  `for all using (true) with check (true)`, granting `anon` full read and write.
+  Combined with this repo being public, anyone who reads the source can read and
+  write the wardrobe database. Moving the key to an env var would not fix that;
+  the key is recoverable from the deployed bundle either way. The fix is real
+  policies (or an authenticated role). Treat this as a known open issue rather
+  than settled design, and don't repeat the "it's fine, RLS covers it" reasoning.
 - The **Anthropic key and Remove.bg key are supplied by the user at runtime** in
   Settings and kept in `localStorage` on their device. They are never committed,
   never in env files here, and never available to a session. Anything that needs
