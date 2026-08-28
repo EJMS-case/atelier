@@ -73,13 +73,21 @@ Conventions worth knowing:
 
 - The **Supabase anon key is committed** in `src/lib/supabase.js`. The comment
   there says row-level policies enforce access server-side. **They currently
-  don't** — every policy in `supabase/migrations/` is
-  `for all using (true) with check (true)`, granting `anon` full read and write.
-  Combined with this repo being public, anyone who reads the source can read and
-  write the wardrobe database. Moving the key to an env var would not fix that;
-  the key is recoverable from the deployed bundle either way. The fix is real
-  policies (or an authenticated role). Treat this as a known open issue rather
-  than settled design, and don't repeat the "it's fine, RLS covers it" reasoning.
+  don't.** Verified against the live database: every application table has RLS
+  enabled with exactly one policy, `FOR ALL TO public USING (true)`. That grants
+  full read and write to anyone holding the anon key — which is published in
+  this public repo *and* extractable from the deployed bundle, so making the
+  repo private would not fix it.
+- **Never store a secret in `user_settings`** (or any other table). The app used
+  to sync the Anthropic and Remove.bg keys there under the `api_keys` row; that
+  made them world-readable. Migration `0026` hides that row from the `public`
+  role and the client code no longer reads or writes it. Keys are per-device in
+  `localStorage`. Don't "restore cross-device key sync" — that is the bug.
+- **Still open:** every other table (518 wardrobe items, outfit logs, planned
+  outfits, trips) and the public `wardrobe-images` bucket remain readable and
+  writable by anyone. The real fix is authentication plus owner-scoped policies;
+  the app has no auth today. Treat this as a known open issue, and don't repeat
+  the "it's fine, RLS covers it" reasoning.
 - The **Anthropic key and Remove.bg key are supplied by the user at runtime** in
   Settings and kept in `localStorage` on their device. They are never committed,
   never in env files here, and never available to a session. Anything that needs
