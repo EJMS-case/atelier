@@ -56,6 +56,12 @@ export const ATHLEISURE_SUBCATEGORY_ALIASES = {
   "Skort":        "Skirts",
   "Long Sleeve":  "Long Sleeves",
   "Short Sleeve": "Short Sleeves",
+  // Bottoms length axis that leaked onto Athleisure rows before the L3 lists
+  // were category-scoped (both live examples are named "Skort"). Athleisure
+  // has no length axis of its own, so these are skirts filed by length.
+  "Mini":         "Skirts",
+  "Midi":         "Skirts",
+  "Maxi":         "Skirts",
 };
 
 // L3 lists that only make sense inside one category. "Pants" and "Skirts"
