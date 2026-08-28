@@ -119,7 +119,7 @@ function buildCollageLayout(items, isMobile) {
     // through to "top", then `place()` keeps just g.top[0]. Same logic as
     // styling-validator's getGarmentRole.
     //
-    // Order matters: dress first, then top (so "Short Sleeve" doesn't get
+    // Order matters: dress first, then top (so "Short Sleeves" doesn't get
     // caught by the /short/ in bottom), then bottom.
     if (cat === "Athleisure" || cat === "Loungewear" || cat === "Swim") {
       const subL = sub.toLowerCase();

@@ -4,7 +4,7 @@
 // weather filter, sort comparators, sleeve classifier, taxonomy migration,
 // and the server-wins mergeItems.
 
-import { BAG_SUBCATEGORIES, BAG_NAME_RE, weatherMatches } from "../constants/taxonomy.js";
+import { BAG_SUBCATEGORIES, BAG_NAME_RE, ATHLEISURE_SUBCATEGORY_ALIASES, weatherMatches } from "../constants/taxonomy.js";
 import {
   COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT,
   COLOR_FAMILY_RANGES, familyForColorString,
@@ -133,8 +133,11 @@ export function getSleeveType(item) {
   // sleeve length, and "unknown" is NEVER weather-excluded — she layers, so
   // any sleeve works. Only a piece she has explicitly named/noted as
   // long-sleeve is treated as long (kept out of hot).
-  const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeve":"short", "Bra/Crop Top":"sleeveless" };
-  if (item.category === "Tops" && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
+  // Keys are Tops + Athleisure subcategory names (Athleisure's Long/Short
+  // Sleeves and Sports Bras are explicit sleeve declarations — sports bras are
+  // sleeveless). Athleisure rows carry the plural names post-0023/normalizeItem.
+  const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeves":"short", "Long Sleeves":"long", "Sports Bras":"sleeveless" };
+  if ((item.category === "Tops" || item.category === "Athleisure") && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
   const text = ((item.name || "") + " " + classifierNotes(item)).toLowerCase();
   if (/\b(sleeveless|tank|strap|strappy|strapless|halter|tube)\b/.test(text)) return "sleeveless";
   if (/\b(short.?sleeve|cap.?sleeve)\b/.test(text)) return "short";
@@ -147,7 +150,7 @@ export function getSleeveType(item) {
 // Single source of truth for "which slot does this garment fill." Used by the
 // sampler (rotation buckets + lower-half availability) and the manual builder
 // (canvas slots). Previously each place had its own regex and they disagreed —
-// e.g. Athleisure "Leggings"/"Skort" fell through to "tops". Returns builder-
+// e.g. Athleisure "Leggings"/"Skirts" fell through to "tops". Returns builder-
 // vocabulary slots: top | bottom | dress | set | swim | outerwear | shoes | bag
 // | accessory.
 export function slotForItem(item) {
@@ -164,7 +167,7 @@ export function slotForItem(item) {
   if (cat === "Tops" || cat === "Knits") return "top";
   if (cat === "Athleisure" || cat === "Loungewear") {
     if (/dress|romper|jumpsuit/.test(sub)) return "dress";
-    // Test TOP signals BEFORE the bottom regex — "Short Sleeve" contains
+    // Test TOP signals BEFORE the bottom regex — "Short Sleeves" contains
     // "short" and would otherwise classify a tee as a bottom (same ordering
     // fix as styling-validator's getGarmentRole and EditorialCollage).
     if (/sleeve|bra|crop|hoodie|sweatshirt|tank|top/.test(sub)) return "top";
@@ -459,6 +462,13 @@ export function normalizeItem(item) {
   }
   if (item.category === "Accessories" && (item.subcategory === "Belts" || /\bbelt\b/i.test(item.name))) {
     item = { ...item, category: "Belts", subcategory: "" };
+  }
+  // Athleisure subcategory consolidation (2026-08-28): retired labels
+  // (Bra/Crop Top, Sports Bra, Pants, Skort, Long/Short Sleeve) fold into
+  // their plural buckets. Runs on every localStorage load and mergeItems, so
+  // legacy rows read correctly even before migration 0023 rewrites them.
+  if (item.category === "Athleisure" && ATHLEISURE_SUBCATEGORY_ALIASES[item.subcategory]) {
+    item = { ...item, subcategory: ATHLEISURE_SUBCATEGORY_ALIASES[item.subcategory] };
   }
   if (!item.created_at) item = { ...item, created_at: "2025-01-01T00:00:00.000Z" };
   return item;

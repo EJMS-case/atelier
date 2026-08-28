@@ -83,7 +83,7 @@ const CLOSET = [
   // Athleisure — the ONLY clothing Active admits (it bans Tops/Bottoms/Bags/
   // Outerwear/Loafers). Without these the Active row can't produce any valid
   // look, since every structured piece above is banned for that occasion.
-  item({ id: "athl-top",      category: "Athleisure", subcategory: "Performance Top", name: "Technical training top", material: "jersey", notes: "moisture-wicking" }),
+  item({ id: "athl-top",      category: "Athleisure", subcategory: "Short Sleeves",  name: "Technical training top", material: "jersey", notes: "moisture-wicking" }),
   item({ id: "athl-bottom",   category: "Athleisure", subcategory: "Leggings",       name: "Compression leggings",  material: "nylon" }),
   item({ id: "athl-zip",      category: "Athleisure", subcategory: "Zip-Ups",        name: "Light training zip-up", material: "jersey", notes: "light layer" }),
 
