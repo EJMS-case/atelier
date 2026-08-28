@@ -1,13 +1,13 @@
 // ── ITEM HELPERS ─────────────────────────────────────────────────────────────
 // Shared garment classifiers + item utilities: slotForItem (the slot
 // vocabulary), boot/hosiery/complete-set predicates, statement-piece detector,
-// weather filter, sort comparators, sleeve classifier, taxonomy migration,
-// and the server-wins mergeItems.
+// weather filter, color-filter predicate, sort comparators, sleeve classifier,
+// taxonomy migration, and the server-wins mergeItems.
 
 import { BAG_SUBCATEGORIES, BAG_NAME_RE, ATHLEISURE_SUBCATEGORY_ALIASES, weatherMatches } from "../constants/taxonomy.js";
 import {
   COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT,
-  COLOR_FAMILY_RANGES, familyForColorString,
+  COLOR_FAMILY_RANGES, familyForColorString, effectiveColorFamily,
 } from "../constants/color.js";
 
 // ── NOTES POLICY ────────────────────────────────────────────────────────────
@@ -408,6 +408,29 @@ export function filterByWeather(items, weather) {
     }
     return true;
   });
+}
+
+// ── COLOR FILTER PREDICATE ──────────────────────────────────────────────────
+// The one place the color chips are matched against an item. Shared by the
+// closet item grid and the Sets view (a set matches when ANY member item
+// does), so the two can't drift apart.
+// The chip array mixes two vocabularies: color FAMILIES and the denim "wash"
+// chips (Light/Medium/Dark/Black Wash). A wash is not a family —
+// effectiveColorFamily never returns a "…Wash" string, so matching on family
+// alone filtered the wash chips to zero results. Wash tokens are matched as a
+// substring of the item's color/notes/name instead.
+export function matchesColorFilter(item, colors) {
+  if (!colors?.length) return true;
+  // Family is derived from the actual color string when possible, so a "Gray"
+  // item saved with the legacy "Neutral" family resolves to "Gray" and stays
+  // out of the Neutrals bucket.
+  if (colors.includes(effectiveColorFamily(item))) return true;
+  const washSel = colors.filter(c => /wash/i.test(c));
+  if (washSel.length) {
+    const text = ((item?.color || "") + " " + (item?.notes || "") + " " + (item?.name || "")).toLowerCase();
+    if (washSel.some(w => text.includes(w.toLowerCase()))) return true;
+  }
+  return false;
 }
 
 // ── COLOR SORT INDEX ────────────────────────────────────────────────────────

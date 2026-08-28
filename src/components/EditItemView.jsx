@@ -315,11 +315,19 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
               if (!setClosets.has(it.set_id)) setClosets.set(it.set_id, new Set());
               setClosets.get(it.set_id).add(it.closet_id || DEFAULT_CLOSET_ID);
             });
+            // Sorted by the label she actually reads, not by item-insertion
+            // order (which is what the counts Map hands back). Unnamed sets
+            // collect at the end rather than sorting under "U".
             const options = [...counts.entries()]
               .filter(([id]) => id === form.set_id || setClosets.get(id).has(form.closet_id))
-              .map(([id, count]) => (
+              .map(([id, count]) => ({ id, count, name: ((setsMetaProp || {})[id]?.name || "").trim() }))
+              .sort((a, b) => {
+                if (!a.name !== !b.name) return a.name ? -1 : 1;
+                return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+              })
+              .map(({ id, count, name }) => (
               <option key={id} value={id}>
-                {(setsMetaProp || {})[id]?.name || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
+                {name || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
               </option>
             ));
             // A freshly minted set has no member rows yet, so no option above

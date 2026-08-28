@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Black Cherry reads purple; sets sort by type and honour the colour filter — 2026-08-28
+
+### Why
+Owner reports: (1) her Black Cherry athleisure filtered as Red but the dye reads purple; (2) the set picker in the item editor came out in a random order; (3) the Sets view should lead with work sets and end with lounge/athleisure; (4) the colour chips did nothing in the Sets view.
+
+### Changed
+- **Colour** (`constants/color.js`): `Black Cherry` is now a shade of **Purple**. The compound name is its own colour — the bare shade `Cherry` and Burgundy/Wine/Oxblood stay Red. Two matching fixes make that hold: shade names are tested **longest-first** (the old insertion-order loop found the `cherry` inside `black cherry` and returned Red), and hyphens/underscores normalize to spaces so every spelling resolves. Migration `0024` clears the stale `color_family` on the stored rows; `effectiveColorFamily` already prefers the colour string, so filtering was right either way.
+- **Set picker** (`EditItemView`): options sort alphabetically by the label the user reads (case-insensitive), unnamed sets last instead of under "U". The closet-scoping filter is unchanged.
+- **Sets view sorting** (`features/closet/setType.js`, new): sets rank by what they're FOR — Work, Formal, Evening, Date Night, Travel, Vacation, Weekend, Casual, Seasonal, Other, then **Lounge & Active** last. The comfort bucket is derived (every member in Athleisure/Loungewear) and an explicit tag always beats it; multi-tag sets take their best rank; ties break by name with unnamed last. `By Type` is the new default sort. A–Z now shares the same name comparator, so unnamed sets stop sorting as the literal string "Set".
+- **Colour filter in the Sets view**: the FilterBar chips stay visible there, so they now filter — a set matches when any member item does. The item grid's colour predicate (families **plus** the denim wash chips, which are not families) moved into one shared `matchesColorFilter` in `utils/item-helpers.js` and both call sites use it, so the two can't drift. The empty state now also fires when a colour filter is what emptied the list.
+- **Migration 0025** — re-sweep of the 0023 Athleisure consolidation. 0023 cleaned the table, but the app ran the pre-merge build for ~2.5h afterwards: its pickers still offered the retired labels and its syncs wrote them back (14 rows had reverted to `Sports Bra`, plus `Skort`/`Pants`/`Long Sleeve`, and newly added pieces were created with the old names). The shipped build's `normalizeItem` closes the loop so a client can't push an old name up again. Also folds the Bottoms length axis (`Mini`/`Midi`/`Maxi`) where it had leaked onto Athleisure rows — both live examples are named "Skort" — and those aliases join `ATHLEISURE_SUBCATEGORY_ALIASES` so the client self-heals them too.
+
+### Tests
+New `scripts/color-family.test.mjs` (Black Cherry in every spelling → Purple, plain Reds unaffected, stale stored family overridden, no regressions elsewhere) and `scripts/set-sorting.test.mjs` (type order, tag-beats-derived, tie-breaks, shared colour predicate incl. a denim-wash case), both wired into `npm test`. Full chain + build green.
+
 ## [Unreleased] — Closet-scoped set picker; upload pipeline no longer freezes the page — 2026-08-28
 
 ### Why

@@ -11,8 +11,7 @@ import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches } from "./constants/taxonomy.js";
-import { effectiveColorFamily } from "./constants/color.js";
-import { defaultSortComparator, mergeItems, slotForItem } from "./utils/item-helpers.js";
+import { defaultSortComparator, matchesColorFilter, mergeItems, slotForItem } from "./utils/item-helpers.js";
 import { computeFilterChips } from "./utils/style-filters.js";
 import { autoColorPairs } from "./utils/wardrobe-coverage.js";
 import {
@@ -23,6 +22,7 @@ import {
   migrateLocalStorage,
 } from "./utils/storage.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
+import { compareSetsByName, compareSetsByType } from "./features/closet/setType.js";
 import { resolveVisibleWardrobe, packedItemIds } from "./features/closet/useVisibleWardrobe.js";
 import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
 import { sb } from "./lib/supabase.js";
@@ -263,7 +263,7 @@ export default function App() {
   const [setsMeta,       setSetsMeta]       = useState(() => loadSetsMeta());
   const [setsSearch,     setSetsSearch]     = useState("");
   const [setsTagFilter,  setSetsTagFilter]  = useState("");
-  const [setsSort,       setSetsSort]       = useState("recent"); // recent | alpha | count
+  const [setsSort,       setSetsSort]       = useState("type"); // type | recent | alpha | count
   const [editingSet,     setEditingSet]     = useState(null); // null or set_id for modal
   const syncTimer = useRef(null);
   const recutRan = useRef(false);
@@ -1200,9 +1200,17 @@ export default function App() {
     if (setsTagFilter) {
       result = result.filter(g => g.tags.includes(setsTagFilter));
     }
+    // Color filter — the FilterBar chips stay visible in the Sets view, so they
+    // have to do something here: a set matches when ANY member item matches,
+    // through the same predicate the item grid uses.
+    if (activeFilters.color?.length) {
+      result = result.filter(g => g.items.some(it => matchesColorFilter(it, activeFilters.color)));
+    }
     // Sort
-    if (setsSort === "alpha") {
-      result.sort((a, b) => (a.name || "Set").localeCompare(b.name || "Set"));
+    if (setsSort === "type") {
+      result.sort(compareSetsByType);
+    } else if (setsSort === "alpha") {
+      result.sort(compareSetsByName);
     } else if (setsSort === "count") {
       result.sort((a, b) => b.items.length - a.items.length);
     } else {
@@ -1239,24 +1247,10 @@ export default function App() {
       });
     }
     if (activeFilters.brand?.length)  base = base.filter(it => activeFilters.brand.includes(it.brand));
+    // Color chips (families + the denim wash chips) — see matchesColorFilter,
+    // shared with the Sets view so the two never drift apart.
     if (activeFilters.color?.length) {
-      // Denim "wash" chips (Light/Medium/Dark/Black Wash) are pushed into this
-      // same color array but are NOT color families — effectiveColorFamily never
-      // returns a "…Wash" string, so matching only on family filtered them to
-      // zero. Match wash tokens as a substring of the item's color/notes/name.
-      const washSel = activeFilters.color.filter(c => /wash/i.test(c));
-      base = base.filter(it => {
-        // Family is derived from the actual color string when possible, so
-        // a "Gray" item saved with the legacy "Neutral" family resolves to
-        // "Gray" and stays out of the Neutrals bucket.
-        const family = effectiveColorFamily(it);
-        if (activeFilters.color.includes(family)) return true;
-        if (washSel.length) {
-          const text = ((it.color || "") + " " + (it.notes || "") + " " + (it.name || "")).toLowerCase();
-          if (washSel.some(w => text.includes(w.toLowerCase()))) return true;
-        }
-        return false;
-      });
+      base = base.filter(it => matchesColorFilter(it, activeFilters.color));
     }
     // Sets filter
     if (activeFilters.sets === "Sets Only") base = base.filter(it => it.set_id);
@@ -1715,6 +1709,7 @@ export default function App() {
                   onChange={e => setSetsSearch(e.target.value)}
                 />
                 <select style={ss.sortSelect} value={setsSort} onChange={e => setSetsSort(e.target.value)}>
+                  <option value="type">By Type</option>
                   <option value="recent">Recently Created</option>
                   <option value="alpha">A – Z</option>
                   <option value="count">Most Items</option>
@@ -1736,7 +1731,7 @@ export default function App() {
               <div style={s.empty}>
                 <div style={s.emptyMark}>✦</div>
                 <p style={s.emptyText}>
-                  {setsSearch || setsTagFilter
+                  {setsSearch || setsTagFilter || activeFilters.color?.length
                     ? "No sets match your search."
                     : "No coord sets yet. Link pieces as a set in Edit Item."}
                 </p>
