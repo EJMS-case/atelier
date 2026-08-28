@@ -1,6 +1,9 @@
 node_modules/
 dist/
-.claude/
 .env
 .env.local
 *.local
+
+# Claude Code / Cowork: share settings + hooks, keep per-machine overrides local
+.claude/settings.local.json
+.claude/*.local.json
