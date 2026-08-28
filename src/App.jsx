@@ -575,17 +575,9 @@ export default function App() {
       saveSetsMeta(merged);
     }).catch(() => {});
 
-    // Try to load API keys from Supabase (cross-device sync)
-    sb.getSettings().then(settings => {
-      if (settings?.anthropicKey && !loadApiKey()) {
-        saveApiKey(settings.anthropicKey);
-        setApiKey(settings.anthropicKey);
-      }
-      if (settings?.rmbgKey && !loadRmbgKey()) {
-        saveRmbgKey(settings.rmbgKey);
-        setRmbgKey(settings.rmbgKey);
-      }
-    }).catch(() => {});
+    // API keys are per-device (localStorage) and deliberately never fetched
+    // from Supabase — that table is readable with the anon key, which ships in
+    // the client bundle. See lib/supabase.js and migration 0026.
 
     reloadFromSupabase();
   }, [reloadFromSupabase, refreshWearData]);
@@ -2367,7 +2359,6 @@ export default function App() {
           onSave={(k, rk, opts = {}) => {
             saveApiKey(k);  setApiKey(k);
             saveRmbgKey(rk); setRmbgKey(rk);
-            sb.saveSettings({ anthropicKey: k, rmbgKey: rk }).catch(() => {});
             // Auto-save (silent) doesn't navigate; only the explicit
             // Save Settings button bounces back to closet.
             if (!opts.silent) setView("closet");
