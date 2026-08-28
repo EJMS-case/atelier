@@ -2,24 +2,43 @@
 
 A private wardrobe app that stores your clothes and uses Claude AI to generate styled outfit collages.
 
-## Setup (GitHub + Vercel)
+## Running it locally
 
-### Step 1 — GitHub
-1. Go to [github.com](https://github.com) → **New repository**
-2. Name it `atelier` → **Create repository**
-3. Upload all these files (drag the whole folder in, or use GitHub Desktop)
+```bash
+npm install
+npm run dev      # dev server
+npm test         # full test suite (offline)
+npm run build    # production build
+```
 
-### Step 2 — Vercel
-1. Go to [vercel.com](https://vercel.com) → **Add New Project**
-2. Import your `atelier` GitHub repo
-3. Framework preset: **Vite**
-4. Click **Deploy** — done!
+Requires Node 20 or newer.
 
-### Step 3 — API Key
-1. Open your deployed app
-2. Tap the **⚙ Settings** icon in the top right
-3. Paste your Anthropic API key (get one at [console.anthropic.com](https://console.anthropic.com))
-4. Your key is stored locally on your device only
+## Deploying
+
+The repo is deployed on Vercel from `main` (framework preset: **Vite**). Pushes
+to `main` ship; branches get preview deploys.
+
+## API key
+
+1. Open the app and tap **⚙ Settings** in the top right.
+2. Paste your Anthropic API key (get one at [console.anthropic.com](https://console.anthropic.com)).
+3. The key is stored on your device only — it is never committed or sent anywhere but Anthropic.
+
+A [Remove.bg](https://remove.bg) key is optional; without one, background
+removal falls back to an in-browser model.
+
+## Working on this with Claude
+
+The repo is set up for **Claude Cowork** and **Claude Code on the web**:
+
+- `CLAUDE.md` orients a session — architecture, commands, conventions, and which
+  docs to read first.
+- `.claude/hooks/session-start.sh` installs dependencies automatically at the
+  start of every remote session, so tests and builds work straight away.
+
+To give Cowork access, connect GitHub in Claude's settings and grant it this
+repository (`EJMS-case/atelier`). Claude then works on a branch and opens a pull
+request; nothing reaches `main` without your review.
 
 ## How it works
 
