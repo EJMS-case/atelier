@@ -1,9 +1,15 @@
 import { useMemo, useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+import { STYLING_CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { COLOR_FAMILIES } from "../constants/color.js";
 
-export default function FilterBar({ items, activeFilters, onChange }) {
+// `showMisc` is the holding room's ONLY appearance in the chip row: App passes
+// true just when the closet being browsed actually contains Misc items. Note
+// `items` here is the scoped pool, which never contains a Misc item (they're
+// stripped at resolveVisibleWardrobe) — so the chip cannot be derived from it,
+// and every other control in this bar (brands, colors, subcategories) stays
+// blind to the holding room by construction.
+export default function FilterBar({ items, activeFilters, onChange, showMisc = false }) {
   const [showBrand, setShowBrand] = useState(false);
   const [brandSearch, setBrandSearch] = useState("");
   const [showMore, setShowMore] = useState(false);
@@ -62,6 +68,7 @@ export default function FilterBar({ items, activeFilters, onChange }) {
         (it.subcategory === sub || getL3Options(singleCat, sub).includes(it.subcategory)))
     );   // preserve TAXONOMY order instead of sorting alphabetically
   })();
+  const miscSelected = showMisc && (activeFilters.category || []).includes(MISC_CATEGORY);
   const childOptions = (() => {
     if (!singleCat || !selectedL2) return [];
     // getL3Options is category-aware: Athleisure "Skirts" has no Mini/Midi/
@@ -76,7 +83,7 @@ export default function FilterBar({ items, activeFilters, onChange }) {
       {/* Category chips */}
       <div style={s.filterSection}>
         <div style={s.filterRow}>
-          {["All", ...CATEGORY_ORDER].map(cat => (
+          {["All", ...STYLING_CATEGORY_ORDER, ...(showMisc ? [MISC_CATEGORY] : [])].map(cat => (
             <button key={cat}
               onClick={() => cat === "All" ? onChange({ ...activeFilters, category: [], subcategory: [], sleeveLength: "" }) : toggle("category", cat)}
               style={{
@@ -88,6 +95,15 @@ export default function FilterBar({ items, activeFilters, onChange }) {
           ))}
         </div>
       </div>
+
+      {/* Holding room: no subcategories, no colors, no brands, no sets — a
+          Misc row is a name and a photo. Showing those controls would only
+          offer filters that can never match. */}
+      {miscSelected ? (
+        <div style={s.activePills}>
+          <button onClick={clearAll} style={s.clearAllBtn}>Clear all</button>
+        </div>
+      ) : (<>
 
       {/* Subcategory chips — single-select L2 parents; a parent's L3 children
           expand on their own row below only while that parent is selected.
@@ -284,6 +300,7 @@ export default function FilterBar({ items, activeFilters, onChange }) {
           <button onClick={clearAll} style={s.clearAllBtn}>Clear all</button>
         </div>
       )}
+      </>)}
     </div>
   );
 }

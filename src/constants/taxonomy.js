@@ -1,9 +1,22 @@
 // ── ATELIER TAXONOMY ─────────────────────────────────────────────────────────
 // Category hierarchy used across the wardrobe, Supabase schema, and AI prompts.
 
+// ── MISC — the holding room ──────────────────────────────────────────────────
+// Odds and ends parked in a closet she doesn't dress from (PJs at her mother's
+// house in Arizona) that she wants TRACKED so she doesn't re-pack them, and
+// that must NEVER reach styling. It is a real category so the chip + editor
+// can address it, but it is deliberately absent from every styling/AI surface:
+// use STYLING_CATEGORY_ORDER / STYLING_TAXONOMY (below) anywhere a category
+// list is fed to the stylist, the auto-detect prompt, insights, or coverage.
+// The wardrobe-side enforcement is upstream of all of that — Misc items are
+// stripped at resolveVisibleWardrobe (features/closet/useVisibleWardrobe.js),
+// so no downstream consumer ever sees one.
+export const MISC_CATEGORY = "Misc";
+
 export const CATEGORY_ORDER = [
   "Tops","Knits","Bottoms","Dresses","Sets","Jumpsuits",
   "Loungewear","Athleisure","Swim","Outerwear","Occasionwear","Shoes","Bags","Belts","Accessories",
+  MISC_CATEGORY,
 ];
 
 export const TAXONOMY = {
@@ -22,7 +35,19 @@ export const TAXONOMY = {
   Bags:         ["Clutch","Crossbody","Shoulder","Tote"],
   Belts:        [],
   Accessories:  ["Hosiery","Jewelry","Pins / Brooches","Scarves & Twillys","Sunglasses","Wrist Cuffs"],
+  // Holding room — no subcategories by design: a Misc row needs a name and
+  // nothing else.
+  [MISC_CATEGORY]: [],
 };
+
+// The styling-safe views of the two lists above. EVERY consumer that hands a
+// category list to a model, or renders a per-category styling/coverage
+// breakdown, must read these instead of CATEGORY_ORDER / TAXONOMY so the AI
+// can never classify anything as Misc and no styling surface can name it.
+export const STYLING_CATEGORY_ORDER = CATEGORY_ORDER.filter(c => c !== MISC_CATEGORY);
+export const STYLING_TAXONOMY = Object.fromEntries(
+  Object.entries(TAXONOMY).filter(([cat]) => cat !== MISC_CATEGORY),
+);
 
 export const SUBCATEGORY_L3 = {
   // "Printed" is the odd one out on a fabric-led axis (Jeans/Satin-Silk/Ponte

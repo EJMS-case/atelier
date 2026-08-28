@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { invokeTool } from "./ai/toolUse.js";
 import { AutoDetectSchema, AutoDetectTool } from "./ai/schemas.js";
-import { TAXONOMY } from "../constants/taxonomy.js";
+import { STYLING_TAXONOMY } from "../constants/taxonomy.js";
 import { MODEL_FAST } from "../constants/models.js";
 
 // `name` is a bulk-add convenience (proposed title), not part of the shared
@@ -33,7 +33,12 @@ const AutoDetectNameTool = {
 // Pin the taxonomy the AI is allowed to choose from to the single source of
 // truth in constants/taxonomy.js — previously this was a hand-copied clone
 // that silently drifted whenever the canonical taxonomy was edited.
-const AUTODETECT_TAXONOMY = TAXONOMY;
+//
+// STYLING_TAXONOMY, not TAXONOMY: the "Misc" holding room is a manual filing
+// drawer for things that must never be styled (PJs parked at her mother's
+// house), so the model must neither see it in the prompt nor be able to
+// return it — sanitize() below validates `category` against these keys too.
+const AUTODETECT_TAXONOMY = STYLING_TAXONOMY;
 
 const DETECT_PROMPT = `You are a wardrobe-cataloging assistant for a private client. Look at the single clothing item in the attached photo and describe it using the record_clothing_item tool.
 

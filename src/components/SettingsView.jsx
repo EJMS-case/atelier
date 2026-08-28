@@ -4,7 +4,9 @@ import { icons, Icon } from "../ui/icons.jsx";
 import { sb, SUPABASE_URL } from "../lib/supabase.js";
 import { compressImage, imageToBase64, detectTransparency, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
 import { stripBackground } from "../lib/bgRemoval.js";
-import { CATEGORY_ORDER } from "../constants/taxonomy.js";
+// STYLING_CATEGORY_ORDER, not CATEGORY_ORDER: neither the orphan-photo
+// vision prompt nor its category picker may offer the "Misc" holding room.
+import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { MODEL_TOP } from "../constants/models.js";
 import { anthropicFetch } from "../lib/ai/toolUse.js";
 
@@ -110,7 +112,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
               // prompt can't drift (a hand-copied clone here was missing
               // Swim/Bags/Belts and re-tagged bags as Accessories). The bag/
               // belt instruction mirrors src/lib/anthropic.js's DETECT_PROMPT.
-              { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: ${CATEGORY_ORDER.join("/")}), subcategory (specific type), color_family (main color). If it's a bag (any shape), use category "Bags" (not "Accessories"). Belts use "Belts". Shoes use "Shoes". Return only valid JSON.` },
+              { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: ${STYLING_CATEGORY_ORDER.join("/")}), subcategory (specific type), color_family (main color). If it's a bag (any shape), use category "Bags" (not "Accessories"). Belts use "Belts". Shoes use "Shoes". Return only valid JSON.` },
             ],
           }],
         }, { apiKey: key });
@@ -561,7 +563,7 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
                           <select style={{...s.input, width:"100%", boxSizing:"border-box", fontSize:12}}
                             value={meta.category}
                             onChange={e => setOrphanMeta(prev => ({...prev, [imageId]: {...meta, category: e.target.value}}))}>
-                            {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                            {STYLING_CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                           {meta.color_family && (
                             <div style={{fontSize:11, color:"var(--color-text-muted)"}}>Color: {meta.color_family}</div>

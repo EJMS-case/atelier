@@ -4,6 +4,8 @@
 // clobbering manual input when detection lands after the user has started
 // typing.
 
+import { MISC_CATEGORY } from "../../constants/taxonomy.js";
+
 /**
  * @param {Object} queueItem  - the current state of a BulkAddView queue entry
  * @param {Object} detection  - the sanitized result from autoDetectItem()
@@ -11,6 +13,11 @@
  */
 export function applyDetection(queueItem, detection) {
   if (!detection) return queueItem;
+  // The Misc holding room is filed by hand and carries no styling metadata —
+  // an AI-proposed color/material/pattern on a row she deliberately parked
+  // there is noise. (The model can't propose Misc itself: the auto-detect
+  // taxonomy is STYLING_TAXONOMY, which omits it.)
+  if (queueItem.category === MISC_CATEGORY) return queueItem;
   const next = { ...queueItem };
 
   // Category: only if still the default "Tops" AND subcategory blank — proxy

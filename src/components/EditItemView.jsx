@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
@@ -34,6 +34,14 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
   const [bgError, setBgError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  // Holding-room row (Misc): tracked so she doesn't re-pack it, never styled.
+  // Everything the stylist reads — brand, color, stylist line, notes,
+  // material, pattern, price, set link, wear history, "style around this
+  // piece" — is pointless here and is collapsed away. Name + photo + Closet
+  // (the control that puts it in Arizona in the first place) is the whole
+  // form. The Category select stays so a row can be filed OUT of Misc again.
+  const isMisc = form.category === MISC_CATEGORY;
 
   // Async save wrapper. Awaits the parent's onSave (which returns {ok,error}),
   // shows a clear error if it failed, and only signals "done" on success so
@@ -170,11 +178,13 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
       )}
 
       <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
-        {[
-          ["Name *","name","e.g. Wool Blazer Navy"],
-          ["Brand","brand","e.g. Totême, The Row, COS"],
-          ["Color","color","e.g. Burgundy, Navy, Espresso"],
-        ].map(([label,field,placeholder]) => (
+        {(isMisc
+          ? [["Name *","name","e.g. PJs - shorts and tank"]]
+          : [
+            ["Name *","name","e.g. Wool Blazer Navy"],
+            ["Brand","brand","e.g. Totême, The Row, COS"],
+            ["Color","color","e.g. Burgundy, Navy, Espresso"],
+          ]).map(([label,field,placeholder]) => (
           <div key={field}>
             <div style={s.fieldLabel}>{label}</div>
             <input style={{...s.input,width:"100%"}} placeholder={placeholder}
@@ -182,6 +192,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
           </div>
         ))}
 
+        {!isMisc && (<>
         {/* Stylist line — the short curated line the AI reads (classifiers +
             prompts). Long pasted product copy in Notes stays for display and
             search; when this line exists it speaks for the piece instead. */}
@@ -236,6 +247,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
             </div>
           )}
         </div>
+        </>)}
         <div>
           <div style={s.fieldLabel}>Category</div>
           <select style={{...s.select,width:"100%"}} value={form.category}
@@ -272,7 +284,9 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
         })()}
       </div>
 
-      {/* Set linking */}
+      {/* Set linking — never for a holding-room row: a Misc item must not be
+          reachable through a coord set, which IS a styling surface. */}
+      {!isMisc && (
       <div style={s.settingsCard}>
         <div style={s.settingsTitle}>Coord Set</div>
         <p style={s.settingsSub}>Link this piece to a coord set, or create a new one.</p>
@@ -385,6 +399,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
           </label>
         ) : null}
       </div>
+      )}
 
       {/* Closet assignment (multi-closet, Phase A) — saving with a different
           closet moves the piece there via the normal onSave path. */}
@@ -413,9 +428,9 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
       {/* "In Your Looks" — worn/planned/saved outfits featuring this piece,
           with dates, so she can judge repeat spacing at a glance. Renders
           nothing when the piece has no history. */}
-      <ItemWearHistory item={item} allItems={allItems} logs={logs} plans={plans} />
+      {!isMisc && <ItemWearHistory item={item} allItems={allItems} logs={logs} plans={plans} />}
 
-      {onStyleAround && (
+      {onStyleAround && !isMisc && (
         <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}
           onClick={() => onStyleAround(item)}>
           ✦ Style around this piece
