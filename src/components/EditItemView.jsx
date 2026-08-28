@@ -307,20 +307,35 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
             // editing in Arizona listed every NYC set. A cross-closet twin
             // (duplicate.js copies set_id) makes its set show in both closets,
             // which is exactly right. The item's own set always stays listed.
-            const counts = new Map();
+            //
+            // The COUNT is per-closet (owner report 2026-08-28): a split set
+            // showed its total from both closets, so a duplicated pair read
+            // "4 pieces" when only 2 were in the room. Same single pass, one
+            // extra tally. Enumeration still uses the all-closets `counts` —
+            // gating that too would drop the item's own set from the list.
+            // The edited item counts under its FORM closet, so switching the
+            // Closet select updates the tally before the save lands.
+            const counts = new Map();       // all closets — enumeration only
+            const closetCounts = new Map(); // this closet — the number shown
             const setClosets = new Map();
             (allItems || []).forEach(it => {
               if (!it.set_id) return;
+              const inCloset = it.id === item.id
+                ? form.closet_id
+                : (it.closet_id || DEFAULT_CLOSET_ID);
               counts.set(it.set_id, (counts.get(it.set_id) || 0) + 1);
+              if (inCloset === form.closet_id) {
+                closetCounts.set(it.set_id, (closetCounts.get(it.set_id) || 0) + 1);
+              }
               if (!setClosets.has(it.set_id)) setClosets.set(it.set_id, new Set());
-              setClosets.get(it.set_id).add(it.closet_id || DEFAULT_CLOSET_ID);
+              setClosets.get(it.set_id).add(inCloset);
             });
             // Sorted by the label she actually reads, not by item-insertion
             // order (which is what the counts Map hands back). Unnamed sets
             // collect at the end rather than sorting under "U".
             const options = [...counts.entries()]
               .filter(([id]) => id === form.set_id || setClosets.get(id).has(form.closet_id))
-              .map(([id, count]) => ({ id, count, name: ((setsMetaProp || {})[id]?.name || "").trim() }))
+              .map(([id]) => ({ id, count: closetCounts.get(id) || 0, name: ((setsMetaProp || {})[id]?.name || "").trim() }))
               .sort((a, b) => {
                 if (!a.name !== !b.name) return a.name ? -1 : 1;
                 return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
