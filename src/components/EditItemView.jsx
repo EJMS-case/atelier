@@ -299,12 +299,25 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
           <option value="">— Not part of a set —</option>
           <option value="__new__">+ Create new set</option>
           {(() => {
-            // Build unique set IDs from items; count pieces in one pass.
+            // Build unique set IDs from items; count pieces in one pass. Sets
+            // have no closet of their own — they live wherever their member
+            // items do — so the picker offers only sets with at least one
+            // piece in THIS garment's closet (form.closet_id, so changing the
+            // Closet select re-scopes the list live). Owner report 2026-08-28:
+            // editing in Arizona listed every NYC set. A cross-closet twin
+            // (duplicate.js copies set_id) makes its set show in both closets,
+            // which is exactly right. The item's own set always stays listed.
             const counts = new Map();
+            const setClosets = new Map();
             (allItems || []).forEach(it => {
-              if (it.set_id) counts.set(it.set_id, (counts.get(it.set_id) || 0) + 1);
+              if (!it.set_id) return;
+              counts.set(it.set_id, (counts.get(it.set_id) || 0) + 1);
+              if (!setClosets.has(it.set_id)) setClosets.set(it.set_id, new Set());
+              setClosets.get(it.set_id).add(it.closet_id || DEFAULT_CLOSET_ID);
             });
-            const options = [...counts.entries()].map(([id, count]) => (
+            const options = [...counts.entries()]
+              .filter(([id]) => id === form.set_id || setClosets.get(id).has(form.closet_id))
+              .map(([id, count]) => (
               <option key={id} value={id}>
                 {(setsMetaProp || {})[id]?.name || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
               </option>

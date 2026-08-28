@@ -2,6 +2,15 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Closet-scoped set picker; upload pipeline no longer freezes the page — 2026-08-28
+
+### Why
+Owner reports: (1) editing a garment while in the Arizona closet listed every NYC set in the Coord Set picker; (2) the bulk-add screen says "you can edit any field while waiting" but on iPhone nothing was tappable while photos processed.
+
+### Changed
+- **Coord Set picker** (`EditItemView`): sets have no closet of their own — they live wherever their member items do — so the picker now offers only sets with at least one piece in the garment's chosen closet (`form.closet_id`, re-scoping live when the Closet select changes). A cross-closet twin (duplicate.js copies `set_id`) correctly surfaces its set in both closets; the item's own set always stays listed. `EditItemView` keeps receiving the full wardrobe — scoping by the *item's* closet, not the device's active closet, is what makes editing an NYC item from Arizona behave.
+- **Bulk-add pipeline** (`BulkAddView`): the freeze was real — every photo ran full-resolution main-thread pixel scans (remove.bg matte assessment + transparent-border trim on ~12MP images), all files concurrently, with multi-MB base64 strings re-rendering on each keystroke. Photos now downscale to `PHOTO_MAX_DIM` immediately after read (stored cutouts were capped there anyway, so nothing kept is lost), the full-res image never enters state, remove.bg and the detect call upload the small image, and at most 2 pipelines run at once (`withPipelineSlot`). Rows appear instantly with every field editable; the thumbnail fills in when the downscale lands. Save requires name + a landed photo so a still-empty row can't store an imageless item.
+
 ## [Unreleased] — Athleisure subcategory consolidation (plural-only) — 2026-08-28
 
 ### Why
