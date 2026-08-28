@@ -528,8 +528,8 @@ section("destination preference");
   // Equally-suitable pairs on a Warm Casual day: Ballet Flat / Suede Loafer /
   // Sneaker all match preferShoeSub (+3); Canvas Tote / Leather Crossbody both
   // match preferBagName (+2); the two Jeans and the nine tees are identical
-  // within their slots. The +2 preference must break each tie (margin 2 > the
-  // 0.6 jitter).
+  // within their slots. The +4.5 preference must break each tie (margin 4.5 >
+  // the 0.6 jitter).
   const loafer    = items.find(it => it.name === "Suede Loafer");
   const crossbody = items.find(it => it.name === "Leather Crossbody");
   const darkJean  = items.find(it => it.name === "Dark Straight Jean");
@@ -563,7 +563,7 @@ section("destination preference");
 
 // Preference never overrides occasion fit: a Dinner day still refuses the
 // preferred sneaker (avoidShoeSub -3 vs preferShoeSub +3 — a 6-point gap the
-// +2 bonus can't close).
+// +4.5 bonus can't close).
 {
   const items = wardrobe();
   const sneaker = items.find(it => it.name === "White Leather Sneaker");
@@ -581,6 +581,193 @@ section("destination preference");
     weather: "Warm", occasion: "Casual", preferItemIds: new Set([loafer.id]),
   });
   assert(alts[0]?.id === loafer.id, "alternativesFor ranks the preferred swap first");
+}
+
+// ── 16. Destination closet in a LOWER formality register ─────────────────────
+// Regression (2026-08-28): a 7-day trip to her Arizona closet generated 15
+// items, all from home, ZERO from the destination. That closet holds only
+// formality 1-2 pieces (athleisure + loungewear + sandals) and trip days
+// default to "Casual" (band [3,4]), so every destination piece took the
+// formality-distance penalty (-3) while a home tee took preferTopName (+2).
+// The old +2 destination bonus could not close a 5-point gap — for ANY
+// wardrobe. See the PREFER_BONUS calibration block in tripPacker.js.
+section("destination closet in a lower formality register");
+
+// Destination closet: nothing but formality 1-2 athleisure/loungewear + flat
+// sandals. Home closet: a full casual wardrobe at formality 3-4.
+function destAthleisureCloset() {
+  return [
+    ...Array.from({ length: 6 }, (_, i) => mk("Athleisure", "Sports Bras", `AZ Tank ${i + 1}`, { formality: 1, material: "cotton" })),
+    ...Array.from({ length: 6 }, (_, i) => mk("Athleisure", "Leggings", `AZ Legging ${i + 1}`, { formality: 1, material: "cotton" })),
+    ...Array.from({ length: 5 }, (_, i) => mk("Athleisure", "Shorts", `AZ Run Short ${i + 1}`, { formality: 1, material: "cotton" })),
+    ...Array.from({ length: 4 }, (_, i) => mk("Loungewear", "Tops", `AZ Lounge Top ${i + 1}`, { formality: 2, material: "cotton" })),
+    ...Array.from({ length: 3 }, (_, i) => mk("Loungewear", "Bottoms", `AZ Lounge Pant ${i + 1}`, { formality: 2, material: "cotton" })),
+    ...Array.from({ length: 4 }, (_, i) => mk("Shoes", "Sandals", `AZ Slide Sandal ${i + 1}`, { formality: 2 })),
+  ];
+}
+function homeCasualCloset() {
+  return [
+    ...Array.from({ length: 10 }, (_, i) => mk("Tops", "T-Shirts", `Home Tee ${i + 1}`, { formality: 3, material: "cotton" })),
+    ...Array.from({ length: 8 }, (_, i) => mk("Bottoms", "Shorts", `Home Short ${i + 1}`, { formality: 3, material: "cotton" })),
+    ...Array.from({ length: 6 }, (_, i) => mk("Bottoms", "Skirts", `Home Skirt ${i + 1}`, { formality: 4, material: "cotton" })),
+    ...Array.from({ length: 4 }, (_, i) => mk("Shoes", "Sandals", `Home Sandal ${i + 1}`, { formality: 3 })),
+    ...Array.from({ length: 3 }, (_, i) => mk("Bags", "", `Home Canvas Tote ${i + 1}`, { formality: 3 })),
+  ];
+}
+
+{
+  nextId = 0;
+  const dest = destAthleisureCloset();
+  const home = homeCasualCloset();
+  const items = [...dest, ...home];
+  const destIds = new Set(dest.map(it => it.id));
+  const { dailyOutfits, packingList } = buildDailyOutfits(items, Array(7).fill(103), {
+    occasions: defaultOccasions(7),
+    tripDayCount: 7,
+    preferItemIds: destIds,
+  });
+  assert(dailyOutfits.length === 7 && dailyOutfits.every(d => d.length >= 3),
+    "7 hot Casual days still build complete outfits");
+
+  const used = [...new Set(dailyOutfits.flat().map(it => it.id))];
+  const fromDest = used.filter(id => destIds.has(id));
+  assert(fromDest.length > 0, "destination closet contributes SOMETHING (the reported bug: zero)");
+  assert(fromDest.length > used.length / 2,
+    `a majority of chosen items come from the destination closet (${fromDest.length}/${used.length})`);
+  // Every slot the destination closet can actually serve is served by it. Bags
+  // it has none of, so those still get packed from home.
+  const shoes = new Set(dailyOutfits.flat().filter(it => it.category === "Shoes").map(it => it.id));
+  assert([...shoes].every(id => destIds.has(id)), "hot Casual shoes all come from the destination closet");
+  const tops = dailyOutfits.flat().filter(it => ["Athleisure", "Loungewear", "Tops"].includes(it.category) && /Tank|Lounge Top|Tee/.test(it.name));
+  assert(tops.some(it => destIds.has(it.id)), "destination tops are worn, not only home tees");
+  assert(packingList.some(it => !destIds.has(it.id)),
+    "preference is not a hard override — home pieces still fill what the destination lacks (bags)");
+}
+
+// ── 17. Hard constraints the destination preference must NOT break ───────────
+section("destination preference vs occasion constraints");
+
+// Warm (76°F) rather than Hot: the Hot bucket hard-bans heels for everyone, so
+// a heel-vs-sandal contest can only be staged at a milder temperature.
+function destAthleisureForOccasionDay() {
+  return [
+    ...Array.from({ length: 5 }, (_, i) => mk("Athleisure", "Sports Bras", `AZ Tank ${i + 1}`, { formality: 1, material: "cotton" })),
+    ...Array.from({ length: 5 }, (_, i) => mk("Athleisure", "Leggings", `AZ Legging ${i + 1}`, { formality: 1, material: "cotton" })),
+    ...Array.from({ length: 4 }, (_, i) => mk("Shoes", "Sandals", `AZ Slide Sandal ${i + 1}`, { formality: 2 })),
+    ...Array.from({ length: 3 }, (_, i) => mk("Shoes", "Sneakers", `AZ Trainer ${i + 1}`, { formality: 1 })),
+  ];
+}
+function homeDressyCloset() {
+  return [
+    ...Array.from({ length: 3 }, (_, i) => mk("Tops", "Blouses", `Silk Blouse ${i + 1}`, { formality: 5, material: "silk" })),
+    ...Array.from({ length: 3 }, (_, i) => mk("Bottoms", "Trousers", `Crepe Trouser ${i + 1}`, { formality: 5, material: "cotton" })),
+    // The only dressy shoes at home are heels, so "packed the heel" is
+    // unambiguous — the destination closet's flats can't be mistaken for one.
+    ...Array.from({ length: 2 }, (_, i) => mk("Shoes", "Pumps", `Leather Pump ${i + 1}`, { formality: 5 })),
+  ];
+}
+
+// Dinner / Work Dinner / Occasion: the heel is packed from home even though
+// flat sandals and trainers are sitting in the destination closet.
+for (const occ of ["Dinner", "Work Dinner", "Occasion"]) {
+  nextId = 0;
+  const dest = destAthleisureForOccasionDay();
+  const home = homeDressyCloset();
+  const destIds = new Set(dest.map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits([...dest, ...home], [76], {
+    occasions: [occ],
+    preferItemIds: destIds,
+  });
+  const shoe = dailyOutfits[0].find(it => it.category === "Shoes");
+  assert(shoe && !destIds.has(shoe.id) && shoe.subcategory === "Pumps",
+    `${occ} day packs the heel from home over the at-destination sandal/sneaker`);
+  const top = dailyOutfits[0].find(it => ["Tops", "Athleisure"].includes(it.category));
+  assert(top && !destIds.has(top.id),
+    `${occ} day packs a proper top from home over at-destination athleisure`);
+}
+
+// Work: work-appropriate pieces get packed rather than the at-destination
+// athleisure, in every slot the day actually cares about.
+{
+  nextId = 0;
+  const dest = destAthleisureForOccasionDay();
+  const home = homeDressyCloset();
+  const destIds = new Set(dest.map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits([...dest, ...home], [76], {
+    occasions: ["Work"],
+    preferItemIds: destIds,
+  });
+  const day = dailyOutfits[0];
+  assert(day.every(it => !destIds.has(it.id)),
+    "Work day pulls every piece from home rather than at-destination athleisure");
+  assert(day.some(it => it.subcategory === "Blouses") && day.some(it => it.subcategory === "Trousers") &&
+         day.some(it => it.subcategory === "Pumps"),
+    "Work day is actually work-appropriate (blouse + trouser + heel)");
+}
+
+// Weather rules are untouched: nothing weather-inappropriate is selected just
+// because it lives at the destination.
+{
+  nextId = 0;
+  const dest = [
+    ...destAthleisureCloset(),
+    mk("Knits", "Sweaters", "AZ Merino Sweater", { formality: 3, material: "wool" }),
+    mk("Bottoms", "Trousers", "AZ Wool Trouser", { formality: 3, material: "wool" }),
+    mk("Shoes", "Ankle", "AZ Ankle Boot", { formality: 3, material: "leather" }),
+  ];
+  const home = homeCasualCloset();
+  const destIds = new Set(dest.map(it => it.id));
+  const banned = new Set(dest.filter(it => /Merino|Wool Trouser|Ankle Boot/.test(it.name)).map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits([...dest, ...home], Array(7).fill(103), {
+    occasions: defaultOccasions(7),
+    tripDayCount: 7,
+    preferItemIds: destIds,
+  });
+  assert(!dailyOutfits.flat().some(it => banned.has(it.id)),
+    "Hot days never surface the destination's wool/knits/boots");
+}
+
+// Trip with NO destination closet behaves exactly as before: the low-formality
+// pieces stay in their own register and lose the Casual day on formality.
+{
+  nextId = 0;
+  const dest = destAthleisureCloset();
+  const home = homeCasualCloset();
+  const destIds = new Set(dest.map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits([...dest, ...home], Array(7).fill(103), {
+    occasions: defaultOccasions(7),
+    tripDayCount: 7,
+    // no preferItemIds
+  });
+  const used = [...new Set(dailyOutfits.flat().map(it => it.id))];
+  const fromDest = used.filter(id => destIds.has(id));
+  assert(fromDest.length * 3 < used.length,
+    `no destination closet → no preference applied (${fromDest.length}/${used.length} low-formality pieces)`);
+  // And the unpreferred score is the untouched pre-change formula.
+  const tank = dest.find(it => it.name === "AZ Tank 1");
+  assert(scoreForOccasion(tank, "Casual") === -3,
+    "without the destination flag the formality penalty is the full 1.5/step");
+}
+
+// ── 18. Destination relief + adequacy gate, scored directly ──────────────────
+section("destination formality relief");
+{
+  nextId = 0;
+  const tank = mk("Athleisure", "Sports Bras", "AZ Tank", { formality: 1 });
+  // Casual band [3,4] → dist 2, inside DEST_ADEQUATE_DIST: penalty halved.
+  assert(scoreForOccasion(tank, "Casual") === -3, "home: Casual dist 2 → -3");
+  assert(scoreForOccasion(tank, "Casual", { atDestination: true }) === -1.5,
+    "at destination: Casual dist 2 → -1.5 (halved)");
+  // Dinner band [4,6] → dist 3, outside the adequacy zone: full penalty.
+  assert(scoreForOccasion(tank, "Dinner") === -4.5, "home: Dinner dist 3 → -4.5");
+  assert(scoreForOccasion(tank, "Dinner", { atDestination: true }) === -4.5,
+    "at destination: Dinner dist 3 → full -4.5 (outside the adequacy zone)");
+  // In-band and band-less items are untouched by the relief.
+  const tee = mk("Tops", "T-Shirts", "Home Tee", { formality: 3 });
+  assert(scoreForOccasion(tee, "Casual", { atDestination: true }) === scoreForOccasion(tee, "Casual"),
+    "in-band items score the same at destination or at home");
+  assert(scoreForOccasion(tank, "Snorkeling", { atDestination: true }) === scoreForOccasion(tank, "Snorkeling"),
+    "an occasion with no formality band is unaffected by the relief");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────

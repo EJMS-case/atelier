@@ -83,7 +83,27 @@ function formalityBand(occasion) {
   return null;
 }
 
-export function scoreForOccasion(item, occasion) {
+// How far outside the day's formality band an at-destination item may sit and
+// still count as ADEQUATE for that day. See the PREFER_BONUS block below —
+// this one number gates BOTH halves of the destination preference (the
+// softened formality penalty and the bonus itself).
+const DEST_ADEQUATE_DIST = 2;
+// Share of the formality-distance penalty an adequate at-destination item
+// still pays. Halved: the gap is a style preference, not a packing cost.
+const DEST_FORMALITY_RELIEF = 0.5;
+
+// Steps between an item's curated formality and the occasion's band (0 when
+// in band, when the item has no formality, or when the occasion has no band).
+function formalityDistance(item, occasion) {
+  if (!Number.isFinite(item?.formality)) return 0;
+  const band = formalityBand(occasion);
+  if (!band) return 0;
+  return item.formality < band[0] ? band[0] - item.formality
+       : item.formality > band[1] ? item.formality - band[1]
+       : 0;
+}
+
+export function scoreForOccasion(item, occasion, opts = {}) {
   const rules = occasionPriorityRegex(occasion);
   const name = ((item.name || "") + " " + (item.subcategory || "")).toLowerCase();
   const sub = item.subcategory || "";
@@ -115,14 +135,15 @@ export function scoreForOccasion(item, occasion) {
   // sinks below a formality-3 short on a Casual day (-3 vs 0 — well above the
   // packer's 0.6 jitter) while a strong explicit signal (user occasion tag +4,
   // preferred shoe sub +3) can still outweigh it when the wardrobe is thin.
-  if (Number.isFinite(item.formality)) {
-    const band = formalityBand(occasion);
-    if (band) {
-      const dist = item.formality < band[0] ? band[0] - item.formality
-                 : item.formality > band[1] ? item.formality - band[1]
-                 : 0;
-      if (dist > 0) s -= Math.min(4.5, 1.5 * dist);
-    }
+  const dist = formalityDistance(item, occasion);
+  if (dist > 0) {
+    let penalty = Math.min(4.5, 1.5 * dist);
+    // At-destination relief: an item already in the closet at the destination
+    // pays only half the penalty — but ONLY while it is still adequate for the
+    // day (see DEST_ADEQUATE_DIST / the PREFER_BONUS block). A piece further
+    // out than that is in the wrong register entirely and pays full freight.
+    if (opts.atDestination && dist <= DEST_ADEQUATE_DIST) penalty *= DEST_FORMALITY_RELIEF;
+    s -= penalty;
   }
   return s;
 }
@@ -187,8 +208,11 @@ function swimPieceKind(it) {
  *                                        (applied to every day if set)
  * @param {Set<string>} [opts.preferItemIds] - ids that already live at the
  *                                        trip's destination closet: scored
- *                                        +PREFER_BONUS so they win ties, never
- *                                        hard constraints (Phase B)
+ *                                        +PREFER_BONUS (with a softened
+ *                                        formality penalty) for any day they
+ *                                        are adequate for, so they are the
+ *                                        first choice rather than a tie-break;
+ *                                        never hard constraints (Phase B)
  * @returns {{ dailyOutfits: Object[][], poolSuits: (Object[]|null)[], packingList: Object[], uncovered: number[] }}
  *   `poolSuits[d]` is null for most days; on the 1-2 suit-placement days it
  *   holds the COMPLETE suit (one one-piece, or a matched top+bottom pair) as
@@ -294,15 +318,59 @@ export function capsuleTargets(dayCount) {
 // trip). Everything else (tops/dresses) stays fresh day to day.
 const CAPSULE_SLOTS = new Set(["shoes", "bags", "outerwear", "swim"]);
 
-// Destination-closet preference bonus (Phase B). Items already at the trip's
-// destination cost NOTHING to pack, so they should win ties and near-ties —
-// but never beat a real constraint. Calibration against existing magnitudes:
+// Destination-closet preference (Phase B). Items already at the trip's
+// destination cost NOTHING to pack, so they should be the FIRST choice for any
+// day they can actually serve — but never beat a real constraint.
+//
+// 2026-08-28 recalibration. The original +2 was calibrated against the
+// occasion terms (3/4) only; it ignored the formality-distance penalty (up to
+// 4.5) that stacks on top of them. A destination closet built entirely of
+// formality 1-2 pieces (her Arizona closet: athleisure + loungewear) therefore
+// could not place a single item on a "Casual" day (band [3,4]):
+//   AZ athleisure top  0 − 3.0 (dist 2) + 2 = −1.0
+//   NYC cotton tee    +2 (preferTopName) − 0     = +2.0
+// — a 3-point deficit the bonus was mathematically incapable of closing, for
+// any wardrobe. The fix is two numbers chosen together:
+//
+//   DEST_ADEQUATE_DIST = 2 — how far outside the day's band an at-destination
+//     item may sit and still be "adequate for the day". Two steps is one
+//     register over (athleisure/lounge vs casual on the 1-8 curated scale).
+//     Inside that zone the formality gap is a style preference, so the penalty
+//     is HALVED and the bonus applies. Outside it the item is in the wrong
+//     register entirely (athleisure at a Dinner, band [4,6], dist 3): it pays
+//     the FULL penalty and gets NO bonus — the preference is "use what's
+//     already there when it's adequate", never "never pack anything".
+//
+//   PREFER_BONUS = 4.5 — enough that an adequate destination piece beats a
+//     COMPARABLE home piece, and no more:
+//       Casual top:  AZ athleisure −1.5 + 4.5 = 3.0  >  NYC tee +2.0   (+1.0)
+//       Casual bottom: AZ legging  −1.5 + 4.5 = 3.0  >  NYC short  0    (+3.0)
+//       Dinner top:  AZ athleisure is dist 3 → −4.5 + 0 = −4.5
+//                                                  <  silk blouse +2.0 (−6.5)
+//       Dinner shoe: AZ sandal (f2, dist 2) −3 − 1.5 + 4.5 = 0
+//                                                  <  home pump +3.0   (−3.0)
+//       Work bottom: AZ legging is dist 4 → −4.5 + 0 = −4.5
+//                                                  <  crepe trouser 0  (−4.5)
+//     Every one of those margins clears the 0.6 tie-break jitter.
+//     Plain halving with no adequacy gate was measured and rejected: it
+//     compresses dist 2 (−1.5) and dist 3-4 (−2.25, the 4.5 cap halved) to
+//     0.75 apart, so no single bonus can both place athleisure on a Casual day
+//     (needs > 3.5) and keep leggings off a Work day (needs < 2.4).
+//
+// Calibration against the other magnitudes is unchanged:
 //   > 0.6  tie-break jitter        → ties resolve to the preferred item
 //   > 1.5  reuse bonus             → a fresh at-destination piece can edge a
 //                                    once-worn pulled piece (packing cost 0)
-//   < 3/4  occasion terms          → dinner still gets the heel, wherever it lives
-//   ≪ 6/7  fresh-top & capsule-ceiling penalties → structure rules still win
-const PREFER_BONUS = 2;
+//   < 6    occasion shoe/top swing → dinner still gets the heel (+3 vs −3),
+//                                    wherever it lives
+//   < 6/7  fresh-top & capsule-ceiling penalties → structure rules still win
+const PREFER_BONUS = 4.5;
+
+// The destination bonus an item earns for a given day: full bonus while the
+// item is adequate for that day's formality band, nothing once it isn't.
+function destinationBonus(item, occasion) {
+  return formalityDistance(item, occasion) <= DEST_ADEQUATE_DIST ? PREFER_BONUS : 0;
+}
 
 export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const dayCount = dailyHighsF.length;
@@ -423,9 +491,10 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     const alreadyHasStatement = currentOutfit.some(isStatement);
     const scored = candidates.map(c => {
       const wears = useCount.get(c.id) || 0;
-      let s = scoreForOccasion(c, occasion);
+      const atDest = !!prefer?.has(c.id);
+      let s = scoreForOccasion(c, occasion, { atDestination: atDest });
       // Already at the destination — packing cost zero (see PREFER_BONUS).
-      if (prefer?.has(c.id)) s += PREFER_BONUS;
+      if (atDest) s += destinationBonus(c, occasion);
       if (alreadyHasStatement && isStatement(c)) s -= 15;
       if (CAPSULE_SLOTS.has(slot)) {
         if (wears > 0) s += 1.5;
@@ -660,7 +729,14 @@ export function alternativesFor(items, currentItem, opts = {}) {
   );
 
   return pool
-    .map(it => ({ item: it, score: scoreForOccasion(it, occasion) + (prefer?.has(it.id) ? PREFER_BONUS : 0) }))
+    .map(it => {
+      const atDest = !!prefer?.has(it.id);
+      return {
+        item: it,
+        score: scoreForOccasion(it, occasion, { atDestination: atDest })
+             + (atDest ? destinationBonus(it, occasion) : 0),
+      };
+    })
     .sort((a, b) => b.score - a.score)
     .map(x => x.item);
 }
