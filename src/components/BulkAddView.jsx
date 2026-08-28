@@ -3,8 +3,31 @@ import { s } from "../ui/styles.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
-import { compressImage, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
-import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
+import { blobToDataUrl, compressImage, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
+import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+
+// Per-file pipeline gate. The heavy steps — decoding a 12MP photo, the
+// matte assessment after remove.bg, the transparent-border trim — all run
+// pixel scans on the main thread, and seven photos processing at once froze
+// the page ("you can edit any field while waiting" was a lie on iPhone).
+// Two in flight keeps typing responsive while still overlapping network
+// waits with canvas work. The while-loop recheck matters: a fresh caller can
+// slip in between a slot freeing and its waiter resuming.
+const MAX_PIPELINES = 2;
+let activePipelines = 0;
+const pipelineWaiters = [];
+async function withPipelineSlot(fn) {
+  while (activePipelines >= MAX_PIPELINES) {
+    await new Promise(res => pipelineWaiters.push(res));
+  }
+  activePipelines++;
+  try { return await fn(); }
+  finally {
+    activePipelines--;
+    const next = pipelineWaiters.shift();
+    if (next) next();
+  }
+}
 
 export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
   const [queue,      setQueue]      = useState([]);
@@ -15,59 +38,79 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
   const handleFiles = (e) => {
     Array.from(e.target.files).forEach(file => {
       const id = `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const rawImage = ev.target.result;
-        setQueue(q => [...q, {
-          id, image: rawImage,
-          name: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
-          category: "Tops", subcategory: "", brand: "", color: "", notes: "",
-          material: "", pattern: "", has_bg: false,
-          detected_at: null, detection_confidence: null,
-        }]);
-        setProcessing(p => ({...p, [id]: "bg"}));
+      // Row appears immediately with every field editable; the thumbnail
+      // fills in when the downscale lands. The full-res photo never enters
+      // state — one 12MP base64 string per row made every keystroke
+      // re-render megabytes.
+      setQueue(q => [...q, {
+        id, image: "",
+        // Empty, not the filename — iPhone exports name files like
+        // "20962754 1680 4DD6…" which used to save as the item name.
+        // AI auto-detect proposes a real title (applyDetection).
+        name: "",
+        category: "Tops", subcategory: "", brand: "", color: "", notes: "",
+        material: "", pattern: "", price_paid: null, has_bg: false,
+        detected_at: null, detection_confidence: null,
+      }]);
+      setProcessing(p => ({...p, [id]: "bg"}));
 
-        // F1 — run BG removal and AI detect in parallel. Both are best-effort;
-        // neither blocks the save button on failure. After a successful strip
-        // we trim the transparent border so saved photos don't carry empty
-        // padding into the closet grid or builder collages.
-        const bgP = stripBackground(rawImage, { rmbgKey })
-          .then(async r => {
-            const trimmed = r.has_bg ? r.image : await trimTransparentBorders(r.image);
-            const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
-            // is_trimmed is set when we actually ran the trim path
-            // (i.e. the bg was removed). Items that retain their bg still
-            // need a future trim pass once a bg removal happens.
-            return { image: compressed, has_bg: r.has_bg, is_trimmed: !r.has_bg };
-          })
-          .catch(err => {
-            console.warn("[F1] bg strip failed:", err);
-            return { image: rawImage, has_bg: true, is_trimmed: false };
-          });
+      withPipelineSlot(async () => {
+        try {
+          const raw = await blobToDataUrl(file);
+          // Work at the stored cap from the start: every downstream pixel
+          // pass (matte assessment, border trim) and both uploads (remove.bg,
+          // the detect call) shrink ~10-50x. Saved cutouts are capped at
+          // PHOTO_MAX_DIM anyway, so no stored detail is lost.
+          const working = await compressImage(raw, PHOTO_MAX_DIM, 0.9);
+          setQueue(q => q.map(i => i.id === id ? { ...i, image: working } : i));
 
-        const detectP = apiKey
-          ? autoDetectItem(rawImage, apiKey).catch(err => {
-              console.warn("[F1] auto-detect failed:", err);
-              return null;
+          // F1 — run BG removal and AI detect in parallel. Both are
+          // best-effort; neither blocks the save button on failure. After a
+          // successful strip we trim the transparent border so saved photos
+          // don't carry empty padding into the closet grid or builder
+          // collages.
+          const bgP = stripBackground(working, { rmbgKey })
+            .then(async r => {
+              const trimmed = r.has_bg ? r.image : await trimTransparentBorders(r.image);
+              const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
+              // is_trimmed is set when we actually ran the trim path
+              // (i.e. the bg was removed). Items that retain their bg still
+              // need a future trim pass once a bg removal happens.
+              return { image: compressed, has_bg: r.has_bg, is_trimmed: !r.has_bg };
             })
-          : Promise.resolve(null);
+            .catch(err => {
+              console.warn("[F1] bg strip failed:", err);
+              return { image: working, has_bg: true, is_trimmed: false };
+            });
 
-        const [bg, detection] = await Promise.all([bgP, detectP]);
+          const detectP = apiKey
+            ? autoDetectItem(working, apiKey).catch(err => {
+                console.warn("[F1] auto-detect failed:", err);
+                return null;
+              })
+            : Promise.resolve(null);
 
-        // Apply results in a single queue update so we don't race with the
-        // user's typing or the Knits auto-classifier (handleCategoryChange).
-        setQueue(q => q.map(i => {
-          if (i.id !== id) return i;
-          let next = { ...i, image: bg.image, has_bg: bg.has_bg, is_trimmed: bg.is_trimmed };
-          if (detection) {
-            next = applyDetection(next, detection);
-            next.detected_at = new Date().toISOString();
-          }
-          return next;
-        }));
-        setProcessing(p => ({...p, [id]: "done"}));
-      };
-      reader.readAsDataURL(file);
+          const [bg, detection] = await Promise.all([bgP, detectP]);
+
+          // Apply results in a single queue update so we don't race with the
+          // user's typing or the Knits auto-classifier (handleCategoryChange).
+          setQueue(q => q.map(i => {
+            if (i.id !== id) return i;
+            let next = { ...i, image: bg.image, has_bg: bg.has_bg, is_trimmed: bg.is_trimmed };
+            if (detection) {
+              next = applyDetection(next, detection);
+              next.detected_at = new Date().toISOString();
+            }
+            return next;
+          }));
+          setProcessing(p => ({...p, [id]: "done"}));
+        } catch (err) {
+          // Read/decode failure — keep the row (fields may hold typed data)
+          // and let the thumbnail badge say the photo failed.
+          console.warn("[F1] photo pipeline failed:", err);
+          setProcessing(p => ({...p, [id]: "error"}));
+        }
+      });
     });
     e.target.value = "";
   };
@@ -100,8 +143,12 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
   const update = (id, f, v) => setQueue(q => q.map(i => i.id===id ? {...i,[f]:v} : i));
   const remove = (id)       => setQueue(q => q.filter(i => i.id!==id));
 
+  // Needs a name AND a landed photo — rows start with image:"" until the
+  // downscale finishes, and saving one would store an item with no picture.
+  const savable = (i) => i.name.trim() && i.image;
+
   const handleSave = () => {
-    const valid = queue.filter(i => i.name.trim());
+    const valid = queue.filter(savable);
     if (!valid.length) return;
     setSaving(true);
     const newItems = valid.map(item => ({
@@ -162,7 +209,10 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                 <div key={item.id} style={s.queueRow}>
                   {/* Thumbnail with status overlay */}
                   <div style={s.queueThumb}>
-                    <img src={item.image} alt="" style={s.queueThumbImg}/>
+                    {/* Empty until the downscale lands; queueThumb's surface
+                        color is the placeholder, the overlay spinner sits on
+                        top either way. */}
+                    {item.image && <img src={item.image} alt="" style={s.queueThumbImg}/>}
                     {status === "bg" && (
                       <div style={s.thumbOverlay}>
                         <span style={s.spinnerSm}/>
@@ -194,7 +244,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       </select>
                       {TAXONOMY[item.category]?.length > 0 && item.category !== "Knits" && (() => {
                         const l2 = getSubcatL2(item.category, item.subcategory);
-                        const l3Options = SUBCATEGORY_L3[l2] || [];
+                        const l3Options = getL3Options(item.category, l2);
                         const l3Val = (l2 && l2 !== item.subcategory) ? item.subcategory : "";
                         return (
                           <>
@@ -253,6 +303,21 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       <input style={{...s.input,...s.queueInput}} placeholder="Brand"
                         value={item.brand} onChange={e=>update(item.id,"brand",e.target.value)}/>
                     </div>
+                    {/* Same fields + widgets as EditItemView, inline — so a
+                        bulk-added piece doesn't need a second editing pass. */}
+                    <div style={s.queueRow2}>
+                      <input style={{...s.input,...s.queueInput}} placeholder="Material (silk, wool…)"
+                        value={item.material} onChange={e=>update(item.id,"material",e.target.value)}/>
+                      <select style={{...s.select,...s.queueSelect}} value={item.pattern}
+                        onChange={e=>update(item.id,"pattern",e.target.value)}>
+                        <option value="">Pattern</option>
+                        {["solid","striped","plaid","floral","abstract","animal","polka-dot"].map(p=><option key={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <input type="number" min="0" step="1"
+                      style={{...s.input,...s.queueInput}} placeholder="Price paid (USD, optional)"
+                      value={item.price_paid ?? ""}
+                      onChange={e=>update(item.id,"price_paid", e.target.value === "" ? null : Number(e.target.value))}/>
                     <textarea rows={2}
                       style={{...s.input,...s.queueInput, minHeight:52, resize:"vertical", fontFamily:"inherit", lineHeight:1.4}}
                       placeholder="Notes (e.g. cropped, chunky knit, cashmere)"
@@ -272,10 +337,10 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
             )}
             <button style={{...s.btnPrimary,width:"100%"}}
               onClick={handleSave}
-              disabled={saving || queue.every(i=>!i.name.trim())}>
+              disabled={saving || !queue.some(savable)}>
               {saving
                 ? <><span style={s.spinnerSm}/> Saving…</>
-                : `Save ${queue.filter(i=>i.name.trim()).length} item${queue.filter(i=>i.name.trim()).length!==1?"s":""} to Wardrobe`}
+                : `Save ${queue.filter(savable).length} item${queue.filter(savable).length!==1?"s":""} to Wardrobe`}
             </button>
             <button style={s.btnSecondary} onClick={onBack}>Cancel</button>
           </div>

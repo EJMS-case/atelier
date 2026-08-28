@@ -209,11 +209,14 @@ export function effectiveColorFamily(item) {
   return familyForColorString(stored) || "";
 }
 
-// Secondary: sleeve length (for Tops, Knits, Athleisure)
+// Secondary: sleeve length (for Tops, Knits, Athleisure). Athleisure rows
+// carry the plural names since the 2026-08-28 consolidation ("Sports Bras",
+// "Short Sleeves", "Long Sleeves"); the singular keys stay for any legacy
+// Tops rows normalizeItem doesn't touch.
 export const SLEEVE_SORT = {
-  "Tanks":0, "T-Shirts":1, "Short Sleeve":2, "Polos":3,
+  "Tanks":0, "Sports Bras":0, "T-Shirts":1, "Short Sleeve":2, "Short Sleeves":2, "Polos":3,
   "Blouses":4, "Shirts":5, "Tops":6, "Light Knit Tops":7,
-  "Cardigans":8, "Pullovers":9, "Long Sleeve":10,
+  "Cardigans":8, "Pullovers":9, "Long Sleeve":10, "Long Sleeves":10,
 };
 
 // Secondary: garment length (for Dresses, Skirts via L3)

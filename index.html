@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- maximum-scale=1.0 kills iOS Safari's focus auto-zoom on small-font
+         inputs (users got stuck zoomed in); modern iOS still allows manual
+         pinch-zoom despite it. viewport-fit=cover fills the notch area. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <title>Atelier — My Wardrobe</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />

@@ -224,7 +224,7 @@ export function computeFilterChips(items, wearStats = {}, activeKeys = null) {
 // Set TOP halves stay out — banning a zip-up because she wants jeans would
 // strip valid tops.
 const SET_BOTTOM_RE = /\b(pant|pants|trouser|trousers|short|shorts|skirt|skort|legging|leggings|jogger|joggers|bottom|bottoms)\b/i;
-// Top signals are tested FIRST for split-set halves: "Short Sleeve" contains
+// Top signals are tested FIRST for split-set halves: "Short Sleeves" contains
 // the word "short" and would otherwise read as a lower-half piece, making an
 // "Only Jeans" toggle ban a short-sleeve set top. Mirrors the TOP-before-
 // BOTTOM ordering in slotForItem / styling-validator.

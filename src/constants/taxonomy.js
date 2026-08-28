@@ -14,7 +14,7 @@ export const TAXONOMY = {
   Sets:         ["Day Sets","Night Sets"],
   Jumpsuits:    [],
   Loungewear:   ["Bottoms","Hoodies / Sweatshirts","Tops"],
-  Athleisure:   ["Bra/Crop Top","Dresses","Leggings","Long Sleeve","Pants","Short Sleeve","Shorts","Skirts","Skort","Sports Bra"],
+  Athleisure:   ["Dresses","Leggings","Long Sleeves","Short Sleeves","Shorts","Skirts","Sports Bras"],
   Swim:         ["Swimsuits","Cover-Ups"],
   Outerwear:    ["Blazers","Coats","Jackets"],
   Occasionwear: ["Cocktail Dresses","Evening Accessories","Formal Separates","Gowns"],
@@ -43,6 +43,35 @@ export const SUBCATEGORY_L3 = {
   "Gowns":              ["A-Line","Ball Gown","Column"],
   "Formal Separates":   ["Formal Skirts","Formal Tops"],
 };
+
+// Retired Athleisure subcategory labels → the bucket they now live in (owner
+// request 2026-08-28: plural-only names, Bra/Crop Top folded into Sports Bras,
+// Pants into Leggings, Skort into Skirts). Applied by normalizeItem so legacy
+// rows read correctly everywhere, and mirrored by the SQL migration that
+// rewrites stored rows.
+export const ATHLEISURE_SUBCATEGORY_ALIASES = {
+  "Bra/Crop Top": "Sports Bras",
+  "Sports Bra":   "Sports Bras",
+  "Pants":        "Leggings",
+  "Skort":        "Skirts",
+  "Long Sleeve":  "Long Sleeves",
+  "Short Sleeve": "Short Sleeves",
+};
+
+// L3 lists that only make sense inside one category. "Pants" and "Skirts"
+// exist under both Bottoms and Athleisure, but the Jeans/Trousers/… and
+// Mini/Midi/Maxi axes belong to Bottoms alone — an athleisure skirt must not
+// grow a tailoring dropdown. Every other L3 key is unambiguous.
+const SUBCATEGORY_L3_HOME = { Pants: "Bottoms", Skirts: "Bottoms" };
+
+// Category-aware L3 lookup — the only sanctioned way to resolve a Type list
+// for a (category, L2) pair. Bare SUBCATEGORY_L3[l2] reads ignore the home
+// category and leak Bottoms axes into Athleisure.
+export function getL3Options(category, l2) {
+  const home = SUBCATEGORY_L3_HOME[l2];
+  if (home && home !== category) return [];
+  return SUBCATEGORY_L3[l2] || [];
+}
 
 // Bag detection — used by normalizeItem (taxonomy migration) and
 // EditorialCollage (slot assignment). Listed once here so the rule doesn't
@@ -146,7 +175,7 @@ export function getSubcatL2(category, subcategory) {
   const taxonomy = TAXONOMY[category] || [];
   if (taxonomy.includes(subcategory)) return subcategory;
   for (const l2 of taxonomy) {
-    if (SUBCATEGORY_L3[l2]?.includes(subcategory)) return l2;
+    if (getL3Options(category, l2).includes(subcategory)) return l2;
   }
   return "";
 }

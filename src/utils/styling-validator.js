@@ -90,7 +90,7 @@ function getGarmentRole(item) {
   if (cat === "Athleisure" || cat === "Loungewear" || cat === "Swim") {
     const sub = (item.subcategory || "").toLowerCase();
     if (ATHL_SUB_DRESS.test(sub)) return "dress";
-    // Check TOP before BOTTOM so "Short Sleeve" doesn't get matched by the
+    // Check TOP before BOTTOM so "Short Sleeves" doesn't get matched by the
     // /short/ inside ATHL_SUB_BOTTOM and classified as a lower-half piece.
     if (ATHL_SUB_TOP.test(sub)) return "upper";
     if (ATHL_SUB_BOTTOM.test(sub)) return "lower";

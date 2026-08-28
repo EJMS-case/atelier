@@ -2,6 +2,29 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Closet-scoped set picker; upload pipeline no longer freezes the page — 2026-08-28
+
+### Why
+Owner reports: (1) editing a garment while in the Arizona closet listed every NYC set in the Coord Set picker; (2) the bulk-add screen says "you can edit any field while waiting" but on iPhone nothing was tappable while photos processed.
+
+### Changed
+- **Coord Set picker** (`EditItemView`): sets have no closet of their own — they live wherever their member items do — so the picker now offers only sets with at least one piece in the garment's chosen closet (`form.closet_id`, re-scoping live when the Closet select changes). A cross-closet twin (duplicate.js copies `set_id`) correctly surfaces its set in both closets; the item's own set always stays listed. `EditItemView` keeps receiving the full wardrobe — scoping by the *item's* closet, not the device's active closet, is what makes editing an NYC item from Arizona behave.
+- **Bulk-add pipeline** (`BulkAddView`): the freeze was real — every photo ran full-resolution main-thread pixel scans (remove.bg matte assessment + transparent-border trim on ~12MP images), all files concurrently, with multi-MB base64 strings re-rendering on each keystroke. Photos now downscale to `PHOTO_MAX_DIM` immediately after read (stored cutouts were capped there anyway, so nothing kept is lost), the full-res image never enters state, remove.bg and the detect call upload the small image, and at most 2 pipelines run at once (`withPipelineSlot`). Rows appear instantly with every field editable; the thumbnail fills in when the downscale lands. Save requires name + a landed photo so a still-empty row can't store an imageless item.
+
+## [Unreleased] — Athleisure subcategory consolidation (plural-only) — 2026-08-28
+
+### Why
+Owner request: the Athleisure subcategory list had drifted into a mix of singular/plural and overlapping buckets. It is now exactly Dresses / Leggings / Long Sleeves / Short Sleeves / Shorts / Skirts / Sports Bras (plural-only, alphabetical).
+
+### Changed
+- **Taxonomy** (`constants/taxonomy.js`): retired labels map to their new buckets via the exported `ATHLEISURE_SUBCATEGORY_ALIASES` (Bra/Crop Top + Sports Bra → Sports Bras, Pants → Leggings, Skort → Skirts, Long/Short Sleeve → Long/Short Sleeves). New category-aware `getL3Options(category, l2)` keeps the Bottoms-only L3 axes (Jeans/Trousers/…, Mini/Midi/Maxi) from leaking into Athleisure — `getSubcatL2`, FilterBar's L3 chip row, and the builder's child chips all resolve through it now.
+- **Client migration**: `normalizeItem` applies the alias map to Athleisure rows on every localStorage load and merge, so legacy rows read correctly everywhere before the DB is touched.
+- **Migration 0023** (`0023_athleisure_subcategories.sql`): one guarded UPDATE rewriting `wardrobe_items` rows with `category='Athleisure'` per the same map.
+- **Classifiers**: `getSleeveType`'s subcategory map speaks the plural names and now covers Athleisure (Sports Bras → sleeveless, Long Sleeves → long); `SLEEVE_SORT` gains the plural keys. Slot/role regexes (slotForItem, validator, collage, style filters) already match the plurals by substring — verified, comments refreshed.
+
+### Tests
+`taxonomy.test.mjs` grows alias/normalizeItem + getL3Options + getSubcatL2 coverage; style-filters fixtures and the matrix closet use the new names. Full battery + build green.
+
 ## [Unreleased] — Duplicate athleisure/lounge pieces into the other closet — 2026-08-26
 
 ### Why

@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
 import MarkdownLite from "../../components/MarkdownLite.jsx";
-import { OCCASIONS, WEATHER_SHORTS, SUBCATEGORY_L3, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
+import { OCCASIONS, WEATHER_SHORTS, getL3Options, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
 import { slotForItem, itemIdIndex } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
@@ -331,13 +331,18 @@ export default function SilhouetteBuilder({
   const subcatParent = subcatFilter
     ? (subcatsForSlot.includes(subcatFilter)
         ? subcatFilter
-        : subcatsForSlot.find(p => (SUBCATEGORY_L3[p] || []).includes(subcatFilter)) || "")
+        : subcatsForSlot.find(p =>
+            (items || []).some(it => getL3Options(it.category, p).includes(subcatFilter))) || "")
     : "";
   const subcatChildren = useMemo(() => {
     if (!subcatParent) return [];
     const def = SLOTS.find(s => s.key === activeSlot);
     const all = (items || []).filter(it => def?.match(it));
-    return (SUBCATEGORY_L3[subcatParent] || []).filter(l3 => all.some(it => it.subcategory === l3));
+    // getL3Options is category-aware, resolved per item against its OWN
+    // category (slots span categories): an Athleisure "Skirts" row yields no
+    // children — the Mini/Midi/Maxi axis belongs to Bottoms alone.
+    const l3s = [...new Set(all.flatMap(it => getL3Options(it.category, subcatParent)))];
+    return l3s.filter(l3 => all.some(it => it.subcategory === l3));
   }, [activeSlot, items, subcatParent]);
 
   // Slot pool split into core wardrobe + comfortwear (Athleisure/Loungewear).
