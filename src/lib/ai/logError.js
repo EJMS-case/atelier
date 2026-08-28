@@ -3,7 +3,7 @@
 // never blocks the caller. Used by the tool-use wrappers when Zod rejects a
 // model response or when the API returns an unexpected shape.
 
-import { SUPABASE_URL, SB_HEADERS } from "../supabase.js";
+import { SUPABASE_URL, sbHeaders } from "../supabase.js";
 
 // Injected by vite.config.js `define` (7-char commit SHA, or "dev"). Every
 // payload carries it as `bv` so a row can be tied to the bundle that produced
@@ -40,7 +40,7 @@ export function logAiError(kind, payload, error) {
 
   fetch(`${SUPABASE_URL}/rest/v1/ai_errors`, {
     method: "POST",
-    headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+    headers: sbHeaders({ "Prefer": "return=minimal" }),
     body,
   }).catch(() => { /* swallow — logging must not break the app */ });
 }

@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@imgly/background-removal": "^1.5.5",
+    "@supabase/supabase-js": "^2.112.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zod": "^4.3.6"

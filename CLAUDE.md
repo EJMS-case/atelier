@@ -83,11 +83,47 @@ Conventions worth knowing:
   made them world-readable. Migration `0026` hides that row from the `public`
   role and the client code no longer reads or writes it. Keys are per-device in
   `localStorage`. Don't "restore cross-device key sync" — that is the bug.
-- **Still open:** every other table (518 wardrobe items, outfit logs, planned
+- **Still open:** every application table (wardrobe items, outfit logs, planned
   outfits, trips) and the public `wardrobe-images` bucket remain readable and
-  writable by anyone. The real fix is authentication plus owner-scoped policies;
-  the app has no auth today. Treat this as a known open issue, and don't repeat
-  the "it's fine, RLS covers it" reasoning.
+  writable by anyone. Don't repeat the "it's fine, RLS covers it" reasoning.
+
+## Auth rollout (in progress)
+
+Closing the above needs authentication plus owner-scoped policies. The
+groundwork has shipped; the cutover has not. **Read this before touching
+`lib/supabase.js`, `lib/auth.js`, or anything under `supabase/migrations/`.**
+
+Shipped so far:
+
+- `lib/auth.js` owns the token lifecycle via `@supabase/supabase-js` (auth
+  only — data stays on the hand-rolled REST client). `lib/supabaseConfig.js`
+  exists solely to keep `auth.js` and `supabase.js` from importing each other.
+- **Headers are built per request.** `sbHeaders()` / `storageHeaders()` replaced
+  the old `SB_HEADERS` / `STORAGE_HEADERS` constants at all 64 call sites. Never
+  hoist the result into a module-level constant — that captures the signed-out
+  headers forever. `features/wear/wearApi.js` did exactly that, and because its
+  writes are fire-and-forget it would have failed silently.
+- Signed out, `Authorization` falls back to the anon key, so behaviour is
+  identical to before login existed. That fallback is what makes the rollout
+  safe while policies are still open.
+- Migration `0028` grants Storage to `authenticated`. This had to land first:
+  every Storage policy is `TO anon`, which does **not** match `authenticated`,
+  so signing in would otherwise 403 every upload instantly.
+- Migration `0029` adds `public.whoami()`, surfaced in Settings → Account.
+
+Not done yet, in order:
+
+1. Owner creates the single account in the Supabase dashboard and disables
+   sign-ups. No account exists yet (`auth.users` is empty).
+2. Verify Settings → Account shows a tick on **every** device.
+3. Only then: tighten the table policies to `TO authenticated` pinned to her
+   user id, and add the blocking login gate. Shipping the gate before step 1
+   would lock her out of her own app.
+4. Later, once stable: revoke the `anon` grants, and drop the `TO anon` Storage
+   policies (removes anonymous upload/delete/list; image viewing is unaffected).
+
+Deliberately **not** doing an `owner_id` column: with one user, pinning the
+policy to her literal user id is strictly stronger and needs no data migration.
 - The **Anthropic key and Remove.bg key are supplied by the user at runtime** in
   Settings and kept in `localStorage` on their device. They are never committed,
   never in env files here, and never available to a session. Anything that needs

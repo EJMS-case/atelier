@@ -3,11 +3,14 @@
 // cost-per-wear on demand. We do this app-side rather than via a DB trigger
 // so the same code path works from every save entry point.
 
-import { SUPABASE_URL, SB_HEADERS } from "../../lib/supabase.js";
+import { SUPABASE_URL, sbHeaders } from "../../lib/supabase.js";
 import { outfitsOf } from "../planner/outfits.js";
 import { nyToday } from "../../lib/time.js";
 
-const H = { ...SB_HEADERS, Prefer: "return=minimal" };
+// Must be a function call, not a module-level object. A snapshot taken at
+// import time freezes the signed-out headers forever, and because the writes
+// below are fire-and-forget, every wear-count update would 401 in silence.
+const H = () => sbHeaders({ Prefer: "return=minimal" });
 
 /**
  * Derive TRUE wear stats from the actual wear record — calendar (planned_outfits)
@@ -67,14 +70,14 @@ export async function bumpWearCounts(itemIds = []) {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?select=wear_count&id=eq.${id}`,
-        { headers: SB_HEADERS },
+        { headers: sbHeaders() },
       );
       if (!res.ok) return;
       const rows = await res.json().catch(() => []);
       const current = rows[0]?.wear_count || 0;
       await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`,
-        { method: "PATCH", headers: H, body: JSON.stringify({ wear_count: current + 1 }) },
+        { method: "PATCH", headers: H(), body: JSON.stringify({ wear_count: current + 1 }) },
       );
     } catch (err) {
       console.warn("[F6] bumpWearCount failed for", id, err);
@@ -88,14 +91,14 @@ export async function unbumpWearCounts(itemIds = []) {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?select=wear_count&id=eq.${id}`,
-        { headers: SB_HEADERS },
+        { headers: sbHeaders() },
       );
       if (!res.ok) return;
       const rows = await res.json().catch(() => []);
       const current = rows[0]?.wear_count || 0;
       await fetch(
         `${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`,
-        { method: "PATCH", headers: H, body: JSON.stringify({ wear_count: Math.max(0, current - 1) }) },
+        { method: "PATCH", headers: H(), body: JSON.stringify({ wear_count: Math.max(0, current - 1) }) },
       );
     } catch (err) {
       console.warn("[F6] unbumpWearCount failed for", id, err);
