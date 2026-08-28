@@ -85,8 +85,11 @@ export const s = {
   // The panel still scrolls internally, so all controls remain reachable.
   stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid var(--color-border)", padding:"12px 16px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", maxHeight:"65vh", overflowY:"auto" },
   panelLabel: { fontSize:10, letterSpacing:"0.22em", color:"var(--color-text-muted)", marginBottom:10 },
-  select: { flex:1, border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)" },
-  input: { flex:1, border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)", outline:"none" },
+  // minWidth:0 + maxWidth:100% on every control: flex items refuse to shrink
+  // below their content width by default, so one long <select> option or value
+  // pushed the whole page into sideways panning on iPhone.
+  select: { flex:1, minWidth:0, maxWidth:"100%", border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)" },
+  input: { flex:1, minWidth:0, maxWidth:"100%", border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)", outline:"none" },
   err: { color:"var(--color-danger)", fontSize:12, margin:"4px 0 0" },
   btnPrimary: { background:"var(--color-ink)", color:"var(--color-surface)", border:"none", borderRadius:4, padding:"10px 20px", fontSize:12, letterSpacing:"0.08em", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7 },
   btnSecondary: { background:"none", border:"1px solid var(--color-border)", borderRadius:4, padding:"10px 20px", fontSize:12, color:"var(--color-text-2)", cursor:"pointer", letterSpacing:"0.06em", textAlign:"center" },
@@ -103,10 +106,15 @@ export const s = {
   queueRow: { display:"flex", gap:10, alignItems:"flex-start", background:"#fff", borderRadius:8, padding:12, border:"1px solid var(--color-border)" },
   queueThumb: { flexShrink:0, width:76, height:95, borderRadius:5, overflow:"hidden", background:"var(--color-surface)", position:"relative" },
   queueThumbImg: { width:"100%", height:"100%", objectFit:"cover" },
-  queueFields: { flex:1, display:"flex", flexDirection:"column", gap:6 },
+  // minWidth:0 on queueFields is load-bearing: it's a flex child of queueRow,
+  // and without it the fields column sizes to its widest control instead of
+  // shrinking to the screen (the sideways-pan bug).
+  queueFields: { flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:6 },
   queueInput: { width:"100%", boxSizing:"border-box", fontSize:12, padding:"6px 8px" },
-  queueRow2: { display:"flex", gap:6 },
-  queueSelect: { flex:"0 0 46%", fontSize:12, padding:"6px 8px" },
+  // Wrap, don't overflow: category + subcategory + Type is three selects; at
+  // 46% flex-basis two fit per line and the third wraps to its own row.
+  queueRow2: { display:"flex", flexWrap:"wrap", gap:6 },
+  queueSelect: { flex:"1 1 46%", minWidth:0, maxWidth:"100%", fontSize:12, padding:"6px 8px" },
   queueRemove: { flexShrink:0, background:"none", border:"none", color:"var(--color-border-muted)", fontSize:15, cursor:"pointer", padding:"0 4px", alignSelf:"flex-start" },
   queueActions: { display:"flex", flexDirection:"column", gap:10 },
 

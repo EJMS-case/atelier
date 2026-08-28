@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
@@ -203,14 +203,16 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
             value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}/>
         </div>
 
-        <div style={{display:"flex",gap:10}}>
-          <div style={{flex:1}}>
+        {/* minWidth:0 lets each half shrink below its control's content width
+            on narrow screens instead of overflowing the page sideways. */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
             <div style={s.fieldLabel}>Material</div>
             <input style={{...s.input,width:"100%"}} placeholder="silk, wool, denim…"
               value={form.material}
               onChange={e=>setForm(f=>({...f,material:e.target.value}))}/>
           </div>
-          <div style={{flex:1}}>
+          <div style={{flex:1,minWidth:0}}>
             <div style={s.fieldLabel}>Pattern</div>
             <select style={{...s.select,width:"100%"}} value={form.pattern}
               onChange={e=>setForm(f=>({...f,pattern:e.target.value}))}>
@@ -243,7 +245,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
         </div>
         {TAXONOMY[form.category]?.length > 0 && (() => {
           const l2 = getSubcatL2(form.category, form.subcategory);
-          const l3Options = SUBCATEGORY_L3[l2] || [];
+          const l3Options = getL3Options(form.category, l2);
           const l3Val = (l2 && l2 !== form.subcategory) ? form.subcategory : "";
           return (
             <>

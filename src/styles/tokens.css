@@ -30,3 +30,19 @@
   --color-success: #306e50;
   --color-danger: #C0392B;
 }
+
+/* ── MOBILE GUARDS ─────────────────────────────────────────────────────────
+ * One control wider than the screen used to pan the whole app sideways on
+ * iPhone; clamp the page and never let media exceed its container.
+ */
+html, body { overflow-x: hidden; }
+img, svg, video { max-width: 100%; }
+
+/* iOS Safari auto-zooms when a focused input/select/textarea has a font-size
+ * under 16px, and the zoom sticks after blur. Controls are styled inline
+ * (s.input / s.select), so !important is the only way to override them from
+ * a stylesheet. Scoped to phones — desktop keeps its denser 12-13px controls.
+ */
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
+}

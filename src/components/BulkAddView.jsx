@@ -4,7 +4,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
 import { compressImage, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
-import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 
 export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
   const [queue,      setQueue]      = useState([]);
@@ -20,9 +20,12 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         const rawImage = ev.target.result;
         setQueue(q => [...q, {
           id, image: rawImage,
-          name: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
+          // Empty, not the filename — iPhone exports name files like
+          // "20962754 1680 4DD6…" which used to save as the item name.
+          // AI auto-detect proposes a real title (applyDetection).
+          name: "",
           category: "Tops", subcategory: "", brand: "", color: "", notes: "",
-          material: "", pattern: "", has_bg: false,
+          material: "", pattern: "", price_paid: null, has_bg: false,
           detected_at: null, detection_confidence: null,
         }]);
         setProcessing(p => ({...p, [id]: "bg"}));
@@ -194,7 +197,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       </select>
                       {TAXONOMY[item.category]?.length > 0 && item.category !== "Knits" && (() => {
                         const l2 = getSubcatL2(item.category, item.subcategory);
-                        const l3Options = SUBCATEGORY_L3[l2] || [];
+                        const l3Options = getL3Options(item.category, l2);
                         const l3Val = (l2 && l2 !== item.subcategory) ? item.subcategory : "";
                         return (
                           <>
@@ -253,6 +256,21 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       <input style={{...s.input,...s.queueInput}} placeholder="Brand"
                         value={item.brand} onChange={e=>update(item.id,"brand",e.target.value)}/>
                     </div>
+                    {/* Same fields + widgets as EditItemView, inline — so a
+                        bulk-added piece doesn't need a second editing pass. */}
+                    <div style={s.queueRow2}>
+                      <input style={{...s.input,...s.queueInput}} placeholder="Material (silk, wool…)"
+                        value={item.material} onChange={e=>update(item.id,"material",e.target.value)}/>
+                      <select style={{...s.select,...s.queueSelect}} value={item.pattern}
+                        onChange={e=>update(item.id,"pattern",e.target.value)}>
+                        <option value="">Pattern</option>
+                        {["solid","striped","plaid","floral","abstract","animal","polka-dot"].map(p=><option key={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <input type="number" min="0" step="1"
+                      style={{...s.input,...s.queueInput}} placeholder="Price paid (USD, optional)"
+                      value={item.price_paid ?? ""}
+                      onChange={e=>update(item.id,"price_paid", e.target.value === "" ? null : Number(e.target.value))}/>
                     <textarea rows={2}
                       style={{...s.input,...s.queueInput, minHeight:52, resize:"vertical", fontFamily:"inherit", lineHeight:1.4}}
                       placeholder="Notes (e.g. cropped, chunky knit, cashmere)"
