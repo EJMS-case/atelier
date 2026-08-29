@@ -78,11 +78,12 @@ FORMALITY (\`f#\`): her curated register — 1 Active, 2 Lounge, 3 Casual, 4 Sma
 Notes do TWO jobs and you must read them for both:
 1. PIECE DESCRIPTION — fabric, fit, cut, length, vibe ("cropped polka-dot blouse, 100% cotton, vintage"). This is the primary signal for whether a piece works in a look.
 2. CONSTRAINTS — phrases like "winter only", "summer only", "evening only", "fall/winter", "wedding only", "warm weather", "cold weather", "for travel", "no work", "casual only" are USER-DECLARED CONSTRAINTS. Treat them as hard rules:
+   • NEGATION FIRST: resolve any negation BEFORE reading a "for X" phrase. "NOT for X" / "never for X" / "no X" excludes the piece from X and says NOTHING about anywhere else — it is an exclusion, not a "for X" constraint. "for casual or vacation — NOT FOR WORK" means wear it for Casual/Vacation and keep it out of Work; it NEVER means work-only or not-for-casual.
    • "winter only" / "cold weather" → exclude from Hot/Warm/Mild generations.
    • "summer only" / "warm weather" → exclude from Cool/Cold generations.
    • "evening only" / "formal only" → exclude from daytime/Casual occasions.
    • "wedding only" / "occasion only" → exclude from Work/Casual/Dinner generations unless the occasion explicitly matches.
-   • Any "X only" or "for X" phrase in notes is the user telling you "don't suggest this outside of X." Honor it.
+   • Any non-negated "X only" or "for X" phrase in notes is the user telling you "don't suggest this outside of X." Honor it.
 
 ★ ELEGANCE — WHO YOU'RE STYLING FOR ★
 Notes tell you WHAT each piece is; combine them with the restraint of the brand register above. The PERSONAL PATTERNS block (when present) shows what she actually reaches for — lean into those proportions, color stories, and finishing choices; they're already proven on her. When notes and personal patterns both point at a combination, that's the elevated move. When they conflict, personal patterns win for COMPOSITION; notes win for INDIVIDUAL PIECE SELECTION.

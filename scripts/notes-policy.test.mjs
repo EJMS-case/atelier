@@ -274,3 +274,40 @@ test("stylist_line: classifierNotes prefers the line over long copy", async () =
   const longLine = { stylist_line: "x".repeat(300), notes: "" };
   assert.equal(classifierNotes(longLine).length, CURATED_NOTES_MAX, "line itself is clamped");
 });
+
+// ── Hot weather: napped/textured winter cloth and layering forms ─────────────
+// Owner report 2026-08-28: a 103°F Arizona week was packing a corduroy mini,
+// two bouclé skirt-dresses and a knitted cape top. None were caught — corduroy
+// and bouclé weren't in the heavy-fabric list, both bouclé pieces are tagged
+// season_weight "Light", and the cape is category Tops (so the Knits ban
+// misses it) and sleeveless (so the long-sleeve rule misses it).
+//
+// The counter-risk is over-correction: a bare /knit/ would match 71 pieces in
+// her wardrobe, including the "Fine Knit" and "Light Knit" tops that are
+// exactly right in heat. Both halves are asserted here.
+test("filterByWeather: corduroy/bouclé/cape are out of Hot; light knits stay in", () => {
+  const HOT = "Hot (85°F+)";
+  const out = [
+    { id: "uma",  name: "Uma Skirt",                   category: "Bottoms", subcategory: "Mini",  material: "Corduroy", season_weight: "Medium" },
+    { id: "bou1", name: "Boucle Skirt Dress",          category: "Dresses", subcategory: "Mini",  material: "Bouclé",   season_weight: "Light" },
+    { id: "bou2", name: "Boucle Plaid Skirt Dress",    category: "Dresses", subcategory: "Mini",  material: "Bouclé",   season_weight: "Light" },
+    { id: "cape", name: "Round neck knitted cape top", category: "Tops",    subcategory: "Tops",  material: "Knit",     season_weight: "Light" },
+  ];
+  for (const item of out) {
+    assert.equal(filterByWeather([item], HOT).length, 0, `${item.name} must not survive Hot`);
+  }
+
+  const stay = [
+    { id: "fine",  name: "Ribbed Tank",  category: "Tops",    subcategory: "Tanks",    material: "Fine Knit",  season_weight: "Light" },
+    { id: "light", name: "Summer Tee",   category: "Tops",    subcategory: "T-Shirts", material: "Light Knit", season_weight: "Light" },
+    { id: "ponte", name: "Ponte Short",  category: "Bottoms", subcategory: "Shorts",   material: "Ponte Knit", season_weight: "Light" },
+    { id: "den",   name: "501 Shorts",   category: "Bottoms", subcategory: "Shorts",   material: "Denim",      season_weight: "Light" },
+    { id: "mesh",  name: "Mesh Skirt",   category: "Bottoms", subcategory: "Maxi",     material: "Mesh",       season_weight: "Light" },
+  ];
+  assert.equal(filterByWeather(stay, HOT).length, stay.length, "light summer pieces all survive Hot");
+
+  // Season-appropriate weather is untouched — these are winter pieces, not
+  // banned pieces. Only Hot rejects them.
+  assert.equal(filterByWeather([out[0]], "Cool (40-54°F)").length, 1, "corduroy is fine when it's cool");
+  assert.equal(filterByWeather([out[3]], "Cool (40-54°F)").length, 1, "a cape is fine when it's cool");
+});

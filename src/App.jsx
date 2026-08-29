@@ -10,7 +10,7 @@ import HomeView from "./features/home/HomeView.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
-import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches } from "./constants/taxonomy.js";
+import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches, MISC_CATEGORY } from "./constants/taxonomy.js";
 import { defaultSortComparator, matchesColorFilter, mergeItems, slotForItem } from "./utils/item-helpers.js";
 import { computeFilterChips } from "./utils/style-filters.js";
 import { autoColorPairs } from "./utils/wardrobe-coverage.js";
@@ -23,7 +23,7 @@ import {
 } from "./utils/storage.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
 import { compareSetsByName, compareSetsByType } from "./features/closet/setType.js";
-import { resolveVisibleWardrobe, packedItemIds } from "./features/closet/useVisibleWardrobe.js";
+import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem } from "./features/closet/useVisibleWardrobe.js";
 import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
@@ -338,6 +338,12 @@ export default function App() {
     setSelectMode(false);
     setSelectedIds([]);
     setWeather(new Set());
+    // The holding-room chip is closet-local: carrying a stale "Misc" selection
+    // into a closet that has no Misc items would leave a Misc pill sitting in
+    // a room the category doesn't exist in.
+    setActiveFilters(f => (f.category?.includes(MISC_CATEGORY)
+      ? { ...f, category: [], subcategory: [], sleeveLength: "" }
+      : f));
   }, []);
 
   // THE one place wardrobe scoping happens: every scoped consumer (the grid,
@@ -356,6 +362,26 @@ export default function App() {
     () => resolveVisibleWardrobe({ items, activeClosetId: activeCloset.id, activeTrip, tripItems: activeTripItems }),
     [items, activeCloset.id, activeTrip, activeTripItems],
   );
+
+  // ── MISC — the holding room ────────────────────────────────────────────────
+  // resolveVisibleWardrobe strips Misc items from `closetItems` unconditionally
+  // (see its header), so the entire app is blind to them. These two memos are
+  // the only doors back in, and neither one leads to a stylist:
+  //
+  //   miscItems     → the closet GRID, and only while the Misc chip is on.
+  //   stylingItems  → the full wardrobe MINUS Misc, for the handful of props
+  //                   that legitimately need to see across closets (the trip
+  //                   planner's destination-closet pool, EditItemView's
+  //                   set-mate lookup). Passing raw `items` there would let
+  //                   the trip packer pull an Arizona PJ set into an outfit.
+  //
+  // Raw `items` stays reserved for App-internal sync machinery and Settings'
+  // closet-agnostic photo/orphan maintenance, neither of which styles anything.
+  const miscItems = useMemo(
+    () => miscItemsForCloset(items, activeCloset.id),
+    [items, activeCloset.id],
+  );
+  const stylingItems = useMemo(() => withoutMisc(items), [items]);
 
   // Suitcase pieces during an ACTIVE trip (wave 2 — packed-item marker). The
   // closet grid badges these 🧳 so packed pieces read apart from destination-
@@ -1151,6 +1177,9 @@ export default function App() {
 
   // Apply multi-select filters
   const isSetView = activeFilters.category?.includes("Sets");
+  // The holding room is showing only while its chip is selected AND this
+  // closet actually holds Misc items — otherwise the chip isn't even rendered.
+  const isMiscView = !!activeFilters.category?.includes(MISC_CATEGORY) && miscItems.length > 0;
 
   // Bulk-select mode only makes sense over the item grids on the closet view;
   // entering the Sets view (or navigating away) hides those grids AND the
@@ -1217,6 +1246,11 @@ export default function App() {
   // e.g. the sync-status flash timer).
   const deferredSearch = useDeferredValue(closetSearch);
   const filtered = useMemo(() => {
+    // Holding room: the ONE place Misc items re-enter the app. They carry no
+    // color/brand/set/wear metadata, so the rest of the filter stack has
+    // nothing to say about them — the view is simply the closet's Misc items,
+    // A→Z by name (miscItemsForCloset already sorts).
+    if (isMiscView) return miscItems;
     let base = closetItems;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
@@ -1273,7 +1307,7 @@ export default function App() {
       });
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
-  }, [closetItems, activeFilters, deferredSearch, isSetView]);
+  }, [closetItems, activeFilters, deferredSearch, isSetView, isMiscView, miscItems]);
 
   // Sync status indicator
   const syncLabel = syncStatus === "syncing" ? "⟳ syncing"
@@ -1447,6 +1481,12 @@ export default function App() {
       const dupTarget = canOfferDuplicate(item, duplicatedIds)
         ? duplicateTargetCloset(item, closets.length ? closets : SEED_CLOSETS)
         : null;
+      // A holding-room card is inert: no "style around this piece" (it would
+      // put a pyjama name into a stylist prompt for a piece the pool doesn't
+      // even contain) and no favouriting (loved pieces bias generation). Edit
+      // and delete stay — renaming it, or moving it out of Arizona, is the
+      // whole point of tracking it.
+      const misc = isMiscItem(item);
       return (
         <ItemCard key={item.id} item={item} allItems={closetItems}
           onDelete={deleteItem}
@@ -1455,8 +1495,8 @@ export default function App() {
           duplicateHint={dupTarget?.name}
           isFavorited={favPieceIds.has(item.id)}
           isPacked={!!packedIds?.has(item.id)}
-          onToggleFav={handleToggleFavPiece}
-          onStyleItem={styleWithItem}/>
+          onToggleFav={misc ? undefined : handleToggleFavPiece}
+          onStyleItem={misc ? undefined : styleWithItem}/>
       );
     }
     const isSelected = selectedIds.includes(item.id);
@@ -1642,7 +1682,8 @@ export default function App() {
 
       {view === "closet" && (
         <div style={s.page}>
-          <FilterBar items={closetItems} activeFilters={activeFilters} onChange={setActiveFilters}/>
+          <FilterBar items={closetItems} activeFilters={activeFilters} onChange={setActiveFilters}
+            showMisc={miscItems.length > 0}/>
 
           {/* Global search bar */}
           <div style={{ position:"relative", marginBottom: 12 }}>
@@ -1805,8 +1846,9 @@ export default function App() {
             </div>
           ))}
 
-          {/* Empty closet state */}
-          {closetItems.length === 0 && (
+          {/* Empty closet state — a closet holding nothing but Misc items is
+              not "empty" while she's standing in the holding room. */}
+          {closetItems.length === 0 && !isMiscView && (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
               <p style={s.emptyText}>This closet is empty — add your first piece.</p>
@@ -1868,7 +1910,7 @@ export default function App() {
       {view === "edit" && editItem && (
         <EditItemView
           item={editItem}
-          allItems={items}
+          allItems={stylingItems}
           closets={closets}
           setsMeta={setsMeta}
           onSaveSetMeta={updateSetMeta}
@@ -2181,7 +2223,7 @@ export default function App() {
           </div>
           <PlannerWrapper
             items={closetItems}
-            allItems={items}
+            allItems={stylingItems}
             closets={closets}
             activeCloset={activeCloset}
             onRefreshActiveTrip={refreshActiveTrip}

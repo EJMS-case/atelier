@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
-import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
+import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
@@ -995,13 +995,18 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // `items` prop, no preference (pre-Phase-B behavior).
   const closetOf = (it) => it.closet_id || DEFAULT_CLOSET_ID;
   const homeClosetId = activeCloset?.id || DEFAULT_CLOSET_ID;
-  const { genItems, preferItemIds } = useMemo(() => {
-    if (!destClosetId) return { genItems: items, preferItemIds: null };
+  const { genItems, preferItemIds, destRelaxed } = useMemo(() => {
+    if (!destClosetId) return { genItems: items, preferItemIds: null, destRelaxed: false };
     const source = Array.isArray(allItems) && allItems.length ? allItems : items;
     const pool = source.filter(it => closetOf(it) === destClosetId || closetOf(it) === homeClosetId);
+    const atDest = pool.filter(it => closetOf(it) === destClosetId);
     return {
       genItems: pool,
-      preferItemIds: new Set(pool.filter(it => closetOf(it) === destClosetId).map(it => it.id)),
+      preferItemIds: new Set(atDest.map(it => it.id)),
+      // A predominantly athleisure/loungewear closet marks a relaxed
+      // destination — the trip is Casual days plus a few dinners, not a week
+      // of outfits. See isRelaxedDestinationCloset in tripPacker.js.
+      destRelaxed: isRelaxedDestinationCloset(atDest),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destClosetId, allItems, items, homeClosetId]);
@@ -1124,7 +1129,11 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       if (!brief && destination.trim() && apiKey) {
         await fetchBrief();
       }
-      const occasions = defaultOccasions(dayCount);
+      // Relaxed destination (her Arizona closet): Casual days with a few
+      // Dinner nights spread through the trip — more of them in December.
+      // Everywhere else this still returns all-Casual, exactly as
+      // defaultOccasions(dayCount) did.
+      const occasions = tripDayOccasions({ dayCount, startDate: start, relaxed: destRelaxed });
       const dayIsos = Array.from({ length: dayCount }, (_, i) => isoDate(addDays(new Date(start), i)));
       const highs = dayIsos.map(iso => perDayHigh(iso));
       // Per-day activity defaults to the trip-level activity for every day.
@@ -1355,7 +1364,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
           // TripDetailView — without persisting it, the AI defaults to
           // "Sightseeing" no matter what the user picked here.
           activity: activity || "Sightseeing",
-          // Pins (migration 0030). saveTrip strips unknown columns on PGRST204,
+          // Pins (migration 0033). saveTrip strips unknown columns on PGRST204,
           // so a project without the migration saves the trip without them —
           // degraded, not broken.
           must_include_ids: [...mustIncludeIds],

@@ -114,7 +114,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   const [closeBusy, setCloseBusy] = useState(false);       // suitcase-close in flight
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
   const [stayingIds, setStayingIds] = useState(new Set()); // B5 "staying behind" picks
-  // "Bringing for sure" pins (trips.must_include_ids, migration 0030). Held
+  // "Bringing for sure" pins (trips.must_include_ids, migration 0033). Held
   // locally and written through updateTrip so a regeneration from this view
   // honours the same picks the trip was set up with. An older trip — or a
   // project without the migration — reads as an empty set and behaves exactly
@@ -662,7 +662,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // Persist a pin change to trips.must_include_ids. Optimistic: the local set
   // drives generation immediately and a failed write only costs the persisted
   // copy, which the next edit retries. updateTrip strips the column on
-  // PGRST204, so a project without migration 0030 keeps working with
+  // PGRST204, so a project without migration 0033 keeps working with
   // session-only pins.
   async function changePins(next) {
     setMustIncludeIds(next);

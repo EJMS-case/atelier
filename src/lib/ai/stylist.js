@@ -5,7 +5,7 @@
 // Callers are responsible for UI state.
 
 import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
-import { TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
+import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
@@ -476,7 +476,9 @@ export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []
   const dateContext = `${now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}, NYC`;
 
   if (mode === "gap") {
-    const taxStr = Object.entries(TAXONOMY).map(([cat, subs]) =>
+    // STYLING_TAXONOMY — the "Misc" holding room is never shoppable, never
+    // styled, and must not appear in a prompt.
+    const taxStr = Object.entries(STYLING_TAXONOMY).map(([cat, subs]) =>
       `${cat}: ${subs.length ? subs.join(", ") : "(no subcategories)"}`
     ).join("\n");
 

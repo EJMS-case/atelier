@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
@@ -34,6 +34,14 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
   const [bgError, setBgError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  // Holding-room row (Misc): tracked so she doesn't re-pack it, never styled.
+  // Everything the stylist reads — brand, color, stylist line, notes,
+  // material, pattern, price, set link, wear history, "style around this
+  // piece" — is pointless here and is collapsed away. Name + photo + Closet
+  // (the control that puts it in Arizona in the first place) is the whole
+  // form. The Category select stays so a row can be filed OUT of Misc again.
+  const isMisc = form.category === MISC_CATEGORY;
 
   // Async save wrapper. Awaits the parent's onSave (which returns {ok,error}),
   // shows a clear error if it failed, and only signals "done" on success so
@@ -170,11 +178,13 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
       )}
 
       <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
-        {[
-          ["Name *","name","e.g. Wool Blazer Navy"],
-          ["Brand","brand","e.g. Totême, The Row, COS"],
-          ["Color","color","e.g. Burgundy, Navy, Espresso"],
-        ].map(([label,field,placeholder]) => (
+        {(isMisc
+          ? [["Name *","name","e.g. PJs - shorts and tank"]]
+          : [
+            ["Name *","name","e.g. Wool Blazer Navy"],
+            ["Brand","brand","e.g. Totême, The Row, COS"],
+            ["Color","color","e.g. Burgundy, Navy, Espresso"],
+          ]).map(([label,field,placeholder]) => (
           <div key={field}>
             <div style={s.fieldLabel}>{label}</div>
             <input style={{...s.input,width:"100%"}} placeholder={placeholder}
@@ -182,6 +192,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
           </div>
         ))}
 
+        {!isMisc && (<>
         {/* Stylist line — the short curated line the AI reads (classifiers +
             prompts). Long pasted product copy in Notes stays for display and
             search; when this line exists it speaks for the piece instead. */}
@@ -236,6 +247,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
             </div>
           )}
         </div>
+        </>)}
         <div>
           <div style={s.fieldLabel}>Category</div>
           <select style={{...s.select,width:"100%"}} value={form.category}
@@ -272,7 +284,9 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
         })()}
       </div>
 
-      {/* Set linking */}
+      {/* Set linking — never for a holding-room row: a Misc item must not be
+          reachable through a coord set, which IS a styling surface. */}
+      {!isMisc && (
       <div style={s.settingsCard}>
         <div style={s.settingsTitle}>Coord Set</div>
         <p style={s.settingsSub}>Link this piece to a coord set, or create a new one.</p>
@@ -307,20 +321,35 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
             // editing in Arizona listed every NYC set. A cross-closet twin
             // (duplicate.js copies set_id) makes its set show in both closets,
             // which is exactly right. The item's own set always stays listed.
-            const counts = new Map();
+            //
+            // The COUNT is per-closet (owner report 2026-08-28): a split set
+            // showed its total from both closets, so a duplicated pair read
+            // "4 pieces" when only 2 were in the room. Same single pass, one
+            // extra tally. Enumeration still uses the all-closets `counts` —
+            // gating that too would drop the item's own set from the list.
+            // The edited item counts under its FORM closet, so switching the
+            // Closet select updates the tally before the save lands.
+            const counts = new Map();       // all closets — enumeration only
+            const closetCounts = new Map(); // this closet — the number shown
             const setClosets = new Map();
             (allItems || []).forEach(it => {
               if (!it.set_id) return;
+              const inCloset = it.id === item.id
+                ? form.closet_id
+                : (it.closet_id || DEFAULT_CLOSET_ID);
               counts.set(it.set_id, (counts.get(it.set_id) || 0) + 1);
+              if (inCloset === form.closet_id) {
+                closetCounts.set(it.set_id, (closetCounts.get(it.set_id) || 0) + 1);
+              }
               if (!setClosets.has(it.set_id)) setClosets.set(it.set_id, new Set());
-              setClosets.get(it.set_id).add(it.closet_id || DEFAULT_CLOSET_ID);
+              setClosets.get(it.set_id).add(inCloset);
             });
             // Sorted by the label she actually reads, not by item-insertion
             // order (which is what the counts Map hands back). Unnamed sets
             // collect at the end rather than sorting under "U".
             const options = [...counts.entries()]
               .filter(([id]) => id === form.set_id || setClosets.get(id).has(form.closet_id))
-              .map(([id, count]) => ({ id, count, name: ((setsMetaProp || {})[id]?.name || "").trim() }))
+              .map(([id]) => ({ id, count: closetCounts.get(id) || 0, name: ((setsMetaProp || {})[id]?.name || "").trim() }))
               .sort((a, b) => {
                 if (!a.name !== !b.name) return a.name ? -1 : 1;
                 return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -370,6 +399,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
           </label>
         ) : null}
       </div>
+      )}
 
       {/* Closet assignment (multi-closet, Phase A) — saving with a different
           closet moves the piece there via the normal onSave path. */}
@@ -398,9 +428,9 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
       {/* "In Your Looks" — worn/planned/saved outfits featuring this piece,
           with dates, so she can judge repeat spacing at a glance. Renders
           nothing when the piece has no history. */}
-      <ItemWearHistory item={item} allItems={allItems} logs={logs} plans={plans} />
+      {!isMisc && <ItemWearHistory item={item} allItems={allItems} logs={logs} plans={plans} />}
 
-      {onStyleAround && (
+      {onStyleAround && !isMisc && (
         <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}
           onClick={() => onStyleAround(item)}>
           ✦ Style around this piece
