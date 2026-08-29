@@ -2,7 +2,7 @@
 // Mobile-first month grid. Tap a day to assign/clear a planned look. The
 // Trip modal lives in this file too.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, defaultOccasions, alternativesFor } from "./tripPacker.js";
@@ -75,6 +75,22 @@ const btnSecondary = {
 // scoped (a full page reload sensibly starts back at today).
 let lastAnchorTime = null;
 
+// Same idea for the OPEN TRIP, and for one thing lastAnchorTime doesn't need:
+// where you were scrolled inside it.
+//
+// ⊞ Build routes through App's `view` state (setView("style")), which unmounts
+// the whole planner — so `activeTrip` was lost and closing the builder dropped
+// you on the month grid at scroll 0, several taps from the outfit you were
+// editing. Since the builder is the only place to remove individual pieces
+// from a trip look, "remove a piece" read as "the app threw me back to the
+// top". These two module-level values survive the remount and put you back.
+//
+// Session-scoped like lastAnchorTime, and cleared by an explicit
+// "← Back to Calendar" — leaving the trip on purpose should not be undone the
+// next time the planner mounts.
+let lastTripId = null;
+let lastTripScrollY = 0;
+
 // `allItems` (the FULL wardrobe) + `closets` feed trip planning across both
 // closets; `onRefreshActiveTrip` re-syncs App's trip-mode pool — wave 2's
 // activation / suitcase-close flows call it after flipping trip status.
@@ -87,7 +103,14 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
   const [trips, setTrips] = useState([]);
-  const [activeTrip, setActiveTrip] = useState(null); // trip object → show TripDetailView
+  const [activeTrip, setActiveTripRaw] = useState(null); // trip object → show TripDetailView
+  // Open/close the trip through here so the module-level memo above always
+  // matches what's on screen.
+  const setActiveTrip = (t) => {
+    lastTripId = t?.id || null;
+    if (!t) lastTripScrollY = 0;
+    setActiveTripRaw(t);
+  };
   const [syncError, setSyncError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   // Active-closet daily-high forecast for the next ~16 days, keyed by iso
@@ -135,6 +158,71 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
+
+  // Re-open the trip the user was in when the planner was last unmounted (the
+  // ⊞ Build round-trip). Runs once per trips fetch and only while nothing is
+  // open, so it can never fight a deliberate navigation.
+  useEffect(() => {
+    if (activeTrip || !lastTripId) return;
+    const again = trips.find(t => t.id === lastTripId);
+    if (again) setActiveTripRaw(again);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trips]);
+
+  // Remember where she was inside the trip, recorded as the trip view is torn
+  // down. This MUST be a layout effect: a passive (useEffect) cleanup runs
+  // after paint, by which point the browser has already clamped the offset to 0
+  // against the much shorter page that replaced the trip — so it recorded 0
+  // every time. A layout cleanup runs synchronously inside the commit, while
+  // the document is still full height.
+  useLayoutEffect(() => {
+    if (!activeTrip) return;
+    return () => { lastTripScrollY = window.scrollY; };
+  }, [activeTrip]);
+
+  // …and put her back there. The page grows in stages after mount — plans and
+  // the forecast arrive over the network, then every outfit photo decodes — so
+  // one scrollTo would just clamp against a page that is still short. Converge
+  // instead: each frame, scroll as close to the target as the current height
+  // allows; once it's reachable, hold it briefly, because the browser's scroll
+  // anchoring keeps nudging the offset while images above the viewport land.
+  //
+  // Only a real gesture cancels the restore. An earlier version bailed whenever
+  // the offset moved on its own, which scroll anchoring does constantly — so
+  // the restore aborted on its first frame and left her at the top anyway.
+  useEffect(() => {
+    if (!activeTrip || !lastTripScrollY) return;
+    const target = lastTripScrollY;
+    const deadline = Date.now() + 4000;
+    let raf = 0;
+    let cancelled = false;
+    let holdUntil = 0;
+    const cancel = () => { cancelled = true; };
+    const opts = { passive: true };
+    window.addEventListener("wheel", cancel, opts);
+    window.addEventListener("touchstart", cancel, opts);
+    window.addEventListener("keydown", cancel, opts);
+    const stop = () => {
+      window.removeEventListener("wheel", cancel);
+      window.removeEventListener("touchstart", cancel);
+      window.removeEventListener("keydown", cancel);
+    };
+    const tick = () => {
+      if (cancelled) return stop();
+      const room = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const y = Math.min(target, room);
+      if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
+      if (y >= target) {
+        if (!holdUntil) holdUntil = Date.now() + 600;
+        if (Date.now() > holdUntil) return stop();
+      }
+      if (Date.now() > deadline) return stop();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); stop(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTrip?.id]);
 
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
   const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });

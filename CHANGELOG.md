@@ -2,6 +2,18 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trip screen no longer throws you back to the top — 2026-08-29
+
+### Why
+Owner report: *"When I remove things from an outfit on this screen, it scrolls me back up to the top"* (trip detail → Looks tab).
+
+### Changed
+- **The open trip and its scroll position survive the ⊞ Build round-trip** (`CalendarView`). Build is the only way to remove individual pieces from a trip look, and it routes through App's `view` state (`setView("style")`), which unmounts the whole planner. `activeTrip` is CalendarView-local state, so it was lost: closing the builder re-mounted the calendar month grid at scroll 0, several taps from the outfit being edited. Two module-level values (same pattern as the existing `lastAnchorTime`) now survive the remount — the trip re-opens when the trip rows land, and the scroll offset is restored. An explicit "← Back to Calendar" clears both, so deliberately leaving a trip is never undone.
+- Two things the fix depends on, both found the hard way and both noted at the call site: the scroll offset is captured in a **`useLayoutEffect` cleanup**, because a passive `useEffect` cleanup runs after paint — by which point the browser has already clamped the offset to 0 against the shorter page, so it recorded 0 every time. And the restore **converges over several frames** rather than firing one `scrollTo`: the page grows in stages (plans, forecast, then each photo decoding), so a single call clamps against a page that is still short. Only a real gesture (wheel / touchstart / keydown) cancels it — an earlier version bailed whenever the offset moved on its own, which the browser's scroll anchoring does constantly.
+
+### Notes
+Removing an outfit (the ✕) does **not** jump to the top: measured on a 6-day trip, the page shortens by exactly the removed card and everything above it holds position. Same for clearing a whole day and for unticking on the Packing tab. Verified in a headless browser at 390×844 against fixture data.
+
 ## [Unreleased] — Trip packing: pre-select the pieces you know you're bringing — 2026-08-29
 
 ### Why
