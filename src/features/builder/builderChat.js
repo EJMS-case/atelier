@@ -29,7 +29,7 @@ import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
 // promptNotes: her curated stylist_line when present, else long pasted product
 // copy condensed to its stylist-relevant sentences (up to 40 items per
 // category × ~1 kB of copy each is real token money).
-import { promptNotes } from "../../utils/item-helpers.js";
+import { promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 
 function formatItem(it) {
   return [
@@ -93,7 +93,9 @@ How to work:
 - The one hard line: only suggest pieces from HER CLOSET below — name them specifically. Never invent items, never suggest shopping. If the perfect thing isn't there, say so honestly and offer the closest thing she owns.
 - Match her energy and length. A quick question gets a quick, complete answer. Light markdown is welcome — **bold** the piece names you're recommending, use a short dash-list when comparing 2-3 options — but never headers, and never bullet-point a conversation that wants a sentence.
 ${personal.length ? `\n${personal.join("\n\n")}\n` : ""}
-HER CLOSET — everything she owns (grouped by category; suggest swaps from anywhere in it):
+HER CLOSET — everything she owns (grouped by category; suggest swaps from anywhere in it).
+${NOTES_NEGATION_LEGEND}
+
 ${closetReference(closetItems)}`;
 }
 

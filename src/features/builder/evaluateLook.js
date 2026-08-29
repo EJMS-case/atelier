@@ -24,7 +24,7 @@ import { sb } from "../../lib/supabase.js";
 import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
 import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
-import { promptNotes } from "../../utils/item-helpers.js";
+import { promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 import { parseEvalResponse } from "./evalParse.js";
 import { logAiError } from "../../lib/ai/logError.js";
 
@@ -120,7 +120,7 @@ export async function evaluateLook(items, apiKey, opts = {}) {
     max_tokens: 3000,
     messages: [{
       role: "user",
-      content: `${EVAL_PROMPT}\n${context.length ? `\n${context.join("\n\n")}\n` : ""}\nITEMS ON THE CANVAS:\n${inventory}`,
+      content: `${EVAL_PROMPT}\n${context.length ? `\n${context.join("\n\n")}\n` : ""}\nITEMS ON THE CANVAS (${NOTES_NEGATION_LEGEND}):\n${inventory}`,
     }],
   }, { apiKey, signal: opts.signal });
 

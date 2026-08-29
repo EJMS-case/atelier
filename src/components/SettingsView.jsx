@@ -9,6 +9,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { MODEL_TOP } from "../constants/models.js";
 import { anthropicFetch } from "../lib/ai/toolUse.js";
+import AccountPanel from "./AccountPanel.jsx";
 
 export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, onNavigate }) {
   const [key,          setKey]          = useState(apiKey);
@@ -271,6 +272,8 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         <button style={s.backBtn} onClick={onBack}>← Back</button>
         <h2 style={s.pageTitle}>Settings</h2>
       </div>
+
+      <AccountPanel />
 
       {/* Style Profile & measurements — moved back from Home (owner,
           2026-08-20: "settings is a better home for it along with my

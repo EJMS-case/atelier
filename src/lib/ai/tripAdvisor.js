@@ -11,7 +11,7 @@ import { z } from "zod";
 import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
-import { filterByWeather, promptNotes } from "../../utils/item-helpers.js";
+import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 import { loadStylePrefs, loadAboutMe } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
 import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
@@ -295,7 +295,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
 OCCASION: ${occasion}
 WEATHER: ${weather} (around ${highF}°F)${heatNote}
 ${destBlock}${activityBlock}${preferBlock}${varietyBlock}${personalBlock}
-WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register. A line ending in "| AT DESTINATION" is already in her closet at the destination and costs nothing to pack — see PACKING PREFERENCE above):
+WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register. A line ending in "| AT DESTINATION" is already in her closet at the destination and costs nothing to pack — see PACKING PREFERENCE above. ${NOTES_NEGATION_LEGEND}):
 ${inventory}
 
 Build exactly 1 polished, complete outfit appropriate for ${occasion} in ${weather} weather.
