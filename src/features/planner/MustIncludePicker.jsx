@@ -100,7 +100,10 @@ export default function MustIncludePicker({
           style={searchInput}
         />
 
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 0 10px", scrollbarWidth: "none" }}>
+        {/* Wraps rather than scrolling sideways: on a 390px phone a horizontal
+            strip hid most categories off the right edge, so finding "Shoes"
+            meant swiping a row you couldn't tell was scrollable. */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 0 10px" }}>
           {categories.map(c => (
             <button key={c} onClick={() => setCat(c)} style={{ ...chip, ...(cat === c ? chipOn : null) }}>
               {c}

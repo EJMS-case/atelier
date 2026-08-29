@@ -659,6 +659,16 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
     [wardrobeAll, mustIncludeIds],
   );
 
+  // Pieces the pin sheet may offer: "bringing for sure" means CARRYING it, so
+  // anything already at the destination is excluded — it needs no packing
+  // decision. Already-pinned pieces stay listed regardless so they can be
+  // un-pinned. Mirrors TripModal's pinPool.
+  const pinPool = useMemo(() => {
+    if (!destClosetId) return genItems;
+    return genItems.filter(it => closetOf(it) !== destClosetId || mustIncludeIds.has(it.id));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genItems, destClosetId, mustIncludeIds]);
+
   // Persist a pin change to trips.must_include_ids. Optimistic: the local set
   // drives generation immediately and a failed write only costs the persisted
   // copy, which the next edit retries. updateTrip strips the column on
@@ -1611,7 +1621,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
           destination closet; everything else keeps its home closet. */}
       {showPinPicker && (
         <MustIncludePicker
-          items={genItems}
+          items={pinPool}
           selectedIds={mustIncludeIds}
           onChange={changePins}
           onClose={() => setShowPinPicker(false)}

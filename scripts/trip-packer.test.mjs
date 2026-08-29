@@ -13,6 +13,7 @@ import {
   tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE,
 } from "../src/features/planner/tripPacker.js";
 import { filterByWeather } from "../src/utils/item-helpers.js";
+import { outfitCoverageGaps } from "../src/features/planner/outfits.js";
 
 let passed = 0, failed = 0;
 function assert(cond, label) {
@@ -1282,6 +1283,47 @@ const idsIn = (dailyOutfits, poolSuits = []) => new Set([
   });
   assert(idsIn(dailyOutfits).has(pinnedSkirt.id), "the pin still lands alongside a destination closet");
   assert(idsIn(dailyOutfits).has(destTote.id), "the destination-closet bag is still preferred");
+}
+
+// ── 22. Pool looks are complete by definition ────────────────────────────────
+// A placed suit ships as its OWN look (poolSuits), so measuring it against
+// top/bottom/shoes flagged every pool day "missing a core piece" in the trip
+// preview and the packing tab. Owner saw that warning on every swim look.
+section("pool looks don't read as incomplete");
+{
+  const onePiece = mk("Swim", "Swimsuits", "Black One-Piece");
+  const top      = mk("Swim", "Swimsuits", "Aluka Top");
+  const bottom   = mk("Swim", "Swimsuits", "Aluka Bottom");
+  assert(outfitCoverageGaps([onePiece]).length === 0, "a one-piece pool look is complete");
+  assert(outfitCoverageGaps([top, bottom]).length === 0, "a matched two-piece pool look is complete");
+
+  // The rule is unchanged for everything else — including a swim piece that has
+  // wandered into a regular outfit, which SHOULD still read as incomplete.
+  const tee    = mk("Tops", "T-Shirts", "Cotton Tee");
+  const jean   = mk("Bottoms", "Jeans", "Light Wash Jean");
+  const shoe   = mk("Shoes", "Sneakers", "White Leather Sneaker");
+  assert(outfitCoverageGaps([tee, jean, shoe]).length === 0, "a complete regular outfit still passes");
+  assert(outfitCoverageGaps([tee, jean]).join(",") === "shoes", "a shoeless outfit still reports shoes");
+  assert(outfitCoverageGaps([tee, shoe]).join(",") === "bottom", "a bottomless outfit still reports bottom");
+  assert(outfitCoverageGaps([onePiece, shoe]).length > 0, "swim mixed into a regular look is still incomplete");
+  assert(outfitCoverageGaps([]).length > 0, "an empty look is still incomplete");
+}
+
+// The packer's own `uncovered` list agrees: a trip that places a pool suit
+// reports no coverage gap for it.
+{
+  const items = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Aluka Top", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Aluka Bottom", { color: "Sky Blue" }),
+  ];
+  const { poolSuits, uncovered, dailyOutfits } = buildDailyOutfits(items, Array(4).fill(90), {
+    occasions: defaultOccasions(4),
+    activity: "Beach",
+  });
+  assert(poolSuits.some(Boolean), "control: the trip placed a pool suit");
+  assert(uncovered.length === 0, `no day reports a coverage gap (got ${uncovered.length})`);
+  assert(dailyOutfits.every(d => d.length >= 3), "…because every day outfit is genuinely complete");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────

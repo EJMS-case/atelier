@@ -941,11 +941,19 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // cards render below it, off-screen. Without auto-scroll users tap Preview
   // and see no reaction, even though state updated correctly.
   const previewRef = useRef(null);
-
+  // Fires ONCE, when the preview first appears. The dependency is `dayLooks`,
+  // which every edit replaces — remove a piece, swap one, shuffle a day, change
+  // an occasion — so this used to yank the sheet back to the top of the preview
+  // on every single tap. Owner report: "when I remove things from an outfit on
+  // this screen, it scrolls me back up to the top." The scroll is only there to
+  // show her the result of tapping Preview; after that she is reading and
+  // editing, and the view must stay where she left it.
+  const previewScrolledRef = useRef(false);
   useEffect(() => {
-    if (dayLooks && previewRef.current) {
-      previewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if (!dayLooks) { previewScrolledRef.current = false; return; }  // re-arm for the next Preview
+    if (previewScrolledRef.current) return;
+    previewScrolledRef.current = true;
+    previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [dayLooks]);
 
   // Geocode the destination + pull per-day Open-Meteo forecast. Same path
@@ -1015,13 +1023,26 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // piece that has since dropped out of it (switching the destination closet
   // narrows the pool). Without that union a pin could become invisible and
   // therefore un-unpinnable while still driving the packer.
+  // What the pin sheet offers. "Bringing for sure" means CARRYING it, so a piece
+  // that already lives at the destination has nothing to pin — it's there. The
+  // packer still reaches for those pieces on their own merits (that's what the
+  // destination closet is for); they just don't belong in a packing decision.
+  // Owner report: the sheet listed her whole Arizona closet.
+  //
+  // Anything already pinned stays listed even if it drops out of the pool (she
+  // switched the destination closet after pinning), otherwise a pin could go
+  // invisible and therefore un-unpinnable while still driving the packer.
   const pinPool = useMemo(() => {
-    if (!mustIncludeIds.size) return genItems;
-    const inPool = new Set(genItems.map(it => it.id));
+    const packable = destClosetId
+      ? genItems.filter(it => closetOf(it) !== destClosetId)
+      : genItems;
+    if (!mustIncludeIds.size) return packable;
+    const shown = new Set(packable.map(it => it.id));
     const source = Array.isArray(allItems) && allItems.length ? allItems : items;
-    const strays = source.filter(it => mustIncludeIds.has(it.id) && !inPool.has(it.id));
-    return strays.length ? [...genItems, ...strays] : genItems;
-  }, [genItems, mustIncludeIds, allItems, items]);
+    const strays = source.filter(it => mustIncludeIds.has(it.id) && !shown.has(it.id));
+    return strays.length ? [...packable, ...strays] : packable;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genItems, mustIncludeIds, allItems, items, destClosetId]);
 
   const pinnedItems = useMemo(
     () => pinPool.filter(it => mustIncludeIds.has(it.id)),
