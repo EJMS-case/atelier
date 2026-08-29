@@ -263,7 +263,17 @@ export async function generateTripDayLook(items, occasion, weather, destination,
         .slice(0, 6);
       return `  · ${d.occasion || "?"} (${d.weather || "?"}): ${names.join(", ") || "(empty)"}`;
     }).join("\n");
-    varietyBlock = `\nALREADY WORN ON OTHER TRIP DAYS:\n${summary}\n\nCAPSULE + VARIETY RULES (this trip packs from ONE suitcase — pack light, style smart):\n- REUSE shoes and bags: whenever a pair of shoes or a bag from another day suits this occasion, pick THAT one instead of introducing a new one. The whole trip should need only 2-3 pairs of shoes and 1-2 bags.\n- Bottoms may repeat up to 3 wears across the trip, styled differently each time — but never two days running.\n- Rotate the hero/statement garment (the most distinctive top, dress, blazer, or print). The hero must NOT appear on more than one day.\n- Tops should not repeat.\n- Never produce the exact same outfit twice — re-wearing a piece is good packing; re-wearing a whole look is not.\n`;
+    // Two different problems, so two different rule sets. Without a destination
+    // closet every piece worn must be carried, so the model is told to ration.
+    // WITH one, most of the wardrobe is already there and the binding
+    // constraint is taste, not luggage — the rationing language was making it
+    // spread thin over a closet that could dress her properly. Owner, on
+    // Arizona: "it's ok if pieces are worn twice." Mirrors the packer's
+    // `plentiful` mode; the two rules that never relax are the same in both.
+    const varietyRules = prefer
+      ? `VARIETY RULES (she has a full closet AT THE DESTINATION plus a packed suitcase — this is NOT a pack-light problem, so do not ration):\n- Re-wearing a piece is FINE. A top, dress or bottom may appear on two days across the trip when it earns its place — style it as a genuinely different outfit the second time (different partner pieces, different shoe, different register), never a repeat of the same recipe.\n- The hero/statement garment may return once, restyled. Two statement pieces in ONE look is still wrong.\n- Never the same piece on consecutive days.\n- Never produce the exact same outfit twice — re-wearing a piece is fine, re-wearing a whole look is not.\n- Spend the range you have: reach for the AT DESTINATION pieces and build the most tasteful look each day deserves, rather than protecting the wardrobe from being used.`
+      : `CAPSULE + VARIETY RULES (this trip packs from ONE suitcase — pack light, style smart):\n- REUSE shoes and bags: whenever a pair of shoes or a bag from another day suits this occasion, pick THAT one instead of introducing a new one. The whole trip should need only 2-3 pairs of shoes and 1-2 bags.\n- Bottoms may repeat up to 3 wears across the trip, styled differently each time — but never two days running.\n- Rotate the hero/statement garment (the most distinctive top, dress, blazer, or print). The hero must NOT appear on more than one day.\n- Tops should not repeat.\n- Never produce the exact same outfit twice — re-wearing a piece is good packing; re-wearing a whole look is not.`;
+    varietyBlock = `\nALREADY WORN ON OTHER TRIP DAYS:\n${summary}\n\n${varietyRules}\n`;
   }
 
   // Extreme heat: on-body leather/suede (skirts, pants, tops, jackets) is

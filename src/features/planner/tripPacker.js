@@ -848,6 +848,27 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     ? opts.preferItemIds
     : null;
 
+  // ── Plentiful mode ─────────────────────────────────────────────────────────
+  // A trip WITHOUT a destination closet is a suitcase-minimisation problem:
+  // everything worn must be carried, so the packer rations hard — fresh top
+  // every day, a statement piece once per trip, a hard ceiling on distinct
+  // shoes and bags.
+  //
+  // A trip WITH one is not that problem. Most of the wardrobe is already there;
+  // the binding constraint is taste, not luggage. Rationing it produced narrow,
+  // repetitive days out of a closet that could have dressed her properly —
+  // owner, on Arizona: "it's ok if pieces are worn twice. I should have enough
+  // there plus what's in my suitcase to have the stylist make me some really
+  // tasteful outfits."
+  //
+  // So when a destination closet is set, repeats get cheap and the ceiling
+  // counts only what she carries. What does NOT relax: never the same piece on
+  // consecutive days, and never two statement pieces in one look — those read
+  // as sloppy however full the closet is.
+  const plentiful = !!prefer;
+  const FRESH_TOP_PENALTY = plentiful ? 2.5 : 6;        // a 2nd wear is fine; a 3rd still costs
+  const REPEAT_STATEMENT_PENALTY = plentiful ? 3 : 6;   // the hero may return once, styled anew
+
   const pick = (candidates, occasion, currentOutfit = [], slot = null, dayIdx = 0) => {
     if (!candidates.length) return null;
     const alreadyHasStatement = currentOutfit.some(isStatement);
@@ -866,27 +887,42 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
       if (mustIds?.has(c.id)) s += MUST_BONUS;
       if (alreadyHasStatement && isStatement(c)) s -= 15;
       if (CAPSULE_SLOTS.has(slot)) {
-        if (wears > 0) s += 1.5;
+        // Reuse-first exists to save suitcase space, so it earns nothing on a
+        // piece that is already at the destination — and left switched on it
+        // pinned her to a single pair of sandals for a week while five more sat
+        // in the closet. Neutral there; still reuse-first for carried pieces.
+        if (wears > 0 && !(plentiful && atDest)) s += 1.5;
       } else if (slot === "bottoms") {
         if (wears >= 3) s -= 6;
         else if (wears > 0) s += 1.5;
         if (wears > 0 && lastWorn.get(c.id) === dayIdx - 1) s -= 4;
-        if (wears > 0 && isStatement(c)) s -= 6;
-      } else { // tops / dresses — fresh each day
-        s -= 6 * wears;
-        if (wears > 0 && isStatement(c)) s -= 6;
+        if (wears > 0 && isStatement(c)) s -= REPEAT_STATEMENT_PENALTY;
+      } else { // tops / dresses
+        s -= FRESH_TOP_PENALTY * wears;
+        if (wears > 0 && isStatement(c)) s -= REPEAT_STATEMENT_PENALTY;
       }
-      return { c, s, wears };
+      return { c, s, wears, atDest };
     });
     // Capsule ceiling: once the slot holds its target count of distinct items,
     // block comparable new ones (see escape-hatch note above).
-    const distinct = distinctBySlot.get(slot)?.size || 0;
+    //
+    // The ceiling counts only pieces she CARRIES. Its whole purpose is to keep
+    // the suitcase small, and a piece already at the destination adds nothing
+    // to the suitcase — capping those was rationing her own closet against her
+    // (owner: "it's ok if pieces are worn twice... I should have enough there
+    // plus what's in my suitcase"). So at-destination candidates never take the
+    // new-item margin, and never count toward the target.
+    const inSlot = distinctBySlot.get(slot);
+    const distinct = inSlot
+      ? (plentiful ? [...inSlot].filter(id => !prefer.has(id)).length : inSlot.size)
+      : 0;
     const target = targets[slot];
     if (target != null && distinct >= target) {
       const margin = CAPSULE_SLOTS.has(slot) ? 7 : 3.5;
       const bestReused = scored.reduce((m, x) => x.wears > 0 && x.s > m ? x.s : m, -Infinity);
       if (bestReused > -Infinity) {
         for (const x of scored) {
+          if (plentiful && x.atDest) continue;      // costs nothing to wear
           if (x.wears === 0 && bestReused >= x.s - 1.5) x.s -= margin;
         }
       }

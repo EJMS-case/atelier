@@ -1347,6 +1347,105 @@ section("swim piece kinds");
     "a matched pair classifies as two different kinds");
 }
 
+// ── 24. Plentiful mode: a destination closet is not a pack-light problem ─────
+// Owner, on Arizona: "it's ok if pieces are worn twice. I should have enough
+// there plus what's in my suitcase to have the stylist make me some really
+// tasteful outfits." With a destination closet the binding constraint is taste,
+// not luggage, so repeats get cheap and the capsule ceiling counts only what
+// she CARRIES — capping at-destination pieces was rationing her own closet.
+section("plentiful mode (destination closet)");
+
+// Both cases below are single-day builds seeded with priorUse, so the winner is
+// decided by score margins well above the 0.6 jitter rather than by sampling.
+
+// THE CEILING. Seed a 7-day trip whose shoe slot already holds its full target
+// of CARRIED shoes. A fresh shoe should be blocked — unless it is already at
+// the destination, where it costs nothing and the ceiling has no business
+// applying.
+{
+  const worn = Array.from({ length: capsuleTargets(7).shoes }, (_, i) =>
+    mk("Shoes", "Sandals", `Home Sandal ${i + 1}`));
+  const fresh = mk("Shoes", "Sandals", "AZ Sandal");
+  const filler = [
+    ...Array.from({ length: 4 }, (_, i) => mk("Tops", "T-Shirts", `Tee ${i + 1}`)),
+    ...Array.from({ length: 4 }, (_, i) => mk("Bottoms", "Shorts", `Short ${i + 1}`)),
+  ];
+  const items = [...worn, fresh, ...filler];
+  const priorUse = Object.fromEntries(worn.map(it => [it.id, 1]));
+  const opts = { occasions: ["Casual"], priorUse, tripDayCount: 7 };
+
+  const carried = buildDailyOutfits(items, [76], opts);
+  const pickedCarried = carried.dailyOutfits[0].find(it => it.category === "Shoes");
+  assert(pickedCarried && pickedCarried.id !== fresh.id,
+    "control: with no destination closet the ceiling still blocks a fresh shoe");
+
+  const atDest = buildDailyOutfits(items, [76], { ...opts, preferItemIds: new Set([fresh.id]) });
+  const pickedDest = atDest.dailyOutfits[0].find(it => it.category === "Shoes");
+  assert(pickedDest && pickedDest.id === fresh.id,
+    "an at-destination shoe is never rationed by the carry ceiling");
+}
+
+// REUSE. A top she has already worn once, with a real occasion edge over the
+// fresh alternative. Packing light says take the fresh one anyway; a full
+// destination closet says wear the better piece again.
+{
+  const better = mk("Tops", "T-Shirts", "Cotton Tee A", { occasion: ["Casual"] });  // +4 occasion tag
+  const plain  = mk("Tops", "T-Shirts", "Cotton Tee B");
+  const filler = [
+    ...Array.from({ length: 3 }, (_, i) => mk("Bottoms", "Shorts", `Short ${i + 1}`)),
+    mk("Shoes", "Sandals", "Sandal"),
+  ];
+  const items = [better, plain, ...filler];
+  const opts = { occasions: ["Casual"], priorUse: { [better.id]: 1 }, tripDayCount: 6 };
+
+  const packLight = buildDailyOutfits(items, [76], opts);
+  assert(packLight.dailyOutfits[0].find(it => it.category === "Tops")?.id === plain.id,
+    "control: packing light takes the fresh top even though it suits the day less");
+
+  // Both at the destination, so the destination bonus cancels and the only
+  // difference left is what a second wear costs.
+  const plentiful = buildDailyOutfits(items, [76], {
+    ...opts, preferItemIds: new Set([better.id, plain.id]),
+  });
+  assert(plentiful.dailyOutfits[0].find(it => it.category === "Tops")?.id === better.id,
+    "with a destination closet the better top is worn a second time instead");
+}
+
+// What does NOT relax: never the same piece two days running.
+{
+  const items = [
+    ...Array.from({ length: 2 }, (_, i) => mk("Tops", "T-Shirts", `Tee ${i + 1}`)),
+    ...Array.from({ length: 2 }, (_, i) => mk("Bottoms", "Shorts", `Short ${i + 1}`)),
+    mk("Shoes", "Sandals", "Flat Sandal"),
+  ];
+  const preferItemIds = new Set(items.map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits(items, Array(4).fill(76), {
+    occasions: defaultOccasions(4), preferItemIds,
+  });
+  let backToBack = 0;
+  for (let d = 1; d < dailyOutfits.length; d++) {
+    const prev = new Set(dailyOutfits[d - 1].filter(it => it.category === "Bottoms").map(it => it.id));
+    if (dailyOutfits[d].some(it => it.category === "Bottoms" && prev.has(it.id))) backToBack++;
+  }
+  assert(backToBack === 0, `no bottom repeats on consecutive days even in plentiful mode (got ${backToBack})`);
+}
+
+// And still at most one statement piece per look.
+{
+  const items = wardrobe();
+  const preferItemIds = new Set(items.map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits(items, Array(5).fill(76), {
+    occasions: defaultOccasions(5), preferItemIds,
+  });
+  const leopard = items.find(it => it.name === "Leopard Print Blouse").id;
+  const fringe  = items.find(it => it.name === "Fringe Suede Bag").id;
+  const together = dailyOutfits.filter(d => {
+    const ids = new Set(d.map(it => it.id));
+    return ids.has(leopard) && ids.has(fringe);
+  }).length;
+  assert(together === 0, "the leopard blouse and the fringe bag never share a look");
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\ntrip-packer: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
