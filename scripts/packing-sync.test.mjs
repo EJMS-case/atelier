@@ -180,6 +180,98 @@ section("untick regeneration reconcile");
   assert(removedPackedIds.length === 0, "it was already unticked, so no unpack note");
 }
 
+// ── Pinned pieces ("bringing for sure") ──────────────────────────────────────
+section("pinned pieces survive outfit churn");
+
+// A pin no outfit references is still rowed.
+{
+  const plans = [plan("2026-09-01", [{ id: "oA", items: ["w1", "w2"] }])];
+  const { rowsToUpsert, idsToDelete } = reconcileTripItems({
+    tripId: TRIP, plans, tripItems: [], destClosetId: null, itemsById,
+    mustIncludeIds: new Set(["w3"]),
+  });
+  assert(sortIds(rowsToUpsert) === "w1,w2,w3", "an unused pin is rowed alongside the outfit-derived pieces");
+  const w3 = rowsToUpsert.find(r => r.item_id === "w3");
+  assert(w3.status === "suggested" && JSON.stringify(w3.outfit_ids) === "[]",
+    "the unused pin rows as suggested with no outfit_ids");
+  assert(idsToDelete.length === 0, "nothing deleted");
+}
+
+// The pin is NOT deleted when outfits stop referencing it — the exact churn
+// that used to drop a hand-ticked piece off the list.
+{
+  const plans = [plan("2026-09-01", [{ id: "oA", items: ["w1"] }])];
+  const tripItems = [
+    { trip_id: TRIP, item_id: "w1", status: "packed",    outfit_ids: ["oA"] },
+    { trip_id: TRIP, item_id: "w3", status: "packed",    outfit_ids: ["oA"] }, // pinned, no longer worn
+  ];
+  const { idsToDelete, removedPackedIds, rowsToUpsert } = reconcileTripItems({
+    tripId: TRIP, plans, tripItems, destClosetId: null, itemsById,
+    mustIncludeIds: new Set(["w3"]),
+  });
+  assert(idsToDelete.length === 0, "a pinned row is never deleted for lack of an outfit");
+  assert(removedPackedIds.length === 0, "…so no spurious 'unpack it' note");
+  const w3 = rowsToUpsert.find(r => r.item_id === "w3");
+  assert(w3 && w3.status === "packed", "the pin keeps its packed status, with outfit_ids refreshed to empty");
+}
+
+// Unpinning restores ordinary behaviour: the same row now goes.
+{
+  const plans = [plan("2026-09-01", [{ id: "oA", items: ["w1"] }])];
+  const tripItems = [
+    { trip_id: TRIP, item_id: "w1", status: "packed", outfit_ids: ["oA"] },
+    { trip_id: TRIP, item_id: "w3", status: "packed", outfit_ids: ["oA"] },
+  ];
+  const { idsToDelete, removedPackedIds } = reconcileTripItems({
+    tripId: TRIP, plans, tripItems, destClosetId: null, itemsById,
+    mustIncludeIds: new Set(),
+  });
+  assert(idsToDelete.join(",") === "w3", "unpinned + unworn comes off the list");
+  assert(removedPackedIds.join(",") === "w3", "…and is reported so the UI can say 'unpack it'");
+}
+
+// A pin that lives at the destination closet still needs no packing.
+{
+  const plans = [plan("2026-09-01", [{ id: "oA", items: ["w1"] }])];
+  const { rowsToUpsert } = reconcileTripItems({
+    tripId: TRIP, plans, tripItems: [], destClosetId: ARIZONA_CLOSET_ID, itemsById,
+    mustIncludeIds: new Set(["w4"]),
+  });
+  assert(sortIds(rowsToUpsert) === "w1", "a pin already at the destination is not pulled");
+}
+
+// A pin for an item the wardrobe no longer knows is never rowed (FK safety).
+{
+  const plans = [plan("2026-09-01", [{ id: "oA", items: ["w1"] }])];
+  const { rowsToUpsert } = reconcileTripItems({
+    tripId: TRIP, plans, tripItems: [], destClosetId: null, itemsById,
+    mustIncludeIds: new Set(["gone"]),
+  });
+  assert(sortIds(rowsToUpsert) === "w1", "a pin for a deleted item is skipped");
+}
+
+// Array form is accepted as well as a Set (callers read it straight off the
+// trips row, where it arrives as a JSON array).
+{
+  const plans = [plan("2026-09-01", [{ id: "oA", items: ["w1"] }])];
+  const { rowsToUpsert } = reconcileTripItems({
+    tripId: TRIP, plans, tripItems: [], destClosetId: null, itemsById,
+    mustIncludeIds: ["w3"],
+  });
+  assert(sortIds(rowsToUpsert) === "w1,w3", "mustIncludeIds accepts a plain array");
+}
+
+// Omitting mustIncludeIds entirely keeps the pre-pin behaviour.
+{
+  const plans = [plan("2026-09-01", [{ id: "oA", items: ["w1"] }])];
+  const tripItems = [{ trip_id: TRIP, item_id: "w3", status: "suggested", outfit_ids: ["oOld"] }];
+  const { rowsToUpsert, idsToDelete } = reconcileTripItems({
+    tripId: TRIP, plans, tripItems, destClosetId: null, itemsById,
+  });
+  assert(sortIds(rowsToUpsert) === "w1", "no pins → only outfit-derived rows");
+  assert(idsToDelete.join(",") === "w3", "no pins → unreferenced rows still deleted");
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\npacking-sync: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

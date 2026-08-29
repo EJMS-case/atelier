@@ -583,6 +583,206 @@ section("destination preference");
   assert(alts[0]?.id === loafer.id, "alternativesFor ranks the preferred swap first");
 }
 
+// ── 14. Must-include pins ────────────────────────────────────────────────────
+// She pre-selects pieces in the trip form; the packer has to place every one
+// of them and build the rest of the suitcase around them.
+section("must-include pins");
+
+const idsIn = (dailyOutfits, poolSuits = []) => new Set([
+  ...dailyOutfits.flat().map(it => it.id),
+  ...poolSuits.flatMap(s => s || []).map(it => it.id),
+]);
+
+// Every pin lands somewhere on a normal trip.
+{
+  const items = wardrobe();
+  const pins = [
+    items.find(it => it.name === "Poplin Midi Skirt"),
+    items.find(it => it.name === "Suede Loafer"),
+    items.find(it => it.name === "Leather Crossbody"),
+    items.find(it => it.name === "Linen Maxi Dress"),
+  ];
+  const { dailyOutfits, packingList, mustIncludeUnplaced } = buildDailyOutfits(items, Array(5).fill(76), {
+    occasions: defaultOccasions(5),
+    mustIncludeIds: new Set(pins.map(it => it.id)),
+  });
+  const used = idsIn(dailyOutfits);
+  assert(pins.every(p => used.has(p.id)), "every pinned piece appears in an outfit");
+  const packed = new Set(packingList.map(it => it.id));
+  assert(pins.every(p => packed.has(p.id)), "every pinned piece is on the packing list");
+  assert(mustIncludeUnplaced.length === 0, "nothing reported unplaced when every pin fits");
+  assert(dailyOutfits.every(d => d.length >= 3), "pinned days still build complete outfits");
+}
+
+// A pinned dress and a pinned bottom can't share a day (same base slot), so
+// they spread — and the pinned dress day is a dress day.
+{
+  const items = wardrobe();
+  const dress  = items.find(it => it.name === "Slip Midi Dress");
+  const skirt  = items.find(it => it.name === "Cotton Mini Skirt");
+  const { dailyOutfits } = buildDailyOutfits(items, Array(3).fill(76), {
+    occasions: defaultOccasions(3),
+    mustIncludeIds: new Set([dress.id, skirt.id]),
+  });
+  const dressDay = dailyOutfits.findIndex(d => d.some(it => it.id === dress.id));
+  const skirtDay = dailyOutfits.findIndex(d => d.some(it => it.id === skirt.id));
+  assert(dressDay >= 0 && skirtDay >= 0, "both base pins placed");
+  assert(dressDay !== skirtDay, "a pinned dress and a pinned bottom take different days");
+  assert(!dailyOutfits[dressDay].some(it => it.category === "Bottoms"),
+    "the pinned-dress day is a dress day, not dress + bottom");
+}
+
+// Weather bypass: a wool coat pinned for a 90°F trip still packs. filterByWeather
+// strips non-light outerwear at Hot, and the packer only reaches for a layer
+// below 68°F — a pin overrides both ("she knows", per Style Me's explicit-
+// request override).
+{
+  const coat = mk("Outerwear", "Coats", "Wool Overcoat", { material: "wool" });
+  const items = [...hotBasics(), coat];
+  assert(filterByWeather([coat], "Hot").length === 0, "control: the wool coat is not Hot-eligible");
+  const { dailyOutfits, packingList } = buildDailyOutfits(items, Array(4).fill(90), {
+    occasions: defaultOccasions(4),
+    mustIncludeIds: new Set([coat.id]),
+  });
+  assert(idsIn(dailyOutfits).has(coat.id), "a pinned wool coat packs anyway on a hot trip");
+  assert(packingList.some(it => it.id === coat.id), "the pinned coat is on the packing list");
+  // Bypass is for the pin ONLY — nothing else weather-excluded sneaks in.
+  const others = mk("Knits", "Sweaters", "Chunky Wool Sweater", { material: "wool" });
+  const { dailyOutfits: d2 } = buildDailyOutfits([...items, others], Array(4).fill(90), {
+    occasions: defaultOccasions(4),
+    mustIncludeIds: new Set([coat.id]),
+  });
+  assert(!idsIn(d2).has(others.id), "an unpinned wool piece is still weather-excluded");
+}
+
+// Best-fit seating: a pin goes to the day whose occasion wants it. The Evening
+// Clutch scores +2 on Dinner (preferBagName) and -2 on Casual (avoidBagName);
+// seating is score-ordered and jitter-free, so the dinner day wins outright.
+{
+  const items = wardrobe();
+  const clutch = items.find(it => it.name === "Evening Clutch");
+  const { dailyOutfits } = buildDailyOutfits(items, Array(3).fill(76), {
+    occasions: ["Casual", "Dinner", "Casual"],
+    mustIncludeIds: new Set([clutch.id]),
+  });
+  assert(dailyOutfits[1].some(it => it.id === clutch.id), "the pinned clutch lands on the dinner day");
+}
+
+// A pin never overrides occasion fit on OTHER days: MUST_BONUS (2.5) is under
+// the occasion terms (±3), so a Dinner day still refuses a pinned sneaker and
+// the sneaker takes a casual day instead.
+{
+  const items = wardrobe();
+  const sneaker = items.find(it => it.name === "White Leather Sneaker");
+  const { dailyOutfits } = buildDailyOutfits(items, Array(3).fill(76), {
+    occasions: ["Casual", "Dinner", "Casual"],
+    mustIncludeIds: new Set([sneaker.id]),
+  });
+  const dinnerShoe = dailyOutfits[1].find(it => it.category === "Shoes");
+  assert(dinnerShoe && dinnerShoe.id !== sneaker.id, "dinner day still refuses the pinned sneaker");
+  assert(idsIn(dailyOutfits).has(sneaker.id), "the pinned sneaker still packs, on a casual day");
+}
+
+// Two pinned statement pieces never share a day (the packer's HC8 rule applies
+// to pins too).
+{
+  const items = wardrobe();
+  const blouse = items.find(it => it.name === "Leopard Print Blouse");
+  const bag    = items.find(it => it.name === "Fringe Suede Bag");
+  const { dailyOutfits } = buildDailyOutfits(items, Array(3).fill(76), {
+    occasions: defaultOccasions(3),
+    mustIncludeIds: new Set([blouse.id, bag.id]),
+  });
+  const blouseDay = dailyOutfits.findIndex(d => d.some(it => it.id === blouse.id));
+  const bagDay    = dailyOutfits.findIndex(d => d.some(it => it.id === bag.id));
+  assert(blouseDay >= 0 && bagDay >= 0, "both statement pins placed");
+  assert(blouseDay !== bagDay, "two pinned statement pieces take different days");
+}
+
+// Overflow: more pinned tops than the trip has days. The surplus is reported in
+// mustIncludeUnplaced — and is STILL on the packing list, because a pin that
+// silently vanishes is the exact bug this feature exists to prevent.
+{
+  const items = wardrobe();
+  const tops = items.filter(it => it.category === "Tops" && /Cotton Tee/.test(it.name)).slice(0, 6);
+  const { dailyOutfits, packingList, mustIncludeUnplaced } = buildDailyOutfits(items, Array(2).fill(76), {
+    occasions: defaultOccasions(2),
+    mustIncludeIds: new Set(tops.map(it => it.id)),
+  });
+  const used = idsIn(dailyOutfits);
+  const seated = tops.filter(t => used.has(t.id));
+  assert(seated.length === 2, `both days seat a pinned top (got ${seated.length})`);
+  assert(mustIncludeUnplaced.length === 4, `the other 4 report as unplaced (got ${mustIncludeUnplaced.length})`);
+  const packed = new Set(packingList.map(it => it.id));
+  assert(tops.every(t => packed.has(t.id)), "every pinned top is on the packing list regardless");
+}
+
+// Single-day rebuild guard: a pin already worn elsewhere on the trip (priorUse)
+// is NOT re-seated onto the day being reshuffled — otherwise every shuffle
+// would cram the whole pin list into one outfit.
+{
+  const coat = mk("Outerwear", "Coats", "Wool Overcoat", { material: "wool" });
+  const items = [...hotBasics(), coat];
+  const { dailyOutfits } = buildDailyOutfits(items, [90], {
+    occasions: ["Casual"],
+    mustIncludeIds: new Set([coat.id]),
+    priorUse: { [coat.id]: 1 },
+    tripDayCount: 4,
+  });
+  assert(!idsIn(dailyOutfits).has(coat.id), "a pin worn on another day is not forced onto a reshuffled day");
+
+  // …but a pin with no home yet IS seated on the rebuilt day (this is the
+  // reshuffle path: the caller excludes the outfit being rebuilt from priorUse,
+  // so a pin that only lived there gets seated again rather than lost).
+  const { dailyOutfits: d2 } = buildDailyOutfits(items, [90], {
+    occasions: ["Casual"],
+    mustIncludeIds: new Set([coat.id]),
+    priorUse: {},
+    tripDayCount: 4,
+  });
+  assert(idsIn(d2).has(coat.id), "a pin with no home is re-seated on the rebuilt day");
+}
+
+// A pinned swim separate ships as a COMPLETE suit in its own pool look, even on
+// an activity whose day pool holds no swim at all — the mate is found across
+// the wardrobe rather than the day pool.
+{
+  const items = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Aluka Top", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Aluka Bottom", { color: "Sky Blue" }),
+  ];
+  const top = items.find(it => it.name === "Aluka Top");
+  const { dailyOutfits, poolSuits } = buildDailyOutfits(items, Array(4).fill(90), {
+    occasions: defaultOccasions(4),
+    activity: "Sightseeing",           // allowSwim: false
+    mustIncludeIds: new Set([top.id]),
+  });
+  const suitDay = poolSuits.findIndex(s => s?.some(it => it.id === top.id));
+  assert(suitDay >= 0, "the pinned swim piece becomes a pool look");
+  assert(poolSuits[suitDay].length === 2, "it packs as a complete suit, not a lone separate");
+  assert(poolSuits[suitDay].every(it => swimKind(it) !== "one-piece")
+      && new Set(poolSuits[suitDay].map(swimKind)).size === 2, "the suit is a matched top + bottom");
+  assert(poolSuits[suitDay].every(it => firstWord(it) === "aluka"), "the mate is the matching piece");
+  assert(!dailyOutfits.flat().some(it => it.category === "Swim"), "swim never rides inside a day outfit");
+  assert(poolSuits.filter(Boolean).length === 1, "the pinned suit is placed once, not every day");
+}
+
+// Pins and the destination closet coexist: both bonuses apply, neither breaks
+// the other's guarantee.
+{
+  const items = wardrobe();
+  const pinnedSkirt = items.find(it => it.name === "Poplin Midi Skirt");
+  const destTote    = items.find(it => it.name === "Canvas Tote");
+  const { dailyOutfits } = buildDailyOutfits(items, Array(4).fill(76), {
+    occasions: defaultOccasions(4),
+    mustIncludeIds: new Set([pinnedSkirt.id]),
+    preferItemIds: new Set([destTote.id]),
+  });
+  assert(idsIn(dailyOutfits).has(pinnedSkirt.id), "the pin still lands alongside a destination closet");
+  assert(idsIn(dailyOutfits).has(destTote.id), "the destination-closet bag is still preferred");
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\ntrip-packer: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

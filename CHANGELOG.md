@@ -2,6 +2,24 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trip packing: pre-select the pieces you know you're bringing — 2026-08-29
+
+### Why
+Owner ask: *"When booking a trip to Arizona (or anywhere I guess), is there a way I can pre-select some items I know I want to bring and then the generated outfits use the pieces I picked (plus the closet) plus whatever else I should pack?"* There wasn't. The nearest thing was the destination closet (a soft `+2` preference over a whole closet, easily outvoted by a formality penalty) and per-piece swapping after generation, one slot at a time. Style Me has had a real must-include mechanism since the requested-pieces work; trips never got it.
+
+### Added
+- **"Bringing for sure"** — a pin picker in the trip setup form (Calendar → Plan a trip) and on an existing trip's Looks tab. `MustIncludePicker` (new) is a searchable, category-filtered closet grid; pinned pieces float to the top, and pieces the trip's climate would normally rule out are badged **Off-forecast** rather than hidden — pinning against the weather is a legitimate override, not a mistake to prevent.
+- **Guaranteed placement** (`tripPacker.js`): new `opts.mustIncludeIds`. Before any picking, `assignMustIncludes` seats each pin on one day via a greedy global best-fit over every (pin, day) pair — most-suitable pairing claims its day first — respecting one pin per slot per day, dress-vs-separates exclusivity, and the existing one-statement-piece-per-day rule. The day loop then force-pushes the seated pin and skips that slot's `pick()`. Pins bypass the weather and activity filters for their own day (the same call Style Me's explicit-request override makes: a pinned wool coat packs for a 100°F trip and the look is styled around it). A pinned layer ignores the `hi < 68` outerwear gate; a pinned swim separate becomes its own complete pool look, with its mate searched across the whole wardrobe rather than the day pool. On the trip's *other* days a pin scores `+MUST_BONUS` (2.5) — above `PREFER_BONUS` so a pin out-ranks a merely-at-destination piece, below the ±3/4 occasion terms so a Dinner day still refuses a pinned sneaker and takes it on a casual day instead.
+- **Pins survive on the packing list** (`packingSync.js`): `reconcileTripItems` takes `mustIncludeIds` and rows a pin even when no outfit references it, and never deletes a pinned row for lack of one — the exact churn that would otherwise drop a hand-ticked piece. The packing tab lists such a pin as "no look uses it yet" with a **pinned** badge. Unticking a piece ("take it out of the suitcase") unpins it first, since the two instructions contradict and the tick is the newer one.
+- **AI day-look generation** (`tripAdvisor.js`): pinned pieces skip the weather/swim eligibility gates, sort ahead of the per-category prompt cap, are tagged `MUST INCLUDE` in the inventory, and get a prompt block requiring the look to be built around at least one of them, with the same weather override. `TripDetailView` passes only the *still-unplaced* pins to each day — this generator sees one day at a time, so handing it the whole list would put every pin on every day.
+- **Migration `0030_trip_must_include.sql`** — `trips.must_include_ids text[] not null default '{}'`. **Needs one manual run against the live project.** Stored on `trips` (not as a `trip_items` flag) because a pin is part of the trip plan: it's set in the same insert that creates the trip, and survives a row's status moving suggested → packed → left_behind. `sb.saveTrip`/`sb.updateTrip` already strip unknown columns on PGRST204, so until the migration runs, trips save without pins — degraded, not broken.
+
+### Notes
+Single-day rebuilds (shuffle, add-a-look, regenerate) don't re-cram the pin list onto the day being rebuilt: placement skips any pin `opts.priorUse` already shows as worn, and callers exclude the outfit under rebuild from `priorUse` — so a pin whose only home was that outfit is seated again rather than lost. Removing a piece via the leave-behind/untick regenerate keeps it out, because the excluded ids never enter the generation pool.
+
+### Tests
+`npm run test:packer` +29 (placement, weather/activity bypass with non-pinned pieces still excluded, best-fit day, occasion fit not overridden, statement pieces split across days, overflow → `mustIncludeUnplaced` yet still packed, reshuffle guard both ways, pinned swim → matched complete suit on a no-swim activity, pins + destination closet together) — 102 total, verified deterministic over 10 consecutive runs. `npm run test:packsync` +9 (unused pin rowed, never deleted, unpinning restores normal deletion, at-destination pin not pulled, deleted-item pin skipped, array/Set/omitted input shapes) — 38 total. Full `npm test` chain and `npm run build` green.
+
 ## [Unreleased] — Black Cherry reads purple; sets sort by type and honour the colour filter — 2026-08-28
 
 ### Why

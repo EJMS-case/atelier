@@ -128,6 +128,13 @@ const TripLooksTool = {
  * @param {Set<string>} [opts.preferItemIds] - ids already at the trip's
  *                   destination closet (Phase B): tagged AT DESTINATION in the
  *                   inventory and soft-preferred, since they pack for free.
+ * @param {Set<string>} [opts.mustIncludeIds] - ids she pinned as "bringing for
+ *                   sure" and that no other day has used yet. Tagged MUST
+ *                   INCLUDE, exempted from the weather filter, and required by
+ *                   the prompt. Callers pass the STILL-UNPLACED pins only —
+ *                   this generator builds one day at a time and has no view of
+ *                   the trip, so handing it the whole list would put every pin
+ *                   on every day.
  */
 export async function generateTripDayLook(items, occasion, weather, destination, apiKey, opts = {}) {
   if (!apiKey || !items?.length) return null;
@@ -142,8 +149,16 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   const activity = opts.activity || "Sightseeing";
   const allowSwim = activity === "Beach" || activity === "Resort" || activity === "Family Visit";
 
+  // Pinned pieces skip the weather + swim gates entirely. Same call the local
+  // packer and Style Me's explicit-request override make: she named the piece,
+  // so the model's job is to style AROUND the mismatch, not to drop it.
+  const mustInclude = opts.mustIncludeIds instanceof Set && opts.mustIncludeIds.size > 0
+    ? opts.mustIncludeIds
+    : null;
+
   const eligible = items.filter(it => {
     if (!it.category) return false;
+    if (mustInclude?.has(it.id)) return true;
     if (!allowSwim && (it.category === "Swim" || it.category === "Loungewear")) return false;
     return filterByWeather([it], weather).length > 0;
   });
@@ -166,9 +181,13 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   const prefer = opts.preferItemIds instanceof Set && opts.preferItemIds.size > 0
     ? opts.preferItemIds
     : null;
-  if (prefer) {
+  // Float preferred pieces to the front of each bucket so the per-category cap
+  // never drops them — pins first, since a capped-out pin would make the
+  // prompt's MUST INCLUDE line unsatisfiable.
+  if (prefer || mustInclude) {
+    const rank = (it) => (mustInclude?.has(it.id) ? 2 : 0) + (prefer?.has(it.id) ? 1 : 0);
     for (const arr of Object.values(byCat)) {
-      arr.sort((a, b) => (prefer.has(b.id) ? 1 : 0) - (prefer.has(a.id) ? 1 : 0));
+      arr.sort((a, b) => rank(b) - rank(a));
     }
   }
   const sampled = [
@@ -186,7 +205,8 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     const pat = it.pattern && it.pattern !== "solid" && it.pattern !== "" ? ` | ${it.pattern}` : "";
     const pn = promptNotes(it, { maxLen: 120 });
     const dest = prefer?.has(it.id) ? " | AT DESTINATION" : "";
-    return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}${f} | ${it.name}${it.color ? ` | ${it.color}` : ""}${pat}${it.brand ? ` | ${it.brand}` : ""}${pn ? ` | ${pn}` : ""}${dest}`;
+    const pin = mustInclude?.has(it.id) ? " | MUST INCLUDE" : "";
+    return `ID:${it.id} | ${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}${f} | ${it.name}${it.color ? ` | ${it.color}` : ""}${pat}${it.brand ? ` | ${it.brand}` : ""}${pn ? ` | ${pn}` : ""}${dest}${pin}`;
   }).join("\n");
 
   // ── Destination context block: feed the brief in so the AI weighs the city
@@ -281,12 +301,26 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     ? `\nPACKING PREFERENCE: Items marked "AT DESTINATION" already live at the destination and cost nothing to pack. When two pieces suit the day equally well, pick the AT DESTINATION one; reach for unmarked pieces only when the look genuinely needs them.\n`
     : "";
 
+  // ── Must-include block. `mustInclude` holds only the pins no other day has
+  // used yet (the caller filters), so the ask is "use at least one of these",
+  // not "use all of them" — one day's look can't wear two pinned dresses, and
+  // the remaining pins are offered again to the next day. Framed exactly like
+  // Style Me's explicit-request override, weather exemption included.
+  let mustBlock = "";
+  if (mustInclude) {
+    const pinned = sampled.filter(it => mustInclude.has(it.id));
+    if (pinned.length) {
+      const names = pinned.map(it => `\`${it.id}\` (${it.name})`).join(" / ");
+      mustBlock = `\n📌 MUST-INCLUDE PIECES — she has already decided these are coming on this trip: ${names}.\nBuild this day's look AROUND at least one of them — it is the point of the day. ${pinned.length > 1 ? "The ones you don't use here are still unplaced and will go to another day, so pick whichever genuinely suits this occasion rather than forcing all of them into one look. " : ""}Do not substitute a similar piece: the named ID is the piece she wants.\n⚠️ These pieces OVERRIDE the weather and activity rules above — for the named pieces ONLY; every other item still obeys them. If a pinned piece is wrong for the forecast, she knows: style AROUND it so it works (its lightest, most breathable partners; drop the extra layer) rather than dropping it.\n`;
+    }
+  }
+
   const destNote = destination ? ` in ${destination}` : "";
   const prompt = `You are her personal stylist building ONE complete outfit for a trip day${destNote}.
 
 OCCASION: ${occasion}
 WEATHER: ${weather} (around ${highF}°F)${heatNote}
-${destBlock}${activityBlock}${preferBlock}${varietyBlock}${personalBlock}
+${destBlock}${activityBlock}${mustBlock}${preferBlock}${varietyBlock}${personalBlock}
 WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register):
 ${inventory}
 
