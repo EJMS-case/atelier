@@ -49,6 +49,7 @@ request; nothing reaches `main` without your review.
 
 ## Your data
 
+- **The app requires signing in.** Your wardrobe is readable only by your own account; the database rejects anyone else. You'll be asked to sign in once per device.
 - Wardrobe data and photos live in Supabase (project `ljcwsrfmojbjdveefoqa`) and sync across devices.
 - Photos upload to Supabase Storage bucket `wardrobe-images`; base64 is only used briefly on-device during upload.
 - Item names and details are sent to Claude for styling and (on new uploads) for auto-detection.
