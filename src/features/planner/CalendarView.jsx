@@ -2,7 +2,7 @@
 // Mobile-first month grid. Tap a day to assign/clear a planned look. The
 // Trip modal lives in this file too.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
@@ -16,6 +16,7 @@ import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import TripDetailView from "./TripDetailView.jsx";
+import MustIncludePicker from "./MustIncludePicker.jsx";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 
@@ -74,6 +75,22 @@ const btnSecondary = {
 // scoped (a full page reload sensibly starts back at today).
 let lastAnchorTime = null;
 
+// Same idea for the OPEN TRIP, and for one thing lastAnchorTime doesn't need:
+// where you were scrolled inside it.
+//
+// ⊞ Build routes through App's `view` state (setView("style")), which unmounts
+// the whole planner — so `activeTrip` was lost and closing the builder dropped
+// you on the month grid at scroll 0, several taps from the outfit you were
+// editing. Since the builder is the only place to remove individual pieces
+// from a trip look, "remove a piece" read as "the app threw me back to the
+// top". These two module-level values survive the remount and put you back.
+//
+// Session-scoped like lastAnchorTime, and cleared by an explicit
+// "← Back to Calendar" — leaving the trip on purpose should not be undone the
+// next time the planner mounts.
+let lastTripId = null;
+let lastTripScrollY = 0;
+
 // `allItems` (the FULL wardrobe) + `closets` feed trip planning across both
 // closets; `onRefreshActiveTrip` re-syncs App's trip-mode pool — wave 2's
 // activation / suitcase-close flows call it after flipping trip status.
@@ -86,7 +103,14 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
   const [trips, setTrips] = useState([]);
-  const [activeTrip, setActiveTrip] = useState(null); // trip object → show TripDetailView
+  const [activeTrip, setActiveTripRaw] = useState(null); // trip object → show TripDetailView
+  // Open/close the trip through here so the module-level memo above always
+  // matches what's on screen.
+  const setActiveTrip = (t) => {
+    lastTripId = t?.id || null;
+    if (!t) lastTripScrollY = 0;
+    setActiveTripRaw(t);
+  };
   const [syncError, setSyncError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   // Active-closet daily-high forecast for the next ~16 days, keyed by iso
@@ -134,6 +158,71 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
+
+  // Re-open the trip the user was in when the planner was last unmounted (the
+  // ⊞ Build round-trip). Runs once per trips fetch and only while nothing is
+  // open, so it can never fight a deliberate navigation.
+  useEffect(() => {
+    if (activeTrip || !lastTripId) return;
+    const again = trips.find(t => t.id === lastTripId);
+    if (again) setActiveTripRaw(again);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trips]);
+
+  // Remember where she was inside the trip, recorded as the trip view is torn
+  // down. This MUST be a layout effect: a passive (useEffect) cleanup runs
+  // after paint, by which point the browser has already clamped the offset to 0
+  // against the much shorter page that replaced the trip — so it recorded 0
+  // every time. A layout cleanup runs synchronously inside the commit, while
+  // the document is still full height.
+  useLayoutEffect(() => {
+    if (!activeTrip) return;
+    return () => { lastTripScrollY = window.scrollY; };
+  }, [activeTrip]);
+
+  // …and put her back there. The page grows in stages after mount — plans and
+  // the forecast arrive over the network, then every outfit photo decodes — so
+  // one scrollTo would just clamp against a page that is still short. Converge
+  // instead: each frame, scroll as close to the target as the current height
+  // allows; once it's reachable, hold it briefly, because the browser's scroll
+  // anchoring keeps nudging the offset while images above the viewport land.
+  //
+  // Only a real gesture cancels the restore. An earlier version bailed whenever
+  // the offset moved on its own, which scroll anchoring does constantly — so
+  // the restore aborted on its first frame and left her at the top anyway.
+  useEffect(() => {
+    if (!activeTrip || !lastTripScrollY) return;
+    const target = lastTripScrollY;
+    const deadline = Date.now() + 4000;
+    let raf = 0;
+    let cancelled = false;
+    let holdUntil = 0;
+    const cancel = () => { cancelled = true; };
+    const opts = { passive: true };
+    window.addEventListener("wheel", cancel, opts);
+    window.addEventListener("touchstart", cancel, opts);
+    window.addEventListener("keydown", cancel, opts);
+    const stop = () => {
+      window.removeEventListener("wheel", cancel);
+      window.removeEventListener("touchstart", cancel);
+      window.removeEventListener("keydown", cancel);
+    };
+    const tick = () => {
+      if (cancelled) return stop();
+      const room = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const y = Math.min(target, room);
+      if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
+      if (y >= target) {
+        if (!holdUntil) holdUntil = Date.now() + 600;
+        if (Date.now() > holdUntil) return stop();
+      }
+      if (Date.now() > deadline) return stop();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); stop(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTrip?.id]);
 
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
   const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -826,6 +915,13 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // Climate brief (temp range + notes + packing tip) — populated by analyzeTripDestination.
   const [brief, setBrief] = useState(null);
   const [briefLoading, setBriefLoading] = useState(false);
+  // "Bringing for sure" — pieces she pinned before generating. The packer
+  // seats each one on a day (tripPacker's mustIncludeIds) and the packing list
+  // keeps them regardless of what the outfits end up doing. Persisted as
+  // trips.must_include_ids so the trip's own Looks tab can regenerate against
+  // the same pins.
+  const [mustIncludeIds, setMustIncludeIds] = useState(() => new Set());
+  const [showPinPicker, setShowPinPicker] = useState(false);
   // Local working copy of per-day looks. Each day is an ordered array of
   // outfit drafts so a single day can hold a daytime look + a dinner look,
   // etc. Shape: { id, label, occasion, items: Item[] }. Activity stays
@@ -915,6 +1011,23 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destClosetId, allItems, items, homeClosetId]);
 
+  // What the pin sheet offers: the generation pool, plus any already-pinned
+  // piece that has since dropped out of it (switching the destination closet
+  // narrows the pool). Without that union a pin could become invisible and
+  // therefore un-unpinnable while still driving the packer.
+  const pinPool = useMemo(() => {
+    if (!mustIncludeIds.size) return genItems;
+    const inPool = new Set(genItems.map(it => it.id));
+    const source = Array.isArray(allItems) && allItems.length ? allItems : items;
+    const strays = source.filter(it => mustIncludeIds.has(it.id) && !inPool.has(it.id));
+    return strays.length ? [...genItems, ...strays] : genItems;
+  }, [genItems, mustIncludeIds, allItems, items]);
+
+  const pinnedItems = useMemo(
+    () => pinPool.filter(it => mustIncludeIds.has(it.id)),
+    [pinPool, mustIncludeIds],
+  );
+
   // If user re-runs Preview the working copy is rebuilt — but vibe/weather
   // edits made in the preview don't auto-clear it.
   const invalidatePreview = () => { setDayLooks(null); };
@@ -998,6 +1111,9 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       prevDayIds,
       tripDayCount: dayCount,
       preferItemIds,
+      // priorUse already carries the rest of the trip, so a pin living on
+      // another day stays put — only a pin with no home lands here.
+      mustIncludeIds,
     });
     const outfitItems = single.dailyOutfits?.[0] || [];
     if (!outfitItems.length) return null;
@@ -1028,6 +1144,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
         activity,
         activities,
         preferItemIds,
+        mustIncludeIds,
       });
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
       if (totalItems === 0) {
@@ -1093,6 +1210,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
         tripDayCount: dayCount,
         rebuildSuit: true,
         preferItemIds,
+        mustIncludeIds,
       });
       const suit = single.poolSuits?.[0];
       if (suit?.length) mutateOutfit(dayIdx, outfitIdx, prev => ({ ...prev, items: suit }));
@@ -1246,6 +1364,10 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
           // TripDetailView — without persisting it, the AI defaults to
           // "Sightseeing" no matter what the user picked here.
           activity: activity || "Sightseeing",
+          // Pins (migration 0033). saveTrip strips unknown columns on PGRST204,
+          // so a project without the migration saves the trip without them —
+          // degraded, not broken.
+          must_include_ids: [...mustIncludeIds],
         });
         savedTrip = Array.isArray(rows) ? rows[0] : rows;
       } catch { /* non-fatal */ }
@@ -1267,6 +1389,13 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
                 outfitIdsByItem.get(it.id).add(o.id);
               }
             }
+          }
+          // A pin the packer couldn't seat anywhere still belongs in the
+          // suitcase — row it with no outfit_ids rather than dropping it.
+          // Mirrors the same carve-out in packingSync's reconcile.
+          for (const it of pinnedItems) {
+            if (destClosetId && closetOf(it) === destClosetId) continue;
+            if (!outfitIdsByItem.has(it.id)) outfitIdsByItem.set(it.id, new Set());
           }
           const tripItemRows = [...outfitIdsByItem].map(([itemId, outfitIds]) => ({
             trip_id: savedTrip.id,
@@ -1354,6 +1483,45 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
             the packing list shows only what to carry.
           </div>
         )}
+
+        {/* Bringing for sure — pre-selected pieces the packer must place. */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: PALETTE.muted }}>Bringing for sure</span>
+            <button onClick={() => setShowPinPicker(true)} style={pinPickBtn}>
+              {mustIncludeIds.size ? "Edit picks" : "+ Pick pieces"}
+            </button>
+          </div>
+          {pinnedItems.length > 0 ? (
+            <>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 0 2px", scrollbarWidth: "none" }}>
+                {pinnedItems.map(it => (
+                  <button key={it.id} title={`Remove ${it.name}`}
+                    onClick={() => {
+                      const next = new Set(mustIncludeIds);
+                      next.delete(it.id);
+                      setMustIncludeIds(next);
+                      invalidatePreview();
+                    }}
+                    style={pinThumb}>
+                    {it.image
+                      ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                      : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.name?.slice(0, 8)}</span>}
+                    <span style={pinThumbX}>×</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic", lineHeight: 1.5 }}>
+                {pinnedItems.length} piece{pinnedItems.length === 1 ? "" : "s"} pinned — each gets a day, and the rest of
+                the suitcase is built around {pinnedItems.length === 1 ? "it" : "them"}. Tap one to remove it.
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic", lineHeight: 1.5 }}>
+              Know you're taking the linen dress? Pin it and the looks will be built around it.
+            </div>
+          )}
+        </div>
 
         <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
           <label style={{ flex: 1, fontSize: 11, color: PALETTE.muted }}>
@@ -1595,6 +1763,18 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
           </div>
         )}
 
+        {showPinPicker && (
+          <MustIncludePicker
+            items={pinPool}
+            selectedIds={mustIncludeIds}
+            onChange={(next) => { setMustIncludeIds(next); invalidatePreview(); }}
+            onClose={() => setShowPinPicker(false)}
+            preferItemIds={preferItemIds}
+            weather={effectiveWeather()}
+            destClosetName={(closets || []).find(c => c.id === destClosetId)?.name || ""}
+          />
+        )}
+
         {swapTarget && (
           <SwapPicker
             target={swapTarget}
@@ -1671,6 +1851,42 @@ const iconButtonStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+};
+
+const pinPickBtn = {
+  background: "transparent",
+  border: `1px solid ${PALETTE.line}`,
+  borderRadius: 999,
+  color: PALETTE.ink,
+  fontSize: 11,
+  padding: "4px 10px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const pinThumb = {
+  position: "relative",
+  flexShrink: 0,
+  width: 46,
+  height: 46,
+  padding: 2,
+  background: "#fff",
+  border: `1px solid ${PALETTE.ink}`,
+  borderRadius: 6,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
+};
+
+const pinThumbX = {
+  position: "absolute",
+  top: -1,
+  right: 1,
+  fontSize: 12,
+  lineHeight: 1,
+  color: PALETTE.accent,
 };
 
 const backdropStyle = {

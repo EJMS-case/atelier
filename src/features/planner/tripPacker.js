@@ -11,6 +11,13 @@
 // day whose occasion the capsule can't serve (dinner needing a heel on an
 // all-sneaker trip) is still allowed to add the right new piece. See
 // capsuleTargets() + the scoring notes inside pick().
+//
+// MUST-INCLUDE PINS (2026-08-29): the trip form lets her pre-select pieces she
+// knows she's bringing. Those ids arrive as opts.mustIncludeIds and are
+// GUARANTEED a place — assigned to their best-fitting day up front, then
+// force-pushed into that day's outfit, bypassing the weather and activity
+// filters the way Style Me's explicit-request override does. See
+// assignMustIncludes() + MUST_BONUS.
 
 import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
@@ -449,10 +456,22 @@ function swimPieceKind(it) {
  *                                        are adequate for, so they are the
  *                                        first choice rather than a tie-break;
  *                                        never hard constraints (Phase B)
- * @returns {{ dailyOutfits: Object[][], poolSuits: (Object[]|null)[], packingList: Object[], uncovered: number[] }}
+ * @param {Set<string>} [opts.mustIncludeIds] - ids she pinned as "bringing for
+ *                                        sure". Each is placed on exactly one
+ *                                        day (see assignMustIncludes) and
+ *                                        scored +MUST_BONUS everywhere else so
+ *                                        the capsule reuses it. Pieces already
+ *                                        worn per opts.priorUse are skipped —
+ *                                        that's what keeps a single-day
+ *                                        reshuffle from re-cramming the whole
+ *                                        pin list onto one day.
+ * @returns {{ dailyOutfits: Object[][], poolSuits: (Object[]|null)[], packingList: Object[], uncovered: number[], mustIncludeUnplaced: Object[] }}
  *   `poolSuits[d]` is null for most days; on the 1-2 suit-placement days it
  *   holds the COMPLETE suit (one one-piece, or a matched top+bottom pair) as
  *   its own separate look — swim is never mixed into `dailyOutfits[d]`.
+ *   `mustIncludeUnplaced` holds pinned pieces no day could seat (more pinned
+ *   tops than days, an unslottable category). They are still on the packing
+ *   list — a pin never silently vanishes.
  */
 // ── Activity-based filters ────────────────────────────────────────────────────
 // Activity is a trip-level intent (Theme Park / Beach / Resort / Active /
@@ -608,6 +627,29 @@ function destinationBonus(item, occasion) {
   return formalityDistance(item, occasion) <= DEST_ADEQUATE_DIST ? PREFER_BONUS : 0;
 }
 
+// Must-include (pinned) bonus. Placement (assignMustIncludes) already guarantees
+// each pin ONE day, so this governs only the days after that — how eagerly the
+// capsule re-wears a pin. Same argument as PREFER_BONUS: a piece already in the
+// suitcase is free to wear again.
+//
+// Deliberately NOT larger than PREFER_BONUS, despite a pin being the more
+// deliberate choice. The two say the same thing (this costs nothing to wear),
+// and a pin does not need scoring help to appear — seating already did that.
+// Sizing it above 4.5 would also leave under 1.5 against the occasion swing,
+// which is where the guarantee below comes from:
+//   < 6    occasion shoe/top swing → a Dinner day still refuses a pinned
+//                                    sneaker (−3 + 2.5 = −0.5 vs a heel's +3);
+//                                    the pin takes a day that wants it instead
+//   > 1.5  reuse bonus             → a pin still edges an equivalent piece that
+//                                    is merely already worn
+//   > 0.6  tie-break jitter        → ties resolve to the pinned piece
+//   << 6/7 structure penalties     → a pinned bottom still won't run back-to-
+//                                    back, a pinned top still goes stale
+// An adequate at-destination piece (+4.5) can therefore still win a slot from a
+// pin on a day the pin doesn't own. That is correct: it costs nothing to pack
+// either, and the pin already has its own day.
+const MUST_BONUS = 2.5;
+
 export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const dayCount = dailyHighsF.length;
   const occasions = opts.occasions && opts.occasions.length === dayCount
@@ -650,6 +692,12 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     });
     return { pool, occasion: occasions[d], wxBucket, hi };
   });
+
+  // Which items each day admits on its own merits, captured BEFORE pinned
+  // pieces are unioned in below. Placement uses it to prefer seating a pin on
+  // a day that actually suits it, so a pinned wool coat lands on the coldest
+  // day of the trip rather than the first one.
+  const naturalIds = dayPools.map(dp => new Set(dp.pool.map(it => it.id)));
 
   // ── Capsule state ──────────────────────────────────────────────────────────
   // useCount: how many days each item has been worn so far this build.
@@ -700,6 +748,99 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const isStatement = (item) =>
     !!item && !isHosieryItem(item) && isStatementPiece(item, { fringeCounts: true });
 
+  // ── Must-include placement ─────────────────────────────────────────────────
+  // Pins are seated BEFORE any picking so the rest of the suitcase is built
+  // around them rather than colliding with them. Each pin gets exactly one
+  // (day, slot) reservation in forcedByDay; the day loop force-pushes it and
+  // skips the pick() for that slot.
+  //
+  // Seating is a greedy global best-fit: every (pin, day) pair is scored, the
+  // list is walked highest-first, and a pair is taken when the day still has
+  // that slot free. Better than a per-item loop because a pin with one good day
+  // claims it before a pin that is happy anywhere takes it.
+  //
+  // Deliberately NOT re-seating a pin that opts.priorUse already shows as worn:
+  // on a single-day reshuffle priorUse carries the rest of the trip, so a pin
+  // living on another day stays there, while a pin whose only home was the
+  // outfit being rebuilt (excluded from priorUse by the caller) is seated again
+  // — the pin survives the shuffle.
+  const mustIds = opts.mustIncludeIds instanceof Set && opts.mustIncludeIds.size > 0
+    ? opts.mustIncludeIds
+    : null;
+  const forcedByDay = dayPools.map(() => ({}));
+  const mustIncludeUnplaced = [];
+
+  if (mustIds) {
+    const pending = items.filter(it => mustIds.has(it.id) && !(useCount.get(it.id) > 0));
+
+    // A day can seat one pin per slot, and a pinned dress rules out a pinned
+    // top/bottom on the same day (they're the same base). One statement piece
+    // per day still holds — pins obey the packer's HC8 rule like anything else.
+    const canSeat = (d, slot, item) => {
+      const f = forcedByDay[d];
+      if (f[slot]) return false;
+      if (slot === "dresses" && (f.tops || f.bottoms)) return false;
+      if ((slot === "tops" || slot === "bottoms") && f.dresses) return false;
+      if (isStatement(item) && Object.values(f).some(isStatement)) return false;
+      return true;
+    };
+
+    const seatScore = (item, slot, d) => {
+      const { occasion, hi } = dayPools[d];
+      // Same signals pick() scores with, so seating and picking agree about
+      // which day suits a piece: this day's real high (the scorching-heat term)
+      // and whether the piece is already at the destination.
+      let s = scoreForOccasion(item, occasion, {
+        atDestination: !!(opts.preferItemIds instanceof Set && opts.preferItemIds.has(item.id)),
+        highF: hi,
+      });
+      // Natural fit is a preference, not a gate: a pinned piece the day's
+      // weather or activity would normally reject can still be seated there
+      // (that's the whole point of a pin), it just loses to a day that wants it.
+      s += naturalIds[d].has(item.id) ? 1.5 : -1.5;
+      // Swim belongs on a pool day, never on a Work/Dinner one.
+      if (slot === "swim" && /work|dinner|occasion/i.test(occasion)) s -= 10;
+      // A pinned layer gravitates to the coldest days.
+      if (slot === "outerwear") s += Math.max(0, Math.min(3, (68 - hi) / 8));
+      return s;
+    };
+
+    const pairs = [];
+    for (const item of pending) {
+      const slot = itemSlot(item);
+      if (!slot) continue;                       // unslottable → packing list only
+      for (let d = 0; d < dayPools.length; d++) {
+        pairs.push({ item, slot, d, s: seatScore(item, slot, d) });
+      }
+    }
+    pairs.sort((a, b) => b.s - a.s);
+
+    const seated = new Set();
+    for (const p of pairs) {
+      if (seated.has(p.item.id)) continue;
+      if (!canSeat(p.d, p.slot, p.item)) continue;
+      forcedByDay[p.d][p.slot] = p.item;
+      seated.add(p.item.id);
+    }
+    for (const it of pending) {
+      if (!seated.has(it.id)) mustIncludeUnplaced.push(it);
+    }
+
+    // Union pins into the day pools so the capsule can REUSE them on their
+    // other days — a pinned loafer should carry the whole trip, not just the
+    // day it was seated on. Swim is the exception: a suit is its own look
+    // placed once, so a pinned swim piece only joins the pool of the day that
+    // seated it (otherwise it would keep re-qualifying as a pool look).
+    for (const item of pending) {
+      const slot = itemSlot(item);
+      for (let d = 0; d < dayPools.length; d++) {
+        if (naturalIds[d].has(item.id)) continue;
+        if (slot === "swim" && forcedByDay[d].swim?.id !== item.id) continue;
+        dayPools[d].pool.push(item);
+      }
+    }
+  }
+
   // Pick one best item from a list for this day. Scoring layers, in order:
   //   · occasion fit (scoreForOccasion) — always dominant when it matters
   //   · statement stacking — a day that already holds a statement piece
@@ -735,6 +876,9 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
       let s = scoreForOccasion(c, occasion, { atDestination: atDest, highF });
       // Already at the destination — packing cost zero (see PREFER_BONUS).
       if (atDest) s += destinationBonus(c, occasion);
+      // She's bringing it regardless, so every day it fits is a day it saves
+      // packing something else (see MUST_BONUS).
+      if (mustIds?.has(c.id)) s += MUST_BONUS;
       if (alreadyHasStatement && isStatement(c)) s -= 15;
       if (CAPSULE_SLOTS.has(slot)) {
         if (wears > 0) s += 1.5;
@@ -779,23 +923,30 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   // falls back to a one-piece; if there's none, the day gets no swim at all —
   // a lone bikini bottom on the schedule was exactly the reported bug.
   // Returns [] or 1-2 items (never a lone separate).
-  const composeSuit = (swimPool, occasion, day, d, { unwornOnly = false } = {}) => {
+  // forcedLead: a PINNED swim piece. It becomes the suit's lead unconditionally,
+  // and its counterpart is searched across the whole wardrobe rather than the
+  // day pool — a pinned bikini top on a Sightseeing trip has no swim in its
+  // day pool at all, and dropping the pin to preserve the no-lone-separate rule
+  // would be the worse failure. If the wardrobe genuinely holds no mate, the
+  // pinned piece still ships alone: she asked for it by name.
+  const composeSuit = (swimPool, occasion, day, d, { unwornOnly = false, forcedLead = null } = {}) => {
     const eligible = unwornOnly
       ? swimPool.filter(it => !(useCount.get(it.id) > 0))
       : swimPool;
-    if (!eligible.length) return [];
+    if (!eligible.length && !forcedLead) return [];
     const pickOnePiece = () => {
       const onePieces = eligible.filter(it => swimPieceKind(it) === "one-piece");
       const op = onePieces.length ? pick(onePieces, occasion, day, "swim", d) : null;
       return op ? [op] : [];
     };
-    const lead = pick(eligible, occasion, day, "swim", d);
+    const lead = forcedLead || pick(eligible, occasion, day, "swim", d);
     if (!lead) return [];
     const kind = swimPieceKind(lead);
     if (kind === "one-piece") return [lead];
     const wantKind = kind === "top" ? "bottom" : "top";
-    const counterparts = eligible.filter(it => it.id !== lead.id && swimPieceKind(it) === wantKind);
-    if (!counterparts.length) return pickOnePiece();
+    const mateSource = forcedLead ? items.filter(it => itemSlot(it) === "swim") : eligible;
+    const counterparts = mateSource.filter(it => it.id !== lead.id && swimPieceKind(it) === wantKind);
+    if (!counterparts.length) return forcedLead ? [forcedLead] : pickOnePiece();
     const leadColor = (lead.color || "").trim().toLowerCase();
     const leadPrefix = ((lead.name || "").trim().split(/\s+/)[0] || "").toLowerCase();
     let mate = null, mateScore = -Infinity;
@@ -853,36 +1004,59 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     const swim      = inSlot("swim");
 
     const day = [];
+    // Pins seated on this day (assignMustIncludes). A forced slot short-circuits
+    // its pick() entirely — the pin IS the choice for that slot.
+    const forced = forcedByDay[d];
 
     // Decide dress vs tops+bottoms. Bias toward dresses for Dinner/Date,
     // toward tops+bottoms for Casual/Work/Active. Either way, fall through
     // if the preferred path has no candidates. Each subsequent pick sees
     // the day's running outfit so the statement-stacking penalty applies.
+    // A pin decides the base outright: a pinned dress makes it a dress day, a
+    // pinned top or bottom makes it a separates day, whatever the occasion's
+    // usual bias would have been.
     const preferDress = /dinner|date|occasion/i.test(occasion);
-    const dressCandidate = pick(dresses, occasion, day, "dresses", d);
 
-    if (preferDress && dressCandidate) {
-      day.push(dressCandidate);
-    } else {
-      const topCandidate = pick(tops, occasion, day, "tops", d);
+    if (forced.dresses) {
+      day.push(forced.dresses);
+    } else if (forced.tops || forced.bottoms) {
+      const topCandidate = forced.tops || pick(tops, occasion, day, "tops", d);
       if (topCandidate) day.push(topCandidate);
-      const bottomCandidate = pick(bottoms, occasion, day, "bottoms", d);
+      const bottomCandidate = forced.bottoms || pick(bottoms, occasion, day, "bottoms", d);
       if (bottomCandidate) day.push(bottomCandidate);
-      // Fallback to dress if we couldn't get a top+bottom pair.
-      if (day.length === 0 && dressCandidate) day.push(dressCandidate);
+    } else {
+      const dressCandidate = pick(dresses, occasion, day, "dresses", d);
+      if (preferDress && dressCandidate) {
+        day.push(dressCandidate);
+      } else {
+        const topCandidate = pick(tops, occasion, day, "tops", d);
+        if (topCandidate) day.push(topCandidate);
+        const bottomCandidate = pick(bottoms, occasion, day, "bottoms", d);
+        if (bottomCandidate) day.push(bottomCandidate);
+        // Fallback to dress if we couldn't get a top+bottom pair.
+        if (day.length === 0 && dressCandidate) day.push(dressCandidate);
+      }
     }
 
-    const shoe = pick(shoes, occasion, day, "shoes", d);
+    const shoe = forced.shoes || pick(shoes, occasion, day, "shoes", d);
     if (shoe) day.push(shoe);
 
-    // Outerwear only when it's cold enough to want a layer.
-    if (hi < 68 && outerwear.length) {
+    // Outerwear only when it's cold enough to want a layer — unless it's
+    // pinned, in which case the temperature doesn't get a vote.
+    if (forced.outerwear) {
+      day.push(forced.outerwear);
+    } else if (hi < 68 && outerwear.length) {
       const o = pick(outerwear, occasion, day, "outerwear", d);
       if (o) day.push(o);
     }
 
-    const bag = pick(bags, occasion, day, "bags", d);
+    const bag = forced.bags || pick(bags, occasion, day, "bags", d);
     if (bag) day.push(bag);
+
+    // Accessories have no pick() of their own — the packer never proposes them
+    // — but a pinned one still has to land somewhere, so it rides the day that
+    // seated it.
+    if (forced.accessories) day.push(forced.accessories);
 
     // Swim lands only until the trip's suit target is met (the activity
     // filter already gates which days see swim in their pool), and only on
@@ -890,7 +1064,13 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     // is a COMPLETE suit from composeSuit(), stored in poolSuits[d] as its
     // own separate look — NEVER pushed into the day's regular outfit. Suit #2
     // waits for the back half of the trip and uses fresh pieces only.
-    if (swim.length && !/work|dinner|occasion/i.test(occasion) && suitsPlaced < swimTarget) {
+    if (forced.swim) {
+      // A pinned suit ignores the trip's suit target and the day gating that
+      // decides where swim *would* go — she picked the suit and the placement
+      // pass already picked a sane day for it.
+      const suit = composeSuit(swim, occasion, [], d, { forcedLead: forced.swim });
+      if (suit.length) { poolSuits[d] = suit; suitsPlaced++; }
+    } else if (swim.length && !/work|dinner|occasion/i.test(occasion) && suitsPlaced < swimTarget) {
       const wantsSecond = suitsPlaced >= 1;
       const midpointOk = !wantsSecond || (swimTarget === 2 && d >= Math.floor(dayCount / 2));
       if (midpointOk) {
@@ -931,6 +1111,12 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
       if (!seen.has(it.id)) { seen.add(it.id); packingList.push(it); }
     }
   }
+  // A pin no day could seat is still going in the suitcase — that is the whole
+  // promise of pinning it. It rides the packing list without an outfit; the UI
+  // labels it so the gap is visible rather than silent.
+  for (const it of mustIncludeUnplaced) {
+    if (!seen.has(it.id)) { seen.add(it.id); packingList.push(it); }
+  }
 
   // Coverage warnings — shared slot-based rule (outfits.js).
   const uncovered = [];
@@ -938,7 +1124,7 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     if (outfitCoverageGaps(day).length > 0) uncovered.push(d);
   });
 
-  return { dailyOutfits, poolSuits, packingList, uncovered };
+  return { dailyOutfits, poolSuits, packingList, uncovered, mustIncludeUnplaced };
 }
 
 // ── Swap helper ──────────────────────────────────────────────────────────────

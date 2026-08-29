@@ -19,6 +19,7 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps } from "./outfits.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
+import MustIncludePicker from "./MustIncludePicker.jsx";
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
@@ -113,6 +114,18 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   const [closeBusy, setCloseBusy] = useState(false);       // suitcase-close in flight
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
   const [stayingIds, setStayingIds] = useState(new Set()); // B5 "staying behind" picks
+  // "Bringing for sure" pins (trips.must_include_ids, migration 0033). Held
+  // locally and written through updateTrip so a regeneration from this view
+  // honours the same picks the trip was set up with. An older trip — or a
+  // project without the migration — reads as an empty set and behaves exactly
+  // as before pins existed.
+  const [mustIncludeIds, setMustIncludeIds] = useState(
+    () => new Set(initialTrip.must_include_ids || []),
+  );
+  const [showPinPicker, setShowPinPicker] = useState(false);
+  useEffect(() => {
+    setMustIncludeIds(new Set(initialTrip.must_include_ids || []));
+  }, [initialTrip.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [brief, setBrief] = useState(() => parseBrief(trip.notes));
   const [briefLoading, setBriefLoading] = useState(false);
   const [generatingDay, setGeneratingDay] = useState(null); // iso
@@ -289,6 +302,10 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // a pending run could mutate trip_items on a just-completed trip.
   const tripStatusRef = useRef(trip.status);
   tripStatusRef.current = trip.status;
+  // Read through a ref: applyReconcile runs off a serialized promise chain and
+  // must see the pins as of the moment it runs, not when it was queued.
+  const mustIncludeRef = useRef(mustIncludeIds);
+  mustIncludeRef.current = mustIncludeIds;
   // Serialize runs so overlapping plan updates can't interleave diffs.
   const reconcileChainRef = useRef(Promise.resolve());
 
@@ -307,6 +324,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       tripItems: priorRows,
       destClosetId,
       itemsById,
+      mustIncludeIds: mustIncludeRef.current,
     });
     if (rowsToUpsert.length === 0 && idsToDelete.length === 0) return;
     // Optimistic local apply; a failed remote write re-syncs from the server.
@@ -409,6 +427,11 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       prevDayIds,
       tripDayCount: days.length,
       preferItemIds,
+      // priorUse holds the rest of the trip, so a pin already living on
+      // another day stays there — only a homeless pin is seated here. A pin
+      // the caller is deliberately excluding isn't in `pool`, so it can't come
+      // back either (that's how the leave-behind regenerate stays honest).
+      mustIncludeIds,
     });
     return (single.dailyOutfits?.[0] || []).map(it => it.id);
   }
@@ -417,6 +440,18 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // affected day through the existing persistPlan path. The reconcile effect
   // (plus the explicit runReconcile below) then drops the excluded rows.
   async function regenerateWithout(excluded) {
+    // Taking a piece OUT of the suitcase overrides a pin on it — the two say
+    // opposite things, and the tick she just made is the newer instruction.
+    // Unpin first so neither the reconcile's carve-out re-rows it nor the
+    // packer's placement pass seats it right back onto a day.
+    const stillPinned = [...mustIncludeIds].filter(id => !excluded.has(id));
+    if (stillPinned.length !== mustIncludeIds.size) {
+      const next = new Set(stillPinned);
+      setMustIncludeIds(next);
+      mustIncludeRef.current = next;
+      try { await updateTrip(trip.id, { must_include_ids: stillPinned }); } catch { /* non-fatal */ }
+      setTrip(t => ({ ...t, must_include_ids: stillPinned }));
+    }
     const pool = regenPool(excluded);
     const running = { ...plansRef.current };
     for (const iso of days) {
@@ -599,6 +634,47 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // that the AI uses to avoid repeating the hero piece across the trip.
   // We flatten every outfit on every other day so a dinner look's items still
   // count against repetition for the next day's daytime look.
+  // Pins the trip hasn't placed yet, given a plans snapshot. The AI path
+  // generates one day at a time, so handing every day the full pin list would
+  // ask each of them to wear all of it. Passing only what's still unplaced
+  // spreads the pins across the trip the same way the local packer's placement
+  // pass does — and once a pin is on a day, later days stop being told about
+  // it. `skipOutfitId` is the outfit currently being regenerated: its items
+  // don't count as placed, so a pin whose only home is that outfit is offered
+  // back to it rather than lost.
+  const unplacedPins = (plansMap, skipOutfitId = null) => {
+    if (!mustIncludeIds.size) return mustIncludeIds;
+    const placed = new Set();
+    for (const d of days) {
+      for (const o of outfitsOf(plansMap[d])) {
+        if (skipOutfitId && o.id === skipOutfitId) continue;
+        for (const id of (o.items || [])) placed.add(id);
+      }
+    }
+    return new Set([...mustIncludeIds].filter(id => !placed.has(id)));
+  };
+
+  const pinnedItems = useMemo(
+    () => resolveItemIds(wardrobeAll, [...mustIncludeIds]),
+    [wardrobeAll, mustIncludeIds],
+  );
+
+  // Persist a pin change to trips.must_include_ids. Optimistic: the local set
+  // drives generation immediately and a failed write only costs the persisted
+  // copy, which the next edit retries. updateTrip strips the column on
+  // PGRST204, so a project without migration 0033 keeps working with
+  // session-only pins.
+  async function changePins(next) {
+    setMustIncludeIds(next);
+    try {
+      await updateTrip(trip.id, { must_include_ids: [...next] });
+      setTrip(t => ({ ...t, must_include_ids: [...next] }));
+    } catch { /* non-fatal — pins still apply for this session */ }
+    // Rows for a newly pinned piece (and cleanup for an unpinned one) come
+    // from the standard reconcile, which now reads the pin set.
+    runReconcile();
+  }
+
   const buildPriorDays = (currentIso, plansMap) =>
     days
       .filter(d => d !== currentIso && plansMap[d])
@@ -652,7 +728,12 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       const weather   = weatherForDay(iso);
       const priorDays = buildPriorDays(iso, plans);
       const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
-      const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity, preferItemIds });
+      const skipOutfitId = outfitIdx === "append" ? null
+        : (outfitIdx == null ? existing[0]?.id : existing[outfitIdx]?.id) || null;
+      const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, {
+        priorDays, brief, activity, preferItemIds,
+        mustIncludeIds: unplacedPins(plans, skipOutfitId),
+      });
       if (!look) { setError("Couldn't generate a look — try again."); return; }
 
       let nextOutfits;
@@ -694,7 +775,12 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
         const weather   = weatherForDay(iso);
         const priorDays = buildPriorDays(iso, running);
         const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
-        const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, { priorDays, brief, activity, preferItemIds });
+        const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, {
+          priorDays, brief, activity, preferItemIds,
+          // `running` grows as days are generated, so each day is told about
+          // only the pins the earlier days didn't already use.
+          mustIncludeIds: unplacedPins(running),
+        });
         if (!look) continue;
         const outfits = [{ id: newOutfitId(), label: "", occasion, items: look.items }];
         const payload = buildPlanPayload({
@@ -884,6 +970,14 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       }
     });
 
+    // Pinned pieces belong on the list even when no look has picked them up
+    // yet — the trip_items row already exists (packingSync's carve-out), so
+    // without this the checklist and the database would disagree. An empty day
+    // set is what marks them as "pinned, not yet worn" in the rows below.
+    for (const id of mustIncludeIds) {
+      if (!itemDays[id]) itemDays[id] = new Set();
+    }
+
     const allIds = Object.keys(itemDays);
     // Resolve against the FULL wardrobe: during an ACTIVE trip the scoped
     // pool excludes still-suggested home pieces — exactly the checklist rows.
@@ -932,7 +1026,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       warnings,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plans, days, genItems, wardrobeAll, destClosetId]);
+  }, [plans, days, genItems, wardrobeAll, destClosetId, mustIncludeIds]);
 
   const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
   const weatherBucket = brief ? bucketFromHigh(brief.tempHighF) : null;
@@ -1046,6 +1140,43 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       {/* ── LOOKS TAB ── */}
       {tab === "looks" && (
         <div style={{ padding: "16px 16px 0" }}>
+          {/* Bringing for sure — pins the generator must place and the packing
+              list must keep. Editable while the trip is still being planned;
+              once it's complete, generation is over and this is read-only. */}
+          <div style={{ marginBottom: 14, padding: "10px 12px", border: `1px solid ${PALETTE.line}`, borderRadius: 8, background: "#fff" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted }}>BRINGING FOR SURE</span>
+              {trip.status !== "complete" && (
+                <button onClick={() => setShowPinPicker(true)}
+                  style={{ background: "transparent", border: `1px solid ${PALETTE.line}`, borderRadius: 999, color: PALETTE.ink, fontSize: 11, padding: "4px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {mustIncludeIds.size ? "Edit picks" : "+ Pick pieces"}
+                </button>
+              )}
+            </div>
+            {pinnedItems.length > 0 ? (
+              <>
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 0 2px", scrollbarWidth: "none" }}>
+                  {pinnedItems.map(it => (
+                    <div key={it.id} title={it.name}
+                      style={{ position: "relative", flexShrink: 0, width: 46, height: 46, padding: 2, background: "#fff", border: `1px solid ${PALETTE.ink}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                      {it.image
+                        ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                        : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.name?.slice(0, 8)}</span>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic", lineHeight: 1.5 }}>
+                  Kept on the packing list whatever the looks do. Regenerate a day to build it around
+                  {pinnedItems.length === 1 ? " this piece" : " these pieces"}.
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4, fontStyle: "italic", lineHeight: 1.5 }}>
+                Pin the pieces you know you're taking and regenerated looks will be built around them.
+              </div>
+            )}
+          </div>
+
           {/* Generate-all CTA: only shown when at least one day is empty. Runs
               sequentially so prior picks inform later ones (variety). */}
           {days.some(iso => outfitsOf(plans[iso]).length === 0) && (
@@ -1439,9 +1570,17 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
                       <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
                       <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 1 }}>
                         {item.color ? `${item.color} · ` : ""}
-                        worn day{wornDays.length === 1 ? "" : "s"} {wornDays.join(", ")}
+                        {wornDays.length === 0
+                          ? "no look uses it yet"
+                          : `worn day${wornDays.length === 1 ? "" : "s"} ${wornDays.join(", ")}`}
                       </div>
                     </div>
+                    {mustIncludeIds.has(item.id) && (
+                      <div title="Bringing for sure — stays on the list whatever the looks do"
+                        style={{ fontSize: 9, letterSpacing: "0.06em", color: PALETTE.ink, border: `1px solid ${PALETTE.ink}`, borderRadius: 10, padding: "2px 7px", flexShrink: 0 }}>
+                        pinned
+                      </div>
+                    )}
                     {atDest && (
                       <div style={{ fontSize: 9, letterSpacing: "0.06em", color: PALETTE.muted, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: "2px 7px", flexShrink: 0 }}>
                         at destination
@@ -1452,9 +1591,11 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
                         stayed behind
                       </div>
                     )}
-                    <div style={{ fontSize: 11, fontWeight: 600, color: wornDays.length > 1 ? PALETTE.accent : PALETTE.muted, flexShrink: 0 }}>
-                      ×{wornDays.length}
-                    </div>
+                    {wornDays.length > 0 && (
+                      <div style={{ fontSize: 11, fontWeight: 600, color: wornDays.length > 1 ? PALETTE.accent : PALETTE.muted, flexShrink: 0 }}>
+                        ×{wornDays.length}
+                      </div>
+                    )}
                   </div>
                   );
                 })}
@@ -1468,6 +1609,18 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
           "Anything staying at the destination?" — packed pieces only, none
           preselected. Flagged pieces get status 'left_behind' AND move to the
           destination closet; everything else keeps its home closet. */}
+      {showPinPicker && (
+        <MustIncludePicker
+          items={genItems}
+          selectedIds={mustIncludeIds}
+          onChange={changePins}
+          onClose={() => setShowPinPicker(false)}
+          preferItemIds={preferItemIds}
+          weather={weatherForDay(days[0])}
+          destClosetName={(closets || []).find(c => c.id === destClosetId)?.name || ""}
+        />
+      )}
+
       {completeModalOpen && (() => {
         const destName = (closets || []).find(c => c.id === destClosetId)?.name || trip.destination_city || trip.destination || "the destination";
         const packedItems = packedRows
