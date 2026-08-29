@@ -14,6 +14,28 @@ Owner report: *"When I remove things from an outfit on this screen, it scrolls m
 ### Notes
 Removing an outfit (the ✕) does **not** jump to the top: measured on a 6-day trip, the page shortens by exactly the removed card and everything above it holds position. Same for clearing a whole day and for unticking on the Packing tab. Verified in a headless browser at 390×844 against fixture data.
 
+## [Unreleased] — Trip days saved one day early; swim tops and cross-closet pieces vanished from cards — 2026-08-29
+
+### Why
+Owner testing the shipped pin feature, in one sitting: the ✕ scrolls the sheet to the top, the pin sheet lists her whole Arizona closet, the category chips run off the right edge of the phone, every pool look warns "missing a core piece", saved outfits lose their tops, a pool look "didn't save the swim top", and the whole trip "keeps landing in the day before the trip".
+
+Three of those are the same class of bug — data was correct and the UI couldn't show it — and one was corrupting dates.
+
+### Fixed
+- **Trip days saved one day early** (`CalendarView`, 8 call sites). Day isos were `isoDate(addDays(new Date(start), n))`. `new Date("2026-08-29")` parses as UTC **midnight**; `isoDate()` then reads **local** components, which in New York is the previous evening — so every day of an Aug 29 – Sep 6 trip wrote to Aug 28 – Sep 5, and the last day came out empty. The preview labels rendered with `timeZone:"UTC"` and so read correctly, which is exactly why it hid. All eight now use `addDaysIso()` — the UTC-anchored helper that already sat in `lib/time.js` directly below `isoDate`, with the comment "noon UTC keeps tz drift away". The preview card's date label now derives from the same iso the day saves under, so a card can't claim a date the database disagrees with. Seasonal-fallback month lookup fixed the same way.
+- **A two-piece swimsuit rendered as one piece** (`EditorialCollage`). Every swim row in her closet is subcategory `Swimsuits`, which matches none of the role regexes, so both halves fell through to `"top"` — and `place()` only ever draws `g[role][0]`. The second piece vanished from the card while sitting safely in the data. `swimPieceKind` moved to `utils/item-helpers.js` (joining the other shared classifiers) and both `tripPacker` and the collage now use it; a bikini lays out as top + bottom.
+- **Saved outfits rendered from the active closet only** (`CalendarView` month grid / day modal / saved-look strip, `TripDetailView` outfit cards). A trip outfit mixes closets by design, so from NYC every Arizona piece silently dropped out of the thumbnail — "all these outfits had tops when I hit save and now the top is gone". They were never gone. Display resolves against the full wardrobe now; only genuinely deleted items drop. Every pool that decides what may be **picked** stays scoped. Pre-existing since multi-closet Phase B.
+- **The preview jumped to the top on every edit** (`CalendarView`). The auto-scroll that makes "Preview looks" visibly land was keyed on `dayLooks`, which every edit replaces — remove a piece, swap, shuffle, change an occasion. It fires once now, re-arming when the preview is cleared.
+- **The pin sheet offered pieces already at the destination.** "Bringing for sure" means *carrying* it; a piece already in Arizona has no packing decision. Excluded from both pickers (already-pinned pieces stay listed so they can be un-pinned).
+- **The picker's category filter wrapped instead of scrolling sideways** — on a 390px phone most categories sat off the right edge of a row that didn't look scrollable.
+- **Pool looks no longer warn "missing a core piece."** A placed suit ships as its own look, so it has no top/bottom/shoes by design; `outfitCoverageGaps` treats an all-swim look as complete. Unchanged everywhere else, including swim that has wandered into a regular outfit.
+
+### Tests
+New `scripts/trip-dates.test.mjs` (13), wired into `npm test` and **run under `TZ=America/New_York`** — in UTC the old code was accidentally correct, so the suite asserts its own precondition before testing the day sequence, DST fall-back/spring-forward, leap day, and year boundaries. `trip-packer` +18 → 276: pool looks read as complete with every other coverage case unchanged, and swim classification on her real item names (the test's hand-copied mirror of `swimPieceKind` is now the shared export, so it can't drift). Full chain, build, and smoke green.
+
+### Data
+Her Arizona closet renamed `Arizona — Mom's` → `Arizona` (her request) and migration `0033` applied to the live project, both directly in Supabase. **The existing Arizona trip's nine plan rows are still shifted one day early** — the code fix stops it recurring but does not move rows already written; offered to her rather than done unasked.
+
 ## [Unreleased] — Trip packing: pre-select the pieces you know you're bringing — 2026-08-29
 
 ### Why

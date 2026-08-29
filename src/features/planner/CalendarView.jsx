@@ -7,7 +7,7 @@ import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, r
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
-import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
+import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
@@ -1068,7 +1068,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   function effectiveWeather() {
     if (weather !== "auto") return weather;
     if (brief?.tempHighF != null) return tempToBucket(brief.tempHighF);
-    const month = new Date(start).getMonth();
+    const month = new Date(start + "T12:00:00Z").getUTCMonth();
     return tempToBucket(SEASONAL_HIGHS[month]);
   }
   function effectiveHigh() {
@@ -1166,7 +1166,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       // Everywhere else this still returns all-Casual, exactly as
       // defaultOccasions(dayCount) did.
       const occasions = tripDayOccasions({ dayCount, startDate: start, relaxed: destRelaxed });
-      const dayIsos = Array.from({ length: dayCount }, (_, i) => isoDate(addDays(new Date(start), i)));
+      const dayIsos = Array.from({ length: dayCount }, (_, i) => addDaysIso(start, i));
       const highs = dayIsos.map(iso => perDayHigh(iso));
       // Per-day activity defaults to the trip-level activity for every day.
       // The user can override individual days from the preview cards.
@@ -1225,7 +1225,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
 
   function reshuffleOutfit(dayIdx, outfitIdx) {
     if (!dayLooks) return;
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const dayAct = dayActivities?.[dayIdx] || activity;
     const target = dayLooks[dayIdx]?.[outfitIdx];
     if (!target) return;
@@ -1262,7 +1262,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
     // All-swim "Pool" looks are left as-is — the regular composer can never
     // produce swim, so rebuilding one here would silently destroy the suit.
     // The user can remove or reshuffle the pool look explicitly.
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const rebuilt = (dayLooks[dayIdx] || []).map(o => {
       const isPool = (o.items || []).length > 0 && o.items.every(it => it.category === "Swim");
       if (isPool) return o;
@@ -1273,7 +1273,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   }
 
   function changeOccasion(dayIdx, outfitIdx, occ) {
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const dayAct = dayActivities?.[dayIdx] || activity;
     const built = buildOneOutfit({ dayIso, dayAct, occasion: occ, dayIdx, excludeOutfitIdx: outfitIdx });
     mutateOutfit(dayIdx, outfitIdx, prev => ({
@@ -1288,7 +1288,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   }
 
   function addOutfit(dayIdx) {
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const dayAct = dayActivities?.[dayIdx] || activity;
     // Default new outfits to Dinner when the day already has a daytime look —
     // otherwise fall through to Casual. Cheap heuristic that picks the right
@@ -1440,7 +1440,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       }
 
       const plans = dayLooks.map((looks, i) => {
-        const dayIso = isoDate(addDays(new Date(start), i));
+        const dayIso = addDaysIso(start, i);
         return buildPlanPayload({
           date: dayIso,
           outfits: looks.map(o => ({
@@ -1623,8 +1623,10 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
                 the same day. */}
             <div style={{ marginBottom: 12 }}>
               {dayLooks.map((looks, dayIdx) => {
-                const dayIso = isoDate(addDays(new Date(start), dayIdx));
-                const dateLabel = new Date(addDays(new Date(start), dayIdx)).toLocaleDateString("en-US", {
+                const dayIso = addDaysIso(start, dayIdx);
+                // Label from the SAME iso the day saves under, so the card can
+                // never again claim a date the database disagrees with.
+                const dateLabel = new Date(dayIso + "T12:00:00Z").toLocaleDateString("en-US", {
                   weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
                 });
                 const dayAct = dayActivities?.[dayIdx] || activity;
@@ -1813,7 +1815,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
             items={genItems}
             preferItemIds={preferItemIds}
             currentDayItems={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.items || []}
-            weather={perDayBucket(isoDate(addDays(new Date(start), swapTarget.dayIdx)))}
+            weather={perDayBucket(addDaysIso(start, swapTarget.dayIdx))}
             occasion={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.occasion}
             onPick={(newItem) => swapItem(swapTarget.dayIdx, swapTarget.outfitIdx, swapTarget.item.id, newItem)}
             onClose={() => setSwapTarget(null)}

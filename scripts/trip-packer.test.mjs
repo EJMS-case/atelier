@@ -12,7 +12,7 @@ import {
   scoreForOccasion, heatScore, SCORCHING_F,
   tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE,
 } from "../src/features/planner/tripPacker.js";
-import { filterByWeather } from "../src/utils/item-helpers.js";
+import { filterByWeather, swimPieceKind } from "../src/utils/item-helpers.js";
 import { outfitCoverageGaps } from "../src/features/planner/outfits.js";
 
 let passed = 0, failed = 0;
@@ -214,12 +214,10 @@ function hotBasics() {
     mk("Bags", "", "Canvas Tote"),
   ];
 }
-// Mirrors the packer's name-based swimPieceKind() for assertions.
-const swimKind = (it) =>
-  /one.?piece|maillot/i.test(it.name) ? "one-piece"
-  : /\btop\b/i.test(it.name) ? "top"
-  : /\bbottoms?\b|\bbrief\b/i.test(it.name) ? "bottom"
-  : "one-piece";
+// The real classifier, not a mirror of it — swimPieceKind moved to
+// item-helpers so the packer and EditorialCollage share one body, and a copy
+// here could drift from both.
+const swimKind = swimPieceKind;
 const firstWord = (it) => it.name.trim().split(/\s+/)[0].toLowerCase();
 
 // ── 8. Swim separates pack complete suits, on a bounded number of days ───────
@@ -1324,6 +1322,29 @@ section("pool looks don't read as incomplete");
   assert(poolSuits.some(Boolean), "control: the trip placed a pool suit");
   assert(uncovered.length === 0, `no day reports a coverage gap (got ${uncovered.length})`);
   assert(dailyOutfits.every(d => d.length >= 3), "…because every day outfit is genuinely complete");
+}
+
+// ── 23. Swim piece classification on her real naming ─────────────────────────
+// Every swim row in her closet is subcategory "Swimsuits", so the NAME is the
+// only signal. EditorialCollage now shares this classifier: without it both
+// halves of a bikini classified as the same role and the collage drew only the
+// first, so a saved pool look rendered as a lone bottom (owner report: "this
+// second outfit didn't save the swim top I picked" — it had saved it).
+section("swim piece kinds");
+{
+  const named = (n) => ({ id: "x", category: "Swim", subcategory: "Swimsuits", name: n });
+  assert(swimPieceKind(named("Bri Top")) === "top", "\"Bri Top\" is a top");
+  assert(swimPieceKind(named("Eliza Full Coverage Bottom")) === "bottom", "\"Eliza Full Coverage Bottom\" is a bottom");
+  assert(swimPieceKind(named("Full Coverage One-Piece")) === "one-piece",
+    "one-piece wins over the word 'coverage'");
+  assert(swimPieceKind(named("Rocky Bikini Bottom")) === "bottom", "bikini bottom is a bottom");
+  assert(swimPieceKind(named("Swimsuit")) === "one-piece", "an unsignposted name defaults to one-piece");
+  assert(swimPieceKind(named("Maillot")) === "one-piece", "maillot is a one-piece");
+  assert(swimPieceKind({ name: null }) === "one-piece", "a missing name doesn't throw");
+  // The two halves of a real suit must land in DIFFERENT kinds — that is the
+  // whole point, and what the collage keys its layout roles off.
+  assert(swimPieceKind(named("Bri Top")) !== swimPieceKind(named("Eliza Full Coverage Bottom")),
+    "a matched pair classifies as two different kinds");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────

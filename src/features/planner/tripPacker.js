@@ -19,7 +19,7 @@
 // filters the way Style Me's explicit-request override does. See
 // assignMustIncludes() + MUST_BONUS.
 
-import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 
@@ -400,7 +400,8 @@ export function scoreForOccasion(item, occasion, opts = {}) {
 //     full outfit base. A HALF of a set is not a base, so it fills no slot.
 //   · swim is its own capsule slot: pool/beach activities pack one or two
 //     complete SUITS — a one-piece, or a matching top+bottom pair composed
-//     by swimPieceKind()/composeSuit() — never a lone separate. A suit never
+//     by swimPieceKind() (item-helpers) / composeSuit() — never a lone
+//     separate. A suit never
 //     substitutes for a core garment slot; it ships as its OWN pool look
 //     (poolSuits[d], separate from the day's regular outfit) only until the
 //     trip's suit target (capsuleTargets().swim) is met, then the packed
@@ -420,22 +421,6 @@ function itemSlot(it) {
     case "swim":      return "swim";
     default:          return null;
   }
-}
-
-// ── Swim piece classifier ────────────────────────────────────────────────────
-// Real swim rows are often all subcategory "Swimsuits" with no set_id, so the
-// NAME is the only signal separating a complete suit from half of one
-// ("Rocky Bikini Bottom" vs "Full coverage one-piece"). Order matters: the
-// one-piece test runs first so "Full coverage one-piece" never falls into the
-// top/bottom buckets, while "Eliza Full Coverage Bottom" (no "one-piece" in
-// the name) still classifies as a bottom. A row named just "Swimsuit" gives
-// no top/bottom signal and defaults to one-piece — i.e. complete on its own.
-function swimPieceKind(it) {
-  const name = it?.name || "";
-  if (/one.?piece|maillot/i.test(name)) return "one-piece";
-  if (/\btop\b/i.test(name)) return "top";
-  if (/\bbottoms?\b|\bbrief\b/i.test(name)) return "bottom";
-  return "one-piece";
 }
 
 // ── Per-day outfit composer ──────────────────────────────────────────────────

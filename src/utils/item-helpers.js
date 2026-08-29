@@ -53,6 +53,28 @@ export function classifierNotes(item) {
   return notes.length <= CURATED_NOTES_MAX ? notes : "";
 }
 
+// ── SWIM PIECE KIND ─────────────────────────────────────────────────────────
+// Is this swim row a complete suit or half of one? Her real swim rows are all
+// subcategory "Swimsuits" with no set_id, so the NAME is the only signal
+// separating "Rocky Bikini Bottom" from "Full coverage one-piece".
+//
+// Order matters: the one-piece test runs first so "Full Coverage One-Piece"
+// never falls into the top/bottom buckets, while "Eliza Full Coverage Bottom"
+// (no "one-piece" in the name) still classifies as a bottom. A row named just
+// "Swimsuit" gives no signal and defaults to one-piece — complete on its own.
+//
+// Shared because two very different consumers need the same answer and had
+// drifted: tripPacker composes complete suits with it, and EditorialCollage
+// needs it to lay a two-piece out as top + bottom rather than stacking both
+// into one role and dropping the second.
+export function swimPieceKind(item) {
+  const name = item?.name || "";
+  if (/one.?piece|maillot/i.test(name)) return "one-piece";
+  if (/\btop\b/i.test(name)) return "top";
+  if (/\bbottoms?\b|\bbrief\b/i.test(name)) return "bottom";
+  return "one-piece";
+}
+
 // ── COMFORT / ACTIVEWEAR CODING ─────────────────────────────────────────────
 // Detects pieces that are athleisure/lounge in SPIRIT even when they're filed
 // under real-garment categories (her FP Movement sets live under Sets/Tops,

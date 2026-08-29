@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { s } from "../ui/styles.js";
 import { BAG_SUBCATEGORIES, BAG_NAME_RE } from "../constants/taxonomy.js";
-import { sortByCategoryOrder, isHosieryItem } from "../utils/item-helpers.js";
+import { sortByCategoryOrder, isHosieryItem, swimPieceKind } from "../utils/item-helpers.js";
 import TrimmedImage from "./TrimmedImage.jsx";
 
 // Mobile gets a portrait canvas (4:5 recipes; manual layouts render at the
@@ -128,6 +128,17 @@ function buildCollageLayout(items, isMobile) {
       if (/pant|short|skirt|skort|legging|jogger|bottom/.test(subL)) return "bottom";
       // Swim cover-ups are tunic/kaftan-shaped — treat as dress for layout.
       if (cat === "Swim" && /cover/.test(subL)) return "dress";
+      // Her real swim rows are ALL subcategory "Swimsuits", which matches none
+      // of the above, so both halves of a bikini used to land in "top" — and
+      // place() only ever draws g[role][0], so the second piece vanished from
+      // the card while sitting safely in the data. Owner report: "this second
+      // outfit didn't save the swim top I picked." It had. Fall back to the
+      // shared name-based classifier (the same one tripPacker composes suits
+      // with) so a two-piece lays out as top + bottom.
+      if (cat === "Swim") {
+        const kind = swimPieceKind(item);
+        return kind === "one-piece" ? "dress" : kind;   // "top" | "bottom"
+      }
       return "top";
     }
     return "top";
