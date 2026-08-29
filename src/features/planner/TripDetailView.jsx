@@ -270,16 +270,19 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, allItems, destClosetId]);
 
-  // Resolve item-id list to item objects, dropping anything missing from the
-  // trip pool (deleted items, etc.). Resolves against the MERGED pool so a
-  // destination-closet piece renders even while the home closet is active.
-  const resolveItems = (ids) => resolveItemIds(genItems, ids);
-
   // FULL-wardrobe lookup — the packing checklist + reconcile must see every
   // item regardless of the current pool scoping (during an ACTIVE trip the
   // scoped `items` prop excludes still-suggested home pieces, which are
   // exactly the rows the checklist is about).
   const wardrobeAll = (allItems && allItems.length) ? allItems : items;
+
+  // Resolve item-id list to item objects for DISPLAY. Resolves against the FULL
+  // wardrobe, not the generation pool: a saved outfit is a record and can hold
+  // a piece from any closet, and during an ACTIVE trip the scoped pool drops
+  // still-unpacked home pieces — either way the piece would silently vanish
+  // from the card rather than render. Only genuinely deleted items drop out.
+  // (The generation pools below stay scoped; this is read-only.)
+  const resolveItems = (ids) => resolveItemIds(wardrobeAll, ids);
   const itemsById = useMemo(
     () => new Map(wardrobeAll.map(it => [it.id, it])),
     [wardrobeAll],

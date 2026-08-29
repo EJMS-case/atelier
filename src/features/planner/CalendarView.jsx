@@ -97,6 +97,17 @@ let lastTripScrollY = 0;
 // `onItemsClosetChanged` patches App's local items after the trip-complete
 // flow reassigns left-behind pieces to the destination closet (B5).
 export default function CalendarView({ items, allItems, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
+  // ── Display pool ───────────────────────────────────────────────────────────
+  // `items` is the ACTIVE closet (NYC while she's home). That scoping is right
+  // for planning — you build tomorrow's look from the closet you're standing
+  // in — but WRONG for rendering something already saved: a trip outfit mixes
+  // closets by design, so resolving it against one closet silently drops every
+  // piece from the other. Owner report: "all these outfits had tops when I hit
+  // save on the trip and now the top is gone." The tops were never gone; the
+  // Arizona ones just couldn't be seen from NYC.
+  //
+  // Reads only. Every pool that decides what MAY BE PICKED stays scoped.
+  const displayItems = (Array.isArray(allItems) && allItems.length) ? allItems : items;
   const [anchor, setAnchor] = useState(() => lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date()));
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
@@ -473,7 +484,7 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
             iso === tripForDay.start_date ||
             (iso < tripForDay.start_date === false && isoDate(startOfMonth(anchor)) === iso)
           );
-          const planItems = resolveItemIds(items, plan?.items);
+          const planItems = resolveItemIds(displayItems, plan?.items);
           const planOutfits = outfitsOf(plan);
           const isToday = iso === todayIso;
           return (
@@ -743,7 +754,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, forecastLabel, hasAp
         </div>
 
         {planOutfits.map((o, idx) => {
-          const outfitItems = resolveItemIds(items, o.items);
+          const outfitItems = resolveItemIds(displayItems, o.items);
           if (outfitItems.length === 0) return null;
           return (
             <div key={o.id || idx} style={{ marginBottom: 12, padding: 12, background: PALETTE.cream, borderRadius: 6 }}>
@@ -839,7 +850,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, forecastLabel, hasAp
               </div>
             )}
             {matching.map(log => {
-              const logItems = resolveItemIds(items, log.garment_ids).slice(0, 4);
+              const logItems = resolveItemIds(displayItems, log.garment_ids).slice(0, 4);
               return (
                 <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather, label: hasLooks ? daypart : "" })}
                   style={{ display: "flex", gap: 10, width: "100%", padding: 10, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, marginBottom: 8, cursor: "pointer", alignItems: "center", textAlign: "left" }}>
