@@ -23,6 +23,9 @@ export function applyDetection(queueItem, detection) {
     next.subcategory = detection.subcategory;
   }
 
+  // Name defaults to "" on upload (filenames made garbage titles) — the AI's
+  // proposed title fills it unless the user already typed one.
+  if (detection.name && !queueItem.name) next.name = detection.name;
   if (detection.primary_color && !queueItem.color) next.color = detection.primary_color;
   if (detection.brand && !queueItem.brand) next.brand = detection.brand;
   if (detection.material && !queueItem.material) next.material = detection.material;

@@ -8,8 +8,6 @@
 // generation:
 //   · STYLING_STATIC_PREAMBLE — rules, methodology, vibe guide, final-check.
 //   · buildStylingPrompt().dynamicBody — occasion, weather, user's closet, etc.
-// buildStylingPrompt() also returns `fullPrompt` (concatenated) as a fallback
-// for any code path that can't split into cached blocks.
 
 import { VIBE_VOCABULARY } from "../features/stylist/moods.js";
 
@@ -19,7 +17,7 @@ import { VIBE_VOCABULARY } from "../features/stylist/moods.js";
 // states (weather details, exclusions, occasion bans, styling directions)
 // belong THERE, not here. Avoid restating in two voices — the model parrots
 // duplicated rules into the rationale.
-export const STYLING_STATIC_PREAMBLE = `You are Atelier, Elyce's personal senior stylist. Creative-director taste — The Row, Khaite, Totême, Saint Laurent.
+const STYLING_STATIC_PREAMBLE = `You are Atelier, Elyce's personal senior stylist. Creative-director taste — The Row, Khaite, Totême, Saint Laurent.
 
 WHO YOU'RE DRESSING: Elyce dresses effortlessly, elegantly, with feminine flare and a subtle edge. Her wardrobe looks easy but is quietly considered — nothing loud, nothing sloppy, nothing accidental. Investment-led closet. The goal is always chic and "thought-about" without looking like she tried too hard.
 
@@ -106,7 +104,7 @@ Return via the return_looks tool. The \`looks\` field MUST be a raw JSON array o
  * Build the request-specific dynamic body of the styling prompt.
  *
  * @param {Object} params  (same fields as legacy buildStylingPrompt)
- * @returns {{ staticPreamble: string, dynamicBody: string, fullPrompt: string }}
+ * @returns {{ staticPreamble: string, dynamicBody: string }}
  */
 export function buildStylingPrompt({
   occasion,
@@ -268,7 +266,7 @@ Weather still governs fabric weight and coverage.\n`
   // weather. These are NOT inventory. The block hard-asserts that twice:
   // the items array still comes only from the wardrobe inventory below.
   const inspirationBlock = (inspirationVibes && inspirationVibes.length > 0)
-    ? `\n🎨 INSPIRATION VIBES — TEXT REFERENCE ONLY (NOT inventory):\nShe saved these style notes for ${occasion} / ${weather || "any weather"}. Use them to bias mood, silhouette, color story, and texture direction. Do NOT try to find or reproduce any item described below — those pieces are NOT in her closet. Build looks from the wardrobe inventory only; if the inspo describes a color or piece she doesn't own, pick the nearest equivalent from her actual closet and move on. Never throw an error because an inspo color/piece is missing.\n\n${inspirationVibes.map((v, i) => `• ${v}`).join("\n")}\n`
+    ? `\n🎨 INSPIRATION VIBES — TEXT REFERENCE ONLY (NOT inventory):\nShe saved these style notes for ${occasion} / ${weather || "any weather"}. Use them to bias mood, silhouette, color story, and texture direction. Do NOT try to find or reproduce any item described below — those pieces are NOT in her closet. Build looks from the wardrobe inventory only; if the inspo describes a color or piece she doesn't own, pick the nearest equivalent from her actual closet and move on. Never throw an error because an inspo color/piece is missing.\n\n${inspirationVibes.map(v => `• ${v}`).join("\n")}\n`
     : "";
 
   // Strategy strings start with ALL-CAPS labels ("TONAL:", "VOLUME BELOW:",
@@ -313,7 +311,6 @@ Seed: ${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).sl
   return {
     staticPreamble: STYLING_STATIC_PREAMBLE,
     dynamicBody,
-    fullPrompt: `${STYLING_STATIC_PREAMBLE}\n\n${dynamicBody}`,
   };
 }
 
@@ -333,6 +330,13 @@ function formatStylePrefs(prefs) {
     // would be worse than no pair at all.
     parts.push(`🎨 HER FAVORITE COLOR PAIRINGS — she chose these herself in Settings; put them to WORK: ${prefs.colorPairs.join(", ")}.
 When a look anchors on a color from one of these pairs, reaching for its partner is a signature move she loves. Neutrals (black, white, cream, grey, camel) are ground for ANY pair — a neutral hero piece (a plain black dress, a cream trouser) WANTS one of these pair colors on the partner piece (the blazer, the shoe, the knit, the bag), and that is the elevated stylist move to reach for BEFORE defaulting to all-neutral safety. Never force a pair against the occasion or weather; the whole closet stays approved.`);
+  }
+  if (prefs.autoPairs?.length > 0) {
+    // Derived, not typed: in-fashion pairings her closet already supports
+    // (fashion-combos ∩ closet, computed in wardrobe-coverage.js). Framed a
+    // notch below her hand-picked list — of-the-moment options, not standing
+    // favorites.
+    parts.push(`🪄 IN-FASHION PAIRINGS HER CLOSET SUPPORTS (derived from what she owns — current, editorial, ready to use): ${prefs.autoPairs.join(", ")}. These are live options when a look wants a color story — same rules as her favorites: neutrals ground them, never force one against occasion or weather.`);
   }
   if (prefs.monochromaticMode) {
     parts.push("She frequently uses the monochrome technique — head-to-toe in one color family with texture variation. Apply this method broadly across the closet, not just for specific colors.");

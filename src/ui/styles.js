@@ -24,6 +24,21 @@ export const s = {
   navActive: { color:"var(--color-surface)" },
   badge: { background:"var(--color-accent)", color:"var(--color-ink)", borderRadius:10, padding:"1px 6px", fontSize:10, fontFamily:"sans-serif" },
 
+  // Active-closet chip + switcher popover (multi-closet, Phase A). The chip
+  // sits in the header next to the brand and reads as a mode switch — the
+  // name truncates on narrow phones instead of pushing the nav off-screen.
+  closetChip: { display:"flex", alignItems:"center", gap:4, background:"var(--color-ink-2)", border:"1px solid var(--color-border-muted)", color:"var(--color-surface)", borderRadius:12, padding:"3px 9px", fontSize:10, letterSpacing:"0.06em", cursor:"pointer", flexShrink:1, minWidth:0, maxWidth:120 },
+  closetChipName: { overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
+  closetMenu: { position:"absolute", top:"calc(100% + 6px)", left:0, background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, boxShadow:"0 8px 24px rgba(0,0,0,0.18)", padding:4, minWidth:180, zIndex:120 },
+  closetMenuItem: { display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1, width:"100%", background:"none", border:"none", borderRadius:6, padding:"8px 10px", fontSize:12, color:"var(--color-ink)", cursor:"pointer", textAlign:"left" },
+  closetMenuItemActive: { background:"var(--color-surface)", fontWeight:600 },
+  closetMenuCity: { fontSize:10, color:"var(--color-text-muted)", fontWeight:400 },
+
+  // Bulk "move to closet" select mode (closet grid). ✓ overlay badge on
+  // selected cards + the sticky bottom action bar.
+  selectBadge: { position:"absolute", top:6, right:6, background:"var(--color-ink)", color:"var(--color-surface)", borderRadius:"50%", width:22, height:22, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12 },
+  bulkBar: { position:"fixed", bottom:0, left:0, right:0, zIndex:70, background:"#fff", borderTop:"1px solid var(--color-border)", boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", padding:"10px 16px calc(10px + env(safe-area-inset-bottom))", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" },
+
   // Page
   page: { maxWidth:900, margin:"0 auto", padding:"24px 20px 160px", position:"relative" },
   pageHeader: { display:"flex", alignItems:"center", gap:14, marginBottom:24 },
@@ -70,8 +85,11 @@ export const s = {
   // The panel still scrolls internally, so all controls remain reachable.
   stylePanel: { position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid var(--color-border)", padding:"12px 16px", zIndex:50, boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", maxHeight:"65vh", overflowY:"auto" },
   panelLabel: { fontSize:10, letterSpacing:"0.22em", color:"var(--color-text-muted)", marginBottom:10 },
-  select: { flex:1, border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)" },
-  input: { flex:1, border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)", outline:"none" },
+  // minWidth:0 + maxWidth:100% on every control: flex items refuse to shrink
+  // below their content width by default, so one long <select> option or value
+  // pushed the whole page into sideways panning on iPhone.
+  select: { flex:1, minWidth:0, maxWidth:"100%", border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)" },
+  input: { flex:1, minWidth:0, maxWidth:"100%", border:"1px solid var(--color-border)", borderRadius:4, padding:"8px 10px", fontSize:13, background:"#fff", color:"var(--color-ink)", outline:"none" },
   err: { color:"var(--color-danger)", fontSize:12, margin:"4px 0 0" },
   btnPrimary: { background:"var(--color-ink)", color:"var(--color-surface)", border:"none", borderRadius:4, padding:"10px 20px", fontSize:12, letterSpacing:"0.08em", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7 },
   btnSecondary: { background:"none", border:"1px solid var(--color-border)", borderRadius:4, padding:"10px 20px", fontSize:12, color:"var(--color-text-2)", cursor:"pointer", letterSpacing:"0.06em", textAlign:"center" },
@@ -88,10 +106,15 @@ export const s = {
   queueRow: { display:"flex", gap:10, alignItems:"flex-start", background:"#fff", borderRadius:8, padding:12, border:"1px solid var(--color-border)" },
   queueThumb: { flexShrink:0, width:76, height:95, borderRadius:5, overflow:"hidden", background:"var(--color-surface)", position:"relative" },
   queueThumbImg: { width:"100%", height:"100%", objectFit:"cover" },
-  queueFields: { flex:1, display:"flex", flexDirection:"column", gap:6 },
+  // minWidth:0 on queueFields is load-bearing: it's a flex child of queueRow,
+  // and without it the fields column sizes to its widest control instead of
+  // shrinking to the screen (the sideways-pan bug).
+  queueFields: { flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:6 },
   queueInput: { width:"100%", boxSizing:"border-box", fontSize:12, padding:"6px 8px" },
-  queueRow2: { display:"flex", gap:6 },
-  queueSelect: { flex:"0 0 46%", fontSize:12, padding:"6px 8px" },
+  // Wrap, don't overflow: category + subcategory + Type is three selects; at
+  // 46% flex-basis two fit per line and the third wraps to its own row.
+  queueRow2: { display:"flex", flexWrap:"wrap", gap:6 },
+  queueSelect: { flex:"1 1 46%", minWidth:0, maxWidth:"100%", fontSize:12, padding:"6px 8px" },
   queueRemove: { flexShrink:0, background:"none", border:"none", color:"var(--color-border-muted)", fontSize:15, cursor:"pointer", padding:"0 4px", alignSelf:"flex-start" },
   queueActions: { display:"flex", flexDirection:"column", gap:10 },
 
@@ -164,6 +187,9 @@ export const s = {
 
   // ── Sets
   setBadge: { position:"absolute", top:6, left:6, background:"rgba(28,24,20,0.75)", color:"var(--color-surface)", fontSize:8, letterSpacing:"0.1em", padding:"3px 7px", borderRadius:3, border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
+  // Packed-for-trip marker (wave 2): subtle 🧳 corner mini-badge on closet-grid
+  // cards while a trip is active — mirrors setBadge's chrome, opposite corner.
+  packedBadge: { position:"absolute", top:6, right:6, background:"rgba(28,24,20,0.55)", borderRadius:10, padding:"2px 6px", fontSize:10, lineHeight:1, pointerEvents:"none" },
   setPanel: { background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, margin:"0 0 10px", padding:"12px 14px", animation:"fadeIn 0.2s ease" },
   setPanelHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 },
   setPanelTitle: { fontSize:10, letterSpacing:"0.18em", color:"var(--color-text-2)" },
@@ -277,6 +303,9 @@ export const ss = {
   cardBody: { padding: "10px 12px 12px" },
   cardName: { fontSize: 14, fontWeight: 500, color: "var(--color-ink)", letterSpacing: "0.02em", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'DM Sans',sans-serif" },
   cardCount: { fontSize: 10, color: "var(--color-text-muted)", letterSpacing: "0.08em", marginBottom: 6 },
+  // B6 split-sets flag: visible but non-blocking — amber matches the app's
+  // other soft warnings (gapAlert / colorException).
+  splitFlag: { fontSize: 9, letterSpacing: "0.06em", color: "#8B6914", marginBottom: 6 },
   cardTags: { display: "flex", gap: 4, flexWrap: "wrap" },
   tagChip: { fontSize: 9, letterSpacing: "0.06em", color: "var(--color-text-2)", background: "var(--color-surface)", borderRadius: 10, padding: "2px 8px" },
   modalItem: { display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", background: "var(--color-surface-2)", borderRadius: 6, cursor: "pointer", border: "1px solid var(--color-border-soft)" },

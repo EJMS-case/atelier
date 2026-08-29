@@ -9,20 +9,35 @@
 
 import { outfitsOf } from "../planner/outfits.js";
 import { asArray } from "../../lib/multitag.js";
-import { filterByWeather } from "../../utils/item-helpers.js";
+import { filterByWeather, isComfortCoded } from "../../utils/item-helpers.js";
+import { getSubcatL2 } from "../../constants/taxonomy.js";
+import { effectiveColorFamily } from "../../constants/color.js";
 
 // Categories that don't count as "leaned-on" garments — belts, jewelry and
 // other accessories, shoes, and bags repeat freely by design.
-export const OVERWEAR_EXCLUDE = new Set(["Belts", "Accessories", "Shoes", "Bags"]);
+const OVERWEAR_EXCLUDE = new Set(["Belts", "Accessories", "Shoes", "Bags"]);
 
 // Garment categories eligible for the forward-looking nudges (rediscover /
 // challenge / swap alternatives). Deliberately EXCLUDES accessories, belts,
 // shoes, bags, AND Swim / Loungewear / Athleisure — the user doesn't want those
 // surfaced as "neglected pieces to rediscover" (belts were crowding it out).
-// Exported: HomeView's "Neglected" list applies the same eligibility rule.
+// Exported: HomeView's "Back in Rotation" list applies the same eligibility rule.
 export const GARMENT_CATS = new Set([
   "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
 ]);
+
+// The category gate above wasn't enough (owner, 2026-08-20 ×2: no t-shirts /
+// lounge / swim / athleisure, and no occasionwear — "a cocktail dress I'd
+// wear only to fancy events" doesn't belong in a wear-it-this-week nudge).
+// Her comfort pieces often live under Sets/Tops/Bottoms, not the Athleisure
+// category, so the shared isComfortCoded heuristic (item-helpers: activewear
+// brand / comfort-coded name / her own formality ≤2) does the real work.
+export function isResurfaceCandidate(it) {
+  if (!GARMENT_CATS.has(it.category)) return false;
+  if (it.category === "Occasionwear") return false; // event pieces rest by design
+  if ((it.subcategory || "") === "T-Shirts") return false;
+  return !isComfortCoded(it);
+}
 
 function daysAgo(iso, fromIso) {
   if (!iso) return Infinity;
@@ -122,10 +137,15 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   // hasn't worn this month, favoring hearted then longest-rested. Suggestions
   // are (a) weather-appropriate for the season and (b) NOT reused across pieces,
   // so three overworn tops don't all show the identical three swaps.
+  // "Try instead" swaps stay within the garment's L2 group — a pencil skirt's
+  // alternatives are skirts, not shorts (both live under Bottoms).
   const usedAltIds = new Set();
   const alternativesFor = (target) => {
+    const targetL2 = getSubcatL2(target.category, target.subcategory);
     const picks = forSeason((items || [])
       .filter(it => it.category === target.category && it.id !== target.id
+        && (!targetL2 || getSubcatL2(it.category, it.subcategory) === targetL2)
+        && isResurfaceCandidate(it)
         && it.image && !wornThisMonth.has(it.id) && !usedAltIds.has(it.id)))
       .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
         || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))
@@ -139,7 +159,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   // Garments only (no accessories/belts/shoes/bags/swim/lounge/athleisure) and
   // season-appropriate, so it stops surfacing a wall of resting belts. ──
   const rediscover = forSeason((items || [])
-    .filter(it => it.image && GARMENT_CATS.has(it.category) && !wornThisMonth.has(it.id) && daysAgo(it.last_worn, endIso) >= 60))
+    .filter(it => it.image && isResurfaceCandidate(it) && !wornThisMonth.has(it.id) && daysAgo(it.last_worn, endIso) >= 60))
     .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
       || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))
     .slice(0, 8);
@@ -148,7 +168,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   const challenge = [];
   const usedCats = new Set();
   for (const it of forSeason((items || [])
-    .filter(it => it.image && GARMENT_CATS.has(it.category) && !wornThisMonth.has(it.id)))
+    .filter(it => it.image && isResurfaceCandidate(it) && !wornThisMonth.has(it.id)))
     .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
       || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))) {
     if (usedCats.has(it.category)) continue;
@@ -156,6 +176,43 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     challenge.push(it);
     if (challenge.length >= 3) break;
   }
+
+  // ── Period stats — the "in review" layer (month/quarter/year windows).
+  // All derived from the same looks; garments only for the piece rankings so
+  // shoes/bags (which repeat by design) don't crowd the story.
+  const periodWearDays = {};
+  looks.forEach(l => {
+    l.itemIds.forEach(id => {
+      const it = itemMap[id];
+      if (!it || OVERWEAR_EXCLUDE.has(it.category)) return;
+      (periodWearDays[id] ||= new Set()).add(l.date);
+    });
+  });
+  const topPieces = Object.entries(periodWearDays)
+    .map(([id, ds]) => ({ item: itemMap[id], wears: ds.size }))
+    .filter(x => x.item)
+    .sort((a, b) => b.wears - a.wears || (a.item.name || "").localeCompare(b.item.name || ""))
+    .slice(0, 6);
+  // Color story of the period — families actually WORN (weighted by
+  // appearances), not families merely owned.
+  const famCounts = {};
+  looks.forEach(l => l.itemIds.forEach(id => {
+    const fam = itemMap[id] ? effectiveColorFamily(itemMap[id]) : "";
+    if (fam) famCounts[fam] = (famCounts[fam] || 0) + 1;
+  }));
+  const colorFamilies = Object.entries(famCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([family, count]) => ({ family, count }));
+  const garmentCount = (items || []).filter(it => GARMENT_CATS.has(it.category)).length;
+  const distinctGarments = Object.keys(periodWearDays).length;
+  const periodStats = {
+    distinctGarments,
+    garmentCount,
+    utilizationPct: garmentCount > 0 ? Math.round((distinctGarments / garmentCount) * 100) : null,
+    heartedCount: looks.filter(l => l.hearted).length,
+    topPieces,
+    colorFamilies,
+  };
 
   return {
     window: { startIso, endIso, days },
@@ -166,5 +223,6 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     leanedOn,
     rediscover,
     challenge,
+    periodStats,
   };
 }

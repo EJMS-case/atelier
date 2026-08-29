@@ -12,7 +12,11 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { subcatMatches, getSubcatL2 } from "../src/constants/taxonomy.js";
+import {
+  subcatMatches, getSubcatL2, getL3Options,
+  TAXONOMY, ATHLEISURE_SUBCATEGORY_ALIASES,
+} from "../src/constants/taxonomy.js";
+import { normalizeItem } from "../src/utils/item-helpers.js";
 
 const semiOpaque = { category: "Accessories", subcategory: "Semi-Opaque", name: "Noosh semi-opaque tights" };
 const hosieryL2  = { category: "Accessories", subcategory: "Hosiery", name: "Generic tights" };
@@ -51,4 +55,39 @@ test("empty filter value matches everything; getSubcatL2 resolves both levels", 
   assert.equal(getSubcatL2("Accessories", "Hosiery"), "Hosiery");
   assert.equal(getSubcatL2("Bottoms", "Mini"), "Skirts");
   assert.equal(getSubcatL2("Bottoms", "Nonexistent"), "");
+});
+
+// ── Athleisure subcategory consolidation (2026-08-28) ────────────────────────
+// Plural-only Athleisure list; retired labels alias into their new buckets via
+// ATHLEISURE_SUBCATEGORY_ALIASES, applied by normalizeItem on every load and
+// mirrored by DB migration 0023.
+
+test("normalizeItem applies ATHLEISURE_SUBCATEGORY_ALIASES to Athleisure rows only", () => {
+  for (const [legacy, canonical] of Object.entries(ATHLEISURE_SUBCATEGORY_ALIASES)) {
+    const out = normalizeItem({ category: "Athleisure", subcategory: legacy, name: "X", created_at: "2026-01-01" });
+    assert.equal(out.subcategory, canonical, `${legacy} → ${canonical}`);
+    assert.equal(out.category, "Athleisure", "category is untouched");
+    assert.ok(TAXONOMY.Athleisure.includes(out.subcategory), `${canonical} is a live Athleisure L2`);
+  }
+  // Canonical names pass through unchanged.
+  const skirts = normalizeItem({ category: "Athleisure", subcategory: "Skirts", name: "X", created_at: "2026-01-01" });
+  assert.equal(skirts.subcategory, "Skirts");
+  // The map is Athleisure-scoped: Bottoms "Pants" / a Loungewear "Skort" name
+  // must never be rewritten.
+  const bottoms = normalizeItem({ category: "Bottoms", subcategory: "Pants", name: "Wool trousers", created_at: "2026-01-01" });
+  assert.equal(bottoms.subcategory, "Pants");
+  const lounge = normalizeItem({ category: "Loungewear", subcategory: "Bottoms", name: "Skort", created_at: "2026-01-01" });
+  assert.equal(lounge.subcategory, "Bottoms");
+});
+
+test("getL3Options is category-aware: Bottoms axes never leak into Athleisure", () => {
+  assert.deepEqual(getL3Options("Athleisure", "Skirts"), [], "athleisure skirts grow no Mini/Midi/Maxi dropdown");
+  assert.deepEqual(getL3Options("Bottoms", "Skirts"), ["Mini", "Midi", "Maxi"]);
+  assert.deepEqual(getL3Options("Athleisure", "Pants"), [], "Jeans/Trousers axis is Bottoms-only");
+  assert.deepEqual(getL3Options("Shoes", "Heels"), ["Block", "Kitten", "Stiletto"], "unambiguous L3 keys resolve everywhere");
+});
+
+test("getSubcatL2 respects L3 homes: 'Mini' has no Athleisure parent", () => {
+  assert.equal(getSubcatL2("Athleisure", "Mini"), "");
+  assert.equal(getSubcatL2("Athleisure", "Skirts"), "Skirts");
 });

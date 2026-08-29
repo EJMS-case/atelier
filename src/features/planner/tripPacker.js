@@ -185,6 +185,10 @@ function swimPieceKind(it) {
  * @param {string[]} [opts.occasions]   - per-day occasion (e.g. ["Casual","Dinner",...])
  * @param {string}   [opts.weather]     - optional explicit weather bucket override
  *                                        (applied to every day if set)
+ * @param {Set<string>} [opts.preferItemIds] - ids that already live at the
+ *                                        trip's destination closet: scored
+ *                                        +PREFER_BONUS so they win ties, never
+ *                                        hard constraints (Phase B)
  * @returns {{ dailyOutfits: Object[][], poolSuits: (Object[]|null)[], packingList: Object[], uncovered: number[] }}
  *   `poolSuits[d]` is null for most days; on the 1-2 suit-placement days it
  *   holds the COMPLETE suit (one one-piece, or a matched top+bottom pair) as
@@ -289,6 +293,16 @@ export function capsuleTargets(dayCount) {
 // Slots where reuse across days is the POINT (wear the same loafers all
 // trip). Everything else (tops/dresses) stays fresh day to day.
 const CAPSULE_SLOTS = new Set(["shoes", "bags", "outerwear", "swim"]);
+
+// Destination-closet preference bonus (Phase B). Items already at the trip's
+// destination cost NOTHING to pack, so they should win ties and near-ties —
+// but never beat a real constraint. Calibration against existing magnitudes:
+//   > 0.6  tie-break jitter        → ties resolve to the preferred item
+//   > 1.5  reuse bonus             → a fresh at-destination piece can edge a
+//                                    once-worn pulled piece (packing cost 0)
+//   < 3/4  occasion terms          → dinner still gets the heel, wherever it lives
+//   ≪ 6/7  fresh-top & capsule-ceiling penalties → structure rules still win
+const PREFER_BONUS = 2;
 
 export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   const dayCount = dailyHighsF.length;
@@ -400,12 +414,18 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   //                       because no reused candidate comes close.
   // All margins comfortably exceed the 0.6 tie-break jitter, so the capsule
   // behaviour is deterministic; jitter only varies genuinely tied choices.
+  const prefer = opts.preferItemIds instanceof Set && opts.preferItemIds.size > 0
+    ? opts.preferItemIds
+    : null;
+
   const pick = (candidates, occasion, currentOutfit = [], slot = null, dayIdx = 0) => {
     if (!candidates.length) return null;
     const alreadyHasStatement = currentOutfit.some(isStatement);
     const scored = candidates.map(c => {
       const wears = useCount.get(c.id) || 0;
       let s = scoreForOccasion(c, occasion);
+      // Already at the destination — packing cost zero (see PREFER_BONUS).
+      if (prefer?.has(c.id)) s += PREFER_BONUS;
       if (alreadyHasStatement && isStatement(c)) s -= 15;
       if (CAPSULE_SLOTS.has(slot)) {
         if (wears > 0) s += 1.5;
@@ -626,6 +646,11 @@ export function alternativesFor(items, currentItem, opts = {}) {
   const occasion = opts.occasion || "Casual";
   const exclude = new Set(opts.exclude || []);
   exclude.add(currentItem.id);
+  // Same destination-closet preference as buildDailyOutfits' pick() — this
+  // ranker scores independently, so it needs its own bump.
+  const prefer = opts.preferItemIds instanceof Set && opts.preferItemIds.size > 0
+    ? opts.preferItemIds
+    : null;
 
   // Swim swaps to swim; every other slot excludes swim/loungewear as before.
   const pool = filterByWeather(items, wxBucket).filter(it =>
@@ -635,7 +660,7 @@ export function alternativesFor(items, currentItem, opts = {}) {
   );
 
   return pool
-    .map(it => ({ item: it, score: scoreForOccasion(it, occasion) }))
+    .map(it => ({ item: it, score: scoreForOccasion(it, occasion) + (prefer?.has(it.id) ? PREFER_BONUS : 0) }))
     .sort((a, b) => b.score - a.score)
     .map(x => x.item);
 }

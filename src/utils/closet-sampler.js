@@ -7,8 +7,8 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, classifierNotes, stylistNotes } from "./item-helpers.js";
-import { buildFilterPredicate, matchesActiveOnly, FILTER_TYPES } from "./style-filters.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes } from "./item-helpers.js";
+import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 
 /**
@@ -175,6 +175,34 @@ export function noteSaysOccasion(item, occasion) {
   // vouching a silk blouse into Lounge, and this rescue also clears category
   // bans upstream.
   return rx.test(((item.name || "") + " " + classifierNotes(item)).toLowerCase());
+}
+
+// ── Negative occasion notes ("NOT FOR WORK") ─────────────────────────────────
+// The mirror image of noteSaysOccasion: her own note can veto a piece OUT of
+// an occasion outright (owner report 2026-08-19: a shoe whose note read
+// "NOT FOR WORK" was styled into a Work look — the note reached the prompt
+// as context but nothing enforced it). Recognized shapes: "not for work",
+// "no work", "never for work" (any casing; a preposition between is
+// optional). Per the owner, "work" covers BOTH Work and Work Dinner. Curated
+// notes only (NOTES POLICY) — product copy can't veto. Only literally NAMING
+// the piece in the request box overrides: that's a per-tap instruction
+// outranking a standing note.
+const OCCASION_VETO_ALIASES = {
+  Work: "work|office",
+  "Work Dinner": "work|office",
+  Casual: "casual",
+  Dinner: "dinner|date.?night",
+  Occasion: "occasion|event|wedding|gala",
+  Lounge: "loung(?:e|ing)",
+  Active: "gym|active|workout",
+  "Travel Day": "travel",
+  Vacation: "vacation",
+};
+export function noteVetoesOccasion(item, occasion) {
+  const aliases = OCCASION_VETO_ALIASES[occasion];
+  if (!aliases) return false;
+  const rx = new RegExp(`\\b(?:not?|never)\\s+(?:for|at|to|in|on)?\\s*(?:the\\s+)?(?:${aliases})\\b`, "i");
+  return rx.test((item.name || "") + " " + classifierNotes(item));
 }
 
 // Garments (not shoes/bags/accessories — a leather sneaker is fine for Lounge)
@@ -471,6 +499,14 @@ export function sampleClosetItems({
     if (bannedCats.has(it.category) && !occasionNoteIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
     if (bannedSubs.has(it.subcategory) && !onlyRescueIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
     if (bannedSubs.has("Jeans") && isDenim(it) && !onlyRescueIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
+    // Form-aware sandal ban (Work / Work Dinner set banned.sandalForms): her
+    // heeled thongs are FILED under Kitten/Block, so the subcategory test
+    // above never saw them (owner screenshot 2026-08-19). Same rescues as a
+    // subcategory ban; checkOccasion mirrors this.
+    if (slots.banned?.sandalForms && isSandalFormItem(it) && !onlyRescueIds.has(it.id) && !nameRescueIds.has(it.id)) return false;
+    // Her own note vetoes this piece for this occasion outright ("NOT FOR
+    // WORK") — see noteVetoesOccasion above. Only literal naming overrides.
+    if (noteVetoesOccasion(it, occasion) && !nameRescueIds.has(it.id)) return false;
     if (bannedKeywords.length > 0) {
       // classifierNotes: "sporty edge" / "casual Friday" in product copy must
       // not ban a piece the way her own "casual only" tag deliberately does.
@@ -530,6 +566,14 @@ export function sampleClosetItems({
   // piece can't become retry-bait. The named-piece re-union happens after
   // step 3a so it clears every weather gate in one place.
   const namedPreWeather = pool.filter(it => nameRescueIds.has(it.id));
+  // Pre-weather snapshot for the include-toggle re-union after step 3a: an
+  // active "Include Blazers/Knits/Stockings" toggle is a direct instruction
+  // (owner 2026-08-19), so its members must survive INTO the inventory even
+  // when the weather gates would empty the type.
+  const includeTypes = excludeSet.size > 0 ? activeIncludeTypes(excludeSet) : [];
+  const includePreWeather = includeTypes.length > 0
+    ? pool.filter(it => includeTypes.some(t => t.match(it)))
+    : [];
   if (filterByWeather && weather) {
     pool = filterByWeather(pool, weather);
   }
@@ -558,7 +602,7 @@ export function sampleClosetItems({
   // swap/add-shoe salvages found zero candidates because none existed. Gating
   // boots out lets the floor backfill the least-recently-used real options.
   if (hotOrWarm) pool = pool.filter(it => !isBootItem(it));
-  if (coolOrCold) pool = pool.filter(it => !(it.subcategory === "Sandals" || /sandal/i.test(it.name || "")));
+  if (coolOrCold) pool = pool.filter(it => !isSandalFormItem(it)); // form-aware: thongs filed under Kitten/Block too
   // Same principle, remaining buckets (2026-08-07): everything below mirrors a
   // rule checkWeatherCompliance rejects 100% of the time — no taste involved —
   // so keeping these in the pool is retry-bait, and (the 0y starvation lesson)
@@ -607,6 +651,35 @@ export function sampleClosetItems({
   if (namedPreWeather.length > 0) {
     const surviving = new Set(pool.map(it => it.id));
     for (const it of namedPreWeather) if (!surviving.has(it.id)) pool.push(it);
+  }
+
+  // Include-toggle weather re-union (owner 2026-08-19: "Include Blazers" on a
+  // Hot Work day produced zero blazers — "I selected it, not as a suggestion").
+  // Each toggled include type must reach the model with enough members for
+  // one per look: when the weather gates leave fewer than MIN_INCLUDE, its
+  // lightest removed members return (heavy-fabric / winter-tagged pieces only
+  // if nothing lighter exists — she'd still rather carry the wool blazer than
+  // go bare-shouldered at the office). checkWeatherCompliance exempts
+  // include-matched items and the INCLUDE prompt line teaches
+  // style-for-the-heat, so a rescued piece can't become retry-bait.
+  if (includePreWeather.length > 0) {
+    const MIN_INCLUDE = 3; // one candidate per generated look (3 looks per tap)
+    const surviving = new Set(pool.map(it => it.id));
+    for (const t of includeTypes) {
+      let have = pool.filter(it => t.match(it)).length;
+      if (have >= MIN_INCLUDE) continue;
+      const removed = includePreWeather.filter(it => t.match(it) && !surviving.has(it.id));
+      const light = removed.filter(it =>
+        !HEAVY_RE.test(wxText(it)) && (it.season_weight || "").toLowerCase() !== "winter");
+      const lightSet = new Set(light);
+      const heavier = removed.filter(it => !lightSet.has(it));
+      for (const it of [...light, ...heavier]) {
+        if (have >= MIN_INCLUDE) break;
+        pool.push(it);
+        surviving.add(it.id);
+        have++;
+      }
+    }
   }
 
   // Boost applies only when the pool can actually use legwear (a skirt or
@@ -703,8 +776,12 @@ export function sampleClosetItems({
         // Family staleness counts: an untouched twin of a just-suggested item
         // is stale too, or the family alternates while looking fresh.
         const isStale = norepeatBlocked.has(it.id) || staleFamilies.has(famOf(it));
+        // Include-toggle members are rotation-exempt like hosiery in cool/cold
+        // skirt pools: every look must carry one (checkIncludeToggles), so
+        // rotating recently-shown blazers out could starve the instruction.
         if (!isStale || freeTextOverrideIds.has(it.id) ||
-            (boostHosiery && isHosieryItem(it))) fresh.push(it);
+            (boostHosiery && isHosieryItem(it)) ||
+            includeTypes.some(t => t.match(it))) fresh.push(it);
         else stale.push(it);
       }
       // Backfill with the LEAST-RECENTLY-suggested repeats first (highest
@@ -963,7 +1040,7 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
     // whole inventory's token cost (owner's explicit priority is token cost).
     // Full text stays on the item for display/search surfaces.
     if (it.notes) {
-      const pn = stylistNotes(it.notes);
+      const pn = promptNotes(it);
       if (pn) parts.push(pn);
     }
     // Visual-AI read (when the closet has been enriched): a compact fabric /

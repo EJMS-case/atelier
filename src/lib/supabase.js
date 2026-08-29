@@ -1,23 +1,42 @@
 // ── SUPABASE CLIENT ──────────────────────────────────────────────────────────
-// Hand-rolled REST client (no @supabase/supabase-js). One public `sb` object
-// centralizes every table + storage operation. The anon key is public — row
-// policies enforce access on the server side.
+// Hand-rolled REST client for data (no @supabase/supabase-js here — that is
+// used in auth.js for the token lifecycle only). One public `sb` object
+// centralizes every table + storage operation.
+//
+// Headers are built PER REQUEST, not once at module load. A module-level
+// constant captures whatever token existed at import time — i.e. none — and can
+// never carry a session that arrives after sign-in. Every call site must use
+// sbHeaders()/storageHeaders(), never a hoisted copy of the result.
 
-export const SUPABASE_URL = "https://ljcwsrfmojbjdveefoqa.supabase.co";
-export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dzcmZtb2piamR2ZWVmb3FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0ODM1NDksImV4cCI6MjA5MDA1OTU0OX0.3LLv6JdwOvq_7woz3LUO8wnaoH8lSawiQJqk2Wmk4QE";
+import { getAccessToken } from "./auth.js";
+import { SUPABASE_URL, SUPABASE_KEY, BUCKET } from "./supabaseConfig.js";
 
-export const SB_HEADERS = {
-  "Content-Type": "application/json",
-  "apikey": SUPABASE_KEY,
-  "Authorization": `Bearer ${SUPABASE_KEY}`,
-  "Prefer": "return=representation",
-};
+export { SUPABASE_URL, SUPABASE_KEY, BUCKET };
 
-export const BUCKET = "wardrobe-images";
-export const STORAGE_HEADERS = {
-  "apikey": SUPABASE_KEY,
-  "Authorization": `Bearer ${SUPABASE_KEY}`,
-};
+// `apikey` still identifies the project and is always the anon key.
+// `Authorization` carries the user's session when signed in, and falls back to
+// the anon key when signed out — so a signed-out client behaves exactly as it
+// did before login existed. That fallback is what makes the rollout safe while
+// table policies are still open; it becomes a no-op once they are closed.
+export function sbHeaders(extra) {
+  const token = getAccessToken();
+  return {
+    "Content-Type": "application/json",
+    "apikey": SUPABASE_KEY,
+    "Authorization": `Bearer ${token || SUPABASE_KEY}`,
+    "Prefer": "return=representation",
+    ...extra,
+  };
+}
+
+export function storageHeaders(extra) {
+  const token = getAccessToken();
+  return {
+    "apikey": SUPABASE_KEY,
+    "Authorization": `Bearer ${token || SUPABASE_KEY}`,
+    ...extra,
+  };
+}
 
 // Public URL for an item's small grid thumbnail. Thumbs live under a `thumbs/`
 // prefix in the same bucket, keyed by item id, so the URL is derivable without
@@ -53,7 +72,7 @@ function dataUrlToBlob(base64DataUrl, fallbackMime) {
 export const sb = {
   async fetchAll() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?select=*&order=created_at.asc`, {
-      headers: SB_HEADERS
+      headers: sbHeaders()
     });
     if (!res.ok) throw new Error("Fetch failed");
     return res.json();
@@ -70,11 +89,13 @@ export const sb = {
     if (payload.set_id === "") payload.set_id = null;
     // Empty strings reach numeric columns as `""` and PG rejects them.
     if (payload.price_paid === "") payload.price_paid = null;
+    // Same for the uuid closet_id column (multi-closet, Phase A).
+    if (payload.closet_id === "") payload.closet_id = null;
 
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
         method: "POST",
-        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify(payload),
       });
       if (res.ok) return res.json();
@@ -91,10 +112,21 @@ export const sb = {
     throw new Error("Upsert failed after stripping unknown columns");
   },
 
+  // ── Closets (multi-closet, Phase A) ──
+  // Full read of the small `closets` table (two seeded rows + any future
+  // additions). Callers cache the result (see utils/storage.js loadClosets).
+  async fetchClosets() {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/closets?select=*&order=created_at.asc`, {
+      headers: sbHeaders(),
+    });
+    if (!res.ok) throw new Error("Fetch closets failed");
+    return res.json();
+  },
+
   async remove(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`, {
       method: "DELETE",
-      headers: SB_HEADERS,
+      headers: sbHeaders(),
     });
     if (!res.ok) throw new Error("Delete failed");
   },
@@ -107,14 +139,14 @@ export const sb = {
       // ── outfit_logs.garment_ids ───────────────────────────────────────────
       const logsRes = await fetch(
         `${SUPABASE_URL}/rest/v1/outfit_logs?select=id,garment_ids&garment_ids=cs.{${id}}`,
-        { headers: SB_HEADERS },
+        { headers: sbHeaders() },
       );
       if (logsRes.ok) {
         const logs = await logsRes.json().catch(() => []);
         await Promise.all((logs || []).map(log =>
           fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${log.id}`, {
             method: "PATCH",
-            headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+            headers: { ...sbHeaders(), "Prefer": "return=minimal" },
             body: JSON.stringify({ garment_ids: (log.garment_ids || []).filter(g => g !== id) }),
           }).catch(() => {}),
         ));
@@ -125,7 +157,7 @@ export const sb = {
       // ── planned_outfits.items + outfits jsonb ─────────────────────────────
       const plansRes = await fetch(
         `${SUPABASE_URL}/rest/v1/planned_outfits?select=id,items,outfits&items=cs.{${id}}`,
-        { headers: SB_HEADERS },
+        { headers: sbHeaders() },
       );
       if (plansRes.ok) {
         const plans = await plansRes.json().catch(() => []);
@@ -136,7 +168,7 @@ export const sb = {
             : plan.outfits;
           return fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?id=eq.${plan.id}`, {
             method: "PATCH",
-            headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+            headers: { ...sbHeaders(), "Prefer": "return=minimal" },
             body: JSON.stringify({ items: newItems, outfits: newOutfits }),
           }).catch(() => {});
         }));
@@ -147,14 +179,14 @@ export const sb = {
       // ── look_feedback.item_ids ────────────────────────────────────────────
       const fbRes = await fetch(
         `${SUPABASE_URL}/rest/v1/look_feedback?select=id,item_ids&item_ids=cs.{${id}}`,
-        { headers: SB_HEADERS },
+        { headers: sbHeaders() },
       );
       if (fbRes.ok) {
         const feedbacks = await fbRes.json().catch(() => []);
         await Promise.all((feedbacks || []).map(fb =>
           fetch(`${SUPABASE_URL}/rest/v1/look_feedback?id=eq.${fb.id}`, {
             method: "PATCH",
-            headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+            headers: { ...sbHeaders(), "Prefer": "return=minimal" },
             body: JSON.stringify({ item_ids: (fb.item_ids || []).filter(i => i !== id) }),
           }).catch(() => {}),
         ));
@@ -165,7 +197,7 @@ export const sb = {
   async ensureBucket() {
     await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
       method: "POST",
-      headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
+      headers: { ...storageHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ id: BUCKET, name: BUCKET, public: true }),
     });
   },
@@ -179,7 +211,7 @@ export const sb = {
         if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
         const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${itemId}`, {
           method: "POST",
-          headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
+          headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true" },
           body: blob,
         });
         // Cache-buster: the storage path is stable (same itemId), so without a
@@ -199,17 +231,33 @@ export const sb = {
     const { blob, mime } = dataUrlToBlob(base64DataUrl, "image/png");
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/thumbs/${itemId}`, {
       method: "POST",
-      headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
+      headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true" },
       body: blob,
     });
     if (!res.ok) throw new Error(`Thumb upload failed (HTTP ${res.status})`);
     return thumbUrl(itemId);
   },
 
+  // Server-side copy of an item's full image to a new object key (closet
+  // duplication). The twin must own its own bytes — deleting the original
+  // later calls removeImage(originalId), which would otherwise blank the
+  // twin's photo too. Thumbs are NOT copied: Thumb.jsx derives one lazily
+  // for the new id. Returns the copy's public URL (same ?v= cache-buster
+  // convention as uploadImage).
+  async copyImage(fromId, toId) {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/copy`, {
+      method: "POST",
+      headers: { ...storageHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ bucketId: BUCKET, sourceKey: String(fromId), destinationKey: String(toId) }),
+    });
+    if (!res.ok) throw new Error(`Image copy failed (HTTP ${res.status})`);
+    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${toId}?v=${Date.now()}`;
+  },
+
   async removeImage(itemId) {
     await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
       method: "DELETE",
-      headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
+      headers: { ...storageHeaders(), "Content-Type": "application/json" },
       // Remove the full image AND its derived thumbnail so deletes don't orphan.
       body: JSON.stringify({ prefixes: [itemId, `thumbs/${itemId}`] }),
     });
@@ -221,7 +269,7 @@ export const sb = {
   async removeThumb(itemId) {
     await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
       method: "DELETE",
-      headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
+      headers: { ...storageHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ prefixes: [`thumbs/${itemId}`] }),
     });
   },
@@ -236,7 +284,7 @@ export const sb = {
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs`, {
         method: "POST",
-        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        headers: { ...sbHeaders(), "Prefer": "return=representation" },
         body: JSON.stringify(payload),
       });
       if (res.ok) return res.json();
@@ -252,7 +300,7 @@ export const sb = {
   },
   async fetchOutfitLogs() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=*&order=date_worn.desc,created_at.desc`, {
-      headers: SB_HEADERS,
+      headers: sbHeaders(),
     });
     if (!res.ok) return [];
     return res.json();
@@ -260,7 +308,7 @@ export const sb = {
   async deleteOutfitLog(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {
       method: "DELETE",
-      headers: SB_HEADERS,
+      headers: sbHeaders(),
     });
     if (!res.ok) throw new Error("Delete outfit log failed");
   },
@@ -269,7 +317,7 @@ export const sb = {
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {
         method: "PATCH",
-        headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+        headers: { ...sbHeaders(), "Prefer": "return=representation" },
         body: JSON.stringify(payload),
       });
       if (res.ok) return res.json();
@@ -287,7 +335,7 @@ export const sb = {
   // ── Favorites ──
   async fetchFavorites() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/favorites?select=*&order=created_at.desc`, {
-      headers: SB_HEADERS,
+      headers: sbHeaders(),
     });
     if (!res.ok) return [];
     return res.json();
@@ -295,7 +343,7 @@ export const sb = {
   async addFavorite(type, referenceId) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/favorites`, {
       method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
+      headers: { ...sbHeaders(), "Prefer": "return=representation" },
       body: JSON.stringify({ type, reference_id: referenceId }),
     });
     if (!res.ok) throw new Error("Add favorite failed");
@@ -304,37 +352,43 @@ export const sb = {
   async removeFavorite(type, referenceId) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/favorites?type=eq.${type}&reference_id=eq.${referenceId}`, {
       method: "DELETE",
-      headers: SB_HEADERS,
+      headers: sbHeaders(),
     });
     if (!res.ok) throw new Error("Remove favorite failed");
   },
-  async updateItemLastWorn(id, date) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify({ last_worn: date }),
-    });
-    if (!res.ok) throw new Error("Update last_worn failed");
-  },
   // Set last_worn on many items in ONE request (all get the same date) instead
   // of a PATCH per garment — logging a 6-piece outfit was firing 6 round-trips.
+  // (The per-item updateItemLastWorn this replaced is deleted — zero callers.)
   async setLastWornBulk(ids = [], date) {
     const list = [...new Set(ids)].filter(Boolean);
     if (list.length === 0) return;
     const inList = list.map(encodeURIComponent).join(",");
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=in.(${inList})`, {
       method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+      headers: { ...sbHeaders(), "Prefer": "return=minimal" },
       body: JSON.stringify({ last_worn: date }),
     });
     if (!res.ok) throw new Error("Bulk last_worn update failed");
+  },
+  // Move many items to a closet in ONE request — same id=in.(…) bulk-PATCH
+  // pattern as setLastWornBulk (multi-closet, Phase A).
+  async setClosetBulk(ids = [], closetId) {
+    const list = [...new Set(ids)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=in.(${inList})`, {
+      method: "PATCH",
+      headers: { ...sbHeaders(), "Prefer": "return=minimal" },
+      body: JSON.stringify({ closet_id: closetId }),
+    });
+    if (!res.ok) throw new Error("Bulk closet move failed");
   },
   // Persist the one-time Visual-AI descriptor for a single item. Best-effort
   // per item so a batch enrichment can continue past one failure.
   async saveItemVision(id, visionData) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${id}`, {
       method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=minimal" },
+      headers: { ...sbHeaders(), "Prefer": "return=minimal" },
       body: JSON.stringify({ vision_data: visionData }),
     });
     if (!res.ok) throw new Error(`Save vision failed (${res.status})`);
@@ -342,7 +396,7 @@ export const sb = {
   async listStorageImages() {
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/wardrobe-images`, {
       method: "POST",
-      headers: { ...STORAGE_HEADERS, "Content-Type": "application/json" },
+      headers: { ...storageHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ prefix: "", limit: 500, offset: 0 }),
     });
     if (!res.ok) return [];
@@ -350,28 +404,40 @@ export const sb = {
     return data.map(f => f.name).filter(Boolean);
   },
 
-  // ── User Settings (API key sync) ──
-  async getSettings() {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.api_keys&select=value`, {
-        headers: SB_HEADERS,
-      });
-      if (!res.ok) return null;
-      const rows = await res.json();
-      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
-    } catch { return null; }
+  // ── User Settings ──
+  // API keys are deliberately NOT synced here. This table is reachable with the
+  // anon key, which ships in the client bundle, so anything stored in it is
+  // readable by anyone. Keys live in localStorage only, per device. Migration
+  // 0026 enforces this server-side by hiding the `api_keys` row from the
+  // `public` role.
+  //
+  // Mount-time batch: App reads style_fingerprint and
+  // rotation_state at startup — separate GETs against the same table.
+  // The first getter call kicks off ONE key=in.(…) fetch; each key is served
+  // from it exactly once, then falls back to its per-key fetch so refresh
+  // flows (Settings button, post-save re-reads) always hit the network.
+  _settingsBatch: null,
+  _batchServed: new Set(),
+  _settingsRow(key) {
+    if (this._batchServed.has(key)) return null;
+    this._batchServed.add(key);
+    if (!this._settingsBatch) {
+      this._settingsBatch = (async () => {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(style_fingerprint,rotation_state,brand_discovery)&select=key,value`, {
+            headers: sbHeaders(),
+          });
+          if (!res.ok) return null;
+          const rows = await res.json();
+          const map = {};
+          for (const r of rows || []) map[r.key] = r.value ?? null;
+          return map;
+        } catch { return null; }
+      })();
+    }
+    // null map (fetch failed) → caller falls through to its own fetch.
+    return this._settingsBatch.then(map => (map ? { raw: map[key] ?? null } : null));
   },
-  async saveSettings(settings) {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
-        method: "POST",
-        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
-        body: JSON.stringify({ key: "api_keys", value: JSON.stringify(settings) }),
-      });
-      if (!res.ok) console.warn("[sb] saveSettings failed:", res.status);
-    } catch { /* fallback to localStorage only */ }
-  },
-
   // ── Style Fingerprint (one row per user, key='style_fingerprint') ──
   // Stored as JSON: { text, source_count, generated_at }. Lives in
   // user_settings (which already exists) to avoid a separate migration.
@@ -388,25 +454,65 @@ export const sb = {
     }
     return this._fpTextPromise.then(t => t.slice(0, maxLen));
   },
-  async getStyleFingerprint() {
+  // In-flight sharing only (cleared once settled) — concurrent mount-time
+  // callers (App's initial load effect + maybeRefreshFingerprint) used to
+  // fire two identical GETs. NOT a result cache: Settings' refresh button
+  // and post-save re-reads still hit the network.
+  _fpInflight: null,
+  getStyleFingerprint() {
+    if (this._fpInflight) return this._fpInflight;
+    const p = (async () => {
+      try {
+        const hit = await this._settingsRow("style_fingerprint");
+        if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
+          headers: sbHeaders(),
+        });
+        if (!res.ok) return null;
+        const rows = await res.json();
+        return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+      } catch { return null; }
+    })();
+    this._fpInflight = p;
+    p.finally(() => { if (this._fpInflight === p) this._fpInflight = null; });
+    return p;
+  },
+  async saveStyleFingerprint(fp) {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.style_fingerprint&select=value`, {
-        headers: SB_HEADERS,
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "style_fingerprint", value: JSON.stringify(fp) }),
+      });
+      if (!res.ok) console.warn("[sb] saveStyleFingerprint failed:", res.status);
+    } catch { /* swallow — non-fatal, regenerate on demand */ }
+  },
+
+  // ── Brand discovery (key='brand_discovery') ──
+  // Cached Brand Atlas result: { brands, generated_at, web, dismissed }.
+  // Cross-device on purpose — a scouting run is a real AI spend; every device
+  // should reuse it. Mount read rides the settings batch above.
+  async getBrandDiscovery() {
+    try {
+      const hit = await this._settingsRow("brand_discovery");
+      if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.brand_discovery&select=value`, {
+        headers: sbHeaders(),
       });
       if (!res.ok) return null;
       const rows = await res.json();
       return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
     } catch { return null; }
   },
-  async saveStyleFingerprint(fp) {
+  async saveBrandDiscovery(data) {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
         method: "POST",
-        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
-        body: JSON.stringify({ key: "style_fingerprint", value: JSON.stringify(fp) }),
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ key: "brand_discovery", value: JSON.stringify(data) }),
       });
-      if (!res.ok) console.warn("[sb] saveStyleFingerprint failed:", res.status);
-    } catch { /* swallow — non-fatal, regenerate on demand */ }
+      if (!res.ok) console.warn("[sb] saveBrandDiscovery failed:", res.status);
+    } catch { /* swallow — the in-memory copy still renders this session */ }
   },
 
   // ── Rotation state (key='rotation_state') ──
@@ -415,8 +521,10 @@ export const sb = {
   // user_settings lets the phone see what the laptop already suggested.
   async getRotationState() {
     try {
+      const hit = await this._settingsRow("rotation_state");
+      if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
       const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.rotation_state&select=value`, {
-        headers: SB_HEADERS,
+        headers: sbHeaders(),
       });
       if (!res.ok) return null;
       const rows = await res.json();
@@ -427,7 +535,7 @@ export const sb = {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
         method: "POST",
-        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify({ key: "rotation_state", value: JSON.stringify(state) }),
       });
       // A silent 4xx here disables cross-device anti-repeat — make it visible.
@@ -443,7 +551,7 @@ export const sb = {
   async fetchInspirations() {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/inspiration_images?select=*&order=created_at.desc`, {
-        headers: SB_HEADERS,
+        headers: sbHeaders(),
       });
       if (!res.ok) return [];
       return res.json();
@@ -452,7 +560,7 @@ export const sb = {
   async upsertInspiration(row) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/inspiration_images`, {
       method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify(row),
     });
     if (!res.ok) throw new Error(`Upsert inspiration failed: ${res.status}`);
@@ -462,7 +570,7 @@ export const sb = {
   async removeInspiration(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/inspiration_images?id=eq.${id}`, {
       method: "DELETE",
-      headers: SB_HEADERS,
+      headers: sbHeaders(),
     });
     if (!res.ok) throw new Error("Delete inspiration failed");
   },
@@ -471,7 +579,7 @@ export const sb = {
     const path = `inspiration/${id}`;
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
       method: "POST",
-      headers: { ...STORAGE_HEADERS, "Content-Type": mime, "x-upsert": "true" },
+      headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true" },
       body: blob,
     });
     if (!res.ok) throw new Error(`Inspiration upload failed: ${res.status}`);
@@ -482,7 +590,7 @@ export const sb = {
   async fetchPlansBetween(startIso, endIso) {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/planned_outfits?select=*&date=gte.${startIso}&date=lte.${endIso}&order=date.asc`,
-      { headers: SB_HEADERS },
+      { headers: sbHeaders() },
     );
     if (!res.ok) return [];
     return res.json().catch(() => []);
@@ -490,7 +598,7 @@ export const sb = {
   async fetchAllPlans() {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/planned_outfits?select=*&order=date.asc`,
-      { headers: SB_HEADERS },
+      { headers: sbHeaders() },
     );
     if (!res.ok) return [];
     return res.json().catch(() => []);
@@ -504,7 +612,7 @@ export const sb = {
     for (let attempt = 0; attempt < 15; attempt++) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`, {
         method: "POST",
-        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify(payload),
       });
       if (res.ok) return res.json();
@@ -521,56 +629,182 @@ export const sb = {
   async deletePlan(date) {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/planned_outfits?date=eq.${date}`,
-      { method: "DELETE", headers: SB_HEADERS },
+      { method: "DELETE", headers: sbHeaders() },
     );
     return res.ok;
   },
+  // Trips carry the Phase B columns (destination_closet_id, destination_city,
+  // status) when the caller provides them. Self-healing like savePlan: on
+  // PGRST204 (column unknown to an un-migrated project) strip it and retry so
+  // the base trip row still saves.
   async saveTrip(trip) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(trip),
-    });
-    if (!res.ok) throw new Error(`saveTrip failed ${res.status}`);
-    return res.json();
+    let payload = { ...trip };
+    // Empty string reaches the uuid destination_closet_id column and PG
+    // rejects it — same normalization as `upsert`'s closet_id.
+    if (payload.destination_closet_id === "") payload.destination_closet_id = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
+        method: "POST",
+        headers: { ...sbHeaders(), "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`saveTrip failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(err?.message || `saveTrip failed ${res.status}`);
+    }
+    throw new Error("saveTrip failed after stripping unknown columns");
   },
   async fetchTripsBetween(startIso, endIso) {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/trips?start_date=lte.${endIso}&end_date=gte.${startIso}&order=start_date.asc`,
-      { headers: SB_HEADERS },
-    );
-    if (!res.ok) return [];
-    return res.json().catch(() => []);
-  },
-  async fetchAllTrips() {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/trips?order=start_date.asc`,
-      { headers: SB_HEADERS },
+      { headers: sbHeaders() },
     );
     if (!res.ok) return [];
     return res.json().catch(() => []);
   },
   async updateTrip(id, patch) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { ...SB_HEADERS, "Prefer": "return=representation" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) throw new Error(`updateTrip failed ${res.status}`);
-    return res.json();
+    let payload = { ...patch };
+    if (payload.destination_closet_id === "") payload.destination_closet_id = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { ...sbHeaders(), "Prefer": "return=representation" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return res.json();
+      let err;
+      try { err = await res.json(); } catch { throw new Error(`updateTrip failed ${res.status}`); }
+      if (err.code === "PGRST204") {
+        const match = err.message?.match(/find the '([^']+)' column/);
+        if (match?.[1]) { delete payload[match[1]]; continue; }
+      }
+      throw new Error(err?.message || `updateTrip failed ${res.status}`);
+    }
+    throw new Error("updateTrip failed after stripping unknown columns");
   },
   async deleteTrip(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
-      method: "DELETE", headers: SB_HEADERS,
+      method: "DELETE", headers: sbHeaders(),
     });
     return res.ok;
+  },
+
+  // ── Trip items (Phase B — trips + packing) ──
+  // The single ACTIVE trip, if any. Pool resolution (useVisibleWardrobe.js)
+  // keys off this row; soft-fails to null so the app boots closet-scoped when
+  // offline or on a pre-migration project.
+  // Soft-fails to null by default (App's mount fetch). Pass {strict: true}
+  // where "couldn't read" must NOT be mistaken for "no active trip" — the
+  // only-one-active-trip guard in Start Trip fails closed on it.
+  async fetchActiveTrip({ strict = false } = {}) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/trips?status=eq.active&order=start_date.desc&limit=1`,
+        { headers: sbHeaders() },
+      );
+      if (!res.ok) throw new Error("Fetch active trip failed");
+      const rows = await res.json();
+      return (Array.isArray(rows) && rows[0]) || null;
+    } catch (e) {
+      if (strict) throw e;
+      return null;
+    }
+  },
+  // outfit_ids-only refresh for an EXISTING trip_items row. A PATCH (not an
+  // upsert) so a status change racing in from the packing checklist is never
+  // clobbered back by a reconcile.
+  async updateTripItemOutfits(tripId, itemId, outfitIds) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=eq.${encodeURIComponent(itemId)}`,
+      {
+        method: "PATCH",
+        headers: { ...sbHeaders(), "Prefer": "return=minimal" },
+        body: JSON.stringify({ outfit_ids: outfitIds }),
+      },
+    );
+    if (!res.ok) throw new Error("Trip item outfit_ids update failed");
+  },
+  // Throws on failure (rather than soft-[] like the fetchers above): the
+  // wave-2 reconcile must distinguish "no rows" from "couldn't read" — an
+  // error mistaken for an empty list would clobber packed statuses. Both
+  // callers catch (App soft-fails to [], TripDetailView keeps its last copy).
+  async fetchTripItems(tripId) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&select=*`,
+      { headers: sbHeaders() },
+    );
+    if (!res.ok) throw new Error(`fetchTripItems failed ${res.status}`);
+    return res.json();
+  },
+  // Replace a trip's trip_items wholesale: DELETE then bulk POST (PostgREST
+  // accepts an array body). Used when (re)pinning a trip's outfits — the row
+  // set is derived from the outfits, so a full rewrite is the honest shape.
+  async replaceTripItems(tripId, rows = []) {
+    const del = await fetch(`${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}`, {
+      method: "DELETE", headers: sbHeaders(),
+    });
+    if (!del.ok) throw new Error(`replaceTripItems delete failed ${del.status}`);
+    if (!rows.length) return [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trip_items`, {
+      method: "POST",
+      headers: { ...sbHeaders(), "Prefer": "return=representation" },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) throw new Error(`replaceTripItems insert failed ${res.status}`);
+    return res.json();
+  },
+  // Targeted upsert (wave 2 reconcile): insert new rows / refresh outfit_ids
+  // on existing ones without the full DELETE+POST of replaceTripItems —
+  // a wholesale replace would wipe packed statuses the reconcile must keep.
+  async upsertTripItems(rows = []) {
+    if (!rows.length) return [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/trip_items?on_conflict=trip_id,item_id`, {
+      method: "POST",
+      headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) throw new Error(`upsertTripItems failed ${res.status}`);
+    return res.json();
+  },
+  // Targeted delete (wave 2 reconcile): rows no longer referenced by any
+  // outfit come off the list. item_id is TEXT (wardrobe ids), so encode.
+  async deleteTripItems(tripId, itemIds = []) {
+    const list = [...new Set(itemIds)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=in.(${inList})`,
+      { method: "DELETE", headers: sbHeaders() },
+    );
+    if (!res.ok) throw new Error(`deleteTripItems failed ${res.status}`);
+  },
+  // Bulk status flip (suggested | packed | left_behind) — same id=in.(…)
+  // pattern as setLastWornBulk. item_id is TEXT (wardrobe ids), so encode.
+  async setTripItemStatus(tripId, itemIds = [], status) {
+    const list = [...new Set(itemIds)].filter(Boolean);
+    if (list.length === 0) return;
+    const inList = list.map(encodeURIComponent).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_items?trip_id=eq.${tripId}&item_id=in.(${inList})`,
+      {
+        method: "PATCH",
+        headers: { ...sbHeaders(), "Prefer": "return=minimal" },
+        body: JSON.stringify({ status }),
+      },
+    );
+    if (!res.ok) throw new Error(`setTripItemStatus failed ${res.status}`);
   },
 
   // ── Look feedback (thumbs up/down on generated looks) ──
   async saveLookFeedback({ lookHash, rating, itemIds, occasion }) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/look_feedback`, {
       method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify({
         look_hash: lookHash,
         rating,
@@ -593,7 +827,7 @@ export const sb = {
   async fetchItemFeedbackScores() {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,rating,created_at`,
-      { headers: SB_HEADERS },
+      { headers: sbHeaders() },
     );
     if (!res.ok) return {};
     const rows = await res.json().catch(() => []);
@@ -622,7 +856,7 @@ export const sb = {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/look_feedback?select=id,item_ids,occasion,created_at&rating=eq.1&order=created_at.desc`,
-        { headers: SB_HEADERS },
+        { headers: sbHeaders() },
       );
       if (!res.ok) return [];
       return (await res.json().catch(() => [])) || [];
@@ -635,7 +869,7 @@ export const sb = {
   async deleteLookFeedback(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/look_feedback?id=eq.${id}`, {
       method: "DELETE",
-      headers: SB_HEADERS,
+      headers: sbHeaders(),
     });
     if (!res.ok) throw new Error("Remove loved look failed");
   },
@@ -647,7 +881,7 @@ export const sb = {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/look_feedback?select=item_ids,occasion&rating=eq.-1&order=created_at.desc&limit=10`,
-        { headers: SB_HEADERS },
+        { headers: sbHeaders() },
       );
       if (!res.ok) return [];
       return (await res.json().catch(() => [])) || [];
@@ -662,7 +896,7 @@ export const sb = {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/look_edits`, {
         method: "POST",
-        headers: SB_HEADERS,
+        headers: sbHeaders(),
         body: JSON.stringify({
           action,
           occasion: occasion || null,
@@ -675,21 +909,31 @@ export const sb = {
   },
   // Newest first, capped — the aggregator collapses repeats so 120 rows is
   // months of signal.
-  async fetchLookEdits(limit = 120) {
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/look_edits?select=action,occasion,weather,out_item_id,in_item_id,created_at&order=created_at.desc&limit=${limit}`,
-        { headers: SB_HEADERS },
-      );
-      if (!res.ok) return [];
-      return (await res.json().catch(() => [])) || [];
-    } catch { return []; }
+  // In-flight sharing per limit (cleared once settled): App's mount path
+  // fires this twice concurrently (the unconditional SWAP-LESSONS load and
+  // the fingerprint-staleness check), which was two identical GETs.
+  _lookEditsInflight: {},
+  fetchLookEdits(limit = 120) {
+    if (this._lookEditsInflight[limit]) return this._lookEditsInflight[limit];
+    const p = (async () => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/look_edits?select=action,occasion,weather,out_item_id,in_item_id,created_at&order=created_at.desc&limit=${limit}`,
+          { headers: sbHeaders() },
+        );
+        if (!res.ok) return [];
+        return (await res.json().catch(() => [])) || [];
+      } catch { return []; }
+    })();
+    this._lookEditsInflight[limit] = p;
+    p.finally(() => { if (this._lookEditsInflight[limit] === p) delete this._lookEditsInflight[limit]; });
+    return p;
   },
 
   // ── Sets ──
   async fetchSets() {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/sets?select=*&order=created_at.desc`, { headers: SB_HEADERS });
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sets?select=*&order=created_at.desc`, { headers: sbHeaders() });
       if (!res.ok) return null;
       return res.json();
     } catch { return null; }
@@ -698,7 +942,7 @@ export const sb = {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/sets`, {
         method: "POST",
-        headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify(set),
       });
       if (!res.ok) return null;
@@ -707,7 +951,7 @@ export const sb = {
   },
   async deleteSet(id) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/sets?id=eq.${id}`, { method: "DELETE", headers: SB_HEADERS });
+      await fetch(`${SUPABASE_URL}/rest/v1/sets?id=eq.${id}`, { method: "DELETE", headers: sbHeaders() });
     } catch { /* ignore — table may not exist */ }
   },
 };

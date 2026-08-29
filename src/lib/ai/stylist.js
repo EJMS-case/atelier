@@ -13,13 +13,18 @@ import { describeStyleFilters } from "../../utils/style-filters.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
 import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
-import { getSleeveType, shuffle, slotForItem } from "../../utils/item-helpers.js";
+import { getSleeveType, shuffle, slotForItem, resolveItemIds } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
 import { summarizeLookEdits } from "../../features/stylist/lookEdits.js";
 import { summarizeOccasionMemory } from "../../features/stylist/occasionMemory.js";
 import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
 import { invokeTool, anthropicFetch } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_STRONG } from "../../constants/models.js";
+import {
+  describeCorePalette, describeColorCoverage, describeTextureCoverage,
+  describePairUnlocks, seasonForDate,
+} from "../../utils/wardrobe-coverage.js";
+import { sb } from "../supabase.js";
 import {
   KnitSchema, KnitTool,
   ColorAnalysisSchema, ColorAnalysisTool,
@@ -136,63 +141,49 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     hero: heroStrategies[i % heroStrategies.length],
   }));
 
-  // Loved looks → compact TEXT exemplars (no W-IDs, so they never pollute item
-  // selection). Each becomes "[Occasion] color subcategory + color subcategory…"
-  // — enough for the model to read the level of polish and the kinds of
+  // Compact TEXT exemplar for one historical look: "[Occasion] color
+  // subcategory + color subcategory…". No W-IDs, so history lines can never
+  // pollute item selection. Shared by loved/disliked/recent-combo lines
+  // (was three hand-copies of the same 12-line body); returns null when
+  // fewer than 2 pieces resolve — a one-piece line teaches nothing.
+  const describeLookLine = (ids, occasion) => {
+    const pieces = resolveItemIds(items, ids)
+      .slice(0, 8)
+      .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
+    if (pieces.length < 2) return null;
+    return { line: `${occasion ? `[${occasion}] ` : ""}${pieces.join(" + ")}`, pieces };
+  };
+
+  // Loved looks → exemplars of the level of polish and the kinds of
   // combinations she rates highly, without copying the exact pieces.
   const lovedLookLines = (lovedLooks || [])
     .slice(0, 5)
-    .map(ll => {
-      const pieces = (ll.garment_ids || ll.items || [])
-        .map(id => items.find(it => it.id === id))
-        .filter(Boolean)
-        .slice(0, 8)
-        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
-      if (pieces.length < 2) return null;
-      const occ = ll.occasion ? `[${ll.occasion}] ` : "";
-      return `${occ}${pieces.join(" + ")}`;
-    })
+    .map(ll => describeLookLine(ll.garment_ids || ll.items, ll.occasion)?.line)
     .filter(Boolean);
 
-  // Disliked looks: same text-only format as loved looks — item descriptions
-  // only, no W-IDs, so they can't interfere with item selection.
+  // Disliked looks: same text-only format as loved looks.
   const dislikedLookLines = (dislikedLooks || [])
     .slice(0, 5)
-    .map(ll => {
-      const pieces = (ll.item_ids || ll.garment_ids || ll.items || [])
-        .map(id => items.find(it => it.id === id))
-        .filter(Boolean)
-        .slice(0, 8)
-        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
-      if (pieces.length < 2) return null;
-      const occ = ll.occasion ? `[${ll.occasion}] ` : "";
-      return `${occ}${pieces.join(" + ")}`;
-    })
+    .map(ll => describeLookLine(ll.item_ids || ll.garment_ids || ll.items, ll.occasion)?.line)
     .filter(Boolean);
 
   // Recent combos — the LOOK-combination companion to the item-level rotation
   // memory: rotation keeps individual pieces fresh, but pieces can still
-  // recombine into the same recipe. Same text-only format as loved/disliked
-  // looks (no W-IDs, so history can't pollute item selection). allLooks arrives
-  // oldest→newest, so reverse before slicing — the model reads newest first.
-  // Deduped on the sorted piece set so a re-generation of the same combination
-  // doesn't burn multiple lines of the 8-line budget.
+  // recombine into the same recipe. allLooks arrives oldest→newest, so
+  // reverse before slicing — the model reads newest first. Deduped on the
+  // sorted piece set so a re-generation of the same combination doesn't burn
+  // multiple lines of the 8-line budget.
   const seenComboKeys = new Set();
   const recentCombos = (previousLooks || [])
     .slice()
     .reverse()
     .map(pl => {
-      const pieces = (pl.garment_ids || pl.items || [])
-        .map(id => items.find(it => it.id === id))
-        .filter(Boolean)
-        .slice(0, 8)
-        .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
-      if (pieces.length < 2) return null;
-      const key = [...pieces].sort().join("|");
+      const described = describeLookLine(pl.garment_ids || pl.items, pl.occasion);
+      if (!described) return null;
+      const key = [...described.pieces].sort().join("|");
       if (seenComboKeys.has(key)) return null;
       seenComboKeys.add(key);
-      const occ = pl.occasion ? `[${pl.occasion}] ` : "";
-      return `${occ}${pieces.join(" + ")}`;
+      return described.line;
     })
     .filter(Boolean)
     .slice(0, 8);
@@ -382,7 +373,7 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
   const anchors = analysis.wardrobeAnchors.map(a => `${a.item.name} (${a.count}x)`).join(", ") || "none yet";
   const underutil = analysis.underutilized.slice(0, 3).map(it => it.name).join(", ") || "none";
   const recentLogs = outfitLogs.slice(0, 10).map(l => {
-    const logItems = (l.garment_ids || []).map(id => items.find(it => it.id === id)).filter(Boolean);
+    const logItems = resolveItemIds(items, l.garment_ids);
     return `${l.date_worn}: ${logItems.map(it => `${it.category}:${it.name}`).join(", ")} (${l.occasion || "casual"})`;
   }).join("\n");
   return `Write a 2-3 sentence monthly style profile for this wardrobe user. Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
@@ -431,7 +422,7 @@ export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, on
 // Compact wardrobe summary: one line per category > subcategory with a count,
 // a color roll-up, and a few example pieces. Replaces the full 400+-line
 // inventory dump that blew the token budget and starved the tool response.
-export function summarizeInventory(items, { examplesPer = 4 } = {}) {
+function summarizeInventory(items, { examplesPer = 4 } = {}) {
   const groups = new Map();
   for (const it of items) {
     const key = `${it.category || "Uncategorized"}${it.subcategory ? ` > ${it.subcategory}` : ""}`;
@@ -489,6 +480,22 @@ export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []
       `${cat}: ${subs.length ? subs.join(", ") : "(no subcategories)"}`
     ).join("\n");
 
+    // Deterministic coverage signals, computed in code so the model reasons
+    // from real numbers instead of eyeballing the summary: her core palette,
+    // where a core color is MISSING from an anchor category ("no navy bag"),
+    // texture holes for the season, and in-fashion pairs one purchase away.
+    const season = seasonForDate(now);
+    const coverageSignals = [
+      describeCorePalette(items),
+      describeColorCoverage(items),
+      describeTextureCoverage(items, season),
+      describePairUnlocks(items, now),
+    ].filter(Boolean).join("\n\n");
+
+    // Her style fingerprint (session-memoized, soft-fail) — recommendations
+    // should extend HER wardrobe's direction, not a generic one.
+    const fp = await sb.fingerprintTextCached(800).catch(() => "");
+
     const dynamic = `You are a wardrobe strategist analyzing gaps in this client's wardrobe. Return your findings through the return_gaps tool.
 
 TODAY: ${dateContext}
@@ -499,18 +506,29 @@ ${taxStr}
 WARDROBE SUMMARY (${items.length} pieces — count, colors, examples per group):
 ${wardrobeSummary}
 
+COVERAGE ANALYSIS (computed from her actual closet — treat these as facts, not suggestions):
+${coverageSignals}
+${fp ? `
+HER STYLE FINGERPRINT (distilled from what she actually wears — extend this direction):
+${fp}
+` : ""}
 Identify the 5-8 HIGHEST-IMPACT gaps, weighing:
-1. MISSING or THIN subcategories that a complete wardrobe needs
-2. Strategic gaps — versatile pieces that would unlock the most new outfits
-3. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't
-4. The season ahead (next 3 months from today's date)
+1. A CORE-PALETTE COLOR MISSING FROM AN ANCHOR CATEGORY is the sharpest kind of gap — if she lives in navy and burgundy but owns no navy bag, a navy bag beats any generic "essential". Read the COLOR × CATEGORY COVERAGE lines and act on them. HARD REQUIREMENT: when those lines list missing core colors, at least TWO of your gaps must come directly from them (fewer only if fewer exist), and at least ONE gap must come from IN-FASHION PAIRINGS ONE PURCHASE AWAY when any are listed.
+2. IN-FASHION PAIRINGS ONE PURCHASE AWAY — one right piece that activates a pairing against many pieces she already owns is maximum leverage per dollar.
+3. TEXTURES missing or thin for the season ahead — a wardrobe this considered should have its ${season} textures covered.
+4. MISSING or THIN subcategories that a complete wardrobe needs.
+5. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't.
+6. The season ahead (next 3 months from today's date).
 
-For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
+For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
 
     return invokeShoppingTool({
       apiKey,
       model: MODEL_STRONG,
-      maxTokens: 3000,
+      // Sonnet 5 thinks adaptively by default and thinking tokens ride
+      // max_tokens — headroom above the ~1200-token gaps JSON or the tool
+      // input truncates and the empty-retry wrapper burns a second call.
+      maxTokens: 5000,
       content: [
         // Shopping-safe profile: palette/fit/taste WITHOUT the styling
         // profile's "inventory only / never invent items" rule, which
@@ -526,16 +544,23 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
     }, "gaps");
   }
 
-  const selectedItems = selectedIds.map(id => items.find(i => i.id === id)).filter(Boolean);
+  const selectedItems = resolveItemIds(items, selectedIds);
   const outfitStr = selectedItems.map(it =>
     `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`
   ).join("\n");
+
+  // Same personal grounding as gap mode — completions should read like her
+  // stylist shopping for her, not a mannequin.
+  const completeFp = await sb.fingerprintTextCached(600).catch(() => "");
 
   const dynamic = `You are completing an outfit. The client has selected these pieces:
 
 SELECTED OUTFIT:
 ${outfitStr}
-
+${completeFp ? `
+HER STYLE FINGERPRINT (distilled from what she actually wears — extend this direction):
+${completeFp}
+` : ""}
 TODAY: ${dateContext}
 
 WARDROBE SUMMARY (what she already owns — don't suggest buying duplicates):
@@ -551,7 +576,8 @@ Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. B
   return invokeShoppingTool({
     apiKey,
     model: MODEL_STRONG,
-    maxTokens: 2500,
+    // Same thinking-rides-the-budget headroom as gap mode above.
+    maxTokens: 4000,
     content: [
       // Shopping-safe profile — see the gap-mode call above.
       { type: "text", text: `${SHOPPING_STYLE_PROFILE}\n${STYLING_PRINCIPLES}`, cache_control: { type: "ephemeral" } },

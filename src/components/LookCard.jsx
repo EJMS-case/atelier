@@ -66,9 +66,9 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
       />
 
       {/* Rationale / styling teaser — use rationale (new) or styling (legacy) */}
-      {(look.rationale || look.styling || look.jewelry) && (
+      {(look.rationale || look.styling) && (
         <div style={s.lookTeaser}>
-          <span style={s.teaserDiamond}>✦</span> {look.rationale || look.styling || look.jewelry}
+          <span style={s.teaserDiamond}>✦</span> {look.rationale || look.styling}
         </div>
       )}
 
@@ -87,9 +87,6 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
           {look.focal_point && (
             <div style={s.metaRow}><span style={{...s.metaIcon, color:"#8B6F5E"}}>FOCAL POINT</span><span style={{fontSize:12,color:"var(--color-text)"}}>{look.focal_point}</span></div>
           )}
-          {/* Legacy fields */}
-          {look.accessories && <div style={s.metaRow}><span style={s.metaIcon}>✦</span><span>{look.accessories}</span></div>}
-          {look.why         && <div style={{...s.metaRow,fontStyle:"italic",color:"var(--color-text-2)"}}>{look.why}</div>}
         </div>
       )}
 

@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
 
-export default function EditItemView({ item, allItems, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
+export default function EditItemView({ item, allItems, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
+    stylist_line: item.stylist_line || "",
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable ?? true,
+    closet_id: item.closet_id || DEFAULT_CLOSET_ID,
     material: item.material || "",
     pattern: item.pattern || "",
     price_paid: item.price_paid ?? null,
@@ -85,11 +88,21 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
       const base64 = await imageToBase64(preview);
       const result = await stripBackground(base64, { rmbgKey });
       if (result.has_bg) {
-        // Both Remove.bg (or missing key) and the imgly fallback gave up.
+        // Removal didn't produce a keepable cutout — the original photo is
+        // untouched. Say WHY: a rejected ghost matte (the washed-out-tote
+        // failure) reads very differently from a missing key, and if
+        // Remove.bg itself errored (credits, key) that's the actionable part.
         setBgState("error");
-        setBgError(rmbgKey
-          ? "Background removal failed — Remove.bg returned an error and the local fallback isn't available. Try a clearer photo or check your API credit balance."
-          : "Add a Remove.bg API key in Settings to strip backgrounds (or upload a photo that's already transparent).");
+        const rmbgNote = result.rmbg_error
+          ? ` Remove.bg error: ${result.rmbg_error}.`
+          : "";
+        if (result.reason === "bad_matte") {
+          setBgError(`The cutout came back washed out (semi-transparent), so your original photo was kept. Try again${rmbgKey ? "" : ", or add a Remove.bg API key in Settings for a cleaner cut"}.${rmbgNote}`);
+        } else {
+          setBgError(rmbgKey
+            ? `Background removal failed and the local fallback couldn't finish. Try a clearer photo or check your Remove.bg credit balance.${rmbgNote}`
+            : "Add a Remove.bg API key in Settings to strip backgrounds (or upload a photo that's already transparent).");
+        }
         return;
       }
       // Trim transparent border so the saved photo is tight to the visible
@@ -129,14 +142,18 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           users can clean up legacy uploads without going through Settings. */}
       {preview && (
         <div style={{marginBottom:20}}>
+          {/* Never lock the button after a removal: a bad result used to
+              dead-end here ("✓ Background already removed", disabled) with no
+              way to re-run short of re-uploading the photo. Re-running is
+              user-initiated and harmless — it works on the current preview. */}
           <button
             style={{...s.btnSecondary, width:"100%"}}
             onClick={handleStripBackground}
-            disabled={bgState === "running" || form.has_bg === false}>
+            disabled={bgState === "running"}>
             {bgState === "running"
               ? "Removing background…"
               : form.has_bg === false
-                ? "✓ Background already removed"
+                ? "↻ Re-run Background Removal"
                 : "Remove Background"}
           </button>
           {bgState === "success" && (
@@ -165,6 +182,16 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           </div>
         ))}
 
+        {/* Stylist line — the short curated line the AI reads (classifiers +
+            prompts). Long pasted product copy in Notes stays for display and
+            search; when this line exists it speaks for the piece instead. */}
+        <div>
+          <div style={s.fieldLabel}>Stylist line · what the AI reads (≤200 chars)</div>
+          <input style={{...s.input, width:"100%"}} maxLength={200}
+            placeholder="e.g. silk cami, bias cut, layers under blazers; not for work alone"
+            value={form.stylist_line} onChange={e=>setForm(f=>({...f,stylist_line:e.target.value}))}/>
+        </div>
+
         {/* Notes gets a real multi-line editor — her notes are sentences
             (fit, care, occasion guidance the stylist reads), and a one-line
             input made editing them a horizontal-scroll exercise. */}
@@ -176,14 +203,16 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
             value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}/>
         </div>
 
-        <div style={{display:"flex",gap:10}}>
-          <div style={{flex:1}}>
+        {/* minWidth:0 lets each half shrink below its control's content width
+            on narrow screens instead of overflowing the page sideways. */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
             <div style={s.fieldLabel}>Material</div>
             <input style={{...s.input,width:"100%"}} placeholder="silk, wool, denim…"
               value={form.material}
               onChange={e=>setForm(f=>({...f,material:e.target.value}))}/>
           </div>
-          <div style={{flex:1}}>
+          <div style={{flex:1,minWidth:0}}>
             <div style={s.fieldLabel}>Pattern</div>
             <select style={{...s.select,width:"100%"}} value={form.pattern}
               onChange={e=>setForm(f=>({...f,pattern:e.target.value}))}>
@@ -216,7 +245,7 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
         </div>
         {TAXONOMY[form.category]?.length > 0 && (() => {
           const l2 = getSubcatL2(form.category, form.subcategory);
-          const l3Options = SUBCATEGORY_L3[l2] || [];
+          const l3Options = getL3Options(form.category, l2);
           const l3Val = (l2 && l2 !== form.subcategory) ? form.subcategory : "";
           return (
             <>
@@ -270,14 +299,35 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
           <option value="">— Not part of a set —</option>
           <option value="__new__">+ Create new set</option>
           {(() => {
-            // Build unique set IDs from items; count pieces in one pass.
+            // Build unique set IDs from items; count pieces in one pass. Sets
+            // have no closet of their own — they live wherever their member
+            // items do — so the picker offers only sets with at least one
+            // piece in THIS garment's closet (form.closet_id, so changing the
+            // Closet select re-scopes the list live). Owner report 2026-08-28:
+            // editing in Arizona listed every NYC set. A cross-closet twin
+            // (duplicate.js copies set_id) makes its set show in both closets,
+            // which is exactly right. The item's own set always stays listed.
             const counts = new Map();
+            const setClosets = new Map();
             (allItems || []).forEach(it => {
-              if (it.set_id) counts.set(it.set_id, (counts.get(it.set_id) || 0) + 1);
+              if (!it.set_id) return;
+              counts.set(it.set_id, (counts.get(it.set_id) || 0) + 1);
+              if (!setClosets.has(it.set_id)) setClosets.set(it.set_id, new Set());
+              setClosets.get(it.set_id).add(it.closet_id || DEFAULT_CLOSET_ID);
             });
-            const options = [...counts.entries()].map(([id, count]) => (
+            // Sorted by the label she actually reads, not by item-insertion
+            // order (which is what the counts Map hands back). Unnamed sets
+            // collect at the end rather than sorting under "U".
+            const options = [...counts.entries()]
+              .filter(([id]) => id === form.set_id || setClosets.get(id).has(form.closet_id))
+              .map(([id, count]) => ({ id, count, name: ((setsMetaProp || {})[id]?.name || "").trim() }))
+              .sort((a, b) => {
+                if (!a.name !== !b.name) return a.name ? -1 : 1;
+                return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+              })
+              .map(({ id, count, name }) => (
               <option key={id} value={id}>
-                {(setsMetaProp || {})[id]?.name || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
+                {name || "Unnamed Set"} ({count} piece{count !== 1 ? "s" : ""})
               </option>
             ));
             // A freshly minted set has no member rows yet, so no option above
@@ -319,6 +369,30 @@ export default function EditItemView({ item, allItems, onSave, onDelete, onBack,
             Show as individual piece in its own category (separable)
           </label>
         ) : null}
+      </div>
+
+      {/* Closet assignment (multi-closet, Phase A) — saving with a different
+          closet moves the piece there via the normal onSave path. */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>Closet</div>
+        <p style={s.settingsSub}>Which closet does this piece live in? Saving moves it.</p>
+        <div style={s.fieldLabel}>Closet</div>
+        <select style={{...s.select, width:"100%"}}
+          value={form.closet_id}
+          onChange={e => setForm(f => ({ ...f, closet_id: e.target.value }))}>
+          {(() => {
+            const list = (closets && closets.length > 0) ? closets : SEED_CLOSETS;
+            const options = list.map(c => (
+              <option key={c.id} value={c.id}>{c.name}{c.city ? ` — ${c.city}` : ""}</option>
+            ));
+            // Safety net: an id no listed closet matches (stale cache) still
+            // renders instead of the select silently showing the first option.
+            if (form.closet_id && !list.some(c => c.id === form.closet_id)) {
+              options.unshift(<option key={form.closet_id} value={form.closet_id}>Unknown closet</option>);
+            }
+            return options;
+          })()}
+        </select>
       </div>
 
       {/* "In Your Looks" — worn/planned/saved outfits featuring this piece,

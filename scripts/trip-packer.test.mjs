@@ -521,6 +521,68 @@ section("formality-band scoring");
   assert(bottom?.name === "Twill Short", "Casual day picks the formality-3 short over the formality-6 ponte");
 }
 
+// ── 15. Destination-closet preference (Phase B) ──────────────────────────────
+section("destination preference");
+{
+  const items = wardrobe();
+  // Equally-suitable pairs on a Warm Casual day: Ballet Flat / Suede Loafer /
+  // Sneaker all match preferShoeSub (+3); Canvas Tote / Leather Crossbody both
+  // match preferBagName (+2); the two Jeans and the nine tees are identical
+  // within their slots. The +2 preference must break each tie (margin 2 > the
+  // 0.6 jitter).
+  const loafer    = items.find(it => it.name === "Suede Loafer");
+  const crossbody = items.find(it => it.name === "Leather Crossbody");
+  const darkJean  = items.find(it => it.name === "Dark Straight Jean");
+  const tee7      = items.find(it => it.name === "Cotton Tee 7");
+  const preferItemIds = new Set([loafer.id, crossbody.id, darkJean.id, tee7.id]);
+  const { dailyOutfits } = buildDailyOutfits(items, [76], {
+    occasions: ["Casual"],
+    preferItemIds,
+  });
+  const day = dailyOutfits[0];
+  assert(day.find(it => it.category === "Shoes")?.id === loafer.id, "preferred shoe wins the tie");
+  assert(day.find(it => it.category === "Bags")?.id === crossbody.id, "preferred bag wins the tie");
+  assert(day.find(it => it.category === "Bottoms")?.id === darkJean.id, "preferred bottom wins the tie");
+  assert(day.find(it => it.category === "Tops")?.id === tee7.id, "preferred top wins the tie");
+}
+
+// Preference never blocks completion: a look that CAN'T be built from
+// preferred pieces still completes from the rest of the wardrobe.
+{
+  const items = wardrobe();
+  const preferItemIds = new Set(items.filter(it => it.category === "Tops").map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits(items, [76], {
+    occasions: ["Casual"],
+    preferItemIds,
+  });
+  const day = dailyOutfits[0];
+  assert(day.some(it => it.category === "Tops"), "tops-only preference still supplies the top");
+  assert(day.some(it => it.category === "Bottoms"), "bottoms complete from non-preferred pieces");
+  assert(day.some(it => it.category === "Shoes"), "shoes complete from non-preferred pieces");
+}
+
+// Preference never overrides occasion fit: a Dinner day still refuses the
+// preferred sneaker (avoidShoeSub -3 vs preferShoeSub +3 — a 6-point gap the
+// +2 bonus can't close).
+{
+  const items = wardrobe();
+  const sneaker = items.find(it => it.name === "White Leather Sneaker");
+  const { dailyOutfits } = buildDailyOutfits(items, [76], {
+    occasions: ["Dinner"],
+    preferItemIds: new Set([sneaker.id]),
+  });
+  const shoe = dailyOutfits[0].find(it => it.category === "Shoes");
+  assert(shoe && shoe.id !== sneaker.id && !/Sneaker|Sandal/i.test(shoe.subcategory),
+    "dinner day ignores the preferred sneaker");
+
+  // alternativesFor ranks preferred items first among equal scorers.
+  const loafer = items.find(it => it.name === "Suede Loafer");
+  const alts = alternativesFor(items, sneaker, {
+    weather: "Warm", occasion: "Casual", preferItemIds: new Set([loafer.id]),
+  });
+  assert(alts[0]?.id === loafer.id, "alternativesFor ranks the preferred swap first");
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\ntrip-packer: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

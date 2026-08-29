@@ -1,13 +1,13 @@
 // ── ITEM HELPERS ─────────────────────────────────────────────────────────────
 // Shared garment classifiers + item utilities: slotForItem (the slot
 // vocabulary), boot/hosiery/complete-set predicates, statement-piece detector,
-// weather filter, sort comparators, sleeve classifier, taxonomy migration,
-// and the server-wins mergeItems.
+// weather filter, color-filter predicate, sort comparators, sleeve classifier,
+// taxonomy migration, and the server-wins mergeItems.
 
-import { BAG_SUBCATEGORIES, BAG_NAME_RE, weatherMatches } from "../constants/taxonomy.js";
+import { BAG_SUBCATEGORIES, BAG_NAME_RE, ATHLEISURE_SUBCATEGORY_ALIASES, weatherMatches } from "../constants/taxonomy.js";
 import {
   COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT,
-  COLOR_FAMILY_RANGES, familyForColorString,
+  COLOR_FAMILY_RANGES, familyForColorString, effectiveColorFamily,
 } from "../constants/color.js";
 
 // ── NOTES POLICY ────────────────────────────────────────────────────────────
@@ -30,6 +30,11 @@ import {
 // reading full notes: matching copy is what a *search* should do.
 // stylistNotes() below is the PROMPT-side counterpart: a bounded digest so
 // long copy doesn't ride the uncached prompt body at full length.
+//
+// stylist_line (2026-08-20, migration 0018) is the designed end state from
+// the descriptions plan: a curated ≤200-char line stored NEXT TO the full
+// copy. When present it outranks notes for classifiers AND prompts —
+// promptNotes() below is the one helper prompt call sites should use.
 export const CURATED_NOTES_MAX = 200;
 // Prompt legend for READING notes, shared by every AI surface that shows the
 // model raw or digested notes (evaluateLook, builder chat, trip-day looks;
@@ -42,8 +47,34 @@ export const CURATED_NOTES_MAX = 200;
 export const NOTES_NEGATION_LEGEND =
   'Read her notes exactly as written: "for X" / "X only" says where a piece belongs; "NOT for X" / "never for X" / "no X" ONLY excludes it from X and implies nothing about anywhere else. E.g. "for casual or vacation — NOT FOR WORK" = great for casual/vacation, excluded from work. Never invert a negation.';
 export function classifierNotes(item) {
+  const line = item && item.stylist_line ? String(item.stylist_line).trim() : "";
+  if (line) return line.slice(0, CURATED_NOTES_MAX);
   const notes = item && item.notes ? String(item.notes) : "";
   return notes.length <= CURATED_NOTES_MAX ? notes : "";
+}
+
+// ── COMFORT / ACTIVEWEAR CODING ─────────────────────────────────────────────
+// Detects pieces that are athleisure/lounge in SPIRIT even when they're filed
+// under real-garment categories (her FP Movement sets live under Sets/Tops,
+// PopFlex skirts under Bottoms). Category gates alone kept letting leggings
+// and sports bras into "restyle this" surfaces and color-story exemplars
+// (owner, 2026-08-20 ×2). Signals: activewear brand, comfort-coded name, or
+// her own formality tag ≤2.
+const COMFORT_BRAND_RE = /fp movement|free people movement|popflex|beyond yoga|alo yoga|lululemon|l\*space/i;
+const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra|zip[- ]?up|athletic|swim|bikini|cover[- ]?up|lounge|pajama|sleep|cozy)\b/i;
+export function isComfortCoded(item) {
+  const f = Number(item?.formality);
+  if (Number.isFinite(f) && f <= 2) return true;
+  const text = `${item?.brand || ""} ${item?.name || ""}`;
+  return COMFORT_BRAND_RE.test(text) || COMFORT_NAME_RE.test(text);
+}
+
+// The notes text a PROMPT should carry for this item: her curated stylist
+// line when present, otherwise the bounded stylistNotes digest of the notes.
+export function promptNotes(item, { maxLen = PROMPT_NOTES_MAX } = {}) {
+  const line = item && item.stylist_line ? String(item.stylist_line).trim() : "";
+  if (line) return line.slice(0, maxLen);
+  return stylistNotes(item?.notes, { maxLen });
 }
 
 // Prompt digest for long notes. Curated notes (and anything ≤ maxLen) pass
@@ -112,8 +143,11 @@ export function getSleeveType(item) {
   // sleeve length, and "unknown" is NEVER weather-excluded — she layers, so
   // any sleeve works. Only a piece she has explicitly named/noted as
   // long-sleeve is treated as long (kept out of hot).
-  const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeve":"short", "Bra/Crop Top":"sleeveless" };
-  if (item.category === "Tops" && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
+  // Keys are Tops + Athleisure subcategory names (Athleisure's Long/Short
+  // Sleeves and Sports Bras are explicit sleeve declarations — sports bras are
+  // sleeveless). Athleisure rows carry the plural names post-0023/normalizeItem.
+  const SLEEVE_FROM_SUB = { "Tanks":"sleeveless", "T-Shirts":"short", "Polos":"short", "Short Sleeves":"short", "Long Sleeves":"long", "Sports Bras":"sleeveless" };
+  if ((item.category === "Tops" || item.category === "Athleisure") && SLEEVE_FROM_SUB[item.subcategory]) return SLEEVE_FROM_SUB[item.subcategory];
   const text = ((item.name || "") + " " + classifierNotes(item)).toLowerCase();
   if (/\b(sleeveless|tank|strap|strappy|strapless|halter|tube)\b/.test(text)) return "sleeveless";
   if (/\b(short.?sleeve|cap.?sleeve)\b/.test(text)) return "short";
@@ -126,7 +160,7 @@ export function getSleeveType(item) {
 // Single source of truth for "which slot does this garment fill." Used by the
 // sampler (rotation buckets + lower-half availability) and the manual builder
 // (canvas slots). Previously each place had its own regex and they disagreed —
-// e.g. Athleisure "Leggings"/"Skort" fell through to "tops". Returns builder-
+// e.g. Athleisure "Leggings"/"Skirts" fell through to "tops". Returns builder-
 // vocabulary slots: top | bottom | dress | set | swim | outerwear | shoes | bag
 // | accessory.
 export function slotForItem(item) {
@@ -143,7 +177,7 @@ export function slotForItem(item) {
   if (cat === "Tops" || cat === "Knits") return "top";
   if (cat === "Athleisure" || cat === "Loungewear") {
     if (/dress|romper|jumpsuit/.test(sub)) return "dress";
-    // Test TOP signals BEFORE the bottom regex — "Short Sleeve" contains
+    // Test TOP signals BEFORE the bottom regex — "Short Sleeves" contains
     // "short" and would otherwise classify a tee as a bottom (same ordering
     // fix as styling-validator's getGarmentRole and EditorialCollage).
     if (/sleeve|bra|crop|hoodie|sweatshirt|tank|top/.test(sub)) return "top";
@@ -184,7 +218,7 @@ export function isCompleteSetItem(item) {
 //   + Ankle/Knee-High/Over-the-Knee (L3), plus anything whose name reads
 //   boot/bootie.
 export const HEEL_SUBS = new Set(["Heels", "Block", "Kitten", "Stiletto", "Pumps", "Mules", "Slingback", "Slingbacks", "Wedges"]);
-export const BOOT_SUBS = new Set(["Boots", "Ankle", "Knee-High", "Over-the-Knee"]);
+const BOOT_SUBS = new Set(["Boots", "Ankle", "Knee-High", "Over-the-Knee"]);
 export function isBootItem(item) {
   if (!item) return false;
   return BOOT_SUBS.has(item.subcategory) ||
@@ -197,6 +231,23 @@ export function isBlazerItem(item) {
   if (!item || item.category !== "Outerwear") return false;
   return item.subcategory === "Blazers" || /\bblazers?\b/i.test(item.name || "");
 }
+// ── SANDAL FORM ─────────────────────────────────────────────────────────────
+// "Is this shoe an open sandal-form?" — wherever it's FILED. Her closet stores
+// heeled thongs and sandal-mules under Kitten/Block (heels shelves), so a
+// literal `subcategory === "Sandals"` test misses them (owner screenshot
+// 2026-08-19: a heeled thong sandal filed under Kitten reached a Work look
+// straight past the Work sandal ban). Name AND curated notes count — her
+// "Leather Mules" carry "thong sandal" only in the note. Bare "mule" is
+// deliberately NOT a match: a closed-toe mule isn't an open shoe; hers match
+// via their own thong/sandal wording. Shared by the Sandals filter chip, the
+// occasion sandal-form ban (styling.js `banned.sandalForms`), and the
+// cool/cold weather gates in filterByWeather + the closet-sampler.
+export const SANDAL_FORM_RE = /\b(sandal|slide|thong)s?\b|\bflip[ -]?flops?\b/i;
+export function isSandalFormItem(item) {
+  if (!item || item.category !== "Shoes") return false;
+  if (item.subcategory === "Sandals") return true;
+  return SANDAL_FORM_RE.test((item.name || "") + " " + classifierNotes(item));
+}
 // ── HOSIERY ─────────────────────────────────────────────────────────────────
 // Tights/stockings live under Accessories > Hosiery (L3: Sheer / Semi-Opaque /
 // Opaque / Fishnet). Single source of truth for "is this a legwear layer" —
@@ -204,7 +255,7 @@ export function isBlazerItem(item) {
 // styling-validator (statement / item-count exemptions), and filterByWeather
 // below. Category-gated to Accessories so a fishnet top or "tight" fit note
 // on a garment never matches.
-export const HOSIERY_SUBS = new Set(["Hosiery", "Sheer", "Semi-Opaque", "Opaque", "Fishnet"]);
+const HOSIERY_SUBS = new Set(["Hosiery", "Sheer", "Semi-Opaque", "Opaque", "Fishnet"]);
 export function isHosieryItem(item) {
   if (!item || item.category !== "Accessories") return false;
   if (HOSIERY_SUBS.has(item.subcategory)) return true;
@@ -227,7 +278,7 @@ export function isHosieryItem(item) {
 // slingback whose pattern got auto-detected as "denim", or a leather bag
 // tagged "leather"). Now it's a whitelist of pattern values that genuinely
 // read as statement.
-export const STATEMENT_PATTERNS = new Set([
+const STATEMENT_PATTERNS = new Set([
   "striped", "stripe", "stripes",
   "plaid", "tartan", "houndstooth", "gingham", "windowpane", "check", "checked", "chevron", "argyle",
   "floral", "botanical",
@@ -348,7 +399,7 @@ export function filterByWeather(items, weather) {
       if (it.category === "Outerwear" && !isLightOuter) return false;
     }
     if (isMild) {
-      if (it.subcategory === "Sandals") return false;
+      if (isSandalFormItem(it)) return false; // form-aware: thongs filed under Kitten/Block too
       // Mild = spring/fall layering. Wool blazers and trenches are fine, but
       // dead-of-winter pieces (parka, puffer, sherpa, shearling, fleece) read
       // as a costume mismatch. Same for items the user tagged Winter-only.
@@ -362,11 +413,34 @@ export function filterByWeather(items, weather) {
       // No sleeve-based top exclusion — a sleeveless/short top layered under a
       // coat or blazer is exactly how she dresses for the cold. Fabric/season
       // still filtered; the stylist adds the outer layer.
-      if (it.subcategory === "Sandals") return false;
+      if (isSandalFormItem(it)) return false; // form-aware: thongs filed under Kitten/Block too
       if (it.subcategory === "Shorts") return false;
     }
     return true;
   });
+}
+
+// ── COLOR FILTER PREDICATE ──────────────────────────────────────────────────
+// The one place the color chips are matched against an item. Shared by the
+// closet item grid and the Sets view (a set matches when ANY member item
+// does), so the two can't drift apart.
+// The chip array mixes two vocabularies: color FAMILIES and the denim "wash"
+// chips (Light/Medium/Dark/Black Wash). A wash is not a family —
+// effectiveColorFamily never returns a "…Wash" string, so matching on family
+// alone filtered the wash chips to zero results. Wash tokens are matched as a
+// substring of the item's color/notes/name instead.
+export function matchesColorFilter(item, colors) {
+  if (!colors?.length) return true;
+  // Family is derived from the actual color string when possible, so a "Gray"
+  // item saved with the legacy "Neutral" family resolves to "Gray" and stays
+  // out of the Neutrals bucket.
+  if (colors.includes(effectiveColorFamily(item))) return true;
+  const washSel = colors.filter(c => /wash/i.test(c));
+  if (washSel.length) {
+    const text = ((item?.color || "") + " " + (item?.notes || "") + " " + (item?.name || "")).toLowerCase();
+    if (washSel.some(w => text.includes(w.toLowerCase()))) return true;
+  }
+  return false;
 }
 
 // ── COLOR SORT INDEX ────────────────────────────────────────────────────────
@@ -374,7 +448,7 @@ export function filterByWeather(items, weather) {
 // shade name first, then derive a family from the free-form color string
 // and use the family's start-of-range index as a fallback. Items with no
 // recognizable color land at the end of the sort.
-export function colorSortIdx(item) {
+function colorSortIdx(item) {
   const cf = item.color_family || "";
   if (COLOR_SORT_ORDER[cf] !== undefined) return COLOR_SORT_ORDER[cf];
   const c = (item.color || "").trim();
@@ -421,6 +495,13 @@ export function normalizeItem(item) {
   }
   if (item.category === "Accessories" && (item.subcategory === "Belts" || /\bbelt\b/i.test(item.name))) {
     item = { ...item, category: "Belts", subcategory: "" };
+  }
+  // Athleisure subcategory consolidation (2026-08-28): retired labels
+  // (Bra/Crop Top, Sports Bra, Pants, Skort, Long/Short Sleeve) fold into
+  // their plural buckets. Runs on every localStorage load and mergeItems, so
+  // legacy rows read correctly even before migration 0023 rewrites them.
+  if (item.category === "Athleisure" && ATHLEISURE_SUBCATEGORY_ALIASES[item.subcategory]) {
+    item = { ...item, subcategory: ATHLEISURE_SUBCATEGORY_ALIASES[item.subcategory] };
   }
   if (!item.created_at) item = { ...item, created_at: "2025-01-01T00:00:00.000Z" };
   return item;
@@ -479,8 +560,26 @@ export function mergeItems(sbItems, localItems) {
 // resolving many looks don't rescan the items array per id; the String()
 // key normalizes numeric-vs-string id drift. Missing ids (deleted items)
 // drop out silently.
+//
+// The id index is cached per items-ARRAY-IDENTITY (WeakMap): App treats the
+// closet immutably (every mutation replaces the array), so identity is a
+// correct cache key, and callers resolving many looks against one closet —
+// a 50-card Saved list, the calendar's 42-cell grid — pay the ~470 Map
+// inserts once instead of per call. A stale-by-mutation entry is impossible
+// unless someone mutates `items` in place; don't.
+const _idIndexCache = new WeakMap();
+export function itemIdIndex(items) {
+  if (!Array.isArray(items)) return new Map();
+  let byId = _idIndexCache.get(items);
+  if (!byId) {
+    byId = new Map(items.map(it => [String(it.id), it]));
+    _idIndexCache.set(items, byId);
+  }
+  return byId;
+}
+
 export function resolveItemIds(items, ids) {
-  const byId = new Map(items.map(it => [String(it.id), it]));
+  const byId = itemIdIndex(items);
   return (ids || [])
     .map(raw => byId.get(String(typeof raw === "object" && raw !== null ? raw.id : raw)))
     .filter(Boolean);
@@ -493,7 +592,7 @@ export function resolveItemIds(items, ids) {
 // used a broken `indexOf(x) ?? 99` compare (indexOf returns -1, never null),
 // so unknown categories (including "Knits", missing from those copies)
 // sorted FIRST instead of last.
-export const CATEGORY_DISPLAY_ORDER = ["Outerwear","Dresses","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
+const CATEGORY_DISPLAY_ORDER = ["Outerwear","Dresses","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Scarves"];
 
 // Returns a NEW array sorted by CATEGORY_DISPLAY_ORDER; unknown categories
 // sink to the end. Stable within a category (Array.prototype.sort is stable).

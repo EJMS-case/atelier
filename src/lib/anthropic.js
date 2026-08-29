@@ -2,10 +2,29 @@
 // Centralizes the auto-detect call for new closet photos. Structured output is
 // produced via Anthropic tool-use + a Zod runtime schema (see ai/schemas.js).
 
+import { z } from "zod";
 import { invokeTool } from "./ai/toolUse.js";
 import { AutoDetectSchema, AutoDetectTool } from "./ai/schemas.js";
 import { TAXONOMY } from "../constants/taxonomy.js";
 import { MODEL_FAST } from "../constants/models.js";
+
+// `name` is a bulk-add convenience (proposed title), not part of the shared
+// wardrobe-item contract in ai/schemas.js — extend locally. The Zod extension
+// is required, not just tidy: z.object strips unknown keys, so without it the
+// model's name would be silently dropped before sanitize() ever saw it.
+const AutoDetectNameSchema = AutoDetectSchema.extend({
+  name: z.string().nullable().default(null),
+});
+const AutoDetectNameTool = {
+  ...AutoDetectTool,
+  input_schema: {
+    ...AutoDetectTool.input_schema,
+    properties: {
+      ...AutoDetectTool.input_schema.properties,
+      name: { type: ["string", "null"] },
+    },
+  },
+};
 
 // ── F1: AUTO-DETECT CLOTHING ITEM FROM PHOTO ─────────────────────────────────
 // Returns a structured object matching the wardrobe_items schema. The caller
@@ -24,6 +43,7 @@ TAXONOMY:
 ${JSON.stringify(AUTODETECT_TAXONOMY, null, 2)}
 
 RULES:
+- \`name\` is a short catalog title: color + defining feature + garment type, max 6 words, lowercase except proper nouns (e.g. "light cobalt flared leggings", "ivory bouclé cardigan").
 - \`category\` must be one of the top-level keys above.
 - \`subcategory\` must be one of that category's values, or "" if the category has none or you can't tell.
 - If it's a bag (any shape), use category "Bags" (not "Accessories"). Belts use "Belts". Shoes use "Shoes".
@@ -62,8 +82,8 @@ export async function autoDetectItem(base64DataUrl, apiKey, opts = {}) {
         { type: "image", source: { type: "base64", media_type: mime, data } },
         { type: "text", text: DETECT_PROMPT },
       ],
-      tool: AutoDetectTool,
-      schema: AutoDetectSchema,
+      tool: AutoDetectNameTool,
+      schema: AutoDetectNameSchema,
       kind: "autodetect_item",
       signal: opts.signal,
     });
@@ -79,6 +99,9 @@ export async function autoDetectItem(base64DataUrl, apiKey, opts = {}) {
 function sanitize(raw) {
   const validCats = new Set(Object.keys(AUTODETECT_TAXONOMY));
   const out = {
+    // Proposed display title — capped so a runaway model sentence can't
+    // become the item name.
+    name: cap(str(raw.name), 60),
     category: validCats.has(raw.category) ? raw.category : null,
     subcategory: "",
     primary_color: str(raw.primary_color),
@@ -98,5 +121,9 @@ function str(v) {
   if (typeof v !== "string") return null;
   const t = v.trim();
   return t && t.toLowerCase() !== "null" && t.toLowerCase() !== "n/a" ? t : null;
+}
+
+function cap(v, max) {
+  return typeof v === "string" && v.length > max ? v.slice(0, max).trim() : v;
 }
 

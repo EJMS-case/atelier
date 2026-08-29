@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, TAXONOMY, SUBCATEGORY_L3, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { COLOR_FAMILIES } from "../constants/color.js";
 
 export default function FilterBar({ items, activeFilters, onChange }) {
@@ -31,8 +31,13 @@ export default function FilterBar({ items, activeFilters, onChange }) {
   const clearAll = () => onChange({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });
   const hasActive = Object.values(activeFilters).some(v => Array.isArray(v) ? v.length > 0 : !!v);
 
-  // Unique brands from wardrobe
-  const brands = [...new Set(items.map(it => it.brand).filter(Boolean))].sort();
+  // Unique brands from wardrobe — memoized: brandSearch is local state, so
+  // every keystroke re-renders this component and used to re-scan + re-sort
+  // the whole closet.
+  const brands = useMemo(
+    () => [...new Set(items.map(it => it.brand).filter(Boolean))].sort(),
+    [items],
+  );
   const filteredBrands = brands.filter(b => b.toLowerCase().includes(brandSearch.toLowerCase()));
 
   // Subcategories: TWO-LEVEL (owner request 2026-08-13 — "sub categories
@@ -54,12 +59,14 @@ export default function FilterBar({ items, activeFilters, onChange }) {
     if (!singleCat) return [];   // only show for single-category selection
     return (TAXONOMY[singleCat] || []).filter(sub =>
       items.some(it => it.category === singleCat &&
-        (it.subcategory === sub || (SUBCATEGORY_L3[sub] || []).includes(it.subcategory)))
+        (it.subcategory === sub || getL3Options(singleCat, sub).includes(it.subcategory)))
     );   // preserve TAXONOMY order instead of sorting alphabetically
   })();
   const childOptions = (() => {
     if (!singleCat || !selectedL2) return [];
-    return (SUBCATEGORY_L3[selectedL2] || []).filter(l3 =>
+    // getL3Options is category-aware: Athleisure "Skirts" has no Mini/Midi/
+    // Maxi children — that axis belongs to Bottoms alone.
+    return getL3Options(singleCat, selectedL2).filter(l3 =>
       items.some(it => it.category === singleCat && it.subcategory === l3)
     );
   })();

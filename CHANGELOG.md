@@ -2,6 +2,318 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Black Cherry reads purple; sets sort by type and honour the colour filter — 2026-08-28
+
+### Why
+Owner reports: (1) her Black Cherry athleisure filtered as Red but the dye reads purple; (2) the set picker in the item editor came out in a random order; (3) the Sets view should lead with work sets and end with lounge/athleisure; (4) the colour chips did nothing in the Sets view.
+
+### Changed
+- **Colour** (`constants/color.js`): `Black Cherry` is now a shade of **Purple**. The compound name is its own colour — the bare shade `Cherry` and Burgundy/Wine/Oxblood stay Red. Two matching fixes make that hold: shade names are tested **longest-first** (the old insertion-order loop found the `cherry` inside `black cherry` and returned Red), and hyphens/underscores normalize to spaces so every spelling resolves. Migration `0024` clears the stale `color_family` on the stored rows; `effectiveColorFamily` already prefers the colour string, so filtering was right either way.
+- **Set picker** (`EditItemView`): options sort alphabetically by the label the user reads (case-insensitive), unnamed sets last instead of under "U". The closet-scoping filter is unchanged.
+- **Sets view sorting** (`features/closet/setType.js`, new): sets rank by what they're FOR — Work, Formal, Evening, Date Night, Travel, Vacation, Weekend, Casual, Seasonal, Other, then **Lounge & Active** last. The comfort bucket is derived (every member in Athleisure/Loungewear) and an explicit tag always beats it; multi-tag sets take their best rank; ties break by name with unnamed last. `By Type` is the new default sort. A–Z now shares the same name comparator, so unnamed sets stop sorting as the literal string "Set".
+- **Colour filter in the Sets view**: the FilterBar chips stay visible there, so they now filter — a set matches when any member item does. The item grid's colour predicate (families **plus** the denim wash chips, which are not families) moved into one shared `matchesColorFilter` in `utils/item-helpers.js` and both call sites use it, so the two can't drift. The empty state now also fires when a colour filter is what emptied the list.
+- **Migration 0025** — re-sweep of the 0023 Athleisure consolidation. 0023 cleaned the table, but the app ran the pre-merge build for ~2.5h afterwards: its pickers still offered the retired labels and its syncs wrote them back (14 rows had reverted to `Sports Bra`, plus `Skort`/`Pants`/`Long Sleeve`, and newly added pieces were created with the old names). The shipped build's `normalizeItem` closes the loop so a client can't push an old name up again. Also folds the Bottoms length axis (`Mini`/`Midi`/`Maxi`) where it had leaked onto Athleisure rows — both live examples are named "Skort" — and those aliases join `ATHLEISURE_SUBCATEGORY_ALIASES` so the client self-heals them too.
+
+### Tests
+New `scripts/color-family.test.mjs` (Black Cherry in every spelling → Purple, plain Reds unaffected, stale stored family overridden, no regressions elsewhere) and `scripts/set-sorting.test.mjs` (type order, tag-beats-derived, tie-breaks, shared colour predicate incl. a denim-wash case), both wired into `npm test`. Full chain + build green.
+
+## [Unreleased] — Closet-scoped set picker; upload pipeline no longer freezes the page — 2026-08-28
+
+### Why
+Owner reports: (1) editing a garment while in the Arizona closet listed every NYC set in the Coord Set picker; (2) the bulk-add screen says "you can edit any field while waiting" but on iPhone nothing was tappable while photos processed.
+
+### Changed
+- **Coord Set picker** (`EditItemView`): sets have no closet of their own — they live wherever their member items do — so the picker now offers only sets with at least one piece in the garment's chosen closet (`form.closet_id`, re-scoping live when the Closet select changes). A cross-closet twin (duplicate.js copies `set_id`) correctly surfaces its set in both closets; the item's own set always stays listed. `EditItemView` keeps receiving the full wardrobe — scoping by the *item's* closet, not the device's active closet, is what makes editing an NYC item from Arizona behave.
+- **Bulk-add pipeline** (`BulkAddView`): the freeze was real — every photo ran full-resolution main-thread pixel scans (remove.bg matte assessment + transparent-border trim on ~12MP images), all files concurrently, with multi-MB base64 strings re-rendering on each keystroke. Photos now downscale to `PHOTO_MAX_DIM` immediately after read (stored cutouts were capped there anyway, so nothing kept is lost), the full-res image never enters state, remove.bg and the detect call upload the small image, and at most 2 pipelines run at once (`withPipelineSlot`). Rows appear instantly with every field editable; the thumbnail fills in when the downscale lands. Save requires name + a landed photo so a still-empty row can't store an imageless item.
+
+## [Unreleased] — Athleisure subcategory consolidation (plural-only) — 2026-08-28
+
+### Why
+Owner request: the Athleisure subcategory list had drifted into a mix of singular/plural and overlapping buckets. It is now exactly Dresses / Leggings / Long Sleeves / Short Sleeves / Shorts / Skirts / Sports Bras (plural-only, alphabetical).
+
+### Changed
+- **Taxonomy** (`constants/taxonomy.js`): retired labels map to their new buckets via the exported `ATHLEISURE_SUBCATEGORY_ALIASES` (Bra/Crop Top + Sports Bra → Sports Bras, Pants → Leggings, Skort → Skirts, Long/Short Sleeve → Long/Short Sleeves). New category-aware `getL3Options(category, l2)` keeps the Bottoms-only L3 axes (Jeans/Trousers/…, Mini/Midi/Maxi) from leaking into Athleisure — `getSubcatL2`, FilterBar's L3 chip row, and the builder's child chips all resolve through it now.
+- **Client migration**: `normalizeItem` applies the alias map to Athleisure rows on every localStorage load and merge, so legacy rows read correctly everywhere before the DB is touched.
+- **Migration 0023** (`0023_athleisure_subcategories.sql`): one guarded UPDATE rewriting `wardrobe_items` rows with `category='Athleisure'` per the same map.
+- **Classifiers**: `getSleeveType`'s subcategory map speaks the plural names and now covers Athleisure (Sports Bras → sleeveless, Long Sleeves → long); `SLEEVE_SORT` gains the plural keys. Slot/role regexes (slotForItem, validator, collage, style filters) already match the plurals by substring — verified, comments refreshed.
+
+### Tests
+`taxonomy.test.mjs` grows alias/normalizeItem + getL3Options + getSubcatL2 coverage; style-filters fixtures and the matrix closet use the new names. Full battery + build green.
+
+## [Unreleased] — Duplicate athleisure/lounge pieces into the other closet — 2026-08-26
+
+### Why
+Owner request: many athleisure and lounge pieces were bought in twos — one kept in NYC, one at mom's in Arizona — and cataloguing the Arizona twin meant re-photographing and re-entering it. She also asked that the option disappear once a piece has been duplicated.
+
+### Added
+- **Migration 0022** (applied live): `wardrobe_items.duplicate_of` (text — the base table's id column is text, FK → wardrobe_items ON DELETE SET NULL) — stamped on the copy, pointing at its source. This one nullable column is the whole "offer once" mechanism: the ⧉ button hides on any item that has a twin or is one, and deleting either side re-offers it on the survivor.
+- **⧉ button on wardrobe cards** (Athleisure + Loungewear only — the categories she doubles; the gate is `DUPLICATABLE_CATEGORIES` in `features/closet/duplicate.js` if she wants more): two-tap confirm like delete, then the item copies into the other closet (NYC ↔ Arizona) with a fresh id, `duplicate_of` link, zeroed wear history, re-stamped created_at, and everything else verbatim.
+- **`sb.copyImage`**: server-side Storage copy so the twin owns its own image object — deleting the original (which removes its image) can't blank the twin's photo. Falls back to sharing the source URL if the copy fails; thumbs regenerate lazily per the new id.
+- Pure logic in `src/features/closet/duplicate.js`; insert rides the existing `addItems` path (optimistic state, pending_sync, sync flash — no new persistence code).
+
+### Tests
+duplicate 23 (new `npm run test:duplicate`, wired into the battery); full battery + build green.
+
+## [Unreleased] — Multi-closet Phase B: trips bridge the closets, packing is outfit-first — 2026-08-25
+
+### Why
+Owner brief Phase B (owner: "Go ahead with phase B!"). Trips are the temporary bridge between closets: in Arizona she dresses from mom's closet + whatever she packed, as one flat pool; the packing list exists only because specific outfits need specific pieces.
+
+### Added
+- **Migration 0021** (applied live): trips gains `user_id` / `destination_closet_id` / `destination_city` / `status` (planning | active | complete — existing 4 trips backfilled); new `trip_items` (trip_id, item_id, status suggested | packed | left_behind, `outfit_ids` linking each piece to the outfits that require it).
+- **THE pool rule** (`useVisibleWardrobe.js`, unit-tested): no active trip → active closet; active trip → destination closet ∪ packed items (suitcase-only when no destination closet). App's one scoping memo delegates to it; the header chip shows ✈ trip mode and explains that closet switches wait until the trip ends.
+- **Outfit-first packing**: the trip packer and per-day AI generation prefer pieces already at the destination (`PREFER_BONUS` calibrated under occasion/capsule penalties, over tie-jitter/reuse); only what a look can't source there gets pulled from home. Pinning a trip records every pulled piece as a 'suggested' trip_item with its outfit links; TripModal's packing preview shows pulled-only + an "already at destination" count.
+- **Packing checklist** (TripDetailView): tick = packed, untick = suggested (optimistic, reverting). **Unticking regenerates every outfit that depended on the piece** (pool = destination ∪ packed ∪ suggested minus it) and a single reconcile site (`packingSync.js`, 25 tests) keeps trip_items ≡ outfit references — a piece no outfit needs leaves the list (packed ones surface "no longer needed — unpack it"). Close suitcase = "Everything's packed" or "Close with N unpacked" (regenerates around them).
+- **Trip lifecycle**: Start trip (blocks if another is active — strict read, fails closed) → ✈ active; Mark complete → **"Anything staying in <destination>?"** modal over packed pieces: flagged → left_behind + `closet_id` permanently moved to the destination closet; everything else needs no change (packing never moved closets). Pool reverts to the active closet.
+- **🧳 badge** on wardrobe-grid cards for packed pieces during an active trip; **"⚠ split across closets"** flag on set cards whose members span closets (surface only — no auto-fix, no blocking).
+
+### Review pass
+Independent review found four issues, fixed: a pending reconcile could mutate a just-completed trip (status now read through a ref + effect dep), a reconcile upsert could clobber a concurrent 'packed' tick (existing rows now get outfit_ids-only PATCHes), the one-active-trip guard silently passed on read failure (now strict), and a third copy of the temperature-fallback chain (deduped).
+
+### Tests
+packing-sync 25, visible-wardrobe 12, trip-packer 73 (+12 preference); full battery + build green.
+
+## [Unreleased] — Multi-closet Phase A: NYC + Arizona closets, one mode switch — 2026-08-24
+
+### Why
+Owner brief: part of the wardrobe lives at her mom's in Arizona (Scottsdale — confirmed with her). One wardrobe split across two rooms; the app should only show the room she's standing in. Phase A is the closets layer; Phase B (trips + outfit-first packing) follows after her report-back.
+
+### Added
+- **Migrations 0019/0020** (applied to live DB after a verified backup — `/backups/*_20260824T204441Z.json` + DB snapshots `*_backup_20260824`, counts 480/41/101 confirmed): `closets` table (NYC default + Arizona — Mom's, fixed ids, per-closet lat/lon/timezone) and `wardrobe_items.closet_id`, backfilled to NYC (480/480 verified), then NOT NULL with NYC default so the deployed client keeps working.
+- **Header closet chip** — a mode switch next to the brand, not a filter: popover lists closets (✓ + city); switching flips the app's entire universe and persists per device (`atelier:active-closet:v1`).
+- **One scoping point**: `closetItems` memo in App is THE place closet filtering happens; grid, search, FilterBar, sets, Style Me, planner, Home, Saved, Insights, Shopping, profile/discovery/vision/color views all consume it. Full `items` reserved for sync machinery and Settings' closet-agnostic orphan scan (`sb.fetchAll` stays unfiltered — mergeItems would prune other closets from the local cache otherwise).
+- **Edit form "Closet" select** (moves a piece on save) and **bulk move**: Select toggle on the closet grid → tap-to-✓ cards → sticky bar "Move to <closet>" via one `id=in.(…)` PATCH (`sb.setClosetBulk`), optimistic with targeted revert on failure.
+- **Weather follows the active closet** (`fetchClosetForecast`, per-closet cache keys): Style Me auto-chip, planner pill + day-assign suggestion (label now shows the closet's city), and Home's Back-in-Rotation season filter all read Scottsdale when the Arizona closet is active. Trip destination forecasts unchanged.
+- New items (add/bulk-add) land in the active closet; `closet_id` missing locally = NYC.
+
+### Out of scope (per brief)
+Geolocation, outfit_logs changes, third closet types, anything in Style Intelligence/Shopping beyond scoping. Phase B (trips/packing) not started — trips table will be EXTENDED (owner-confirmed), not replaced.
+
+### Tests
+Full battery (19 suites) + build green.
+
+## [Unreleased] — Sky-blue swatch fix; combos freed from the palette rule (chic-only, no neons) — 2026-08-20
+
+### Why
+Owner: "This isn't sky blue!" — the Sky Blue + Navy swatch rendered two navy dots. And a standing-preference correction: the Dark Winter palette must NOT constrain color pairings — only the garment nearest the face needs to flatter her coloring ("gray isn't my color, but gray pants under a burgundy top works"). Include every chic pairing; the only exclusion is neons.
+
+### Fixed
+- **`hexForColorLabel`**: exact-name lookup first, shades overriding same-named families, explicit entries for multi-word labels. The old longest-substring match resolved "Sky Blue" to the *Blue family's* anchor hex — which is navy. Tested (`Sky Blue ≠ #1B2A4A`).
+- **Her hand-picked pairs are no longer hidden from Home's Color Stories** — the manual-list exclusion made favorites like Burgundy + Navy invisible (the exclusion survives only in Style Profile's add-suggestions, where duplicates are pointless).
+
+### Changed
+- **Combo taste rule rewritten**: any chic pairing qualifies; neons are the only exclusion; Dark Winter is explicitly not a constraint (her color-near-face heuristic recorded in the library header). Eight new combos including her requests — **Charcoal + Burgundy**, **Burgundy + Sky Blue** — plus Camel + Burgundy, Olive + Black/Ivory/Camel, Lavender + Charcoal. Library at 51; Home shows 8 stories. Hers today: Deep Teal + Navy, Burgundy + Navy, Cherry Red + Cobalt, Sky Blue + Navy, Burgundy + Sky Blue, Cherry Red + Blush, Navy + Blush, Navy + Black.
+
+### Tests
+coverage 13 → 15 (swatch hexes, no-exclude visibility); full battery (250) + build green; verified visually against her data.
+
+## [Unreleased] — Color Stories: swatches only, more pairings; Shop Smarter to the bottom — 2026-08-20
+
+### Why
+Owner: the clothing thumbnails on Color Stories sometimes read as the wrong color (stored color vs photo mismatch) and weren't tappable — "omit the icons of clothing and just have the swatches"; she wants MORE chic pairings; and Shop Smarter should live at the bottom of Home.
+
+### Changed
+- **Color Stories are swatch-led now**: piece thumbnails removed; swatch dots enlarged (26px); an explicit "Tap a pairing and the stylist builds the look around it" hint added (the whole card was always tappable — now it says so). Six stories instead of four.
+- **Combo library 29 → 43**: fourteen more Dark-Winter-safe pairings across seasons (Navy + Chocolate, Emerald + Black, Cobalt + Black, Wine + Fuchsia, Gray + Blush, Camel + Black, White + Cherry, Deep Teal + Navy, Plum + Blush, Espresso + Camel, Sky + Navy tonals, Emerald + Chocolate, Charcoal + Camel…). Her Home today: Deep Teal + Navy, Cherry Red + Cobalt, Sky Blue + Navy, Cherry Red + Blush, Navy + Blush, Navy + Black.
+- **Shop Smarter moved to the bottom of Home** (after Back in Rotation) — dressing sections first, shopping last.
+
+### Tests
+Full battery (248) + build green; verified visually against her real data.
+
+## [Unreleased] — Chat replies cut mid-sentence: Sonnet 5's default thinking rides max_tokens — 2026-08-20
+
+### Why
+Owner screenshot: every builder-chat reply cut off mid-sentence ("This whole chat is getting cut off"). Root cause (confirmed against the current API reference): **Sonnet 5 runs adaptive thinking by default even when the request doesn't ask for it**, and those invisible thinking tokens count against `max_tokens`. The chat's 600-token cap was mostly consumed by thinking; the visible reply got the remainder. Every `MODEL_STRONG` (Sonnet 5) call site with a tight cap had the same latent bug — including the 2026-08-19 evaluator "truncation" saga, which was this in disguise.
+
+### Fixed
+- **Builder chat**: `max_tokens` 600 → 4000 + `output_config: {effort: "low"}` — shallow thinking keeps replies starting fast (it's a conversation, not the evaluator) and the budget can no longer starve the visible text.
+- **Evaluate look**: 1400 → 3000 (the JSON needs ~700 tokens; thinking needs the rest).
+- **Shopping recs**: gaps 3000 → 5000, completions 2500 → 4000 (truncated tool input was burning the empty-retry).
+- **Brand Atlas**: main run 8000 → 10000, finish-round 2500 → 4000 (search results AND thinking ride the output budget).
+
+### Notes
+- All raw-fetch call sites on `MODEL_STANDARD` (Sonnet 4.6) are unaffected — that model only thinks when asked.
+
+## [Unreleased] — Round 3: color stories are styleable clothes only; occasionwear rests; Gap Analysis on Home — 2026-08-20
+
+### Why
+Owner's screenshot review of round 2: the same pink blouse fronted two color stories, "Cobalt" was represented by an athletic dress and "Forest" by leggings + a sports bra, the challenge suggested a cocktail dress she'd only wear to fancy events, and "gap analysis still missing" — it was buried in Settings → More Tools where she never found it.
+
+### Fixed
+- **Color-story matching now counts styleable pieces only**: new shared `isComfortCoded` (item-helpers — activewear brand / comfort-coded name / her own formality ≤2) + a category gate (no Athleisure/Lounge/Swim/Occasionwear) applied inside `comboOwnership`, so a pairing can neither qualify NOR be illustrated by activewear. With her closet: Forest + Burgundy correctly disappears (its green side was leggings), Navy + Black takes the slot. Shoes/bags/accessories stay eligible — a navy bag legitimately carries a navy story.
+- **Story exemplars dedupe across cards** — the same blouse can no longer front two pairings.
+- **Occasionwear excluded from resurface surfaces** (Back in Rotation + challenge + try-instead): cocktail dresses and gowns rest by design. Her resting pool: 26 → 19.
+- **"Try instead" swaps stay within the garment's L2 group** — a pencil skirt's alternatives are skirts, not shorts.
+- **"PLANNED FOR TODAY · Today" redundancy dropped.**
+
+### Added
+- **SHOP SMARTER cluster on Home**: Brand Atlas + a new **Gap Analysis** entry (it now opens Shopping directly — previously reachable only via Settings → More Tools). Both rows render from local data; verified via the Playwright harness that the tap lands on the numbers panel — with her real closet it opens on "Bags: no navy · white · green".
+- Coverage-panel failures now log to console instead of silently rendering nothing.
+
+### Tests
+- Full battery (248) + build green; Home and Shopping verified visually against her real data (mocked-network Playwright harness).
+
+## [Unreleased] — Round 2 on the Home/chatbot audit (owner feedback, same day) — 2026-08-20
+
+### Why
+Owner reviewed the deployed build and was unimpressed, with specifics: still a big blank spot on Home; Brand Atlas ran long then failed; resurface suggestions included tees/lounge/swim/athleisure and weren't weather-relevant; Color Stories "lame and seriously lacking"; Style Profile belongs in Settings with her measurements; "gap analysis didn't move". This round was diagnosed with EYES: her real closet/plans/logs were exported and the app rendered locally under Playwright with the network mocked — the before screenshot showed a 4,120-px page whose bottom third was a wall of 12 huge white resting-item cards, plus a duplicate REDISCOVER strip inside the review card.
+
+### Fixed
+- **The blank spot**: Back in Rotation is now ONE compact horizontal scroller (88-px tap-to-style tiles, cap 10) instead of a 12-card grid; the duplicate REDISCOVER strip in LookBackCard is gone (it repeated the same resting pieces). Page height with her real data: 4,120 → 2,899 px.
+- **Brand Atlas failure root-caused from `ai_errors`**: the run died at `stop_reason: max_tokens` — web-search calls and results ride the assistant turn's OUTPUT budget, and 3,000 tokens were spent before the final JSON began. Now: max_tokens 8000, searches capped at 4, `pause_turn` continuation loop (≤3 rounds), and a tool-free "finish the JSON now" recovery round when the budget still runs out.
+- **Resurface suggestions**: new shared `isResurfaceCandidate` (recapData) — no T-Shirts, no activewear brands (FP Movement, PopFlex, Beyond Yoga…), no comfort-coded names (hoodie/legging/skort/zip-up/swim/lounge…), nothing she filed at formality ≤2 — applied to Home's Back in Rotation AND the recap's challenge + try-instead alternatives. Her resting count went 108 → 26 truly restyle-worthy pieces. Weather relevance is now guaranteed: live forecast bucket when available, month-based NYC bucket (`seasonalBucketForDate`) otherwise — a failed forecast fetch can no longer surface August wool.
+
+### Changed
+- **Color Stories**: combo library 16 → 29 pairs (rich summer + transitional additions in the Dark Winter register); stories blend the current AND upcoming season (late August already whispers fall); chromatic pairings hard-outrank all-neutral ones (Black + White can't lead); each card now shows up to 3 of HER actual pieces that make the pairing; four stories instead of three. With her closet today: Cherry Red + Cobalt, Cherry Red + Blush, Navy + Blush, Forest + Burgundy.
+- **Style Profile moved to Settings** (owner: "settings is a better home for it along with my measurements"): first-class "Style Profile & Measurements" card at the top of Settings; Home card removed; About Me retitled "About Me & Measurements"; Back returns to Settings. (This reverses the 2026-08-19 "Inside Home" placement at her explicit request.)
+- **Gap analysis shows its math**: new WHAT THE NUMBERS SAY panel in Shopping's gap tab — missing core colors per anchor category (with swatches), pairings one purchase away, texture holes for the season — rendered deterministically the moment the tab opens, before any AI runs. The gap prompt now HARD-requires ≥2 recommendations drawn from the coverage lines and ≥1 from the pair unlocks when they exist.
+
+### Tests
+- coverage 10 → 13 (nextSeason/bucket fallback, chromatic ranking, `isResurfaceCandidate`); full battery (248) + build green; before/after verified visually against her real data via the mocked-network Playwright harness.
+
+## [Unreleased] — Smarter Home + period reviews, coverage-driven gap analysis, builder-chat overhaul, AI readiness audit — 2026-08-20
+
+### Why
+Owner audit of the Home Screen and the builder chatbot: the not-used list was "repetitive and not seasonal", color pairings had to be typed by hand, the gap analysis "frankly sucks — I don't have a navy bag, why doesn't it suggest that?", she wants month/quarter/year reviews of her best outfits, and the Build-me chat "can't see" outfit edits, asks where she's going with Work already selected, has no rich text, and is slow. Plus: in-fashion color blocking, texture gaps, a color/category audit so the AI can read everything, and a speed pass.
+
+### Added
+- **`utils/wardrobe-coverage.js`** (pure, `npm run test:coverage` 10) — deterministic closet analytics: core palette with dominant shades, **color × category coverage** (a core color missing from an anchor category — the "no navy bag" detector), **texture inventory** vs a canonical seasonal roster, **auto color pairs** (in-fashion combos ∩ closet, manual-pair aware), **pair unlocks** (pairings one purchase away), date-seeded `rotateDaily`.
+- **`constants/fashion-combos.js`** — 16 curated in-fashion color-blocking pairs (quiet-luxury register, Dark Winter + warm-exception palette, season-tagged, one-line editorial notes) + the 16-texture seasonal roster.
+- **Home · Color Stories card** — up to 3 in-fashion pairings her closet supports right now, with swatches and the editorial why; tap → Style Me pre-briefed to build around the pair. Zero AI calls, zero typing.
+- **Month / Quarter / Year in review** — LookBackCard grew a period toggle (30/90/365-day windows through the same `buildRecap`); new `periodStats` (distinct garments worn + closet-utilization %, loved count, worn color story, top pieces with wear counts). The most-stylish judge now reads her **style fingerprint**, is period-aware, favors range across winners, and caps candidates at 80 (hearted always kept) so a year window can't blow the prompt.
+- **Style Profile · AI Readiness card** (`features/profile/dataAudit.js`, `npm run test:audit` 7) — the color & category audit: readiness % (critical-clean rows), per-issue counts (unreadable color, missing/off-taxonomy subcategory, no photo, missing material/formality, notes over the classifier cap), and a flagged-pieces list that opens each item in the editor. Critical issues (break AI reads) rank above enhancers.
+- **Style Profile · "In fashion now" pair suggestions** — auto-pair chips with swatches; one tap promotes one to her standing list.
+
+### Changed
+- **Home "Neglected" → "Back in Rotation"**: season-filtered by today's NYC bucket (`filterByWeather` — August never nags about resting wool) and rotated daily (`rotateDaily`), with the bucket named in the header; the section (and the old always-rendered empty gray box — the layout gap) disappears entirely when there's nothing to say.
+- **Gap analysis rebuilt around computed coverage signals**: the prompt now carries HER CORE PALETTE, the COLOR × CATEGORY COVERAGE matrix, texture coverage for the season, IN-FASHION PAIRINGS ONE PURCHASE AWAY, and her style fingerprint — with instructions that a core color missing from an anchor category is the sharpest gap and that data-backed reasons must be cited. "Complete a Look" gains the fingerprint too.
+- **Builder chat overhauled** (`builderChat.js`): the CURRENT LOOK block is rebuilt on **every turn** and rides the latest message — mid-conversation edits are finally visible (the old code snapshotted context onto the first message only); the builder's occasion/weather chips are in the brief (no more "where are we headed?"); context adds fingerprint + About Me silhouette + color pairs (manual + auto); persona raised to the senior-stylist register on `MODEL_STRONG`; responses **stream** token-by-token; light **markdown** renders via new dependency-free `MarkdownLite`; persona + closet live in a **cached system block** (byte-stable per session) so follow-up turns are fast and cheap; dead `temperature` param dropped.
+- **Auto color pairs feed every AI surface**: Style Me (`autoPairs` on style prefs → new prompt block, dynamic body only — no preamble cache invalidation), Evaluate look (via `closetItems`), trip-day generation, and the builder chat. Manual pairs always lead; auto pairs are framed as of-the-moment options.
+
+### Performance (HANDOFF-deferred levers, shipped)
+- **`user_settings` mount reads**: first getter kicks off ONE `key=in.(api_keys,style_fingerprint,rotation_state)` fetch; each key served from it exactly once, then per-key fetches as before (refresh flows stay fresh). 3 GETs → 1 on cold start.
+- **EditorialCollage**: one shared `matchMedia` + one listener app-wide (was one per instance — 42 in the calendar grid).
+- **`judgeMostStylish` dynamically imported** on tap — recapAI (and its toolUse/coerce chain) left the cold-start chunk (`recapAI` is its own ~2.6 kB chunk now).
+
+### Added (same session, owner follow-up request)
+- **Brand Atlas** (`features/discovery/`, lazy ~6.8 kB chunk; `npm run test:brands` 5) — "find new, unique and lesser-known brands I would love … can that live in the home page or will it get too heavy?" It lives on Home WITHOUT the weight: the Home card renders only the **cached** result (zero AI calls, zero network — the cache rides the existing settings mount batch); a scouting run happens only on an explicit tap inside the view. Each run sends her deterministic taste profile (owned-brand census, core palette, texture profile, fingerprint) to `MODEL_STRONG` with the **web search server tool** (max 6 searches) so finds are current, real, international, and purchasable — with a graceful no-web fallback (flagged in the UI) if the org's key lacks the tool. Results persist cross-device (`user_settings.brand_discovery`); "✕ not for me" dismisses a brand permanently and excludes it from every future run; owned brands are always excluded. Tolerant last-array JSON parse (`parseBrandDiscovery`), parse failures log `brand_discovery:parse` with the raw text.
+
+### Added (same session — AI-readiness data fix executed IN PRODUCTION, owner request "can cowork fix the flags?")
+- **`stylist_line` (migration 0018 + backfill)** — the designed end state of the notes policy: a curated ≤200-char line stored next to the full product copy. `classifierNotes` prefers it; new **`promptNotes(item)`** helper (line → else digest) now feeds formatInventory, builder chat, Evaluate, and trip-day prompts; EditItemView gets a "Stylist line · what the AI reads" field; the AI-readiness audit treats a row with a line as notes-readable. **All 64 long-notes rows got hand-curated lines** written from their own copy (fabric, silhouette, occasions, seasons, vetoes like "NOT for work" preserved; classifier-keyword hygiene — no other-garment mentions that trip weather/statement checks). Notes column untouched — copy stays for display, search, and vision.
+- **Production data fixes (all snapshotted first in service-role-only `readiness_backup_20260820`; purge after a quiet month):** 8 unreadable colors resolved (Brew tights → Brown; Platinum → Gray; Skin-Tone/Natural/houndstooth → Neutrals; Eden set backfilled Black/Knit from its own notes) and "IMG 9375" renamed to the Minnie Mouse T-Shirt it is (color deliberately left for her — the one remaining critical flag); the off-taxonomy "Pouch" bag filed as Clutch; **467 `color_family` values normalized** to the app parser's exact output (legacy plurals like "Blacks"/"Reds & Burgundy"/"Denims" + nulls → canonical families; FP Movement "Dark Shadow" corrected to Gray per her own notes); **87 missing materials filled** from each row's own name/notes via a priority-ordered fabric lexicon (cashmere → … → knit; faux-guarded leather/suede; T-shirts default to cotton jersey). 67 materials remain genuinely unstated — left blank rather than guessed.
+- **Deliberately NOT touched: the 305 missing formality tags.** `f#` is her curated taste signal; bulk-guessing it would pollute every prompt that reads it. The audit card lists them; a propose-and-approve pass is on offer if she wants one.
+
+### Watch
+- Ask her: does Home feel smarter (seasonal rotation, Color Stories), do the period reviews read true, does the gap analysis now name the navy-bag class of gap, and does the builder chat finally track her edits and register high-end?
+- **Post-data-fix:** her next Style Me taps read a closet that's 99.8% color-readable with 64 newly classifier-visible pieces (the ponte/silk/blouse workhorses) — looks should get noticeably sharper about occasions and seasons. If a stylist line ever steers a piece wrong, edit it in EditItemView (it outranks notes for the AI).
+- **Brand Atlas first run**: if it errors mentioning the tool, her API key's org doesn't have web search enabled (console.anthropic.com → toggle web search); the no-web fallback still works but says so. If the finds feel off-register, the levers are the scouting prompt's register paragraph and `max_uses`.
+- `FASHION_COMBOS` / `TEXTURE_ROSTER` are the editorial knobs — refresh seasonally, keep the register quiet-luxury and Dark Winter-safe.
+- Chat markdown is deliberately minimal (bold/italic/lists). If she wants tables or links, extend `MarkdownLite`, not the prompt.
+
+## [Unreleased] — Style Profile surface (roadmap B) + owner-approved schema drops — 2026-08-19
+
+### Why
+Roadmap B from the owner's 2026-08-08 survey — the last unstarted item on her agreed A2→A4→A5→B order: taste surfaces were buried in Settings between API keys and photo-batch tools. She picked the placement in this session's survey: **inside Home**. The same survey approved dropping the dead database schema (handoff open item 6).
+
+### Added
+- **`StyleProfileView`** (`src/features/profile/`, lazy chunk) — her stylist's file on her: (1) **Your Stylist's Read** — the fingerprint, its date + source count, and a new freshness line (*"N new looks since"* = current log count vs `source_count`) so drift is visible before the 10-look auto-refresh fires; refresh button moved from Settings. (2) **Color Pairings** — the pairs editor + style modes moved from Settings, plus **suggested pairs derived from her loved looks** (deterministic, zero AI calls: non-neutral color families that co-occur inside hearted looks and aren't already on her list; one tap adds them). (3) **About Me** — the six fields moved from Settings, always expanded.
+- **Home entry card** — "✦ YOUR STYLE PROFILE" under the Style-me CTA, teasing the first two lines of the fingerprint (or an invitation when none exists). Verified in Playwright at phone viewport: card renders, opens the view, all three sections render, Back returns to Home, zero console errors.
+- **Migration 0017** (`drop_dead_schema`, applied to production via MCP): drops `moodboards`, `look_feedback.mood`, and `wardrobe_items.primary_color_hex/secondary_color/secondary_color_hex/thumbnail_url` — all zero-code-reference (grep-verified same day), **owner-approved by survey**. Live values (1 moodboard, 5 moods, 157 color hexes) snapshotted into service-role-only `dropped_columns_backup_20260819` first; drop the backup after a month or two of nobody missing it.
+
+### Changed
+- **Settings is plumbing-only now**: Style Preferences / Style Fingerprint / About Me cards removed; a "Style Profile — now on Home" pointer sits at the top of More Tools. Keys, photo tools, orphan recovery, and data tools stay put.
+- Persistence unchanged: prefs + About Me still per-device localStorage via storage.js; fingerprint still `user_settings`. Generation reads (`loadStylePrefs`/`loadAboutMe` at generate time) untouched.
+
+### Watch
+- Ask her whether the Home card + profile page feel right, and whether the loved-look pair suggestions surface anything true (they need ≥1 loved look with 2+ non-neutral-family pieces to appear at all).
+- **Remove.bg: she answered "not sure — remind me later."** When she next hits a washed-out cutout (the gate now names the Remove.bg error), remind her the fix is checking credits/key at remove.bg.
+
+## [Unreleased] — Evaluate look survives truncation; backend cleanup pass — 2026-08-19
+
+### Why
+Owner screenshot (03:19): "**Could not parse evaluation response**" on ✦ Evaluate look. The 08-19 evaluator rework raised the response contract to ~600–700 tokens of JSON but left `max_tokens` at 900 — a generous evaluation gets cut mid-JSON, and the old parser demanded one complete `{…}` block, failing wholesale with the score sitting right there. The path also never logged, so the failure left nothing to diagnose. Separately, the owner asked for a backend cleanup pass (dead code, inefficiencies); two full audit sweeps ran over `src/` and every finding was verified in code before acting.
+
+### Fixed
+- **Evaluate look**: `max_tokens` 900→1400; new pure `parseEvalResponse` (`features/builder/evalParse.js`, `npm run test:evalparse` 9) — fence/prose tolerant, structural repair via coerce-shapes' `parseLooseJson`, field-level salvage for mid-string truncation (cut-off sentence trimmed to a whole word, half-finished tips dropped). Total parse failures now log `evaluate_look:parse` with `stop_reason` + raw text (the replay protocol finally has payloads here); tolerant parses log `evaluate_look:recovered`. The user-facing error is now actionable ("came back garbled — tap Evaluate look again").
+
+### Changed (performance — same behavior, verified by the full battery)
+- **`itemIdIndex(items)`** (item-helpers): WeakMap-cached id→item Map keyed on closet-array identity; `resolveItemIds` now uses it (App treats the closet immutably, so identity is a correct key). Callers resolving many looks stop paying ~470 Map inserts per call.
+- **Validator lookups are O(1)**: `resolveLookItem` (funnel for ~25 checks per look, every streamed look + retry + salvage) and both full-`idMap` scans (`eligibleIncludeShortIds`, `eligibleShortIdsForSlot`) now use the index instead of `allItems.find` per id.
+- **Hot render paths converted to `resolveItemIds`/memo**: calendar month grid (42 cells × ~470 scans per render), DayModal + saved-look list, TripDetailView `resolveItems` + packing list, HomeView today/upcoming plans, LookBackCard, SilhouetteBuilder `pickedItems` (now `useMemo` — was rescanning the closet per drag frame), stylist.js history/shopping sites.
+- **App landing grid**: Recently-Added/Needs-Categorizing lists are `useMemo`'d (were filter+date-sorting the whole closet inside JSX on every App state tick, two `Date` allocations per sort comparison); piece-favorite checks go through a memoized `Set` (`favPieceIds`) instead of `favorites.some` per card.
+- **FilterBar**: brand list memoized (every keystroke in brand search re-scanned + re-sorted the closet).
+- **Mount fetch dedupe**: `sb.getStyleFingerprint` and `sb.fetchLookEdits` share in-flight promises (each was fired twice concurrently on App mount). In-flight only — cleared when settled, so Settings' refresh and post-save re-reads still hit the network.
+- **stylist.js**: the three hand-copied look-exemplar blocks (loved/disliked/recent-combos) collapsed into one `describeLookLine` helper — same output strings, byte-identical prompts.
+
+### Removed (dead code — every removal verified at zero reference sites)
+- `generateValidatedLooks`' `prompt` back-compat param + branch (no caller passes it); validator's shadowing `coerceLooksShape` export renamed to internal `coerceLooksShapeLogged` (the imported one lives in coerce-shapes.js); `ValidationError` de-exported (App matches `e.name`, nothing imports the class).
+- LookCard's unreachable legacy fields (`look.jewelry`/`accessories`/`why` — no producer since the LooksTool schema); App's normalized `colorStory`/`reasoning` look fields (zero consumers); `buildStylingPrompt().fullPrompt` (eagerly concatenated the whole preamble per call, zero consumers) + its stale doc lines; App's dead `TEMPS` set; `sb.updateItemLastWorn` + `sb.fetchAllTrips` (both superseded, zero callers); two unused map indices.
+- 22 exported-but-never-imported symbols de-exported (storage keys, `STORAGE_HEADERS`, `TZ`, `STYLING_STATIC_PREAMBLE`, `summarizeInventory`, `friendlyApiError`, etc.) — bindings kept, module surface honest. Test-only exports deliberately kept.
+
+### Verification
+- Full battery green (now 15 suites incl. test:evalparse 9 + test:matte 7) + build clean. `STYLING_STATIC_PREAMBLE` string byte-identical — no prompt-cache invalidation.
+
+### Deferred with reasons (see HANDOFF)
+- Saved-tab views (`LooksView`/`OutfitHistory`/`FavoritesView`/`PlannerWrapper`) each refetch `outfit_logs`/plans App already holds — consolidating changes data-freshness semantics; documented as the next efficiency lever, not done blind.
+- The OutfitHistory/ItemWearHistory plan-merge twin, the shared search-semantics twin, and Settings' two batch-loop scaffolds — behavior-sensitive extractions, each needs its divergent flags preserved.
+
+## [Unreleased] — Background removal rejects ghost mattes; Remove-Background is re-runnable — 2026-08-19
+
+### Why
+Owner screenshots (3:14 AM, "Leather Work Tote"): background removal on a brown leather tote "succeeded" but returned a **ghost matte** — handles fully opaque, the entire body at ~15–20% alpha — previewed as a washed-out white ghost with the success message "✓ Background removed. Tap Save Changes to keep it." One tap from overwriting the only copy of the photo (originals aren't kept). Confirmed in the DB that she did NOT save it (the row still carries fresh-upload flags and the original image). Three compounding gaps: no matte-quality check anywhere in the pipeline; the trim then clips wherever ghost alpha dips below the bbox threshold (the bag's fading bottom edge); and after any removal the button locks to "✓ Background already removed" — a bad result dead-ends with no retry short of re-uploading. The likely producer is the @imgly in-browser fallback (its known failure mode on large uniform regions), which runs **silently** whenever Remove.bg fails — she can't tell quality dropped because a key/credit problem swapped the engine.
+
+### Added
+- **`assessAlphaMatte` (utils/alpha-matte.js, pure + node-testable)**: verdict on a cutout's alpha channel. Rejects "ghost" (majority of visible pixels semi-transparent AND almost nothing solid: `partialFraction > 0.6 && opaqueFraction < 0.25`, or no pixel above ~78% alpha) and "empty". The two-sided test is deliberate: legitimately sheer garments (organza, hosiery) carry large semi-transparent panels but always keep solid structure (seams, hems, plackets), so they pass. Thresholds are exported knobs. `assessCutout(dataUrl)` in images.js is the canvas-side wrapper; unreadable pixels return null and **fail open**.
+- **Quality gate in `stripBackground`** (lib/bgRemoval.js): every successful removal is assessed. A ghosted Remove.bg result falls through to imgly; a ghosted imgly result is rejected and the ORIGINAL photo kept (`has_bg: true`). All three call sites (EditItemView, BulkAdd, Settings batch) already treat `has_bg: true` as "removal didn't happen", so the gate needed zero call-site changes. The result now carries `reason` ("bad_matte" | "failed" | "no_remover") and `rmbg_error` (Remove.bg's own failure message) so the UI can say what actually went wrong.
+- `npm run test:matte` (7) in the battery — includes the ghosted-tote shape, the sheer-garment allowance, and the fail-open cases.
+
+### Fixed
+- **EditItemView Remove-Background dead-end**: the button is no longer disabled after a removal (`✓ Background already removed`) — it stays live as "↻ Re-run Background Removal", so a bad cutout can be re-run in place. Failure messages are now reason-specific: a rejected ghost matte explains the original was kept, and any Remove.bg API error (credits, key) is surfaced verbatim instead of silently swapping to the lower-quality local engine.
+
+### Watch
+- If she reports the removal "refusing" on a piece, check whether it's the gate rejecting genuinely bad mattes (working as intended — the fix is Remove.bg credits/key for a cleaner engine) vs a false rejection of an unusual sheer piece (then loosen `GHOST_PARTIAL_MIN`/`GHOST_OPAQUE_MAX` in alpha-matte.js).
+- The tote item (`item-1787123664680-0cxkgteg25qu`) still has its background (`has_bg: null`); once this deploys she can tap Remove Background again — with a working Remove.bg key it should cut cleanly.
+
+## [Unreleased] — Include Blazers is an instruction; sandal-forms banned from Work; "NOT FOR WORK" notes enforced — 2026-08-19
+
+### Why
+Owner screenshots, three misfires in one Work + Hot tap, choices confirmed by her survey answers:
+1. **"Include Blazers" produced zero blazers.** Hot removed every blazer that isn't explicitly a light fabric (of her 15, only the cotton one qualifies) and the INCLUDE prompt line literally said "when weather rules it out, skip it". Her answer: *"I selected it, not as a suggestion. I need to cover my shoulders at work. This is what I mean by 'be smarter'."*
+2. **A heeled thong sandal reached a Work look.** The Work sandal ban tests the literal "Sandals" subcategory; her Schutz "Leather Mules" are filed under Kitten (and the Marc Fisher heeled thong under Block), so the ban never saw them. She chose: ban all open sandal-forms from Work.
+3. **The same shoe's note says "NOT FOR WORK" — ignored.** Notes reach the prompt as context but no mechanism enforces a negative occasion note. She chose: "not for work" blocks Work AND Work Dinner.
+
+### Added
+- **`checkIncludeToggles` (hard) + `salvageByAddingIncludes`** (styling-validator): every look must carry a piece matching each active include-mode toggle whenever eligible candidates exist in the sampled inventory (requirement caps at the candidate count; zero candidates → no failure, never an error wall). The salvage mirrors `salvageByAddingShoes` — a look lacking the layer gets an unused eligible candidate added (running before the shoe salvage, tolerating a still-pending shoes failure so a look missing both completes). The streaming gate includes the check so a blazer-less look can't stream to screen and dodge it.
+- **Include-toggle weather machinery**: the sampler re-unions a toggled type's lightest members past the weather gates until ≥3 candidates (one per look) exist — heavy/winter pieces only as last resort — and exempts them from rotation-drop; `checkWeatherCompliance` exempts include-matched items (same principle as named pieces: the toggle is her call, the prompt teaches lightest-option style-for-the-heat). New `activeIncludeTypes`/`matchesActiveInclude` helpers in style-filters. The INCLUDE prompt line rewritten from "skip it when weather rules it out" to a firm per-look instruction that outranks the weather guidance for that one layer.
+- **`isSandalFormItem` / `SANDAL_FORM_RE`** (item-helpers): shared open-sandal-form matcher — subcategory "Sandals" OR sandal/slide/thong/flip-flop in the NAME or CURATED NOTES, category-gated to Shoes. Bare "mule" deliberately doesn't match (a closed-toe mule isn't an open shoe; hers match via their own "thong sandal" wording).
+- **`banned.sandalForms` occasion flag** (styling.js — Work + Work Dinner only): enforced in the sampler's step-1 ban and `checkOccasion`, with the same Only-toggle/named-piece rescues as subcategory bans. Dinner/Occasion deliberately keep the literal ban — her notes vouch heeled thong sandals "for dinners in warm weather".
+- **`noteVetoesOccasion`** (closet-sampler): her own curated note can veto a piece OUT of an occasion — "not for work", "no work", "never for the office" (per her answer, work wording covers Work Dinner too; every occasion has aliases, e.g. "not for dinner"). Hard pool removal; product copy (>200 chars) can't veto; literally naming the piece in the request box still overrides.
+
+### Changed
+- Sandals filter chip now uses `isSandalFormItem` (notes-aware), so "No Sandals" finally covers the Kitten-filed mule; the cool/cold weather gates (sampler 3a, `filterByWeather` Mild/Cool/Cold, validator `lightOnly`) are form-aware the same way.
+
+### Verification
+- test:validator 34→42, test:filters 38→41, test:notes 21→25; full battery + build green. End-to-end sampler sim (her exact closet shape): Work+Hot pool excludes the mule, keeps it for Casual, and carries 3 blazers (cotton+crepe+poly, wool held back) with the toggle on.
+
+### Watch
+- Her next "Include Blazers" tap in any weather should produce a blazer in EVERY look; `stylist_outfit:include_salvage` rows appearing occasionally = safety net working, a spike = the prompt line isn't landing.
+- If she ever wants a mule/thong at Work Dinner after all, the lever is removing `sandalForms` from Work Dinner's banned block — one line.
+- Note vetoes are sampler-only: the manual builder and evaluator deliberately still allow a vetoed piece (her hands, her choice).
+
+## [Unreleased] — Evaluate look works again: sampling param removed — 2026-08-19
+
+### Why
+Owner screenshot: tapping **✦ Evaluate look** in the builder surfaced "`temperature` is deprecated for this model." and no evaluation. The evaluator's rewrite (#184) moved it to MODEL_STRONG (Sonnet 5) but kept its `temperature: 0.6` — Sonnet 5 removed the sampling params, so the API 400s and `friendlyApiError` passes the raw message through to the UI. Same class of break the stylist pipeline already dodged on Opus 4.8 (see the comment at styling-validator.js' streaming call).
+
+### Fixed
+- **`evaluateLook.js` no longer sends `temperature`** — the call succeeds on Sonnet 5 again. Look-evaluation variety was never the point of the setting; the read is deterministic-ish by nature.
+
+### Changed
+- **`anthropicFetch` self-heals removed sampling params**: a 400 whose message names `temperature`/`top_p`/`top_k` while the request body carries one now strips all three and retries once (no transient-retry slot consumed) instead of surfacing an error the user can't act on. This future-proofs the two call sites that still legitimately pass temperature to models that accept it today — builderChat (Sonnet 4.6) and autoDetectItem (Haiku 4.5) — against the next model-constant bump.
+
+### Verification
+- Full battery + build green.
+
 ## [Unreleased] — "In Your Looks": tap a garment, see when you wore it — 2026-08-19
 
 ### Why

@@ -161,26 +161,27 @@ test("explainFilterViolation returns null for allowed items, a reason otherwise"
   assert.match(explainFilterViolation(jeans, ["no-jeans"]), /No Jeans/);
 });
 
-// ── The "Short Sleeve" trap ──────────────────────────────────────────────────
-// Athleisure/Loungewear subcategory "Short Sleeve" contains the substring
-// "short" — a naive bottom-first regex classifies the TOP as a lower-half
-// piece, so an "Only Jeans" toggle banned her athleisure tees. Top signals
-// must win before the bottom regex, while real Shorts/Skorts stay bottoms.
-const athShortSleeve = { id: "athss", category: "Athleisure", subcategory: "Short Sleeve", name: "Swiftly Tech Short Sleeve" };
-const athShorts      = { id: "athsh", category: "Athleisure", subcategory: "Shorts",       name: "Hotty Hot Short" };
-const athSkort       = { id: "athsk", category: "Athleisure", subcategory: "Skort",        name: "Tennis Skort" };
+// ── The "Short Sleeves" trap ─────────────────────────────────────────────────
+// Athleisure subcategory "Short Sleeves" contains the substring "short" — a
+// naive bottom-first regex classifies the TOP as a lower-half piece, so an
+// "Only Jeans" toggle banned her athleisure tees. Top signals must win before
+// the bottom regex, while real Shorts/Skirts stay bottoms. (Fixtures use the
+// post-2026-08-28 plural names; skorts now live under "Skirts".)
+const athShortSleeve = { id: "athss", category: "Athleisure", subcategory: "Short Sleeves", name: "Swiftly Tech Short Sleeve" };
+const athShorts      = { id: "athsh", category: "Athleisure", subcategory: "Shorts",        name: "Hotty Hot Short" };
+const athSkort       = { id: "athsk", category: "Athleisure", subcategory: "Skirts",        name: "Tennis Skort" };
 const setShortSleeve = { id: "setss", category: "Sets", subcategory: "", name: "Swiftly Short Sleeve", set_id: "s2" };
 
-test("slotForItem: athleisure 'Short Sleeve' is a top; Shorts/Skort stay bottoms", () => {
+test("slotForItem: athleisure 'Short Sleeves' is a top; Shorts/Skirts stay bottoms", () => {
   assert.equal(slotForItem(athShortSleeve), "top");
   assert.equal(slotForItem(athShorts), "bottom");
   assert.equal(slotForItem(athSkort), "bottom");
 });
 
 test("only-jeans never bans an athleisure short-sleeve top, still bans athleisure shorts", () => {
-  assert.equal(excluded(["only-jeans"], athShortSleeve), false, "'Short Sleeve' top must not be lower-half");
+  assert.equal(excluded(["only-jeans"], athShortSleeve), false, "'Short Sleeves' top must not be lower-half");
   assert.equal(excluded(["only-jeans"], athShorts), true, "real Shorts occupy the lower half");
-  assert.equal(excluded(["only-jeans"], athSkort), true, "Skort occupies the lower half");
+  assert.equal(excluded(["only-jeans"], athSkort), true, "an athleisure skirt occupies the lower half");
 });
 
 test("a set's short-sleeve top half is not lower-half under only-jeans", () => {
@@ -359,12 +360,44 @@ test("only-stockings is include-mode: bans nothing — a steer + rescue", () => 
 test("describeStyleFilters renders every group's Only line without throwing (outer + legwear included)", () => {
   const lines = describeStyleFilters(["only-blazers", "only-stockings", "only-heels", "no-jeans"]);
   assert.equal(lines.length, 4);
-  assert.ok(lines.some(l => /INCLUDE Blazers/.test(l) && /NOT a ban/.test(l)), "outer group renders the include line (was a crash pre-2026-08-13)");
-  assert.ok(lines.some(l => /INCLUDE Stockings/.test(l) && /weather/i.test(l)), "legwear include line stays weather-safe");
+  assert.ok(lines.some(l => /INCLUDE Blazers/.test(l) && /DIRECT INSTRUCTION/.test(l) && /EVERY look/.test(l)), "outer group renders the include line as a firm per-look instruction (owner 2026-08-19)");
+  assert.ok(lines.some(l => /INCLUDE Stockings/.test(l) && /bans no other/i.test(l)), "include line stays a positive ask, never a ban");
 });
 
 test("stockings chip renders when hosiery is owned, hides otherwise", () => {
   const withTights = computeFilterChips([...closet, sheerTights], {});
   assert.ok(withTights.map(c => c.key).includes("stockings"));
   assert.ok(!computeFilterChips(closet, {}).map(c => c.key).includes("stockings"));
+});
+
+// ── Sandal-form matching (owner screenshot 2026-08-19) ───────────────────────
+// Her Schutz "Leather Mules" are FILED under Kitten with "thong sandal" only
+// in the curated note — the chip (and every consumer of the shared
+// isSandalFormItem) must catch them; the Heels chip must not.
+
+const thongMule = { id: "thongmule", category: "Shoes", subcategory: "Kitten", name: "Leather Mules", notes: "Taupe leather heeled mule thong sandal for casual or vacation — NOT FOR WORK" };
+const namedThong = { id: "namedthong", category: "Shoes", subcategory: "Block", name: "Heeled thong shoe", notes: "Black leather slip on block heel sandal" };
+const plainKitten = { id: "plainkit", category: "Shoes", subcategory: "Kitten", name: "Suede Kitten Pump" };
+
+test("sandals chip catches sandal-forms filed under heels shelves via name AND curated notes", () => {
+  assert.equal(excluded(["no-sandals"], thongMule), true, "thong-sandal note must match the Sandals chip");
+  assert.equal(excluded(["no-sandals"], namedThong), true, "thong in the name must match");
+  assert.equal(excluded(["no-sandals"], plainKitten), false, "a real kitten pump is not a sandal");
+});
+
+test("heels chip still excludes mule/thong forms; pump stays", () => {
+  assert.equal(excluded(["no-heels"], thongMule), false, "the mule is the Sandals chip's, not Heels'");
+  assert.equal(excluded(["no-heels"], plainKitten), true);
+});
+
+// ── Include-mode helpers (owner 2026-08-19: toggles are instructions) ────────
+
+test("matchesActiveInclude: true only for active include-mode toggles", async () => {
+  const { matchesActiveInclude, activeIncludeTypes } = await import("../src/utils/style-filters.js");
+  const blazer = { id: "blz", category: "Outerwear", subcategory: "Blazers", name: "Morena Blazer" };
+  assert.equal(matchesActiveInclude(blazer, ["only-blazers"]), true);
+  assert.equal(matchesActiveInclude(heels, ["only-blazers"]), false, "non-matching item");
+  assert.equal(matchesActiveInclude(heels, ["only-heels"]), false, "restrict-mode toggles are not includes");
+  assert.equal(matchesActiveInclude(blazer, ["no-blazers"]), false, "a No toggle is not an include");
+  assert.equal(activeIncludeTypes(["only-blazers", "only-stockings", "only-heels"]).map(t => t.label).sort().join(","), "Blazers,Stockings");
 });

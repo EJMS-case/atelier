@@ -4,7 +4,7 @@
 // (which matters for users traveling). Every "what day is it" check in the
 // app should go through these helpers so we have one source of truth.
 
-export const TZ = "America/New_York";
+const TZ = "America/New_York";
 export const CITY = "New York, NY";
 // Open-Meteo coordinates for Manhattan. Free, no API key, no signup.
 export const LAT = 40.7128;
@@ -14,6 +14,17 @@ export const LON = -74.0060;
 export function nyToday() {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
   return fmt.format(new Date());
+}
+
+// "YYYY-MM-DD" in an arbitrary IANA timezone, defaulting to NYC. Forecast maps
+// fetched for a non-NYC closet are keyed by that closet's local dates, so
+// looking up "today" in them must use the closet's timezone — NY has already
+// rolled past midnight while Phoenix is still on the previous evening.
+export function todayInTz(tz) {
+  if (!tz || tz === TZ) return nyToday();
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+  } catch { return nyToday(); }
 }
 
 // Day part: "past" | "today" | "future" — used to pick UI language.

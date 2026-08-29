@@ -9,8 +9,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage } from "./builderChat.js";
-import { OCCASIONS, WEATHER_SHORTS, SUBCATEGORY_L3, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
-import { slotForItem } from "../../utils/item-helpers.js";
+import MarkdownLite from "../../components/MarkdownLite.jsx";
+import { OCCASIONS, WEATHER_SHORTS, getL3Options, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
+import { slotForItem, itemIdIndex } from "../../utils/item-helpers.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
@@ -330,13 +331,18 @@ export default function SilhouetteBuilder({
   const subcatParent = subcatFilter
     ? (subcatsForSlot.includes(subcatFilter)
         ? subcatFilter
-        : subcatsForSlot.find(p => (SUBCATEGORY_L3[p] || []).includes(subcatFilter)) || "")
+        : subcatsForSlot.find(p =>
+            (items || []).some(it => getL3Options(it.category, p).includes(subcatFilter))) || "")
     : "";
   const subcatChildren = useMemo(() => {
     if (!subcatParent) return [];
     const def = SLOTS.find(s => s.key === activeSlot);
     const all = (items || []).filter(it => def?.match(it));
-    return (SUBCATEGORY_L3[subcatParent] || []).filter(l3 => all.some(it => it.subcategory === l3));
+    // getL3Options is category-aware, resolved per item against its OWN
+    // category (slots span categories): an Athleisure "Skirts" row yields no
+    // children — the Mini/Midi/Maxi axis belongs to Bottoms alone.
+    const l3s = [...new Set(all.flatMap(it => getL3Options(it.category, subcatParent)))];
+    return l3s.filter(l3 => all.some(it => it.subcategory === l3));
   }, [activeSlot, items, subcatParent]);
 
   // Slot pool split into core wardrobe + comfortwear (Athleisure/Loungewear).
@@ -443,13 +449,17 @@ export default function SilhouetteBuilder({
 
   // Flatten the multi-item slots into a single list of {slot, item} pairs.
   // The slot is preserved so default positions / z-order / layout controls
-  // still key off the slot definition.
-  const pickedItems = Object.entries(selections).flatMap(([slot, ids]) => {
-    const arr = Array.isArray(ids) ? ids : [ids];
-    return arr
-      .map(id => ({ slot, item: items.find(i => i.id === id) }))
-      .filter(x => x.item);
-  });
+  // still key off the slot definition. Memoized: this used to rescan the
+  // ~470-item closet per selection per render, and drag/resize renders fire
+  // continuously.
+  const pickedItems = useMemo(() => {
+    const byId = itemIdIndex(items || []);
+    return Object.entries(selections).flatMap(([slot, ids]) =>
+      asArray(ids)
+        .map(id => ({ slot, item: byId.get(String(id)) }))
+        .filter(x => x.item)
+    );
+  }, [selections, items]);
 
   // Toggle helper. Multi-slots accumulate; single-slots replace.
   const togglePick = (slot, id) => {
@@ -621,10 +631,20 @@ export default function SilhouetteBuilder({
 
     const userMsg = { role: "user", content: text };
     const next = [...chatMessages, userMsg];
-    setChatMessages(next);
+    // Optimistic placeholder for the streaming reply — deltas fill it in.
+    setChatMessages([...next, { role: "assistant", content: "" }]);
     setChatInput("");
     setChatLoading(true);
     setChatErr("");
+
+    const setLastAssistant = (content) =>
+      setChatMessages(prev => {
+        const copy = [...prev];
+        if (copy.length && copy[copy.length - 1].role === "assistant") {
+          copy[copy.length - 1] = { role: "assistant", content };
+        }
+        return copy;
+      });
 
     try {
       const reply = await sendBuilderMessage({
@@ -632,11 +652,22 @@ export default function SilhouetteBuilder({
         assembledItems: pickedItems.map(p => p.item),
         closetItems: items,
         emptySlots,
+        // The builder chips ARE the brief — the stylist should never ask
+        // where she's going when Work is already selected.
+        occasions: asArray(occasions),
+        weathers: asArray(weathers),
         apiKey,
+        onDelta: setLastAssistant,
       });
-      setChatMessages(prev => [...prev, { role: "assistant", content: reply }]);
+      setLastAssistant(reply);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     } catch (err) {
+      // Drop the empty placeholder so a failed turn doesn't leave a blank bubble.
+      setChatMessages(prev =>
+        prev.length && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content
+          ? prev.slice(0, -1)
+          : prev
+      );
       setChatErr(err.message || "Chat failed.");
     } finally {
       setChatLoading(false);
@@ -654,6 +685,7 @@ export default function SilhouetteBuilder({
       const result = await evaluateLook(pickedItems.map(p => p.item), apiKey, {
         occasions: asArray(occasions),
         weathers: asArray(weathers),
+        closetItems: items,
       });
       setEvaluation(result);
     } catch (err) {
@@ -1134,10 +1166,11 @@ export default function SilhouetteBuilder({
                 </div>
               )}
 
-              {/* Message thread */}
+              {/* Message thread — assistant replies stream in live and render
+                  light markdown (bold piece names, short lists). */}
               {chatMessages.length > 0 && (
                 <div style={{ maxHeight: 280, overflowY: "auto", marginBottom: 8, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {chatMessages.map((m, i) => (
+                  {chatMessages.filter(m => m.content || m.role === "user").map((m, i) => (
                     <div key={i} style={{
                       alignSelf: m.role === "user" ? "flex-end" : "flex-start",
                       maxWidth: "88%",
@@ -1148,10 +1181,10 @@ export default function SilhouetteBuilder({
                       fontSize: 12,
                       lineHeight: 1.5,
                     }}>
-                      {m.content}
+                      {m.role === "assistant" ? <MarkdownLite text={m.content}/> : m.content}
                     </div>
                   ))}
-                  {chatLoading && (
+                  {chatLoading && !chatMessages[chatMessages.length - 1]?.content && (
                     <div style={{ alignSelf: "flex-start", fontSize: 12, color: PALETTE.muted, padding: "6px 4px" }}>
                       Styling…
                     </div>

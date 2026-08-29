@@ -4,14 +4,12 @@ import { icons, Icon } from "../ui/icons.jsx";
 import { sb, SUPABASE_URL } from "../lib/supabase.js";
 import { compressImage, imageToBase64, detectTransparency, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
 import { stripBackground } from "../lib/bgRemoval.js";
-import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../utils/storage.js";
 import { CATEGORY_ORDER } from "../constants/taxonomy.js";
-import { generateStyleFingerprint } from "../features/stylist/styleFingerprint.js";
-import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { MODEL_TOP } from "../constants/models.js";
 import { anthropicFetch } from "../lib/ai/toolUse.js";
+import AccountPanel from "./AccountPanel.jsx";
 
-export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, styleFingerprint, setStyleFingerprint, onNavigate }) {
+export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, onNavigate }) {
   const [key,          setKey]          = useState(apiKey);
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
@@ -44,10 +42,6 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
     return () => timers.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, rmbg]);
-  const [prefs,        setPrefs]        = useState(() => loadStylePrefs());
-  const [newPair,      setNewPair]      = useState("");
-  const [aboutMe,      setAboutMe]      = useState(() => loadAboutMe());
-  const [aboutMeOpen,  setAboutMeOpen]  = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [fSyncRunning, setFSyncRunning] = useState(false);
   const [fSyncProg,    setFSyncProg]    = useState(null);
@@ -67,26 +61,6 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
   const [trimProgress, setTrimProgress] = useState({ done: 0, total: 0, errors: 0 });
   const [trimDone, setTrimDone] = useState(false);
   const trimStop = useRef(false);
-
-  // ── Style Fingerprint
-  const [fpRunning, setFpRunning] = useState(false);
-  const [fpError,   setFpError]   = useState("");
-  const handleRefreshFingerprint = async () => {
-    if (!apiKey) { setFpError("Add your Anthropic API key above first."); return; }
-    setFpRunning(true); setFpError("");
-    try {
-      const [logs, plans, edits] = await Promise.all([
-        sb.fetchOutfitLogs().catch(() => []),
-        fetchAllPlans().catch(() => []),
-        sb.fetchLookEdits().catch(() => []),
-      ]);
-      const fp = await generateStyleFingerprint({ items, logs, plans, edits, apiKey });
-      await sb.saveStyleFingerprint(fp);
-      setStyleFingerprint?.(fp);
-    } catch (e) {
-      setFpError(e.message || "Couldn't generate fingerprint.");
-    } finally { setFpRunning(false); }
-  };
 
   // ── Recover Lost Items state
   const [recoverOpen,    setRecoverOpen]    = useState(false);
@@ -188,8 +162,6 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
     }
   };
 
-  const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefs(updated); };
-  const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
 
   const itemsClean       = items.filter(it => it.image && it.has_bg === false);
   // `is_trimmed` is NOT a reliable record of "we actually cropped this": the
@@ -292,19 +264,29 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
     setDetectRunning(false);
   };
 
-  const removePair  = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
-  const addPair     = () => {
-    if (!newPair.trim()) return;
-    updatePrefs({ ...prefs, colorPairs: [...prefs.colorPairs, newPair.trim()] });
-    setNewPair("");
-  };
-
   return (
     <div style={s.page}>
       <div style={s.pageHeader}>
         <button style={s.backBtn} onClick={onBack}>← Back</button>
         <h2 style={s.pageTitle}>Settings</h2>
       </div>
+
+      <AccountPanel />
+
+      {/* Style Profile & measurements — moved back from Home (owner,
+          2026-08-20: "settings is a better home for it along with my
+          measurements"). First card so it never gets buried under keys. */}
+      {onNavigate && (
+        <div style={s.settingsCard}>
+          <div style={s.settingsTitle}>✦ Style Profile &amp; Measurements</div>
+          <p style={s.settingsSub}>
+            Your stylist's read, color pairings, About Me &amp; measurements, and the AI Readiness audit. Everything here quietly shapes every look.
+          </p>
+          <button style={{...s.btnPrimary, width:"100%"}} onClick={() => onNavigate("profile")}>
+            Open Style Profile
+          </button>
+        </div>
+      )}
 
       {/* Anthropic key */}
       <div style={s.settingsCard}>
@@ -381,118 +363,6 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
           </div>
         </div>
       )}
-
-      {/* Style Preferences */}
-      <div style={s.settingsCard}>
-        <div style={s.settingsTitle}>✦ Style Preferences</div>
-        <p style={s.settingsSub}>These are injected into every outfit generation.</p>
-
-        <div style={s.fieldLabel}>Favorite color-blocking pairs</div>
-        {prefs.colorPairs.map((pair, i) => (
-          <div key={i} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
-            <span style={{flex:1, fontSize:12, color:"var(--color-text)"}}>{pair}</span>
-            <button onClick={() => removePair(i)} style={{background:"none",border:"none",color:"var(--color-border-muted)",cursor:"pointer",fontSize:13}}>✕</button>
-          </div>
-        ))}
-        <div style={{display:"flex", gap:8, marginTop:6, marginBottom:14}}>
-          <input style={{...s.input, flex:1, fontSize:12}} placeholder="e.g. Navy + Cool Red"
-            value={newPair} onChange={e => setNewPair(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && addPair()}/>
-          <button style={s.btnPrimary} onClick={addPair}>Add</button>
-        </div>
-
-        <div style={s.fieldLabel}>Style modes</div>
-        {[["monochromaticMode","Monochromatic looks"],["tonalPairing","Tonal pairing (e.g. navy + powder blue)"]].map(([key,label]) => (
-          <label key={key} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--color-text)",cursor:"pointer",marginBottom:8}}>
-            <input type="checkbox" checked={prefs[key]}
-              onChange={e => updatePrefs({ ...prefs, [key]: e.target.checked })}/>
-            {label}
-          </label>
-        ))}
-      </div>
-
-      {/* Style Fingerprint — Claude-summarized observations from her ENTIRE
-          worn + planned outfit history. Read by Style Me as a soft bias. */}
-      <div style={s.settingsCard}>
-        <div style={s.settingsTitle}>✦ Style Fingerprint</div>
-        <p style={s.settingsSub}>
-          A short summary of patterns Claude has observed across every outfit you've worn or planned. Read by Style Me as a soft bias — never as a hard rule. Refresh after you've added new looks to keep it current.
-        </p>
-        {styleFingerprint?.text && (
-          <div style={{
-            background: "var(--color-bg)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-            padding: 12,
-            fontSize: 12,
-            color: "var(--color-text)",
-            lineHeight: 1.55,
-            whiteSpace: "pre-wrap",
-            marginBottom: 10,
-          }}>
-            {styleFingerprint.text}
-          </div>
-        )}
-        {styleFingerprint?.generated_at && (
-          <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
-            Last updated {new Date(styleFingerprint.generated_at).toLocaleDateString()}
-            {styleFingerprint.source_count ? ` · ${styleFingerprint.source_count} outfit${styleFingerprint.source_count === 1 ? "" : "s"}` : ""}
-          </div>
-        )}
-        <button style={{...s.btnPrimary, width:"100%"}}
-          onClick={handleRefreshFingerprint}
-          disabled={fpRunning || !apiKey}>
-          {fpRunning
-            ? "Reading your history…"
-            : !apiKey
-              ? "Add Anthropic key above first"
-              : styleFingerprint
-                ? "Refresh Fingerprint"
-                : "Generate Fingerprint"}
-        </button>
-        {fpError && (
-          <div style={{ fontSize: 11, color: "var(--color-danger)", marginTop: 6 }}>{fpError}</div>
-        )}
-      </div>
-
-      {/* About Me */}
-      <div style={s.settingsCard}>
-        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}
-          role="button" tabIndex={0} aria-expanded={aboutMeOpen}
-          onClick={() => setAboutMeOpen(v => !v)}
-          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAboutMeOpen(v => !v); } }}>
-          <div style={s.settingsTitle}>✦ About Me</div>
-          <span style={{fontSize:12, color:"var(--color-text-muted)"}}>{aboutMeOpen ? "▲ Collapse" : "▼ Expand"}</span>
-        </div>
-        <p style={s.settingsSub}>Body descriptors + life context injected into outfit generation. Optional — add what's relevant.</p>
-        {aboutMeOpen && (
-          <div style={{marginTop:12}}>
-            <div style={s.fieldLabel}>Height</div>
-            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. 5'7&quot;"
-              value={aboutMe.height || ""} onChange={e => updateAboutMe({...aboutMe, height: e.target.value})}/>
-
-            <div style={s.fieldLabel}>Torso length</div>
-            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Long torso, short legs"
-              value={aboutMe.torsoLength || ""} onChange={e => updateAboutMe({...aboutMe, torsoLength: e.target.value})}/>
-
-            <div style={s.fieldLabel}>Fit notes</div>
-            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Prefer relaxed shoulders, avoid cropped"
-              value={aboutMe.fitNotes || ""} onChange={e => updateAboutMe({...aboutMe, fitNotes: e.target.value})}/>
-
-            <div style={s.fieldLabel}>Proportions</div>
-            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Narrow shoulders, fuller hips"
-              value={aboutMe.proportions || ""} onChange={e => updateAboutMe({...aboutMe, proportions: e.target.value})}/>
-
-            <div style={s.fieldLabel}>Age range</div>
-            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Late 30s"
-              value={aboutMe.ageRange || ""} onChange={e => updateAboutMe({...aboutMe, ageRange: e.target.value})}/>
-
-            <div style={s.fieldLabel}>Professional context</div>
-            <input style={{...s.input, width:"100%", marginBottom:10}} placeholder="e.g. Creative director, client-facing, WFH 3 days/week"
-              value={aboutMe.professionalContext || ""} onChange={e => updateAboutMe({...aboutMe, professionalContext: e.target.value})}/>
-          </div>
-        )}
-      </div>
 
       {/* Batch Background Removal */}
       <div style={s.settingsCard}>

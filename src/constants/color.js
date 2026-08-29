@@ -57,6 +57,10 @@ export const COLOR_FAMILIES = [
     {name:"Fuchsia",  hex:"#D81B60"},
   ]},
   { name:"Purple",   hex:"#6A1B9A", shades:[
+    // Owner call (2026-08-28): her Black Cherry athleisure reads purple, not
+    // red — the dye is a deep aubergine-wine. It lives in Purple even though
+    // the bare shade "Cherry" is a Red; the compound name is its own colour.
+    {name:"Black Cherry", hex:"#4A1233"},
     {name:"Plum",        hex:"#4A0E4E"},
     {name:"Deep Purple", hex:"#38006B"},
     {name:"Purple",      hex:"#6A1B9A"},
@@ -119,6 +123,13 @@ const SHADE_TO_FAMILY = (() => {
   return out;
 })();
 
+// Same pairs, longest shade name first. A compound shade must be tested before
+// the shorter shade it contains, or the substring wins and drags the item into
+// the wrong family — "black cherry" would match the Red shade "cherry" and
+// filter as Red. Insertion order can't be relied on for that, so sort here.
+const SHADE_ENTRIES_BY_LENGTH = Object.entries(SHADE_TO_FAMILY)
+  .sort((a, b) => b[0].length - a[0].length);
+
 // Free-form color string → family. Hits the SHADE_TO_FAMILY table first,
 // then falls back to keyword regex for items whose `color` is something
 // like "Dark Navy Wash" or "Soft Pink Stripe".
@@ -128,13 +139,16 @@ const ACHROMATIC = new Set(["Black", "Gray", "White", "Neutrals"]);
 
 export function familyForColorString(color) {
   if (!color) return "";
-  const c = color.toLowerCase().trim();
+  // Hyphens/underscores normalize to spaces so a compound shade matches in
+  // every spelling ("black-cherry" → "black cherry"); without this the shade
+  // loop below finds only the bare "cherry" inside it and returns Red.
+  const c = color.toLowerCase().trim().replace(/[-_]+/g, " ");
   if (SHADE_TO_FAMILY[c]) return SHADE_TO_FAMILY[c]; // exact single-colour match
 
   // Word-boundary shade lookup. A chromatic hit wins immediately; achromatic
   // hits are only used if NO chromatic colour appears anywhere in the string.
   let achro = "";
-  for (const [shade, family] of Object.entries(SHADE_TO_FAMILY)) {
+  for (const [shade, family] of SHADE_ENTRIES_BY_LENGTH) {
     if (new RegExp(`\\b${shade.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(c)) {
       if (!ACHROMATIC.has(family)) return family;
       if (!achro) achro = family;
@@ -143,6 +157,10 @@ export function familyForColorString(color) {
 
   // Keyword buckets — chromatic first (so a compound colour resolves to its
   // actual hue), achromatic last as the fallback / modifier.
+  // Compound names that contain another family's keyword, checked before the
+  // single-word buckets so the substring can't win (hyphen/space spellings the
+  // shade table's exact " " form doesn't cover).
+  if (/\bblack[\s-]?cherry\b/.test(c)) return "Purple";
   if (/\b(red|cherry|crimson|burgundy|wine|oxblood|merlot|maroon|brick)\b/.test(c)) return "Red";
   if (/\b(pink|blush|rose|magenta|fuchsia|coral|salmon|peach)\b/.test(c)) return "Pink";
   if (/\b(purple|violet|lavender|plum|lilac|aubergine|orchid)\b/.test(c)) return "Purple";
@@ -209,11 +227,14 @@ export function effectiveColorFamily(item) {
   return familyForColorString(stored) || "";
 }
 
-// Secondary: sleeve length (for Tops, Knits, Athleisure)
+// Secondary: sleeve length (for Tops, Knits, Athleisure). Athleisure rows
+// carry the plural names since the 2026-08-28 consolidation ("Sports Bras",
+// "Short Sleeves", "Long Sleeves"); the singular keys stay for any legacy
+// Tops rows normalizeItem doesn't touch.
 export const SLEEVE_SORT = {
-  "Tanks":0, "T-Shirts":1, "Short Sleeve":2, "Polos":3,
+  "Tanks":0, "Sports Bras":0, "T-Shirts":1, "Short Sleeve":2, "Short Sleeves":2, "Polos":3,
   "Blouses":4, "Shirts":5, "Tops":6, "Light Knit Tops":7,
-  "Cardigans":8, "Pullovers":9, "Long Sleeve":10,
+  "Cardigans":8, "Pullovers":9, "Long Sleeve":10, "Long Sleeves":10,
 };
 
 // Secondary: garment length (for Dresses, Skirts via L3)

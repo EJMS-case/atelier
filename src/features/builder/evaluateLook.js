@@ -23,7 +23,10 @@ import { MODEL_STRONG } from "../../constants/models.js";
 import { sb } from "../../lib/supabase.js";
 import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
 import { summarizeSilhouette } from "../stylist/silhouette.js";
-import { stylistNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
+import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
+import { promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
+import { parseEvalResponse } from "./evalParse.js";
+import { logAiError } from "../../lib/ai/logError.js";
 
 const EVAL_PROMPT = `You are Elyce's personal stylist — a senior editorial stylist with a sharp, high-end eye. Her register is quiet luxury (The Row, Totême, Khaite; easy-feminine by way of Sézane). She built this outfit herself from her own wardrobe and wants the read she'd get from a top-tier human stylist: honest, precise, and chic — never generic, never flattering for its own sake.
 
@@ -33,8 +36,6 @@ SCORE the look 1-10 on styling merit:
 - formality coherence — inventory lines may carry her curated formality as f1 (most casual) to f8 (most formal); a look mixing distant registers should hear about it,
 - intentionality and finish (does it read styled, or assembled),
 - and, when an occasion is given, fitness for that room — a beautiful look that's wrong for the room is not a 9.
-
-${NOTES_NEGATION_LEGEND}
 
 WEATHER IS NOT A RATING FACTOR. Never move the score for the forecast. If the look reads seasonally off for the stated weather, say so ONLY in the separate "weather" field — one light, knowing aside ("the suede and the dark palette read a little wintery for this heat"). If the look sits fine in the weather, set "weather" to null.
 
@@ -64,7 +65,7 @@ function formatItemLine(it) {
     it.material ? `material: ${it.material}` : null,
     it.brand ? `brand: ${it.brand}` : null,
     it.name,
-    it.notes ? `notes: ${stylistNotes(it.notes, { maxLen: 160 })}` : null,
+    promptNotes(it, { maxLen: 160 }) ? `notes: ${promptNotes(it, { maxLen: 160 })}` : null,
   ].filter(Boolean);
   return parts.join(" | ");
 }
@@ -73,7 +74,8 @@ function formatItemLine(it) {
  * @param {Array}  items  - resolved wardrobe items on the canvas
  * @param {string} apiKey
  * @param {Object} opts   - { occasions?: string[], weathers?: string[],
- *                           model?, signal? }
+ *                           closetItems? (full wardrobe, for auto color
+ *                           pairs), model?, signal? }
  */
 export async function evaluateLook(items, apiKey, opts = {}) {
   if (!apiKey) throw new Error("API key required");
@@ -91,43 +93,57 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   if (Array.isArray(silhouette) && silhouette.length) {
     context.push(`HER BODY & FIT (dress to flatter):\n${silhouette.join("\n")}`);
   }
-  // Her hand-picked Settings color pairs — an activated pair is a signature
-  // move worth crediting; a missed easy activation is fair tip material.
+  // Her hand-picked color pairs + the in-fashion pairs her closet supports
+  // (auto-derived when the caller passes the full closet) — an activated pair
+  // is a signature move worth crediting; a missed easy activation is fair tip
+  // material.
   const prefs = loadStylePrefs();
-  if (prefs?.colorPairs?.length) {
-    context.push(`HER FAVORITE COLOR PAIRINGS (chosen by her, by hand): ${prefs.colorPairs.join(", ")}. A look that activates one deserves credit; a neutral look that could easily take a pair color is a natural tip.`);
+  const manualPairs = prefs?.colorPairs || [];
+  const autoPairs = opts.closetItems?.length
+    ? autoColorPairs(opts.closetItems, { exclude: manualPairs, max: 3 }).map(p => p.label)
+    : [];
+  const allPairs = [...manualPairs, ...autoPairs];
+  if (allPairs.length) {
+    context.push(`HER COLOR PAIRINGS (hand-picked favorites${autoPairs.length ? ", plus in-fashion pairs her closet supports" : ""}): ${allPairs.join(", ")}. A look that activates one deserves credit; a neutral look that could easily take a pair color is a natural tip.`);
   }
   const fp = await sb.fingerprintTextCached(1200);
   if (fp) context.push(`HER STYLE FINGERPRINT (your read on her taste — judge against it):\n${fp}`);
 
+  // No sampling params here: Sonnet 5 removed `temperature` — sending it is a
+  // hard 400 ("`temperature` is deprecated for this model") shown to the user.
+  // max_tokens 3000: the JSON contract needs ~600-700 tokens, but Sonnet 5
+  // runs adaptive thinking by DEFAULT and its (invisible) thinking tokens
+  // count against max_tokens — the 900→1400 truncation saga (2026-08-19) was
+  // this in disguise, and 1400 still left the JSON racing the thinking.
   const res = await anthropicFetch({
     model: opts.model || MODEL_STRONG,
-    max_tokens: 900,
-    temperature: 0.6,
+    max_tokens: 3000,
     messages: [{
       role: "user",
-      content: `${EVAL_PROMPT}\n${context.length ? `\n${context.join("\n\n")}\n` : ""}\nITEMS ON THE CANVAS:\n${inventory}`,
+      content: `${EVAL_PROMPT}\n${context.length ? `\n${context.join("\n\n")}\n` : ""}\nITEMS ON THE CANVAS (${NOTES_NEGATION_LEGEND}):\n${inventory}`,
     }],
   }, { apiKey, signal: opts.signal });
 
   const body = await res.json();
   const text = body.content?.map(b => b.text || "").join("") || "";
-  const match = text.replace(/```json|```/g, "").trim().match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("Could not parse evaluation response");
+  const { parsed, salvaged } = parseEvalResponse(text);
 
-  // Caps are generous safety rails against runaway output, NOT formatting —
-  // the old 120/160-char slices were truncating her evaluations mid-sentence
-  // (owner report 2026-08-19).
-  const parsed = JSON.parse(match[0]);
-  return {
-    score: typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : null,
-    headline: String(parsed.headline || "").slice(0, 280),
-    works: String(parsed.works || "").slice(0, 400),
-    tips: Array.isArray(parsed.tips)
-      ? parsed.tips.filter(t => typeof t === "string").slice(0, 3).map(t => t.trim().slice(0, 400))
-      : [],
-    weather: typeof parsed.weather === "string" && parsed.weather.trim()
-      ? parsed.weather.trim().slice(0, 400)
-      : null,
-  };
+  // The protocol needs payloads: this path never logged, so the owner's
+  // parse failure left nothing to replay. A salvage is a `:recovered`-style
+  // heads-up; a total miss carries the raw text for a real diagnosis.
+  if (!parsed) {
+    logAiError("evaluate_look:parse", {
+      stop_reason: body.stop_reason ?? null,
+      model: body.model ?? null,
+      text: text.slice(0, 4000),
+    }, "unparseable evaluation response");
+    throw new Error("The evaluation came back garbled — tap Evaluate look again.");
+  }
+  if (salvaged) {
+    logAiError("evaluate_look:recovered", {
+      stop_reason: body.stop_reason ?? null,
+      truncated: body.stop_reason === "max_tokens",
+    }, "evaluation response needed tolerant parse");
+  }
+  return parsed;
 }

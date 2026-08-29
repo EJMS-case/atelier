@@ -14,10 +14,17 @@ import Thumb from "./Thumb.jsx";
 // lose her words.
 const NOTES_CLAMP_CHARS = 60;
 
-function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, onStyleItem }) {
+// `isPacked` (wave 2, trips): true while the item sits in the active trip's
+// suitcase — shows a subtle 🧳 corner badge so packed pieces read apart from
+// destination-closet ones during a trip.
+function ItemCard({ item, allItems, onDelete, onEdit, onDuplicate, duplicateHint, isFavorited, isPacked, onToggleFav, onStyleItem }) {
   const [confirm,   setConfirm]   = useState(false);
   const [showSet,   setShowSet]   = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  // Duplicate-to-other-closet button: idle → confirm (second tap fires, same
+  // two-tap pattern as delete — a stray tap must not silently mint a row in a
+  // closet she isn't looking at) → busy while the image copy + upsert run.
+  const [dupState, setDupState] = useState("idle");
   const isPartOfSet = item.set_id && item.is_separable;
   const clampNotes = (item.notes || "").length > NOTES_CLAMP_CHARS;
   return (
@@ -31,6 +38,9 @@ function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, 
             onClick={e => { e.stopPropagation(); setShowSet(v => !v); }}>
             Part of Set
           </button>
+        )}
+        {isPacked && (
+          <div style={s.packedBadge} title="Packed for your trip">🧳</div>
         )}
       </div>
       {showSet && <SetPanel item={item} allItems={allItems} onClose={() => setShowSet(false)}/>}
@@ -65,6 +75,22 @@ function ItemCard({ item, allItems, onDelete, onEdit, isFavorited, onToggleFav, 
         {onToggleFav && (
           <button style={s.iconBtn} onClick={() => onToggleFav(item)} title="Favorite" aria-label="Favorite">
             <HeartIcon filled={isFavorited} size={13}/>
+          </button>
+        )}
+        {onDuplicate && (
+          <button
+            style={{...s.iconBtn, color: dupState === "idle" ? undefined : "var(--color-ink)"}}
+            disabled={dupState === "busy"}
+            onClick={async () => {
+              if (dupState === "idle") { setDupState("confirm"); return; }
+              if (dupState !== "confirm") return;
+              setDupState("busy");
+              try { await onDuplicate(item); }
+              finally { setDupState("idle"); }
+            }}
+            title={dupState === "confirm" ? `Tap again — duplicate into ${duplicateHint}` : `Duplicate into ${duplicateHint}`}
+            aria-label={`Duplicate into ${duplicateHint}`}>
+            {dupState === "busy" ? "…" : dupState === "confirm" ? "⧉?" : <Icon path={icons.copy} size={13}/>}
           </button>
         )}
         <button style={s.iconBtn} onClick={() => onEdit(item)} title="Edit" aria-label="Edit">
