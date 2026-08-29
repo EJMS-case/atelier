@@ -19,6 +19,7 @@ import TripDetailView from "./TripDetailView.jsx";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
+import { restoreScroll } from "../../utils/restoreScroll.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
@@ -191,47 +192,13 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
     return () => { lastTripScrollY = window.scrollY; };
   }, [activeTrip]);
 
-  // …and put her back there. The page grows in stages after mount — plans and
-  // the forecast arrive over the network, then every outfit photo decodes — so
-  // one scrollTo would just clamp against a page that is still short. Converge
-  // instead: each frame, scroll as close to the target as the current height
-  // allows; once it's reachable, hold it briefly, because the browser's scroll
-  // anchoring keeps nudging the offset while images above the viewport land.
-  //
-  // Only a real gesture cancels the restore. An earlier version bailed whenever
-  // the offset moved on its own, which scroll anchoring does constantly — so
-  // the restore aborted on its first frame and left her at the top anyway.
+  // …and put her back there. The converge/cancel logic lives in
+  // utils/restoreScroll.js — shared with the closet grid, which had the same
+  // "snaps back to the top" failure for the same two reasons (the page is
+  // still short on the first frame; scroll anchoring looks like a gesture).
   useEffect(() => {
     if (!activeTrip || !lastTripScrollY) return;
-    const target = lastTripScrollY;
-    const deadline = Date.now() + 4000;
-    let raf = 0;
-    let cancelled = false;
-    let holdUntil = 0;
-    const cancel = () => { cancelled = true; };
-    const opts = { passive: true };
-    window.addEventListener("wheel", cancel, opts);
-    window.addEventListener("touchstart", cancel, opts);
-    window.addEventListener("keydown", cancel, opts);
-    const stop = () => {
-      window.removeEventListener("wheel", cancel);
-      window.removeEventListener("touchstart", cancel);
-      window.removeEventListener("keydown", cancel);
-    };
-    const tick = () => {
-      if (cancelled) return stop();
-      const room = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      const y = Math.min(target, room);
-      if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
-      if (y >= target) {
-        if (!holdUntil) holdUntil = Date.now() + 600;
-        if (Date.now() > holdUntil) return stop();
-      }
-      if (Date.now() > deadline) return stop();
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); stop(); };
+    return restoreScroll(lastTripScrollY);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTrip?.id]);
 
