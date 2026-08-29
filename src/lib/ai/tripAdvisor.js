@@ -127,7 +127,10 @@ const TripLooksTool = {
  *                   weighting so a Lisbon trip isn't styled like Manhattan.
  * @param {Set<string>} [opts.preferItemIds] - ids already at the trip's
  *                   destination closet (Phase B): tagged AT DESTINATION in the
- *                   inventory and soft-preferred, since they pack for free.
+ *                   inventory, floated to the top of each category bucket, and
+ *                   strongly preferred per slot (they pack for free) — with an
+ *                   explicit exception for a day the destination closet can't
+ *                   dress (a heel for dinner).
  */
 export async function generateTripDayLook(items, occasion, weather, destination, apiKey, opts = {}) {
   if (!apiKey || !items?.length) return null;
@@ -275,10 +278,15 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   }
   const personalBlock = personalBits.length ? `\n${personalBits.join("\n\n")}\n` : "";
 
-  // Soft preference, not a rule — a look that genuinely needs a pulled piece
-  // should still get it (each unmarked piece costs suitcase space).
+  // Strong preference with a stated exception — NOT an absolute rule. The old
+  // wording ("when two pieces suit the day equally well") only fired on exact
+  // ties, so the AI path had the same weakness the local packer did: a
+  // destination closet whose register sits slightly below the day's (all
+  // athleisure/loungewear, hers in Arizona) never surfaced at all. Marked
+  // pieces are now the FIRST thing to reach for in every slot; a pulled piece
+  // still wins when the occasion genuinely needs it (a heel for dinner).
   const preferBlock = prefer
-    ? `\nPACKING PREFERENCE: Items marked "AT DESTINATION" already live at the destination and cost nothing to pack. When two pieces suit the day equally well, pick the AT DESTINATION one; reach for unmarked pieces only when the look genuinely needs them.\n`
+    ? `\nPACKING PREFERENCE (important): Items marked "AT DESTINATION" are already in her closet at the destination — they cost NOTHING to pack, while every unmarked piece has to fit in the suitcase. For EACH slot of the look (top, bottom/dress, shoes, bag, layer), start from the AT DESTINATION pieces and use one whenever it is adequate for the day — it does not have to be the most obvious or the dressiest choice, only appropriate. Do not skip an AT DESTINATION piece merely because an unmarked one is a slightly better style match. Exception: when the day's occasion genuinely calls for something the destination closet does not have (a heel or a proper dress for a dinner, work-appropriate pieces for a work day), pack the unmarked piece for that slot — and keep using AT DESTINATION pieces for the rest of the look.\n`
     : "";
 
   const destNote = destination ? ` in ${destination}` : "";
@@ -287,7 +295,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
 OCCASION: ${occasion}
 WEATHER: ${weather} (around ${highF}°F)${heatNote}
 ${destBlock}${activityBlock}${preferBlock}${varietyBlock}${personalBlock}
-WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register. ${NOTES_NEGATION_LEGEND}):
+WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register. A line ending in "| AT DESTINATION" is already in her closet at the destination and costs nothing to pack — see PACKING PREFERENCE above. ${NOTES_NEGATION_LEGEND}):
 ${inventory}
 
 Build exactly 1 polished, complete outfit appropriate for ${occasion} in ${weather} weather.

@@ -4,7 +4,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
 import { blobToDataUrl, compressImage, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
-import { CATEGORY_ORDER, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 
 // Per-file pipeline gate. The heavy steps — decoding a 12MP photo, the
 // matte assessment after remove.bg, the transparent-border trim — all run
@@ -205,6 +205,11 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           <div style={s.queueList}>
             {queue.map(item => {
               const status = processing[item.id];
+              // Holding room (Misc): name + photo + nothing else. Same
+              // collapse as EditItemView — none of these fields are read for
+              // an item that will never be styled. Misc is only ever chosen
+              // by hand here; the AI can't propose it (STYLING_TAXONOMY).
+              const isMisc = item.category === MISC_CATEGORY;
               return (
                 <div key={item.id} style={s.queueRow}>
                   {/* Thumbnail with status overlay */}
@@ -242,7 +247,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                         onChange={e => handleCategoryChange(item.id, e.target.value, item.image)}>
                         {CATEGORY_ORDER.map(c=><option key={c}>{c}</option>)}
                       </select>
-                      {TAXONOMY[item.category]?.length > 0 && item.category !== "Knits" && (() => {
+                      {!isMisc && TAXONOMY[item.category]?.length > 0 && item.category !== "Knits" && (() => {
                         const l2 = getSubcatL2(item.category, item.subcategory);
                         const l3Options = getL3Options(item.category, l2);
                         const l3Val = (l2 && l2 !== item.subcategory) ? item.subcategory : "";
@@ -265,7 +270,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       })()}
                     </div>
                     {/* Knit classification prompt */}
-                    {item.category === "Knits" && (() => {
+                    {!isMisc && item.category === "Knits" && (() => {
                       const ks = knitSuggest[item.id];
                       if (ks === "loading") return (
                         <div style={s.knitPrompt}>
@@ -297,6 +302,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       );
                       return null;
                     })()}
+                    {!isMisc && (<>
                     <div style={s.queueRow2}>
                       <input style={{...s.input,...s.queueInput}} placeholder="Color"
                         value={item.color} onChange={e=>update(item.id,"color",e.target.value)}/>
@@ -322,6 +328,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       style={{...s.input,...s.queueInput, minHeight:52, resize:"vertical", fontFamily:"inherit", lineHeight:1.4}}
                       placeholder="Notes (e.g. cropped, chunky knit, cashmere)"
                       value={item.notes} onChange={e=>update(item.id,"notes",e.target.value)}/>
+                    </>)}
                   </div>
                   <button style={s.queueRemove} onClick={()=>remove(item.id)}>✕</button>
                 </div>

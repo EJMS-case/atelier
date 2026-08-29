@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { s, si } from "../ui/styles.js";
 import { sb } from "../lib/supabase.js";
 import { streamStyleProfile, colorHex } from "../lib/ai/stylist.js";
-import { CATEGORY_ORDER } from "../constants/taxonomy.js";
+// STYLING_CATEGORY_ORDER: insights never names the "Misc" holding room (its
+// items are stripped upstream, so the row would always read zero anyway).
+import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { loadInsightsDismissed, saveInsightsDismissed } from "../utils/storage.js";
 
 // ── STYLE INSIGHTS ANALYSIS ──────────────────────────────────────────────────
@@ -136,7 +138,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
         <button style={si.cardDismiss} onClick={() => dismiss("gaps")} aria-label="Dismiss category breakdown card">✕</button>
         <div style={si.sectionHeader}>Category Breakdown</div>
         <div style={si.barContainer}>
-          {CATEGORY_ORDER.map(cat => {
+          {STYLING_CATEGORY_ORDER.map(cat => {
             const count = analysis.catCounts[cat] || 0;
             const max = Math.max(...Object.values(analysis.catCounts), 1);
             return (<div key={cat} style={si.barRow}><div style={si.barLabel}>{cat}</div>

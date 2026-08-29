@@ -338,7 +338,15 @@ export function filterByWeather(items, weather) {
     // "wool" / "leather" / "trench" was weather-excluding pieces the copy was
     // only styling against, not describing.
     const nameNotes = ((it.name || "") + " " + classifierNotes(it) + " " + (it.knit_weight || "") + " " + (it.material || "")).toLowerCase();
-    const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit/i.test(nameNotes);
+    // Owner report 2026-08-28: corduroy and bouclé were being packed for a
+    // 103°F week. They aren't "heavy" by name and both bouclé pieces are even
+    // tagged season_weight Light, so nothing here caught them. Napped/textured
+    // winter cloth is added by NAME because the season tag can't be trusted.
+    // Deliberately NOT a bare /knit/: that matches 71 pieces including the
+    // "Fine Knit" and "Light Knit" summer tops, which are exactly right in
+    // heat. Genuinely warm knits are already covered — the Knits CATEGORY is
+    // dropped wholesale in Hot below, plus chunky/cable/thick here.
+    const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit|corduroy|boucl[eé]|tweed|velvet|velour|flannel|mohair|angora|alpaca|teddy/i.test(nameNotes);
     const isWinterOuter = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(nameNotes);
     const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(nameNotes);
     const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
@@ -368,6 +376,12 @@ export function filterByWeather(items, weather) {
       if (it.category === "Outerwear" && !isLightOuter) return false;
       if (it.subcategory === "Jackets" && isHeavyFabric) return false;
       if (it.category === "Tops" && sleeve === "long") return false;
+      // A cape/poncho is a layering FORM, not a fabric — her knitted cape top
+      // is category Tops (so the Knits ban misses it), sleeveless (so the long-
+      // sleeve rule misses it) and tagged Light (so the season tag misses it),
+      // and it still landed in a 103°F packing list. Nobody wears a cape at
+      // 100°, whatever it's made of.
+      if (/\b(cape|poncho)\b/i.test(nameNotes)) return false;
       if (it.category === "Dresses" && /long.?sleeve/i.test(nameNotes)) return false;
       if (isHeavyFabric) return false;
       if (seasonTag === "winter") return false;
