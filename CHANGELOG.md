@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A trip look keeps its pieces whichever closet you're standing in — 2026-09-01
+
+### Why
+Owner report, with screenshots of the same Arizona trip day taken seconds apart: *"When I'm in the Arizona closet and try to edit outfits from the Arizona trip, the pieces I selected for the trip disappear, and when I'm trying to edit an outfit for the Arizona trip the pieces that live in Arizona disappear."* Day 1's Casual look showed a white tee, striped trousers, sandals, a bag and a belt under the NYC chip; under the Arizona chip the same look showed the trousers and the sandals.
+
+### Fixed
+- **A saved outfit renders against the whole wardrobe, never the active closet** (`TripDetailView`, `CalendarView`). `resolveItems` was resolving a trip look's item ids against the *generation* pool — asking "may I pick this here?" of a piece that had already been chosen. The pool is `destination closet ∪ active closet`, so tapping the destination chip collapsed the two into one and every home-closet piece in every saved look silently fell out of the collage. Closet scoping decides what you may PICK; it has no business deciding what an already-saved look CONTAINS. The same one-line confusion was behind the false coverage warnings on the Packing tab ("no top or dress" against a look that has one) and the partial thumbnails on the calendar grid, the day modal, and the saved-look picker — all now resolve against the full wardrobe.
+- **Editing a trip look no longer deletes the out-of-closet half of it** (`App.jsx`). This was the destructive half, and it left no trace. `SilhouetteBuilder` distributes `initialLook.garment_ids` into slots by looking each id up **in its pool**, and Save writes back only the ids that survived that lookup — so a closet-scoped pool didn't merely hide the Arizona pieces of a look opened from NYC, it dropped them from the plan row on save. The builder now receives the pieces of the look being edited (new `builderItems` memo), and, when the look is a trip day, the trip's whole pool — so the swap sheet offers what the trip can actually reach instead of one room of it.
+- **A trip's pool can only grow as the trip fills in, never shrink under it** (`outfits.js`, `TripDetailView`). New pure `tripCommittedIds({ plans, tripItems, mustIncludeIds })` — the union of the pins, every piece on every look, and every packing row — widens the generation pool through the new shared `poolIncluding` helper. Without it, regenerating a day while the destination chip was selected quietly rebuilt the capsule out of destination pieces alone, and "Bringing for sure" couldn't show (or unpin) a pin that lived in the other room.
+- **Pins ride inside the trip-setup pool rather than beside it** (`CalendarView`'s `TripModal`). The old `pinPool` union fed the picker but not the packer, and `tripPacker` seats pins by filtering the pool it was handed — so a pinned piece outside the pool was accepted by the sheet and then silently ignored at generation, not even reported as `mustIncludeUnplaced`. One pool now, shared by both.
+
+### Added
+- `poolIncluding(pool, allItems, ids)` in `features/closet/useVisibleWardrobe.js` — widen a scoped pool by specific committed ids, wherever they live. Returns the same array reference when nothing is missing, so callers keep memo stability. Misc ("holding room") pieces are never pulled in, even by a stale pin: that carve-out stays shut.
+
+### Notes
+No migration and no data repair. A look already thinned by an edit-and-save under the old code is gone from the plan row and can't be recovered here — regenerate or rebuild that day. Nothing about the pool rule for the closet grid, Style Me, or the active-trip suitcase changed (`resolveVisibleWardrobe` is untouched); this is only about surfaces that display or edit an already-committed set of ids.
+
+### Tests
+New `scripts/trip-pool.test.mjs` (`npm run test:trippool`, 17) — the screenshot's look resolving whole from either chip, both directions of the old scoped-display bug kept as regressions, `tripCommittedIds` over outfits/legacy `items` mirrors/pins/packing rows and malformed input, the property that no committed piece can fall out of the pool under any chip, and the Misc carve-out. `npm run test:visible` +8 for `poolIncluding` (identity return, Set and array inputs, unknown ids, no duplicates, Misc). Full `npm test` chain and `npm run build` green.
+
 ## [Unreleased] — Trip screen no longer throws you back to the top — 2026-08-29
 
 ### Why

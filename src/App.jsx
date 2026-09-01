@@ -23,7 +23,7 @@ import {
 } from "./utils/storage.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
 import { compareSetsByName, compareSetsByType } from "./features/closet/setType.js";
-import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem } from "./features/closet/useVisibleWardrobe.js";
+import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem, poolIncluding } from "./features/closet/useVisibleWardrobe.js";
 import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
 import { sb } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
@@ -382,6 +382,27 @@ export default function App() {
     [items, activeCloset.id],
   );
   const stylingItems = useMemo(() => withoutMisc(items), [items]);
+
+  // ── Builder pool ───────────────────────────────────────────────────────────
+  // SilhouetteBuilder distributes initialLook.garment_ids into slots by
+  // LOOKING EACH ID UP IN ITS POOL, and its Save writes back only the ids that
+  // survived. So a scoped pool doesn't merely hide an out-of-closet piece
+  // while you edit — it deletes it the moment you save. That is exactly what
+  // happens on a trip look: every trip day mixes home and destination pieces
+  // by design, so opening one with the wrong closet chip selected silently
+  // strips half the outfit.
+  //
+  // The look being edited therefore brings its own pieces into the pool.
+  // Everything else stays closet-scoped: this widens what the canvas can HOLD,
+  // never what the swap sheet offers to add.
+  const builderItems = useMemo(() => {
+    const editedIds = editingPlan ? (editingPlan.plan?.items || []) : (builderSeed?.garment_ids || []);
+    const widen = [
+      ...editedIds.map(it => (typeof it === "object" && it !== null ? it.id : it)),
+      ...(editingPlan?.poolIds || []),
+    ];
+    return poolIncluding(closetItems, stylingItems, widen);
+  }, [closetItems, stylingItems, editingPlan, builderSeed]);
 
   // Suitcase pieces during an ACTIVE trip (wave 2 — packed-item marker). The
   // closet grid badges these 🧳 so packed pieces read apart from destination-
@@ -1930,7 +1951,7 @@ export default function App() {
       {/* ── LOOKS ── */}
       {view === "style" && manualBuilderOpen && (
         <SilhouetteBuilder
-          items={closetItems}
+          items={builderItems}
           setsMeta={setsMeta}
           apiKey={apiKey}
           initialLook={editingPlan ? {
@@ -2237,7 +2258,7 @@ export default function App() {
               setManualBuilderOpen(true);
               setView("style");
             }}
-            onBuildDay={(iso, existingIds, tripOutfitIdx = null, newOutfitLabel = null) => {
+            onBuildDay={(iso, existingIds, tripOutfitIdx = null, newOutfitLabel = null, poolIds = null) => {
               // tripOutfitIdx is set when Build is opened from a specific
               // outfit on a trip-detail day. We carry it through editingPlan
               // so the save path can update outfits[idx] in the JSONB array
@@ -2245,7 +2266,12 @@ export default function App() {
               // trip view doesn't read from when outfits[] is present).
               // newOutfitLabel rides along when the calendar appends a fresh
               // look ("Day"/"Evening") so the save path can stamp it.
-              setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx, newOutfitLabel });
+              // poolIds rides along from the trip detail view: a trip's pool is
+              // destination ∪ home ∪ whatever the trip already holds, which is
+              // wider than any one closet. Without it the swap sheet would
+              // offer only the active closet while editing a look that is
+              // cross-closet by construction.
+              setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx, newOutfitLabel, poolIds });
               setBuilderReturnView(viewRef.current);
               setManualBuilderOpen(true);
               setView("style");

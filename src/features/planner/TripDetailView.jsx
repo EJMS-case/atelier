@@ -16,11 +16,12 @@ import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib
 import { SEASONAL_HIGHS } from "../../lib/time.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
-import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps } from "./outfits.js";
+import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds } from "./outfits.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
+import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 
@@ -251,29 +252,8 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   const tempHighForDay = (iso) =>
     forecast?.[iso]?.high ?? brief?.tempHighF ?? null;
 
-  // ── Generation pool (Phase B) ──────────────────────────────────────────
-  // With a destination closet: merge its items (from the full wardrobe) into
-  // the scoped `items` prop and prefer them when scoring/generating — packing
-  // cost zero. Same rule as TripModal's preview pool. Without one, this is
-  // just `items` and no preference (pre-Phase-B behavior).
   const closetOf = (it) => it?.closet_id || DEFAULT_CLOSET_ID;
   const destClosetId = trip.destination_closet_id || null;
-  const { genItems, preferItemIds } = useMemo(() => {
-    if (!destClosetId) return { genItems: items, preferItemIds: null };
-    const seen = new Set(items.map(it => it.id));
-    const extra = (allItems || []).filter(it => closetOf(it) === destClosetId && !seen.has(it.id));
-    const pool = [...items, ...extra];
-    return {
-      genItems: pool,
-      preferItemIds: new Set(pool.filter(it => closetOf(it) === destClosetId).map(it => it.id)),
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, allItems, destClosetId]);
-
-  // Resolve item-id list to item objects, dropping anything missing from the
-  // trip pool (deleted items, etc.). Resolves against the MERGED pool so a
-  // destination-closet piece renders even while the home closet is active.
-  const resolveItems = (ids) => resolveItemIds(genItems, ids);
 
   // FULL-wardrobe lookup — the packing checklist + reconcile must see every
   // item regardless of the current pool scoping (during an ACTIVE trip the
@@ -284,6 +264,50 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
     () => new Map(wardrobeAll.map(it => [it.id, it])),
     [wardrobeAll],
   );
+
+  // Resolve an item-id list to item objects, dropping only ids the WARDROBE no
+  // longer has (deleted pieces). Deliberately NOT the trip pool: a saved
+  // outfit is a record of what she chose, not a query against whichever closet
+  // chip is selected right now. The Arizona trip's Day 1 look holds a NYC tee;
+  // tapping the Arizona chip must not make that tee vanish from the collage,
+  // from the coverage check ("no top or dress" on a look that has one), or
+  // from the ⊞ Build canvas that saves the look back.
+  const resolveItems = (ids) => resolveItemIds(wardrobeAll, ids);
+
+  // Everything this trip has already committed to, by id: the pins, every
+  // piece on every saved look, and every row in the suitcase. These are facts
+  // about the trip, so they belong in its pool no matter which closet is
+  // active — without them, opening the trip from the destination closet
+  // narrows the pool to the destination and a regenerate quietly rebuilds the
+  // capsule out of half a wardrobe.
+  const committedIds = useMemo(
+    () => tripCommittedIds({ plans, tripItems, mustIncludeIds }),
+    [plans, tripItems, mustIncludeIds],
+  );
+
+  // ── Generation pool (Phase B) ──────────────────────────────────────────
+  // What a fresh generation may PICK from. With a destination closet: merge
+  // its items (from the full wardrobe) into the scoped `items` prop and prefer
+  // them when scoring/generating — packing cost zero. Same rule as TripModal's
+  // preview pool. Without one, this is just `items` and no preference
+  // (pre-Phase-B behavior). Either way it is widened by `committedIds` so the
+  // pool can only ever grow as the trip fills in, never shrink under it.
+  const { genItems, preferItemIds } = useMemo(() => {
+    let scoped = items;
+    if (destClosetId) {
+      const seen = new Set(items.map(it => it.id));
+      const extra = (allItems || []).filter(it => closetOf(it) === destClosetId && !seen.has(it.id));
+      scoped = extra.length ? [...items, ...extra] : items;
+    }
+    const pool = poolIncluding(scoped, wardrobeAll, committedIds);
+    return {
+      genItems: pool,
+      preferItemIds: destClosetId
+        ? new Set(pool.filter(it => closetOf(it) === destClosetId).map(it => it.id))
+        : null,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, allItems, wardrobeAll, destClosetId, committedIds]);
 
   // ── Trip_items reconcile (wave 2 — B4) ────────────────────────────────────
   // ONE reconcile site for the whole view (per the handoff warning about the
@@ -1026,7 +1050,12 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       warnings,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plans, days, genItems, wardrobeAll, destClosetId, mustIncludeIds]);
+  }, [plans, days, wardrobeAll, destClosetId, mustIncludeIds]);
+
+  // Handed to the ⊞ Build canvas so editing a trip look offers the TRIP's
+  // pool rather than whichever closet the chip happens to be on — the look is
+  // cross-closet by construction, so a closet-scoped swap sheet is wrong.
+  const tripPoolIds = useMemo(() => genItems.map(it => it.id), [genItems]);
 
   const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
   const weatherBucket = brief ? bucketFromHigh(brief.tempHighF) : null;
@@ -1310,7 +1339,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
                         ✦ Generate
                       </button>
                       {onBuildDay && (
-                        <button onClick={() => onBuildDay(iso, [])}
+                        <button onClick={() => onBuildDay(iso, [], null, null, tripPoolIds)}
                           style={{ padding: "7px 12px", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                           ⊞ Build
                         </button>
@@ -1384,7 +1413,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
                               {outfitItems.length > 0 ? "↺ Regenerate" : "✦ Generate"}
                             </button>
                             {onBuildDay && (
-                              <button onClick={() => onBuildDay(iso, outfit.items || [], outfitIdx)}
+                              <button onClick={() => onBuildDay(iso, outfit.items || [], outfitIdx, null, tripPoolIds)}
                                 style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                                 ⊞ Build
                               </button>

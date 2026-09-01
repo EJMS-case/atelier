@@ -19,6 +19,7 @@ import TripDetailView from "./TripDetailView.jsx";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
+import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
@@ -103,6 +104,12 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
   const [activeDay, setActiveDay] = useState(null); // iso string
   const [showTrip, setShowTrip] = useState(false);
   const [trips, setTrips] = useState([]);
+  // Saved plans and outfit logs name their pieces by id, and those ids don't
+  // belong to the active closet — a look pinned to a day can hold a piece that
+  // lives in another room, and every trip day does by construction. So DISPLAY
+  // resolves against the full wardrobe; only pickers stay scoped to `items`.
+  const wardrobeAll = (Array.isArray(allItems) && allItems.length) ? allItems : items;
+
   const [activeTrip, setActiveTripRaw] = useState(null); // trip object → show TripDetailView
   // Open/close the trip through here so the module-level memo above always
   // matches what's on screen.
@@ -473,7 +480,7 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
             iso === tripForDay.start_date ||
             (iso < tripForDay.start_date === false && isoDate(startOfMonth(anchor)) === iso)
           );
-          const planItems = resolveItemIds(items, plan?.items);
+          const planItems = resolveItemIds(wardrobeAll, plan?.items);
           const planOutfits = outfitsOf(plan);
           const isToday = iso === todayIso;
           return (
@@ -541,6 +548,7 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
           iso={activeDay}
           plan={plans[activeDay]}
           items={items}
+          allItems={wardrobeAll}
           outfitLogs={outfitLogs}
           forecast={forecast}
           forecastLabel={`${activeCloset?.name || "NYC"} forecast`}
@@ -670,7 +678,11 @@ function GenerateForDay({ iso, isPast, hasExisting, forecast, hasApiKey, onGener
   );
 }
 
-function DayModal({ iso, plan, items, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
+function DayModal({ iso, plan, items, allItems, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
+  // Saved looks resolve against the whole wardrobe, never the scoped pool —
+  // see the note on `wardrobeAll` in CalendarView. `items` stays the picker
+  // scope; this is only ever read to RENDER what a day already holds.
+  const wardrobeAll = (Array.isArray(allItems) && allItems.length) ? allItems : items;
   // Language adapts to past/today/future. Past = "What you wore" (a log, not
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
@@ -743,7 +755,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, forecastLabel, hasAp
         </div>
 
         {planOutfits.map((o, idx) => {
-          const outfitItems = resolveItemIds(items, o.items);
+          const outfitItems = resolveItemIds(wardrobeAll, o.items);
           if (outfitItems.length === 0) return null;
           return (
             <div key={o.id || idx} style={{ marginBottom: 12, padding: 12, background: PALETTE.cream, borderRadius: 6 }}>
@@ -839,7 +851,7 @@ function DayModal({ iso, plan, items, outfitLogs, forecast, forecastLabel, hasAp
               </div>
             )}
             {matching.map(log => {
-              const logItems = resolveItemIds(items, log.garment_ids).slice(0, 4);
+              const logItems = resolveItemIds(wardrobeAll, log.garment_ids).slice(0, 4);
               return (
                 <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather, label: hasLooks ? daypart : "" })}
                   style={{ display: "flex", gap: 10, width: "100%", padding: 10, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, marginBottom: 8, cursor: "pointer", alignItems: "center", textAlign: "left" }}>
@@ -995,10 +1007,23 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // `items` prop, no preference (pre-Phase-B behavior).
   const closetOf = (it) => it.closet_id || DEFAULT_CLOSET_ID;
   const homeClosetId = activeCloset?.id || DEFAULT_CLOSET_ID;
+  // Pins ride INSIDE the pool, not alongside it. A pinned piece that the
+  // closet scoping leaves out (she pinned from a different closet, or switched
+  // the destination after pinning) would otherwise be invisible in the sheet —
+  // and therefore un-unpinnable — while tripPacker, which seats pins by
+  // filtering the pool it was handed, silently ignored it. Folding the union
+  // in here makes one pool that both surfaces agree on.
   const { genItems, preferItemIds, destRelaxed } = useMemo(() => {
-    if (!destClosetId) return { genItems: items, preferItemIds: null, destRelaxed: false };
     const source = Array.isArray(allItems) && allItems.length ? allItems : items;
-    const pool = source.filter(it => closetOf(it) === destClosetId || closetOf(it) === homeClosetId);
+    if (!destClosetId) {
+      return {
+        genItems: poolIncluding(items, source, mustIncludeIds),
+        preferItemIds: null,
+        destRelaxed: false,
+      };
+    }
+    const scoped = source.filter(it => closetOf(it) === destClosetId || closetOf(it) === homeClosetId);
+    const pool = poolIncluding(scoped, source, mustIncludeIds);
     const atDest = pool.filter(it => closetOf(it) === destClosetId);
     return {
       genItems: pool,
@@ -1009,23 +1034,11 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       destRelaxed: isRelaxedDestinationCloset(atDest),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destClosetId, allItems, items, homeClosetId]);
-
-  // What the pin sheet offers: the generation pool, plus any already-pinned
-  // piece that has since dropped out of it (switching the destination closet
-  // narrows the pool). Without that union a pin could become invisible and
-  // therefore un-unpinnable while still driving the packer.
-  const pinPool = useMemo(() => {
-    if (!mustIncludeIds.size) return genItems;
-    const inPool = new Set(genItems.map(it => it.id));
-    const source = Array.isArray(allItems) && allItems.length ? allItems : items;
-    const strays = source.filter(it => mustIncludeIds.has(it.id) && !inPool.has(it.id));
-    return strays.length ? [...genItems, ...strays] : genItems;
-  }, [genItems, mustIncludeIds, allItems, items]);
+  }, [destClosetId, allItems, items, homeClosetId, mustIncludeIds]);
 
   const pinnedItems = useMemo(
-    () => pinPool.filter(it => mustIncludeIds.has(it.id)),
-    [pinPool, mustIncludeIds],
+    () => genItems.filter(it => mustIncludeIds.has(it.id)),
+    [genItems, mustIncludeIds],
   );
 
   // If user re-runs Preview the working copy is rebuilt — but vibe/weather
@@ -1765,7 +1778,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
 
         {showPinPicker && (
           <MustIncludePicker
-            items={pinPool}
+            items={genItems}
             selectedIds={mustIncludeIds}
             onChange={(next) => { setMustIncludeIds(next); invalidatePreview(); }}
             onClose={() => setShowPinPicker(false)}
