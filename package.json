@@ -33,7 +33,8 @@
     "test:sets": "node scripts/set-sorting.test.mjs",
     "test:colors": "node scripts/color-family.test.mjs",
     "test:misc": "node scripts/misc-category.test.mjs",
-    "test": "npm run test:coerce && npm run test:boxmath && npm run test:validator && npm run test:filters && npm run test:freetext && npm run test:rotation && npm run test:weather && npm run test:packer && npm run test:packsync && npm run test:visible && npm run test:duplicate && npm run test:edits && npm run test:memory && npm run test:silhouette && npm run test:notes && npm run test:taxonomy && npm run test:matte && npm run test:evalparse && npm run test:coverage && npm run test:audit && npm run test:brands && npm run test:sets && npm run test:colors && npm run test:misc && npm run test:matrix",
+    "test:trippool": "node scripts/trip-pool.test.mjs",
+    "test": "npm run test:coerce && npm run test:boxmath && npm run test:validator && npm run test:filters && npm run test:freetext && npm run test:rotation && npm run test:weather && npm run test:packer && npm run test:packsync && npm run test:visible && npm run test:duplicate && npm run test:edits && npm run test:memory && npm run test:silhouette && npm run test:notes && npm run test:taxonomy && npm run test:matte && npm run test:evalparse && npm run test:coverage && npm run test:audit && npm run test:brands && npm run test:sets && npm run test:colors && npm run test:misc && npm run test:trippool && npm run test:matrix",
     "test:freetext": "node scripts/free-text-rescue.test.mjs"
   },
   "dependencies": {

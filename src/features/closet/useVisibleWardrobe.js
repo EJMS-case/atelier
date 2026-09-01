@@ -96,3 +96,41 @@ export function resolveVisibleWardrobe({ items, activeClosetId, activeTrip, trip
     (destClosetId != null && closetOf(it) === destClosetId) || packed.has(it.id),
   );
 }
+
+/**
+ * Union a scoped pool with specific pieces named by id, wherever they live.
+ *
+ * Closet scoping answers "what may I PICK from here". It must never decide
+ * what an already-committed artifact CONTAINS — a saved outfit, a trip's pins,
+ * a suitcase. Those name their pieces by id, and the ids outlive whichever
+ * closet chip happens to be selected: the Arizona trip's Day 1 look holds a
+ * NYC tee, and tapping the Arizona chip cannot un-hold it.
+ *
+ * So every surface that shows or edits a committed set of ids resolves against
+ * a pool widened by this helper (or against the full wardrobe outright). A
+ * scoped pool alone silently drops the out-of-closet pieces, which reads as
+ * "my outfit lost its top" and — once the thinned look is saved back — makes
+ * it true.
+ *
+ * Misc ("holding room") items are never pulled in: a pinned or packed PJ set
+ * can't exist, and if a stale id names one, honouring it would put pyjamas
+ * back on a styling surface through the one door that is meant to stay shut.
+ *
+ * @param {Object[]} pool     - the scoped pool to widen (returned as-is when
+ *                              nothing is missing, so callers keep referential
+ *                              stability inside a useMemo)
+ * @param {Object[]} allItems - the full wardrobe to pull missing pieces from
+ * @param {Iterable<string>} ids - ids that must be present in the result
+ * @returns {Object[]} pool, plus any named piece it lacked (appended in
+ *                     `allItems` order)
+ */
+export function poolIncluding(pool, allItems, ids) {
+  const base = pool || [];
+  const wanted = ids instanceof Set ? ids : new Set(ids || []);
+  if (wanted.size === 0) return base;
+  const have = new Set(base.map(it => it.id));
+  const extra = (allItems || []).filter(
+    it => it && wanted.has(it.id) && !have.has(it.id) && !isMiscItem(it),
+  );
+  return extra.length ? [...base, ...extra] : base;
+}
