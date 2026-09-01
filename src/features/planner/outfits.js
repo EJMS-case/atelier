@@ -77,6 +77,33 @@ export function flattenPlanItemIds(plan) {
   return out;
 }
 
+// ── What a trip has already committed to ─────────────────────────────────────
+// The union of every id the trip names: her "bringing for sure" pins, every
+// piece on every look across every day, and every row on the packing list.
+//
+// These are facts about the TRIP, not about a closet, so they must survive a
+// change of the active closet chip. Closet scoping answers "what may I pick
+// from here"; it has no business deciding what a trip already holds. Feed the
+// result to poolIncluding() (features/closet/useVisibleWardrobe.js) and the
+// trip's pool can only grow as the trip fills in — never shrink under it,
+// which is what made an Arizona-trip look lose its NYC pieces the moment the
+// Arizona closet was selected.
+//
+// @param {Object}   plans          - { iso: plan } for the trip's days
+// @param {Object[]} [tripItems]    - trip_items rows
+// @param {Iterable<string>} [mustIncludeIds] - trips.must_include_ids
+// @returns {Set<string>} every committed item id
+export function tripCommittedIds({ plans, tripItems, mustIncludeIds }) {
+  const out = new Set(mustIncludeIds || []);
+  for (const plan of Object.values(plans || {})) {
+    for (const id of flattenPlanItemIds(plan)) out.add(id);
+  }
+  for (const row of (tripItems || [])) {
+    if (row?.item_id) out.add(row.item_id);
+  }
+  return out;
+}
+
 // ── Coverage check ───────────────────────────────────────────────────────────
 // Single shared rule for "is this outfit missing a core piece" — used by the
 // trip packer, the trip-preview cards, and the trip-detail packing tab

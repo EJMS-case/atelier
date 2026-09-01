@@ -6,7 +6,7 @@
 //
 // Run: npm run test:visible
 
-import { resolveVisibleWardrobe, packedItemIds } from "../src/features/closet/useVisibleWardrobe.js";
+import { resolveVisibleWardrobe, packedItemIds, poolIncluding } from "../src/features/closet/useVisibleWardrobe.js";
 import { DEFAULT_CLOSET_ID, ARIZONA_CLOSET_ID } from "../src/features/closet/closets.js";
 
 let passed = 0, failed = 0;
@@ -98,6 +98,45 @@ section("degenerate inputs");
     "null items → empty array");
   const pool = resolveVisibleWardrobe({ items, activeClosetId: DEFAULT_CLOSET_ID, activeTrip: null, tripItems: undefined });
   assert(ids(pool) === ids([nycTee, nycJean, legacyBag]), "missing tripItems is fine without a trip");
+}
+
+// ── 6. poolIncluding — committed ids survive the closet chip ─────────────────
+// The Arizona-trip bug: a trip look holds a NYC tee, she taps the Arizona
+// chip, and the scoped pool no longer contains the tee — so the collage lost
+// its top, coverage warned "no top or dress", and the ⊞ Build canvas saved the
+// look back without it. Committed ids widen the pool instead.
+section("poolIncluding");
+{
+  const az = [azDress, azSandal];                       // Arizona chip is on
+
+  const widened = poolIncluding(az, items, ["w1"]);     // the trip look's NYC tee
+  assert(ids(widened) === ids([azDress, azSandal, nycTee]), "a committed NYC piece joins the Arizona pool");
+  assert(widened.map(it => it.id).join(",") === "w3,w4,w1",
+    "the scoped pool keeps its order; extras are appended");
+
+  assert(poolIncluding(az, items, ["w3", "w4"]) === az,
+    "nothing missing → the SAME array back (memo stability)");
+  assert(poolIncluding(az, items, []) === az, "no ids → the same array back");
+  assert(poolIncluding(az, items, null) === az, "null ids → the same array back");
+
+  assert(ids(poolIncluding(az, items, new Set(["w1", "w5"]))) === ids([azDress, azSandal, nycTee, legacyBag]),
+    "accepts a Set, and a missing closet_id is no obstacle");
+
+  // A deleted piece is genuinely gone: an id the wardrobe can't resolve adds
+  // nothing rather than a hole.
+  assert(ids(poolIncluding(az, items, ["gone"])) === ids(az), "an unknown id is dropped, not faked");
+
+  // Duplicates can't sneak in — a committed id already in the pool is a no-op.
+  const twice = poolIncluding(az, items, ["w3", "w1"]);
+  assert(twice.filter(it => it.id === "w3").length === 1, "an id already in the pool is not duplicated");
+
+  // The holding room stays shut even when an id names one of its pieces.
+  const pjs = { id: "w6", name: "PJs", category: "Misc", closet_id: ARIZONA_CLOSET_ID };
+  assert(ids(poolIncluding([nycTee], [...items, pjs], ["w6"])) === ids([nycTee]),
+    "a Misc piece is never pulled in, even by a committed id");
+
+  assert(poolIncluding(null, items, ["w1"]).length === 1, "null pool is treated as empty");
+  assert(poolIncluding(az, null, ["w1"]) === az, "null wardrobe → nothing to pull, same array back");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
