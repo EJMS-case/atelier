@@ -2,6 +2,34 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The doctor was wrong three times out of three — 2026-09-02
+
+### Why
+Every finding `npm run doctor` produced against the real wardrobe turned out to be a false alarm. All three. Owner, on two of them:
+
+> *"Combine sports bra and sports bras. Moving forward be smarter about errors like that."*
+> *"The sets you noted aren't a misfire, it's just two pieces from the same brand in the same color that I wear as a set because they match."*
+
+A check that is wrong every time it speaks is worse than no check: it trains you to skim past the one that matters.
+
+### What each finding actually was
+- **"Sports Bra" vs "Sports Bras"** — `ATHLEISURE_SUBCATEGORY_ALIASES` has folded the singular into the plural inside `normalizeItem` since 2026-08-28, and that runs on every load. The app was never confused; only the stored value was stale, because migration 0023 rewrote the rows that existed then and *Twist Sports Bra* was created afterwards. My stated reason — "any code comparing this subcategory covers only half your rows" — was **wrong**.
+- **Belts blank two ways** (`""` on 11 rows, `null` on 3) — **nothing** in the codebase compares `subcategory` to either value. All 25 read sites coalesce with `|| ""`. Pure noise.
+- **A coord set spanning both closets** — her filing, not a fault. See her words above.
+
+### Changed
+- **`setsSplitAcrossClosets` deleted.** Zero true positives, one false positive on the only data that matters. The tests that replaced it assert her filing is the specification, so nobody re-adds it.
+- **`taxonomyAnomalies` → `unknownSubcategories`**, and it now reports only a value the app genuinely cannot place: no canonical entry at level 2 (`TAXONOMY`), none at level 3 (`SUBCATEGORY_L3` — "Jeans" and "Midi" are stored as subcategories but live a tier down), and no alias. Missing the L3 tier would have flagged most of her Bottoms and Shoes, which is the same mistake one layer deeper.
+- The blank-spelling check is gone entirely.
+
+### Fixed (data)
+- **Migration `0034`** folds the one remaining stored `"Sports Bra"` into `"Sports Bras"` — **applied live**; that subcategory is now a single bucket of 20. The rollback names the single affected row rather than reversing in bulk, which would wrongly demote the other 19.
+
+### Notes
+`npm run doctor` over the live 533-garment wardrobe now reports **no findings**, which is the honest answer. The checks that survive are the ones that caught something real: a saved look naming a piece the pool can't reach, an active trip carrying nothing, a suitcase naming a deleted garment, and a Misc leak.
+
+`pool-invariants` 53 → 56. Full `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — One vocabulary for a set of clothes, and a test that renders the app — 2026-09-02
 
 ### Why

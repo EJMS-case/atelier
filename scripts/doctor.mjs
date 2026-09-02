@@ -23,9 +23,9 @@
 // if she wants that.
 
 import {
-  looksReachable, setsSplitAcrossClosets, activeTripCarriesSomething,
-  taxonomyAnomalies, miscLeaks,
+  looksReachable, activeTripCarriesSomething, unknownSubcategories, miscLeaks,
 } from "../src/features/closet/poolInvariants.js";
+import { TAXONOMY, SUBCATEGORY_L3, ATHLEISURE_SUBCATEGORY_ALIASES } from "../src/constants/taxonomy.js";
 import { resolveVisibleWardrobe } from "../src/features/closet/useVisibleWardrobe.js";
 import { SUPABASE_URL, SUPABASE_KEY as ANON_KEY } from "../src/lib/supabaseConfig.js";
 
@@ -138,32 +138,20 @@ async function main() {
     }
   }
 
-  // ── 3. Coord sets duplication cannot explain ───────────────────────────────
-  // A set living in both rooms is normal — she buys athleisure in twos and ⧉
-  // duplicate keeps the set_id. Only a cross-room set with NO duplicate link
-  // between the halves is worth a word: that is a mis-filed piece.
-  const split = setsSplitAcrossClosets(wardrobe);
-  for (const bad of split) {
-    const members = wardrobe.filter(w => w.set_id === bad.setId);
-    note("warn", "A coord set spans both closets but nothing links the halves",
-      members.map(w => w.name).join(" + "),
-      "These look like different products filed under one set — a duplicate pair would be linked. Split them, or re-file the odd piece.");
+  // ── 3. Subcategories the app cannot place ──────────────────────────────────
+  // Only values with no canonical entry AND no alias, at any of the three
+  // taxonomy tiers. Everything softer than that was removed on 2026-09-02
+  // after all three of this check's findings turned out to be false alarms —
+  // see the note on unknownSubcategories for what they were and why.
+  for (const u of unknownSubcategories(wardrobe, {
+    taxonomy: TAXONOMY, l3: SUBCATEGORY_L3, aliases: ATHLEISURE_SUBCATEGORY_ALIASES,
+  })) {
+    note("warn", `${u.count} item(s) filed under a subcategory the app doesn't know`,
+      `${u.category} → "${u.subcategory}"`,
+      "Nothing maps this value, so filters on it silently miss those rows. Re-file them, or add the value to the taxonomy.");
   }
 
-  // ── 4. Taxonomy hygiene ────────────────────────────────────────────────────
-  const { nearDuplicates, blankStyles } = taxonomyAnomalies(wardrobe);
-  for (const spellings of nearDuplicates) {
-    const counts = spellings.map(s => `"${s}" (${wardrobe.filter(w => w.subcategory === s).length})`);
-    note("warn", "One subcategory, two spellings", counts.join(" vs "),
-      "Any code comparing this subcategory covers only half your rows. Pick one spelling and re-file the others.");
-  }
-  if (blankStyles.length > 1) {
-    note("warn", `Blank subcategory is stored ${blankStyles.length} different ways`,
-      blankStyles.join(" and "),
-      "Harmless today, but every `subcategory === ''` check misses the nulls and vice versa.");
-  }
-
-  // ── 5. The holding room ────────────────────────────────────────────────────
+  // ── 4. The holding room ────────────────────────────────────────────────────
   const leaked = miscLeaks(resolveVisibleWardrobe({
     items: wardrobe, activeClosetId: wardrobe[0]?.closet_id, activeTrip: null,
   }));
