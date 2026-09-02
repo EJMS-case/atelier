@@ -32,7 +32,12 @@ export async function findBrowser(label) {
   let chromium;
   try { ({ chromium } = await import("playwright-core")); }
   catch {
-    console.log(`${label}: playwright-core not installed — skipping (npm i -D playwright-core to enable)`);
+    // playwright-core is a devDependency; reaching here means dependencies are
+    // not installed, so say that rather than suggesting an ad-hoc install. It
+    // was NOT a devDependency until 2026-09-02, which meant a fresh container
+    // skipped this walk silently and "smoke green" could mean "smoke did not
+    // run" — the same shape as the vacuous checks this harness exists to stop.
+    console.log(`${label}: playwright-core missing — run \`npm install\`. Skipping.`);
     return null;
   }
   const executablePath = fs.existsSync(BROWSERS_DIR)

@@ -10,6 +10,7 @@
 
 import { getAccessToken } from "./auth.js";
 import { SUPABASE_URL, SUPABASE_KEY, BUCKET } from "./supabaseConfig.js";
+import { selfHealingWrite } from "./selfHealingWrite.js";
 
 export { SUPABASE_URL, SUPABASE_KEY, BUCKET };
 
@@ -78,38 +79,28 @@ export const sb = {
     return res.json();
   },
 
-  // Self-healing upsert: strips unknown columns on PGRST204 and retries. This
-  // protects old clients from breaking when a new migration hasn't run yet.
+  // Writes through selfHealingWrite: a column the live project has not been
+  // migrated to yet is stripped and the row saves without it. The `""` → null
+  // normalizations below are upsert's own — PG rejects an empty string in a
+  // numeric or uuid column, and no amount of retrying fixes that.
   async upsert(item) {
     const { image, pending_sync, ...rest } = item;
     // `pending_sync` is a UI-only flag for the local cross-device delete-
     // protection path; it must never hit Supabase.
     void pending_sync;
-    let payload = image && !image.startsWith("data:") ? { ...rest, image } : { ...rest };
+    const payload = image && !image.startsWith("data:") ? { ...rest, image } : { ...rest };
     if (payload.set_id === "") payload.set_id = null;
     // Empty strings reach numeric columns as `""` and PG rejects them.
     if (payload.price_paid === "") payload.price_paid = null;
     // Same for the uuid closet_id column (multi-closet, Phase A).
     if (payload.closet_id === "") payload.closet_id = null;
 
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items`, {
-        method: "POST",
-        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return res.json();
-
-      let err;
-      try { err = await res.json(); } catch { throw new Error(`Upsert failed ${res.status}`); }
-
-      if (err.code === "PGRST204") {
-        const match = err.message?.match(/find the '([^']+)' column/);
-        if (match?.[1]) { delete payload[match[1]]; continue; }
-      }
-      throw new Error(`Upsert failed: ${err.message || res.status}`);
-    }
-    throw new Error("Upsert failed after stripping unknown columns");
+    return selfHealingWrite({
+      url: `${SUPABASE_URL}/rest/v1/wardrobe_items`,
+      headers: () => ({ ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" }),
+      body: payload,
+      label: "Upsert",
+    });
   },
 
   // ── Closets (multi-closet, Phase A) ──
@@ -275,28 +266,15 @@ export const sb = {
   },
 
   // ── Outfit Logs ──
-  // Mirrors the self-healing pattern in `upsert`: on PGRST204 (unknown
-  // column, e.g. an older Supabase project that hasn't run the latest
-  // migration), strip that column and retry. Saves the caller from having
-  // to know which columns exist on which deploy.
+  // Self-healing like `upsert`, so a caller never has to know which columns
+  // exist on which deploy.
   async saveOutfitLog(log) {
-    let payload = { ...log };
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs`, {
-        method: "POST",
-        headers: { ...sbHeaders(), "Prefer": "return=representation" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return res.json();
-      let err;
-      try { err = await res.json(); } catch { throw new Error(`Save outfit log failed ${res.status}`); }
-      if (err.code === "PGRST204") {
-        const match = err.message?.match(/find the '([^']+)' column/);
-        if (match?.[1]) { delete payload[match[1]]; continue; }
-      }
-      throw new Error(`Save outfit log failed: ${err.message || res.status}`);
-    }
-    throw new Error("Save outfit log failed after stripping unknown columns");
+    return selfHealingWrite({
+      url: `${SUPABASE_URL}/rest/v1/outfit_logs`,
+      headers: () => ({ ...sbHeaders(), "Prefer": "return=representation" }),
+      body: log,
+      label: "Save outfit log",
+    });
   },
   async fetchOutfitLogs() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=*&order=date_worn.desc,created_at.desc`, {
@@ -313,23 +291,13 @@ export const sb = {
     if (!res.ok) throw new Error("Delete outfit log failed");
   },
   async updateOutfitLog(id, patch) {
-    let payload = { ...patch };
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {
-        method: "PATCH",
-        headers: { ...sbHeaders(), "Prefer": "return=representation" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return res.json();
-      let err;
-      try { err = await res.json(); } catch { throw new Error(`Update outfit log failed ${res.status}`); }
-      if (err.code === "PGRST204") {
-        const match = err.message?.match(/find the '([^']+)' column/);
-        if (match?.[1]) { delete payload[match[1]]; continue; }
-      }
-      throw new Error(`Update outfit log failed: ${err.message || res.status}`);
-    }
-    throw new Error("Update outfit log failed after stripping unknown columns");
+    return selfHealingWrite({
+      url: `${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`,
+      method: "PATCH",
+      headers: () => ({ ...sbHeaders(), "Prefer": "return=representation" }),
+      body: patch,
+      label: "Update outfit log",
+    });
   },
 
   // ── Favorites ──
@@ -604,27 +572,13 @@ export const sb = {
     return res.json().catch(() => []);
   },
   async savePlan(plan) {
-    // Self-healing upsert: on PGRST204 ("column not found"), strip the
-    // unknown column and retry. Lets newer client code (activity, day_label)
-    // remain compatible with Supabase projects that haven't run the latest
-    // migration — same pattern as saveOutfitLog.
-    let payload = { ...plan, updated_at: new Date().toISOString() };
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`, {
-        method: "POST",
-        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return res.json();
-      let err;
-      try { err = await res.json(); } catch { throw new Error(`savePlan failed ${res.status}`); }
-      if (err.code === "PGRST204") {
-        const match = err.message?.match(/find the '([^']+)' column/);
-        if (match?.[1]) { delete payload[match[1]]; continue; }
-      }
-      throw new Error(err?.message || `savePlan failed ${res.status}`);
-    }
-    throw new Error("savePlan failed after stripping unknown columns");
+    return selfHealingWrite({
+      url: `${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`,
+      headers: () => ({ ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" }),
+      body: { ...plan, updated_at: new Date().toISOString() },
+      label: "savePlan",
+      preferServerMessage: true,
+    });
   },
   async deletePlan(date) {
     const res = await fetch(
@@ -634,30 +588,20 @@ export const sb = {
     return res.ok;
   },
   // Trips carry the Phase B columns (destination_closet_id, destination_city,
-  // status) when the caller provides them. Self-healing like savePlan: on
-  // PGRST204 (column unknown to an un-migrated project) strip it and retry so
-  // the base trip row still saves.
+  // status) when the caller provides them. Self-healing, so the base trip row
+  // still saves against a project that lacks one of them.
   async saveTrip(trip) {
-    let payload = { ...trip };
+    const payload = { ...trip };
     // Empty string reaches the uuid destination_closet_id column and PG
     // rejects it — same normalization as `upsert`'s closet_id.
     if (payload.destination_closet_id === "") payload.destination_closet_id = null;
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips`, {
-        method: "POST",
-        headers: { ...sbHeaders(), "Prefer": "return=representation" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return res.json();
-      let err;
-      try { err = await res.json(); } catch { throw new Error(`saveTrip failed ${res.status}`); }
-      if (err.code === "PGRST204") {
-        const match = err.message?.match(/find the '([^']+)' column/);
-        if (match?.[1]) { delete payload[match[1]]; continue; }
-      }
-      throw new Error(err?.message || `saveTrip failed ${res.status}`);
-    }
-    throw new Error("saveTrip failed after stripping unknown columns");
+    return selfHealingWrite({
+      url: `${SUPABASE_URL}/rest/v1/trips`,
+      headers: () => ({ ...sbHeaders(), "Prefer": "return=representation" }),
+      body: payload,
+      label: "saveTrip",
+      preferServerMessage: true,
+    });
   },
   async fetchTripsBetween(startIso, endIso) {
     const res = await fetch(
@@ -668,24 +612,16 @@ export const sb = {
     return res.json().catch(() => []);
   },
   async updateTrip(id, patch) {
-    let payload = { ...patch };
+    const payload = { ...patch };
     if (payload.destination_closet_id === "") payload.destination_closet_id = null;
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
-        method: "PATCH",
-        headers: { ...sbHeaders(), "Prefer": "return=representation" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) return res.json();
-      let err;
-      try { err = await res.json(); } catch { throw new Error(`updateTrip failed ${res.status}`); }
-      if (err.code === "PGRST204") {
-        const match = err.message?.match(/find the '([^']+)' column/);
-        if (match?.[1]) { delete payload[match[1]]; continue; }
-      }
-      throw new Error(err?.message || `updateTrip failed ${res.status}`);
-    }
-    throw new Error("updateTrip failed after stripping unknown columns");
+    return selfHealingWrite({
+      url: `${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`,
+      method: "PATCH",
+      headers: () => ({ ...sbHeaders(), "Prefer": "return=representation" }),
+      body: payload,
+      label: "updateTrip",
+      preferServerMessage: true,
+    });
   },
   async deleteTrip(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/trips?id=eq.${id}`, {
