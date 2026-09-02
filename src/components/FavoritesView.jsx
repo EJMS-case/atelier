@@ -14,7 +14,7 @@ import Thumb from "./Thumb.jsx";
 // unused for weeks while loves accumulated), so the tab surfaces both.
 // A loved look whose item set matches a hearted log is shown once, as the log
 // (it carries date/notes/layout; the feedback row doesn't).
-export default function FavoritesView({ items, favorites, toggleFav, onEditItem, nested }) {
+export default function FavoritesView({ wardrobe, favorites, toggleFav, onEditItem, nested }) {
   const [tab, setTab] = useState("outfits");
   const [logs, setLogs] = useState([]);
   const [loved, setLoved] = useState([]);
@@ -34,7 +34,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
   const favOutfitIds = new Set(favorites.filter(f => f.type === "outfit").map(f => f.reference_id));
   const favPieceIds  = new Set(favorites.filter(f => f.type === "piece").map(f => f.reference_id));
   const favOutfits = logs.filter(l => favOutfitIds.has(l.id));
-  const favPieces  = items.filter(i => favPieceIds.has(i.id));
+  const favPieces  = wardrobe.filter(i => favPieceIds.has(i.id));
 
   // Dedupe key: the sorted item set. Hearted logs win over loved feedback rows.
   const itemSetKey = (ids) => (ids || []).map(String).sort().join("|");
@@ -89,7 +89,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
         </>
       );
       return (
-        <SavedLookCard key={entry.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
+        <SavedLookCard key={entry.id} log={log} wardrobe={wardrobe} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
           headerRight={
             <button style={s.heartBtn} onClick={() => toggleFav("outfit", log.id)} title="Remove from favorites" aria-label="Remove from favorites">
               {heartSvg}
@@ -105,7 +105,7 @@ export default function FavoritesView({ items, favorites, toggleFav, onEditItem,
       </>
     );
     return (
-      <SavedLookCard key={entry.id} log={{ garment_ids: fb.item_ids }} items={items} subtitle={subtitle} onEditItem={onEditItem}
+      <SavedLookCard key={entry.id} log={{ garment_ids: fb.item_ids }} wardrobe={wardrobe} subtitle={subtitle} onEditItem={onEditItem}
         headerRight={
           <button style={s.heartBtn} onClick={() => unlove(fb)} title="Remove from favorites" aria-label="Remove from favorites">
             {heartSvg}

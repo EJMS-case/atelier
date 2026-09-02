@@ -63,24 +63,44 @@ const CLOSETS = [
   { id: AZ_CLOSET, name: "Arizona", is_default: false },
 ];
 const TRIP_ID = "11111111-1111-4111-8111-111111111111";
+
+// Dates are relative to TODAY, deliberately: the calendar opens on the current
+// month, so a hard-coded trip drifts out of view and the walk starts skipping
+// the screen it exists to cover. (It did — the check reported "no trip
+// affordance" until this was fixed.)
+const iso = (offsetDays) => {
+  const d = new Date(); d.setUTCHours(12, 0, 0, 0); d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+};
 const TRIPS = [{
   id: TRIP_ID, destination: "Arizona", status: "planning",
-  start_date: "2026-10-01", end_date: "2026-10-05",
+  start_date: iso(2), end_date: iso(6),
   destination_closet_id: AZ_CLOSET, activity: "Casual",
   must_include_ids: [wardrobe[0].id], notes: "",
 }];
 const PLANS = [{
-  date: "2026-10-02", source: "trip", notes: "",
+  date: iso(3), source: "trip", notes: "",
   items: [wardrobe[0].id, wardrobe[5].id],
   outfits: [{ id: "o1", label: "", occasion: "Casual", items: [wardrobe[0].id, wardrobe[5].id] }],
 }];
+// The Arizona piece the saved look below is made of, asserted by name in the walk.
+const AZ_LOOK_ITEM = buildWardrobe({ closetId: AZ_CLOSET })[0];
+const AZ_LOOK_PIECE = AZ_LOOK_ITEM.name;
+
 const TABLE = {
   wardrobe_items: wardrobe,
   closets: CLOSETS,
   trips: TRIPS,
   trip_items: [{ trip_id: TRIP_ID, item_id: wardrobe[0].id, status: "suggested", outfit_ids: [] }],
   planned_outfits: PLANS,
-  outfit_logs: [],
+  // A saved look made in Arizona, viewed from NYC. Owner's report of
+  // 2026-09-02: it rendered as "These pieces are no longer in your closet."
+  // The walk below asserts that message never appears.
+  outfit_logs: [{
+    id: "log-az", date_worn: "2026-08-30", occasion: "Casual", notes: "",
+    garment_ids: [`az-${AZ_LOOK_ITEM.id}`],
+    layout_data: null,
+  }],
   look_edits: [], look_feedback: [], favorites: [], sets: [],
   user_settings: [], inspiration_images: [], shopping_collages: [], ai_errors: [],
 };
@@ -101,15 +121,22 @@ await new Promise(r => server.listen(4322, r));
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
 
-// Seed the session BEFORE any script runs.
+// Seed the session AND pin the active closet BEFORE any script runs.
+//
+// Pinning matters: the walk asserts that a look made from ARIZONA pieces still
+// renders while standing in NYC. If the app boots into Arizona, that Arizona
+// piece is "available" and the assertion can never fail — which is exactly how
+// the first version of this check passed with the bug present. A test whose
+// premise is unpinned proves nothing.
 const YEAR_2099 = 4102444800;
-await context.addInitScript(([key, exp]) => {
-  window.localStorage.setItem(key, JSON.stringify({
+await context.addInitScript(([authKey, closetKey, nyc, exp]) => {
+  window.localStorage.setItem(authKey, JSON.stringify({
     access_token: "fixture-token", refresh_token: "fixture-refresh",
     token_type: "bearer", expires_in: 999999, expires_at: exp,
     user: { id: "00000000-0000-4000-8000-000000000000", email: "fixture@example.com", aud: "authenticated", role: "authenticated" },
   }));
-}, ["atelier:auth", YEAR_2099]);
+  window.localStorage.setItem(closetKey, JSON.stringify(nyc));
+}, ["atelier:auth", "atelier:active-closet:v1", NYC_CLOSET, YEAR_2099]);
 
 const page = await context.newPage();
 const errors = [];
@@ -224,9 +251,56 @@ await check("Planner → day modal", async () => {
   if (!opened) throw new Error("no day cell found on the month grid");
 });
 await check("Saved", tab("Saved"));
+
+// Her exact report, from NYC: "atelier is pulling in saved outfits from
+// Arizona and marking them as nonexistent."
+//
+// Asserts the PIECE IS THERE, not that some message is absent — an earlier
+// version checked for the old wording, which this same commit had already
+// changed, so it could never fail. Assert on what the user sees, never on a
+// string you control.
+await check("Saved: a look made in Arizona still shows its pieces from NYC", async () => {
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!text.includes(AZ_LOOK_PIECE)) {
+    throw new Error(`the Arizona piece "${AZ_LOOK_PIECE}" is missing from the saved look`);
+  }
+  if (/no longer in your closet|deleted from your wardrobe/.test(text)) {
+    throw new Error("a saved look reports its pieces as gone while they exist");
+  }
+});
+
 await check("Inspo", tab("Inspo"));
 await check("Style Me", tab("Style Me"));
+// Opening a trip is what dereferences `available` down the planner chain. The
+// walk missed it once and a prop rename shipped an `undefined` straight
+// through PlannerWrapper — build green, twelve unit suites green, caught by
+// nothing. The check REFUSES TO PASS VACUOUSLY: if it cannot find the trip to
+// open, that is a failure of the itinerary and it says so, rather than
+// quietly clicking nothing and reporting a tick.
 await check("back to Planner", tab("Planner"));
+await check("Planner → open the trip", async () => {
+  const opened = await page.evaluate(() => {
+    // The trip strip renders a "View →" button. Clicking the strip itself does
+    // nothing, which is how an earlier version of this check passed while the
+    // trip screen was broken.
+    // "View →" is not necessarily a <button>; take the INNERMOST element whose
+    // own text is the affordance, so the click lands on the handler and not on
+    // a wrapper that swallows it.
+    const el = [...document.querySelectorAll("*")]
+      .filter(e => /^View\s*→?$/.test((e.textContent || "").trim()))
+      .pop();
+    if (!el) return false;
+    el.click();
+    return true;
+  });
+  if (!opened) throw new Error('no "View →" on the trip strip — the itinerary is stale, not the app');
+  await page.waitForTimeout(1200);
+  // Prove the trip DETAIL screen actually mounted; a click that navigated
+  // nowhere must not read as a pass.
+  const onTrip = await page.evaluate(() =>
+    /Packing|Looks|Suitcase|Start trip/i.test(document.body.innerText));
+  if (!onTrip) throw new Error("the trip detail screen did not mount after View →");
+});
 
 await browser.close();
 server.close();

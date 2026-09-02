@@ -1117,7 +1117,7 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         stylePrefsWithAuto, loadAboutMe(), styleExcludes,
-        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
+        { wardrobe, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
           // Occasion memory inputs (roadmap A4) — raw rows already in state,
           // summarized to text lines inside generateOutfit (occasionMemory.js).
           outfitLogs: wearData.logs || [], lovedFeedback,
@@ -1696,6 +1696,7 @@ export default function App() {
           </div>
           <HomeView
             items={available}
+            wardrobe={wardrobe}
             activeCloset={activeCloset}
             favorites={favorites}
             apiKey={apiKey}
@@ -2156,7 +2157,7 @@ export default function App() {
             </div>
           )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={available}
+            <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} wardrobe={wardrobe}
               onEditItem={handleEditItemCard}
               onEditInBuilder={(lk) => {
                 const ids = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
@@ -2260,7 +2261,7 @@ export default function App() {
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
           <PlannerWrapper
-            items={available}
+            available={available}
             wardrobe={wardrobe}
             closets={closets}
             activeCloset={activeCloset}
@@ -2300,7 +2301,7 @@ export default function App() {
       {/* ── SAVED (Looks / History / Favorites) ── */}
       {view === "favorites" && (
         <SavedView
-          items={available}
+          wardrobe={wardrobe}
           apiKey={apiKey}
           favorites={favorites}
           toggleFav={toggleFav}
@@ -2459,6 +2460,7 @@ export default function App() {
       {view === "profile" && (
         <StyleProfileView
           items={available}
+          wardrobe={wardrobe}
           apiKey={apiKey}
           styleFingerprint={styleFingerprint}
           setStyleFingerprint={setStyleFingerprint}

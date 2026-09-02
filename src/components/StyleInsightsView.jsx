@@ -50,7 +50,7 @@ function analyzeWardrobe(items, outfitLogs) {
 }
 
 // ── STYLE INSIGHTS VIEW ───────────────────────────────────────────────────
-export default function StyleInsightsView({ items, apiKey, onBack }) {
+export default function StyleInsightsView({ items, wardrobe, apiKey, onBack }) {
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState(null);
   const [outfitLogs, setOutfitLogs] = useState([]);

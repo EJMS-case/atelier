@@ -19,7 +19,7 @@ import { autoColorPairs, rotateDaily, hexForColorLabel, seasonalBucketForDate } 
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop }) {
+export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -108,7 +108,10 @@ export default function HomeView({ items, activeCloset, favorites, apiKey, plans
 
   // Every outfit on today's plan, not just the legacy `items` mirror of #0.
   const todayPlanItems = useMemo(
-    () => resolveItemIds(items, flattenPlanItemIds(todayPlan)),
+    // A planned day is a COMMITTED set of ids and can hold a piece from the
+    // other room, so it resolves against the wardrobe. `items` stays scoped
+    // below, where the question really is "what's resting in THIS closet".
+    () => resolveItemIds(wardrobe || items, flattenPlanItemIds(todayPlan)),
     [items, todayPlan],
   );
 
@@ -192,7 +195,7 @@ export default function HomeView({ items, activeCloset, favorites, apiKey, plans
           <div style={sectionHeader}>COMING UP</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {upcomingPlans.map(plan => {
-              const planItems = resolveItemIds(items, plan.items);
+              const planItems = resolveItemIds(wardrobe || items, plan.items);
               const tag = plan.day_label || plan.occasion || "";
               return (
                 <button key={plan.date} onClick={onOpenPlanner}
@@ -219,7 +222,7 @@ export default function HomeView({ items, activeCloset, favorites, apiKey, plans
           + leaned-on pieces + forward nudges). Reads its 30-day window out of
           the shared planner rows passed down from App. */}
       {items.length > 0 && (
-        <LookBackCard items={wearItems} favorites={favorites || []} apiKey={apiKey}
+        <LookBackCard items={wearItems} wardrobe={wardrobe} favorites={favorites || []} apiKey={apiKey}
           plans={plans} onEditItem={onEditItem} onStyleItem={onStyleItem}/>
       )}
 

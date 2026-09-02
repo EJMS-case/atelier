@@ -6,7 +6,7 @@ import FavoritesView from "./FavoritesView.jsx";
 import SearchInput from "./SearchInput.jsx";
 import { LookSearchContext } from "./SavedLookCard.jsx";
 
-export default function SavedView({ items, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar }) {
+export default function SavedView({ wardrobe, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar }) {
   // The Wear tab and its metrics (most-worn / neglected / cost-per-wear) moved
   // to the Home dashboard. Saved is now strictly: All your saved looks,
   // History (with subcategories), and Favorites.
@@ -26,16 +26,16 @@ export default function SavedView({ items, favorites, toggleFav, onEditItem, onW
           match). History brings its own search box, so ours is hidden there
           and the context is fed "" to avoid double-filtering. */}
       {tab !== "history" && (
-        <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Search items, occasion, notes…"/>
+        <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Search wardrobe, occasion, notes…"/>
       )}
       <LookSearchContext.Provider value={tab === "history" ? "" : searchQ}>
       {tab === "looks" && (
-        <LooksView items={items} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar}/>
+        <LooksView wardrobe={wardrobe} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar}/>
       )}
       {tab === "history" && (
         <OutfitHistory
           nested
-          items={items}
+          wardrobe={wardrobe}
           apiKey={apiKey}
           onWearAgain={onWearAgain}
           onDelete={onDeleteLog}
@@ -49,7 +49,7 @@ export default function SavedView({ items, favorites, toggleFav, onEditItem, onW
         />
       )}
       {tab === "favorites" && (
-        <FavoritesView nested items={items} favorites={favorites} toggleFav={toggleFav} onEditItem={onEditItem}/>
+        <FavoritesView nested wardrobe={wardrobe} favorites={favorites} toggleFav={toggleFav} onEditItem={onEditItem}/>
       )}
       </LookSearchContext.Provider>
     </div>
