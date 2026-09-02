@@ -9,6 +9,8 @@
 // An explicit tag always wins over the derived bucket — a set she tagged Work
 // is a work set no matter what its pieces are filed under.
 
+import { DEFAULT_CLOSET_ID } from "./closets.js";
+
 // Bucket labels in rank order, first to last. Exported so the sort and its
 // test agree on one source of truth.
 export const SET_TYPE_ORDER = [
@@ -60,29 +62,47 @@ export function compareSetsByName(a, b) {
 }
 
 // ── SET MEMBERSHIP ───────────────────────────────────────────────────────────
-// What a coord set CONTAINS — a committed fact about the garment, not a
-// question the active closet gets to answer.
+// What a coord set contains — IN ONE ROOM.
 //
-// This exists because the same one-line filter was written inline in two places
-// (the Coord Set panel and the set editor) and both were handed a
-// closet-scoped pool. She buys her athleisure sets in twos, one half per
-// closet, so 8 of her sets have members in both rooms and both surfaces showed
-// half a set: two pieces of a four-piece set, with no hint the others existed.
+// The owner buys her athleisure sets in twos, one for each closet, and the ⧉
+// duplicate feature copies a piece into the other room KEEPING ITS set_id. So a
+// single set_id routinely holds the NYC set *and* its Arizona copy. Seven of
+// her eight cross-closet sets are exactly that: same garments, owned twice.
 //
-// One function, so a future caller cannot quietly re-scope it. Pass the full
-// styling wardrobe. See src/features/closet/poolInvariants.js for the general
-// rule this is an instance of.
+// That makes "which closet" part of the question, not a scoping mistake:
 //
-// @param {Object[]} wardrobe - the FULL wardrobe (never a closet-scoped pool)
+//   Standing in Arizona, the Never Better set IS the two Arizona pieces.
+//   Listing the NYC halves beside them shows her four pieces where she owns
+//   two, each garment twice, half of them 2,000 miles away.
+//
+// Owner, catching this on review: "I have the same set in both closets. Make
+// sure your change didn't change that." She was right — an earlier version of
+// this helper resolved across all rooms and would have done exactly that.
+//
+// So membership scopes by closet. It takes the FULL wardrobe and does the
+// scoping itself, rather than trusting the caller to pass a pre-scoped pool —
+// the two inline filters this replaced each depended on being handed the right
+// array, and one of them was not.
+//
+// (Passing closetId = null asks the genuinely cross-room question, which only
+// the invariant checks and the doctor need.)
+//
+// @param {Object[]} wardrobe   - the full wardrobe
 // @param {string}   setId
-// @returns {Object[]} every piece in the set, wherever it lives
-export function setMembers(wardrobe, setId) {
+// @param {string}   [closetId] - the room; omit/null for every room
+// @returns {Object[]} the set's pieces
+export function setMembers(wardrobe, setId, closetId = null) {
   if (!setId) return [];
-  return (wardrobe || []).filter(it => it?.set_id && it.set_id === setId);
+  return (wardrobe || []).filter(it =>
+    it?.set_id === setId && (closetId == null || (it.closet_id || DEFAULT_CLOSET_ID) === closetId),
+  );
 }
 
-// The set's OTHER pieces — what the Coord Set panel shows beside the one you
-// tapped.
+// The set's OTHER pieces in the SAME room as the piece you tapped — what the
+// Coord Set panel shows. Scoped by the item's own closet, so handing this the
+// full wardrobe is correct and handing it a scoped pool is merely redundant.
 export function setMatesOf(wardrobe, item) {
-  return setMembers(wardrobe, item?.set_id).filter(it => it.id !== item?.id);
+  if (!item?.set_id) return [];
+  return setMembers(wardrobe, item.set_id, item.closet_id || DEFAULT_CLOSET_ID)
+    .filter(it => it.id !== item.id);
 }

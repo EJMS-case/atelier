@@ -24,8 +24,9 @@
 //   · "it's excluding the bow bag that I did pack"
 //     — the trip pool read only 'packed' rows, so an 18-piece suitcase that
 //       had been pinned rather than ticked was invisible for the whole trip
-//   · a Coord Set panel showing half a set
-//     — 8 of her sets have members in both rooms
+//   · a Coord Set panel scoped wrongly — first by showing half a set, then,
+//     when that was "fixed" without checking the data, by showing the same
+//     garment twice. She owns these sets in BOTH rooms; see setMembers().
 //
 // Each was found by a person using the app, days apart, after a green test run.
 // The point of this module is that the NEXT one is found by a machine, before
@@ -139,25 +140,45 @@ function safeParse(s) {
 }
 
 /**
- * A coord set is one garment in two halves. Asking a single closet what it
- * contains returns half of it — which is what the Coord Set panel and the set
- * editor were doing while 8 of her sets had members in both rooms.
+ * A coord set living in two rooms is NORMAL here and must not be reported: she
+ * buys her athleisure sets in twos and the ⧉ duplicate feature copies a piece
+ * into the other closet keeping its set_id, so one set_id routinely holds the
+ * NYC set and its Arizona twin. Seven of her eight cross-closet sets are that.
+ *
+ * What IS worth reporting is a set spanning rooms that duplication cannot
+ * explain — no member on either side is a copy of a member on the other. That
+ * is a mis-filed piece, not a pair: hers is a Good Karma bra in NYC sharing a
+ * set with two Never Better pieces in Arizona, which are different products.
+ *
+ * Identity = `duplicate_of` when the row is a copy, else its own id. Two rows
+ * in different rooms sharing an identity are one garment owned twice.
  *
  * @param {Object[]} wardrobe - the full wardrobe
  * @returns {Array<{setId: string, closets: string[], pieces: number}>}
- *          sets whose members live in more than one closet
+ *          only the sets duplication does not account for
  */
-export function setsSpanningClosets(wardrobe) {
+export function setsSplitAcrossClosets(wardrobe) {
   const bySet = new Map();
   for (const it of (wardrobe || [])) {
     if (!it?.set_id) continue;
     if (!bySet.has(it.set_id)) bySet.set(it.set_id, []);
     bySet.get(it.set_id).push(it);
   }
+  const identity = (it) => it.duplicate_of || it.id;
   const out = [];
   for (const [setId, members] of bySet) {
     const closets = [...new Set(members.map(closetOf))];
-    if (closets.length > 1) out.push({ setId, closets, pieces: members.length });
+    if (closets.length < 2) continue;
+    // Explained when ANY identity appears in more than one room — that is a
+    // duplicate pair, and the set is the same set owned twice.
+    const rooms = new Map();                     // identity → Set(closet)
+    for (const it of members) {
+      const key = identity(it);
+      if (!rooms.has(key)) rooms.set(key, new Set());
+      rooms.get(key).add(closetOf(it));
+    }
+    const paired = [...rooms.values()].some(r => r.size > 1);
+    if (!paired) out.push({ setId, closets, pieces: members.length });
   }
   return out;
 }

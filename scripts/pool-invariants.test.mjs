@@ -9,13 +9,13 @@
 // Run: npm run test:invariants
 
 import {
-  unreachableIds, classifyUnreachable, looksReachable, setsSpanningClosets,
+  unreachableIds, classifyUnreachable, looksReachable, setsSplitAcrossClosets,
   activeTripCarriesSomething, taxonomyAnomalies, miscLeaks, idOf,
 } from "../src/features/closet/poolInvariants.js";
 import { resolveVisibleWardrobe, poolIncluding } from "../src/features/closet/useVisibleWardrobe.js";
 import { swimPieceKind } from "../src/utils/item-helpers.js";
 import { setMembers, setMatesOf } from "../src/features/closet/setType.js";
-import { buildWardrobe, buildSplitSet, everyTaxonomyPair, SHAPES, NYC_CLOSET, AZ_CLOSET }
+import { buildWardrobe, buildDuplicatedSet, buildMisfiledSet, everyTaxonomyPair, SHAPES, NYC_CLOSET, AZ_CLOSET }
   from "./fixtures/build-wardrobe.mjs";
 
 let passed = 0, failed = 0;
@@ -133,35 +133,63 @@ section("plan shapes");
   assert(looksReachable({ plans: null, pool: all, wardrobe: empty }).length === 0, "null plans → no findings");
 }
 
-// ── 5. Regression: coord sets split across closets (found 2026-09-02) ───────
-section("regression: sets spanning closets");
+// ── 5. Coord sets: the SAME set owned in both rooms ─────────────────────────
+// She buys athleisure in twos, and ⧉ duplicate copies a piece into the other
+// closet keeping its set_id. So one set_id holding pieces in both rooms is the
+// NORMAL shape, not a bug — and set membership must stay closet-scoped.
+//
+// Owner, on review: "I have the same set in both closets. Make sure your change
+// didn't change that." An earlier version of setMembers resolved across rooms
+// and would have shown her 4 pieces where she owns 2. These assertions exist so
+// that cannot come back.
+section("coord sets: owned twice, one per room");
 {
-  const { setId, items } = buildSplitSet();
-  const spanning = setsSpanningClosets(items);
-  assert(spanning.length === 1 && spanning[0].setId === setId, "a set with members in both rooms is reported");
-  assert(spanning[0].pieces === 4, "and counts all of its pieces, not the ones in one room");
+  const { setId, items } = buildDuplicatedSet();
+  const nycTop = items.find(it => it.id === "fx-nb-top-nyc");
+  const azTop = items.find(it => it.id === "fx-nb-top-az");
 
-  // What the Coord Set panel was doing: asking one closet what the set contains.
+  assert(setMembers(items, setId, NYC_CLOSET).length === 2, "the NYC set is TWO pieces");
+  assert(setMembers(items, setId, AZ_CLOSET).length === 2, "the Arizona set is TWO pieces");
+  assert(setMatesOf(items, nycTop).length === 1, "standing in NYC, the top has ONE mate — not three");
+  assert(setMatesOf(items, nycTop)[0].closet_id === NYC_CLOSET, "…and that mate is in NYC");
+  assert(setMatesOf(items, azTop).length === 1 && setMatesOf(items, azTop)[0].closet_id === AZ_CLOSET,
+    "standing in Arizona, the mate is the Arizona one");
+
+  // Handing it the FULL wardrobe must give the same answer as a scoped pool —
+  // the helper scopes by the tapped piece's own closet, so a caller cannot get
+  // this wrong by passing the wrong array.
   const azOnly = items.filter(it => it.closet_id === AZ_CLOSET);
-  const mates = azOnly.filter(it => it.set_id === setId);
-  assert(mates.length === 2 && items.filter(it => it.set_id === setId).length === 4,
-    "a scoped lookup returns half the set — the bug, stated as a test");
+  assert(setMatesOf(items, azTop).length === setMatesOf(azOnly, azTop).length,
+    "full wardrobe and scoped pool agree — the caller cannot get it wrong");
 
-  assert(setsSpanningClosets(buildWardrobe()).length === 0, "a single-room wardrobe reports nothing");
-  assert(setsSpanningClosets([]).length === 0 && setsSpanningClosets(null).length === 0, "degenerate input");
+  // Asking the genuinely cross-room question is still possible, explicitly.
+  assert(setMembers(items, setId, null).length === 4, "closetId=null asks across rooms, for the doctor");
 
-  // The fix: ONE function answers "what does this set contain", and it reads the
-  // whole wardrobe. Both surfaces that used to filter inline now call it.
-  assert(setMembers(items, setId).length === 4, "setMembers returns the WHOLE set, both rooms");
-  assert(setMembers(azOnly, setId).length === 2,
-    "…and handing it a scoped pool is the bug — which is why callers must pass the full wardrobe");
-  const one = items.find(it => it.id === "fx-nb-top-nyc");
-  assert(setMatesOf(items, one).length === 3, "setMatesOf excludes the piece you tapped, keeps the rest");
-  assert(setMatesOf(items, one).some(it => it.closet_id === AZ_CLOSET),
-    "and reaches across closets — the half-a-set bug, stated as a test");
+  // A duplicate pair is NOT an anomaly and must never be reported.
+  assert(setsSplitAcrossClosets(items).length === 0,
+    "the same set owned in both rooms is normal — reported as nothing");
+
   assert(setMembers(items, null).length === 0, "no set id → no members");
-  assert(setMembers(null, setId).length === 0 && setMatesOf(null, one).length === 0, "degenerate input");
+  assert(setMembers(null, setId).length === 0 && setMatesOf(null, nycTop).length === 0, "degenerate input");
   assert(setMatesOf(items, { id: "x" }).length === 0, "an item with no set has no mates");
+}
+
+// ── 5b. The one anomaly worth reporting ─────────────────────────────────────
+section("coord sets: a genuinely mis-filed set");
+{
+  const { setId, items } = buildMisfiledSet();
+  const found = setsSplitAcrossClosets(items);
+  assert(found.length === 1 && found[0].setId === setId,
+    "a cross-room set with NO duplicate link is reported — different products filed together");
+  assert(found[0].pieces === 3, "and counts every piece");
+
+  // Mixing both shapes: only the unexplained one surfaces.
+  const both = [...items, ...buildDuplicatedSet().items];
+  assert(setsSplitAcrossClosets(both).length === 1,
+    "with both shapes present, only the anomaly is reported");
+
+  assert(setsSplitAcrossClosets(buildWardrobe()).length === 0, "a single-room wardrobe reports nothing");
+  assert(setsSplitAcrossClosets([]).length === 0 && setsSplitAcrossClosets(null).length === 0, "degenerate input");
 }
 
 // ── 6. Regression: her real vocabulary (the swimsuit family) ────────────────

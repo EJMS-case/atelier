@@ -1822,8 +1822,8 @@ export default function App() {
               <SetEditModal
                 setId={editingSet}
                 meta={setsMeta[editingSet] || { name: "", tags: [] }}
-                groupItems={setMembers(stylingItems, editingSet)}
-                allItems={stylingItems}
+                groupItems={setMembers(stylingItems, editingSet, activeCloset.id)}
+                allItems={closetItems}
                 onSave={(data) => { updateSetMeta(editingSet, data); setEditingSet(null); }}
                 onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
                 onClose={() => setEditingSet(null)}

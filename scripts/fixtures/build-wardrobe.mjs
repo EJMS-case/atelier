@@ -77,20 +77,42 @@ export function buildWardrobe({ closetId = NYC_CLOSET, includeMisc = false } = {
 }
 
 /**
- * A wardrobe split across both rooms, the way hers really is: the same
- * athleisure set bought in twos, one half in each closet. Returns the pieces
- * plus the set id that spans them — the shape behind "8 coord sets span both
- * closets", where asking one closet what a set contains returns half of it.
+ * THE NORMAL SHAPE: the same coord set owned in both rooms. She buys athleisure
+ * in twos and the ⧉ duplicate feature copies a piece into the other closet
+ * keeping its set_id, so the Arizona rows are copies (`duplicate_of` → the NYC
+ * original) sharing one set_id. Seven of her eight cross-closet sets are this.
+ *
+ * A "fix" that resolves set membership across rooms turns her 2-piece set into
+ * a 4-piece one, listing each garment twice. That is why this fixture exists.
  */
-export function buildSplitSet() {
+export function buildDuplicatedSet() {
   const setId = "fx-set-never-better";
   return {
     setId,
     items: [
       { id: "fx-nb-top-nyc", name: "Never Better Crop Top / Bra", category: "Athleisure", subcategory: "Sports Bras", closet_id: NYC_CLOSET, set_id: setId },
       { id: "fx-nb-leg-nyc", name: "Never Better 7/8 Leggings", category: "Athleisure", subcategory: "Leggings", closet_id: NYC_CLOSET, set_id: setId },
-      { id: "fx-nb-top-az", name: "Never Better Crop Top / Bra", category: "Athleisure", subcategory: "Sports Bras", closet_id: AZ_CLOSET, set_id: setId },
-      { id: "fx-nb-leg-az", name: "Never Better 7/8 Leggings", category: "Athleisure", subcategory: "Leggings", closet_id: AZ_CLOSET, set_id: setId },
+      { id: "fx-nb-top-az", name: "Never Better Crop Top / Bra", category: "Athleisure", subcategory: "Sports Bras", closet_id: AZ_CLOSET, set_id: setId, duplicate_of: "fx-nb-top-nyc" },
+      { id: "fx-nb-leg-az", name: "Never Better 7/8 Leggings", category: "Athleisure", subcategory: "Leggings", closet_id: AZ_CLOSET, set_id: setId, duplicate_of: "fx-nb-leg-nyc" },
+    ],
+  };
+}
+
+/**
+ * THE ANOMALY: a set spanning both rooms that duplication does NOT explain —
+ * no piece on either side is a copy of a piece on the other. Hers is a Good
+ * Karma bra in NYC filed with two Never Better pieces in Arizona, which are
+ * different products. One of her eight looks like this, and it is the only one
+ * worth reporting.
+ */
+export function buildMisfiledSet() {
+  const setId = "fx-set-misfiled";
+  return {
+    setId,
+    items: [
+      { id: "fx-gk-bra-nyc", name: "Good Karma Square Neck Bra", category: "Athleisure", subcategory: "Sports Bras", closet_id: NYC_CLOSET, set_id: setId },
+      { id: "fx-nb-leg-az2", name: "Never Better 7/8 Leggings", category: "Athleisure", subcategory: "Leggings", closet_id: AZ_CLOSET, set_id: setId },
+      { id: "fx-nb-top-az2", name: "Never Better Crop Top / Bra", category: "Athleisure", subcategory: "Sports Bras", closet_id: AZ_CLOSET, set_id: setId },
     ],
   };
 }

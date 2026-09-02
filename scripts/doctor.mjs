@@ -23,7 +23,7 @@
 // if she wants that.
 
 import {
-  looksReachable, setsSpanningClosets, activeTripCarriesSomething,
+  looksReachable, setsSplitAcrossClosets, activeTripCarriesSomething,
   taxonomyAnomalies, miscLeaks,
 } from "../src/features/closet/poolInvariants.js";
 import { resolveVisibleWardrobe } from "../src/features/closet/useVisibleWardrobe.js";
@@ -69,7 +69,7 @@ async function load() {
     };
   }
   const [wardrobe, trips, plans] = await Promise.all([
-    get("wardrobe_items?select=id,name,category,subcategory,closet_id,set_id"),
+    get("wardrobe_items?select=id,name,category,subcategory,closet_id,set_id,duplicate_of"),
     get("trips?select=id,destination,status,start_date,end_date,destination_closet_id,must_include_ids"),
     get("planned_outfits?select=date,items,outfits"),
   ]);
@@ -138,16 +138,16 @@ async function main() {
     }
   }
 
-  // ── 3. Coord sets split across rooms ───────────────────────────────────────
-  const split = setsSpanningClosets(wardrobe);
-  if (split.length) {
-    const detail = split.map(s => {
-      const members = wardrobe.filter(w => w.set_id === s.setId).map(w => w.name);
-      return `${members.join(" + ")} (${s.pieces} pieces, ${s.closets.length} rooms)`;
-    });
-    note("info", `${split.length} coord set(s) have members in more than one closet`,
-      detail.join("\n     "),
-      "Expected — you buy these in twos. Noted so that any 'what is in this set' lookup is checked against the whole wardrobe, never one closet.");
+  // ── 3. Coord sets duplication cannot explain ───────────────────────────────
+  // A set living in both rooms is normal — she buys athleisure in twos and ⧉
+  // duplicate keeps the set_id. Only a cross-room set with NO duplicate link
+  // between the halves is worth a word: that is a mis-filed piece.
+  const split = setsSplitAcrossClosets(wardrobe);
+  for (const bad of split) {
+    const members = wardrobe.filter(w => w.set_id === bad.setId);
+    note("warn", "A coord set spans both closets but nothing links the halves",
+      members.map(w => w.name).join(" + "),
+      "These look like different products filed under one set — a duplicate pair would be linked. Split them, or re-file the odd piece.");
   }
 
   // ── 4. Taxonomy hygiene ────────────────────────────────────────────────────
