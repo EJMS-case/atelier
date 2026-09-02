@@ -6,7 +6,7 @@
 //
 // Run: npm run test:visible
 
-import { resolveVisibleWardrobe, packedItemIds, carriedItemIds, poolIncluding } from "../src/features/closet/useVisibleWardrobe.js";
+import { resolveVisibleWardrobe, packedItemIds, carriedItemIds, poolIncluding, isLookWearableNow } from "../src/features/closet/useVisibleWardrobe.js";
 import { DEFAULT_CLOSET_ID, ARIZONA_CLOSET_ID } from "../src/features/closet/closets.js";
 
 let passed = 0, failed = 0;
@@ -224,6 +224,32 @@ section("carriedItemIds");
   // "🧳 N packed" counter and the closet's 🧳 badge still mean ticked.
   assert(packedItemIds([{ item_id: "k1", status: "packed" }]).size === 1,
     "packedItemIds still counts only ticked rows");
+}
+
+// ── isLookWearableNow — the Saved list's "can I wear this today?" chip ───────
+// Saved looks stay a full history (both closets, always) because a look is
+// RESOLVED against the wardrobe. The chip answers the other question, and it
+// answers it with `available`, so a trip look mixing destination pieces with
+// carried ones is wearable where she actually is.
+{
+  const NYC_LOOK = ["n1", "n2"];
+  const MIXED    = ["n1", "az1"];   // a carried NYC top + an Arizona skirt
+  const inNYC     = new Set(["n1", "n2"]);
+  const inArizona = new Set(["az1"]);
+  const onTrip    = new Set(["az1", "n1"]);  // dest closet ∪ what she carried
+
+  assert(isLookWearableNow(NYC_LOOK, inNYC) === true, "an all-NYC look is wearable in NYC");
+  assert(isLookWearableNow(NYC_LOOK, inArizona) === false, "…and not from Arizona");
+  assert(isLookWearableNow(MIXED, onTrip) === true,
+    "a mixed trip look IS wearable during the trip — the suitcase is in the pool");
+  assert(isLookWearableNow(MIXED, inNYC) === false,
+    "…and not from NYC while the Arizona half is still there");
+  // Once the trip ends and the carried pieces come home, `available` is NYC's
+  // closet again and the same look answers true — no per-look closet tag to rot.
+  assert(isLookWearableNow(MIXED, new Set(["n1", "n2", "az1"])) === true,
+    "a look is wearable again once every piece is back within reach");
+  assert(isLookWearableNow([], inNYC) === false, "an empty look is not 'wearable'");
+  assert(isLookWearableNow(null, inNYC) === false, "a look with no ids is not 'wearable'");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────

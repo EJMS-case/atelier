@@ -222,3 +222,35 @@ export function poolIncluding(pool, wardrobe, ids) {
   );
   return extra.length ? [...base, ...extra] : base;
 }
+
+/**
+ * Can she put this committed look on TODAY, standing where she is standing?
+ *
+ * Saved looks are a history: every look she has ever built, both closets
+ * together, in one list. That is deliberate — a look is RESOLVED against the
+ * wardrobe, so an Arizona look still shows its pieces while she is in NYC
+ * rather than reading as "my outfit lost its top". But the list conflates two
+ * questions she asks it: "what have I worn?" and "what can I wear now?"
+ *
+ * This answers the second, and it answers it with `available` rather than with
+ * a closet id, which is the whole point: during a trip `available` is the
+ * destination closet PLUS what she is carrying, so a trip look mixing Arizona
+ * pieces with a top she flew out with is wearable in Arizona (it is), not
+ * wearable in NYC while those pieces are still in her suitcase (they aren't),
+ * and wearable again once she comes home and they do. No new concept, no
+ * "which closet does this look belong to" — 16 of her 101 saved looks are
+ * genuinely mixed and that question has no honest answer for them.
+ *
+ * Filtering, never hiding: the caller shows this behind a chip with a count of
+ * what it holds back. "The old behavior of filtering them out made saved
+ * outfits look lost" is a comment in LooksView for a reason.
+ *
+ * @param {string[]} garmentIds - the look's committed ids
+ * @param {Set<string>} availableIds - ids of what she may pick from right now
+ * @returns {boolean} true when every piece is within reach
+ */
+export function isLookWearableNow(garmentIds, availableIds) {
+  const ids = garmentIds || [];
+  if (ids.length === 0) return false;   // nothing to wear is not "wearable"
+  return ids.every(id => availableIds.has(id));
+}

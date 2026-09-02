@@ -1,11 +1,15 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-02**, after PR #221. The session log below is in merge
+Refreshed **2026-09-02**, after PR #222. The session log below is in merge
 order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
 per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
 preferences" down is older standing context: search it, don't read it through.
 
 ## Session log
+
+### 2026-09-02 · PR #222 — saved looks can be narrowed to what she can actually wear
+
+Owner: *"For saved looks, why are the two closets combined?"* **Because nothing separated them** — `LooksView` fetches every `outfit_logs` row and filters only by occasion, weather and worn/scheduled. The *pieces* resolve against the **wardrobe**, which is deliberate and MUST STAY (scoping that resolve is what made an Arizona look read as "my outfit lost its top" from NYC, four times). The gap is that the list answers two questions at once: "what have I worn?" and "what can I wear now?" New chip — `All looks (n)` / `Wearable now (n)` — keyed off **`available`, not a closet id**. That is the load-bearing choice: **16 of her 101 saved looks are genuinely mixed** (a trip look pairs Arizona pieces with a top she carried), so "which closet does this look belong to" has no honest answer for them, while `available` already means "destination closet ∪ what she is carrying" during a trip — so such a look is wearable in Arizona, not in NYC while those pieces are still in the suitcase, and wearable again once they come home, with no per-look closet tag to rot. `isLookWearableNow()` lives in `useVisibleWardrobe.js` with the rest of the vocabulary; `npm run test:visible` is 45. **It defaults to `All looks` and the chip only appears when it would actually split the list** — hiding saved looks by default is a mistake this app already made, and **the render walk caught the first version of this change doing it again** (the Arizona-look screen went red). That check has now paid for itself twice; do not "fix" it by loosening it. **Open, hers: whether to flip the default to `Wearable now`.**
 
 ### 2026-09-02 · PR #221 — a trip she was still on could not be un-completed
 

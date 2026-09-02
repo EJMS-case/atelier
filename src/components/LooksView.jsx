@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect, useMemo } from "react";
 import RouteFallback from "./RouteFallback.jsx";
 import { s } from "../ui/styles.js";
 import { icons, HeartIcon } from "../ui/icons.jsx";
@@ -10,6 +10,7 @@ import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
 import ConfirmRemove from "./ConfirmRemove.jsx";
+import { isLookWearableNow } from "../features/closet/useVisibleWardrobe.js";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
@@ -24,7 +25,7 @@ const badgeStyle = {
   borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap",
 };
 
-export default function LooksView({ wardrobe, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
+export default function LooksView({ wardrobe, available, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -35,6 +36,16 @@ export default function LooksView({ wardrobe, onDelete, onLogAsWorn, isFav, togg
   // Worn-status chip: "Ready to wear" restores the old save-for-later view
   // (unworn + unscheduled) with one tap; "Worn" shows only worn looks.
   const [filterStatus, setFilterStatus] = useState("All");
+  // Where she is standing. Saved looks are a HISTORY — both closets, always,
+  // because a look resolves against the wardrobe — but the list conflates
+  // "what have I worn?" with "what can I wear now?". This chip separates them.
+  //
+  // It DEFAULTS TO "All looks", and that is not timidity: hiding saved looks by
+  // default is a mistake this app has already made once ("the old behavior of
+  // filtering them out made saved outfits look lost", above), and the render
+  // walk asserts an Arizona look still shows its pieces from NYC. So the list
+  // stays whole and the chip narrows it, rather than the reverse.
+  const [filterScope, setFilterScope] = useState("All looks");
   const [showBuilder, setShowBuilder] = useState(false);
   // Garment-set signatures for every outfit currently pinned on the planner —
   // used to badge saved looks that have already been scheduled.
@@ -81,8 +92,26 @@ export default function LooksView({ wardrobe, onDelete, onLogAsWorn, isFav, togg
     if (filterStatus === "Worn") return !!l.date_worn;
     return true;
   };
-  const displayed = visibleLogs
-    .filter(l => matchesStatus(l) && rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx));
+  // `available` is already the right answer in every case: the active closet,
+  // or during a trip the destination closet plus what she is carrying. So a
+  // trip look mixing Arizona pieces with a top she flew out with is wearable
+  // in Arizona, not in NYC while that top is still in her suitcase, and
+  // wearable again once it comes home.
+  const availableIds = useMemo(() => new Set((available || []).map(it => it.id)), [available]);
+  const inScope = (l) => filterScope === "All looks"
+    || isLookWearableNow(l.garment_ids, availableIds);
+  const matchesFilters = (l) =>
+    matchesStatus(l) && rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx);
+  const displayed = visibleLogs.filter(l => inScope(l) && matchesFilters(l));
+  // Both counts ride ON the chips, so neither view is a mystery: she can see
+  // what "Wearable now" would drop before she taps it.
+  const scopeCounts = visibleLogs.reduce((acc, l) => {
+    if (!matchesFilters(l)) return acc;
+    acc.all++;
+    if (isLookWearableNow(l.garment_ids, availableIds)) acc.wearable++;
+    return acc;
+  }, { all: 0, wearable: 0 });
+  const outOfScopeCount = scopeCounts.all - scopeCounts.wearable;
   // Only offer the status chips when they'd actually split the list.
   const hasWornOrScheduled = logs.some(l => l.date_worn || isScheduled(l));
 
@@ -142,6 +171,16 @@ export default function LooksView({ wardrobe, onDelete, onLogAsWorn, isFav, togg
           Build a Look
         </button>
       )}
+      {/* Only worth offering when it would actually split the list — the same
+          rule the status chips follow. */}
+      {!loading && logs.length > 0 && outOfScopeCount > 0 && (
+        <div style={{...s.filterRow, marginBottom: 8}}>
+          {[["All looks", scopeCounts.all], ["Wearable now", scopeCounts.wearable]].map(([sc, n]) => (
+            <button key={sc} onClick={() => setFilterScope(sc)}
+              style={{...s.chip, ...(filterScope === sc ? s.chipActive : {})}}>{sc} ({n})</button>
+          ))}
+        </div>
+      )}
       {!loading && logs.length > 0 && hasWornOrScheduled && (
         <div style={{...s.filterRow, marginBottom: 8}}>
           {["All", "Ready to wear", "Worn"].map(st => (
@@ -176,7 +215,9 @@ export default function LooksView({ wardrobe, onDelete, onLogAsWorn, isFav, togg
         <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
           {filterStatus === "Ready to wear" && filterOcc === "All" && filterWx === "All"
             ? "Every saved look is already worn or scheduled."
-            : "No saved looks match these filters."}
+            : filterScope === "Wearable now"
+              ? `Nothing here is wearable from where you are right now — tap "All looks" to see the other ${outOfScopeCount}.`
+              : "No saved looks match these filters."}
         </p></div>
       )}
       {!loading && displayed.map(log => {
