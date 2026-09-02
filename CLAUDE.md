@@ -88,6 +88,41 @@ Conventions worth knowing:
 - New feature work should land in `src/features/<area>/` with its own
   `scripts/<area>.test.mjs`, rather than growing `App.jsx`.
 
+## Working with the owner
+
+Her standing instructions, in her words. These are decisions already made —
+follow them rather than re-asking.
+
+- **Merge without waiting.** *"Merge now. Moving forward do not wait for me."*
+  Branch → PR → squash-merge to `main` once `npm test`, `npm run build` and
+  `npm run smoke` are green. Don't park a verified change waiting for approval.
+- **Right the first time.** *"I want things to be right the first time."* A fix
+  that only addresses the screen she screenshotted is not a fix. Find the bug's
+  family and sweep every site — `grep` for the call, fix all of them, and add
+  the check that would have caught the whole class.
+- **Think bigger picture.** *"think bigger picture and plan ahead for things
+  like this when making all changes moving forward, please."* Said after the
+  same pool bug reached her a **fourth** time, each previous fix having stopped
+  at the reported surface.
+- **Check before calling her data wrong.** *"Moving forward be smarter about
+  errors like that."* The doctor's first run against live data was wrong three
+  times out of three: one "anomaly" was already folded by `normalizeItem`'s
+  alias map, one compared against a distinction nothing in the code makes, and
+  one was her deliberate filing. **Read the normalizer and the alias maps before
+  reporting a data problem.**
+- **One vocabulary, every time.** *"the correct language for a set of clothes
+  and everything else, every single time."* See the `wardrobe` / `available`
+  rule above; hold the same standard for any new concept.
+- **Verify against the live rows before believing any bug report — hers, mine,
+  or a test's.** One SQL query has settled every dispute this project has had,
+  in both directions: it proved her suitcase report right, and it proved my
+  cross-closet "fix" wrong. When she pushes back on a change, she has been
+  right every time.
+- **Her data is hers.** She reports bugs from her phone, mid-use, with
+  screenshots, and she builds looks on the phone. Deleting rows, dropping
+  tables, clearing a trip pin that names a deleted garment — surface it and let
+  her decide. Never action it unilaterally.
+
 ## Keys and data
 
 **The anon-key hole is closed.** As of migrations 0026–0031 (all applied live,
