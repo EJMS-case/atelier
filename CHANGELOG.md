@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The suitcase was invisible for the whole trip — 2026-09-02
+
+### Why
+Owner, from Arizona, mid-trip: *"When building outfits while on my trip to Arizona, it's adding a bag that I didn't pack (nyc closet bucket bag) and excluding the bow bag that I did pack. I noticed this with a few other items as well. It did, however, show me the 2 bags already in Arizona."*
+
+Checked against the live rows before touching anything. Her active Arizona trip has **18 pinned pieces and 18 `trip_items` rows, every one of them `status = 'suggested'`. Not one row is `'packed'`.**
+
+### Fixed
+- **A pinned piece counts as carried** (`resolveVisibleWardrobe`). The active-trip pool was `destination closet ∪ trip_items status 'packed'`, and nothing in the app forces a tick before departure — so starting a trip with the checklist untouched collapsed the pool to the destination closet alone. Every piece she had physically flown out with was invisible to styling for the length of the trip; the Arizona closet was all she had. A pin is the same claim as a tick, made at planning time instead of at packing time — "bringing for sure" — and it cannot mean "left behind", because taking a piece out of the suitcase (untick, or "Close with N unpacked") routes through `regenerateWithout`, which unpins it first so the two can never disagree. The rule is now `destination closet ∪ packed ∪ pinned`, via a new shared `carriedItemIds()`. `'suggested'` deliberately still doesn't carry: it is the packer's opinion that she needs a piece, not evidence she has it, and that distinction is the entire point of the checklist.
+- **Starting a trip with unconfirmed pieces now says so** (`TripDetailView`). `handleStartTrip` had no packing check at all. It now names the pieces that are neither ticked nor pinned and asks before activating, pointing at the tick and at "Close with unpacked" — which restyles those days rather than leaving a look that dresses her in something 2,000 miles away. Pinned pieces are not counted, so a trip planned entirely by pinning starts without a prompt.
+- The active-trip header label reads "Pool = Arizona + what you're carrying" rather than "+ packed pieces", which was true of the code and not of the suitcase.
+
+### Notes
+The bag she *was* offered came in by a different door and is working as designed: the Mini Mini Bucket Bag is on her Sep 2 look, and the builder pool is widened by the edited look's own pieces (#215) so that saving can't delete what the pool can't see. With this fix her pinned bags join it in the picker, so there is something to swap to. Two pieces on her saved trip looks are neither pinned nor in Arizona — the Mini Mini Bucket Bag (Sep 2, Sep 6) and 501 Shorts (Aug 31) — and restyling those days is hers to ask for; the data is untouched here.
+
+No migration.
+
+### Tests
+`visible-wardrobe` +15 → 38: her exact live shape (pinned, row still `'suggested'`, destination closet selected) resolves with the bag in the pool; a pin with no `trip_items` row at all still counts; an unpinned `'suggested'` piece stays out; pins and ticks union rather than override; a pinned Misc piece is still refused, so the holding room stays shut through the new door too; with no destination closet the pool is exactly what she carries. New `carriedItemIds` unit tests cover dedupe and degenerate input, and assert `packedItemIds` did NOT grow pin behaviour — the "🧳 N packed" counter and the closet's 🧳 badge still mean ticked. Full `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — A trip look keeps its pieces whichever closet you're standing in — 2026-09-01
 
 ### Why

@@ -606,6 +606,29 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
         alert(`Finish or complete "${other.destination || other.destination_city || "your other trip"}" first — only one trip can be active at a time.`);
         return;
       }
+      // A piece that is neither ticked nor pinned is only a SUGGESTION — the
+      // packer thinks she needs it; nothing says she has it. Starting the trip
+      // anyway leaves those pieces out of the trip pool (see
+      // resolveVisibleWardrobe) while the looks that use them still name them,
+      // so she gets dressed in something sitting in the other closet. Say so
+      // once, here, rather than letting her find out mid-trip: "it's adding a
+      // bag that I didn't pack."
+      //
+      // Pinned pieces are NOT counted — a pin travels with her, so it needs no
+      // tick. This only fires for genuinely unconfirmed pieces.
+      const unconfirmed = suggestedRows.filter(r => !mustIncludeIds.has(r.item_id));
+      if (unconfirmed.length > 0) {
+        const names = unconfirmed
+          .slice(0, 4)
+          .map(r => itemsById.get(r.item_id)?.name || "a piece");
+        const more = unconfirmed.length - names.length;
+        const list = names.join(", ") + (more > 0 ? `, and ${more} more` : "");
+        if (!window.confirm(
+          `${unconfirmed.length} piece${unconfirmed.length === 1 ? " is" : "s are"} still unticked on the Packing tab — ${list}. `
+          + `Start the trip anyway? Looks using ${unconfirmed.length === 1 ? "it" : "them"} will show ${unconfirmed.length === 1 ? "a piece" : "pieces"} you may not have with you. `
+          + `Cancel to tick ${unconfirmed.length === 1 ? "it" : "them"} off, or use "Close with unpacked" to restyle those days first.`,
+        )) return;
+      }
       await updateTrip(trip.id, { status: "active" });
       setTrip(prev => ({ ...prev, status: "active" }));
       await onRefreshActiveTrip?.();
@@ -1127,7 +1150,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
           ) : null}
           {trip.status === "active" && (
             <span style={{ fontSize: 10, color: PALETTE.muted }}>
-              Pool = {destClosetId ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination closet") : "suitcase only"} + packed pieces
+              Pool = {destClosetId ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination closet") : "suitcase only"} + what you're carrying
             </span>
           )}
         </div>

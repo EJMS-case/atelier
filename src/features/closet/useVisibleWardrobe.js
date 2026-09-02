@@ -4,10 +4,32 @@
 //
 //   no active trip → pool = items in the active closet
 //   active trip    → pool = items in the trip's destination closet
-//                           ∪ items PACKED for the trip (trip_items status
-//                           'packed'), wherever they came from
+//                           ∪ items she is CARRYING, wherever they came from
 //
-// A trip with no destination closet resolves to just the packed items (the
+// "Carrying" is either of two claims — a piece needs only one of them:
+//   · trip_items status 'packed' — ticked off on the Packing tab
+//   · trips.must_include_ids — "bringing for sure", pinned in the trip form
+//
+// Pins count because a pin IS the statement that the piece is in the suitcase,
+// made at planning time instead of at packing time. Reading only 'packed' put
+// a trapdoor under the whole trip: start a trip without ticking anything —
+// nothing forces you to — and the pool silently collapsed to the destination
+// closet, so every piece the owner had actually flown out with disappeared
+// from styling for the length of the trip. Owner report, from Arizona: "it's
+// adding a bag that I didn't pack and excluding the bow bag that I did."
+// All 18 of her pinned pieces were sitting in trip_items as 'suggested'.
+//
+// A pin can't mean "left behind": taking a piece out of the suitcase (untick,
+// or "Close with N unpacked") routes through regenerateWithout, which unpins
+// it first precisely so the two can't disagree. So pinned-and-not-removed is
+// the strongest carry signal available, and it is the one the owner actually
+// gives.
+//
+// 'suggested' is deliberately NOT carried: it means the packer thinks she
+// needs the piece, not that she has it. That distinction is the entire point
+// of the checklist.
+//
+// A trip with no destination closet resolves to just the carried items (the
 // suitcase IS the closet). During a trip the active closet is deliberately
 // ignored — switching closets takes effect after the trip ends.
 //
@@ -70,10 +92,28 @@ export function packedItemIds(tripItems) {
 }
 
 /**
+ * Everything the owner is carrying on a trip: ticked-off packed rows PLUS the
+ * pieces she pinned as "bringing for sure". See the rule at the top of this
+ * file for why a pin counts — in short, it is the same claim as a tick, made
+ * earlier, and nothing but removing the piece can retract it.
+ *
+ * @param {Object}   [activeTrip] - the status='active' trip row
+ * @param {Object[]} [tripItems]  - trip_items rows for that trip
+ * @returns {Set<string>} item ids in the suitcase
+ */
+export function carriedItemIds(activeTrip, tripItems) {
+  const carried = packedItemIds(tripItems);
+  for (const id of (activeTrip?.must_include_ids || [])) {
+    if (id) carried.add(id);
+  }
+  return carried;
+}
+
+/**
  * Resolve the wardrobe the whole app should see right now.
  *
  * Misc ("holding room") items are ALWAYS excluded from the result — with or
- * without an active trip, from the destination closet and from the packed set
+ * without an active trip, from the destination closet and from the carried set
  * alike. Get at them through miscItemsForCloset() instead.
  *
  * @param {Object[]} items          - full wardrobe
@@ -84,16 +124,16 @@ export function packedItemIds(tripItems) {
  */
 export function resolveVisibleWardrobe({ items, activeClosetId, activeTrip, tripItems }) {
   // Strip the holding room before any closet/trip logic runs, so no branch
-  // below can reintroduce it (a packed Misc row would otherwise ride into the
-  // trip pool through packedItemIds).
+  // below can reintroduce it (a packed or pinned Misc row would otherwise ride
+  // into the trip pool through carriedItemIds).
   const all = withoutMisc(items);
   if (!activeTrip) {
     return all.filter(it => closetOf(it) === activeClosetId);
   }
   const destClosetId = activeTrip.destination_closet_id || null;
-  const packed = packedItemIds(tripItems);
+  const carried = carriedItemIds(activeTrip, tripItems);
   return all.filter(it =>
-    (destClosetId != null && closetOf(it) === destClosetId) || packed.has(it.id),
+    (destClosetId != null && closetOf(it) === destClosetId) || carried.has(it.id),
   );
 }
 

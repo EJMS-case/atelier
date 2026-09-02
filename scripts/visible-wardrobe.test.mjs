@@ -1,12 +1,12 @@
 // ── VISIBLE-WARDROBE TESTS ───────────────────────────────────────────────────
 // Node-run (no framework) tests for the Phase B pool-resolution rule in
 // src/features/closet/useVisibleWardrobe.js — the ONE place the app decides
-// which items are visible: active closet normally; destination closet ∪
-// packed trip items while a trip is active.
+// which items are visible: active closet normally; destination closet ∪ the
+// pieces she is carrying (packed rows ∪ pins) while a trip is active.
 //
 // Run: npm run test:visible
 
-import { resolveVisibleWardrobe, packedItemIds, poolIncluding } from "../src/features/closet/useVisibleWardrobe.js";
+import { resolveVisibleWardrobe, packedItemIds, carriedItemIds, poolIncluding } from "../src/features/closet/useVisibleWardrobe.js";
 import { DEFAULT_CLOSET_ID, ARIZONA_CLOSET_ID } from "../src/features/closet/closets.js";
 
 let passed = 0, failed = 0;
@@ -137,6 +137,93 @@ section("poolIncluding");
 
   assert(poolIncluding(null, items, ["w1"]).length === 1, "null pool is treated as empty");
   assert(poolIncluding(az, null, ["w1"]) === az, "null wardrobe → nothing to pull, same array back");
+}
+
+// ── 6. Pins count as carried (owner report, Arizona) ─────────────────────────
+// She pinned 18 pieces as "bringing for sure", started the trip without
+// ticking anything on the Packing tab, and the pool collapsed to the Arizona
+// closet: every piece she had actually flown out with vanished from styling.
+// "It's adding a bag that I didn't pack and excluding the bow bag that I did."
+section("active trip: pins are carried");
+{
+  const bowBag = { id: "w7", name: "Dior Bow Bag", closet_id: DEFAULT_CLOSET_ID };
+  const withBag = [...items, bowBag];
+  // The exact shape of her live trip: pinned, and its row still 'suggested'.
+  const trip = {
+    id: "t3", status: "active", destination_closet_id: ARIZONA_CLOSET_ID,
+    must_include_ids: ["w7"],
+  };
+  const tripItems = [{ trip_id: "t3", item_id: "w7", status: "suggested" }];
+
+  const pool = resolveVisibleWardrobe({ items: withBag, activeClosetId: ARIZONA_CLOSET_ID, activeTrip: trip, tripItems });
+  assert(ids(pool) === ids([azDress, azSandal, bowBag]),
+    "a pinned piece is in the pool even while its row is still 'suggested'");
+
+  // A pin with NO trip_items row at all (reconcile hasn't run yet) still counts
+  // — the pin lives on the trip row, not on the checklist.
+  const noRows = resolveVisibleWardrobe({ items: withBag, activeClosetId: ARIZONA_CLOSET_ID, activeTrip: trip, tripItems: [] });
+  assert(ids(noRows) === ids([azDress, azSandal, bowBag]), "a pin with no row yet still counts");
+
+  // The distinction that makes the checklist mean anything: 'suggested' alone
+  // is the packer's opinion, not her suitcase. Only pins and ticks carry.
+  const merelySuggested = {
+    id: "t4", status: "active", destination_closet_id: ARIZONA_CLOSET_ID, must_include_ids: [],
+  };
+  const suggestedOnly = resolveVisibleWardrobe({
+    items: withBag, activeClosetId: ARIZONA_CLOSET_ID, activeTrip: merelySuggested,
+    tripItems: [{ trip_id: "t4", item_id: "w7", status: "suggested" }],
+  });
+  assert(ids(suggestedOnly) === ids([azDress, azSandal]),
+    "an unpinned 'suggested' piece stays out — the packer's opinion is not a suitcase");
+
+  // Pins and ticks union rather than override each other.
+  const both = resolveVisibleWardrobe({
+    items: withBag, activeClosetId: ARIZONA_CLOSET_ID, activeTrip: trip,
+    tripItems: [{ trip_id: "t3", item_id: "w1", status: "packed" }],
+  });
+  assert(ids(both) === ids([azDress, azSandal, bowBag, nycTee]), "packed ∪ pinned, not one or the other");
+
+  // A pin can never resurrect the holding room, same as every other door in.
+  const pjs = { id: "w8", name: "PJs", category: "Misc", closet_id: DEFAULT_CLOSET_ID };
+  const withPjs = resolveVisibleWardrobe({
+    items: [...withBag, pjs], activeClosetId: ARIZONA_CLOSET_ID,
+    activeTrip: { ...trip, must_include_ids: ["w7", "w8"] }, tripItems: [],
+  });
+  assert(ids(withPjs) === ids([azDress, azSandal, bowBag]), "a pinned Misc piece is still excluded");
+
+  // No destination closet: the suitcase IS the closet, and pins fill it.
+  const noDest = resolveVisibleWardrobe({
+    items: withBag, activeClosetId: DEFAULT_CLOSET_ID,
+    activeTrip: { id: "t5", status: "active", destination_closet_id: null, must_include_ids: ["w7"] },
+    tripItems: [],
+  });
+  assert(ids(noDest) === ids([bowBag]), "no destination closet → pool is exactly what she carries");
+}
+
+// ── 7. carriedItemIds helper ─────────────────────────────────────────────────
+section("carriedItemIds");
+{
+  const set = carriedItemIds(
+    { must_include_ids: ["p1", "p2"] },
+    [{ item_id: "k1", status: "packed" }, { item_id: "s1", status: "suggested" }],
+  );
+  assert(set.has("k1"), "packed rows are carried");
+  assert(set.has("p1") && set.has("p2"), "pins are carried");
+  assert(!set.has("s1"), "suggested rows are not carried");
+  assert(set.size === 3, "no extras");
+
+  // A piece both pinned and ticked is one entry, not two.
+  const dedup = carriedItemIds({ must_include_ids: ["k1"] }, [{ item_id: "k1", status: "packed" }]);
+  assert(dedup.size === 1, "pinned AND packed counts once");
+
+  assert(carriedItemIds(null, null).size === 0, "no trip, no rows → empty");
+  assert(carriedItemIds({}, []).size === 0, "a trip with no pins → empty");
+  assert(carriedItemIds({ must_include_ids: null }, []).size === 0, "null pins → empty");
+
+  // packedItemIds must NOT have grown a pin behaviour — the packing tab's
+  // "🧳 N packed" counter and the closet's 🧳 badge still mean ticked.
+  assert(packedItemIds([{ item_id: "k1", status: "packed" }]).size === 1,
+    "packedItemIds still counts only ticked rows");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
