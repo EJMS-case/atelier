@@ -17,7 +17,7 @@ const NOTES_CLAMP_CHARS = 60;
 // `isPacked` (wave 2, trips): true while the item sits in the active trip's
 // suitcase — shows a subtle 🧳 corner badge so packed pieces read apart from
 // destination-closet ones during a trip.
-function ItemCard({ item, allItems, onDelete, onEdit, onDuplicate, duplicateHint, isFavorited, isPacked, onToggleFav, onStyleItem }) {
+function ItemCard({ item, wardrobe, onDelete, onEdit, onDuplicate, duplicateHint, isFavorited, isPacked, onToggleFav, onStyleItem }) {
   const [confirm,   setConfirm]   = useState(false);
   const [showSet,   setShowSet]   = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -43,7 +43,7 @@ function ItemCard({ item, allItems, onDelete, onEdit, onDuplicate, duplicateHint
           <div style={s.packedBadge} title="Packed for your trip">🧳</div>
         )}
       </div>
-      {showSet && <SetPanel item={item} allItems={allItems} onClose={() => setShowSet(false)}/>}
+      {showSet && <SetPanel item={item} wardrobe={wardrobe} onClose={() => setShowSet(false)}/>}
       <div style={s.cardBody}>
         <div style={s.cardCat}>
           {item.category}{item.subcategory ? ` · ${item.subcategory}` : ""}

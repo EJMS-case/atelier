@@ -93,12 +93,12 @@ let lastAnchorTime = null;
 let lastTripId = null;
 let lastTripScrollY = 0;
 
-// `allItems` (the FULL wardrobe) + `closets` feed trip planning across both
+// `wardrobe` (the FULL wardrobe) + `closets` feed trip planning across both
 // closets; `onRefreshActiveTrip` re-syncs App's trip-mode pool — wave 2's
 // activation / suitcase-close flows call it after flipping trip status.
 // `onItemsClosetChanged` patches App's local items after the trip-complete
 // flow reassigns left-behind pieces to the destination closet (B5).
-export default function CalendarView({ items, allItems, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
+export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
   const [anchor, setAnchor] = useState(() => lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date()));
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
@@ -109,7 +109,10 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
   // belong to the active closet — a look pinned to a day can hold a piece that
   // lives in another room, and every trip day does by construction. So DISPLAY
   // resolves against the full wardrobe; only pickers stay scoped to `items`.
-  const wardrobeAll = (Array.isArray(allItems) && allItems.length) ? allItems : items;
+  // App always passes `wardrobe`; the fallback only protects a caller that
+  // predates the prop (or a test), and it degrades to the scoped pool rather
+  // than to nothing.
+  const wardrobe = (Array.isArray(wardrobeProp) && wardrobeProp.length) ? wardrobeProp : available;
 
   const [activeTrip, setActiveTripRaw] = useState(null); // trip object → show TripDetailView
   // Open/close the trip through here so the module-level memo above always
@@ -266,7 +269,7 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
   async function handleGenerateForDay(iso, occasion, label = "") {
     if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
     const wxBucket = forecast?.[iso]?.bucket || "";
-    const look = await generateTripDayLook(items, occasion, wxBucket, null, apiKey, {});
+    const look = await generateTripDayLook(available, occasion, wxBucket, null, apiKey, {});
     if (!look) throw new Error("Couldn't generate a look — try again.");
     // Same reconcile-and-append as handleAssignSaved — never overwrite a
     // multi-outfit day with a fresh single-outfit row.
@@ -362,8 +365,8 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
     return (
       <TripDetailView
         trip={activeTrip}
-        items={items}
-        allItems={allItems}
+        available={available}
+        wardrobe={wardrobe}
         closets={closets}
         apiKey={apiKey}
         onBack={() => { setActiveTrip(null); refreshPlans(); }}
@@ -447,7 +450,7 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
             iso === tripForDay.start_date ||
             (iso < tripForDay.start_date === false && isoDate(startOfMonth(anchor)) === iso)
           );
-          const planItems = resolveItemIds(wardrobeAll, plan?.items);
+          const planItems = resolveItemIds(wardrobe, plan?.items);
           const planOutfits = outfitsOf(plan);
           const isToday = iso === todayIso;
           return (
@@ -514,8 +517,8 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
           key={activeDay}
           iso={activeDay}
           plan={plans[activeDay]}
-          items={items}
-          allItems={wardrobeAll}
+          available={available}
+          wardrobe={wardrobe}
           outfitLogs={outfitLogs}
           forecast={forecast}
           forecastLabel={`${activeCloset?.name || "NYC"} forecast`}
@@ -553,8 +556,8 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
 
       {showTrip && (
         <TripModal
-          items={items}
-          allItems={allItems}
+          available={available}
+          wardrobe={wardrobe}
           closets={closets}
           activeCloset={activeCloset}
           apiKey={apiKey}
@@ -645,11 +648,14 @@ function GenerateForDay({ iso, isPast, hasExisting, forecast, hasApiKey, onGener
   );
 }
 
-function DayModal({ iso, plan, items, allItems, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
-  // Saved looks resolve against the whole wardrobe, never the scoped pool —
-  // see the note on `wardrobeAll` in CalendarView. `items` stays the picker
-  // scope; this is only ever read to RENDER what a day already holds.
-  const wardrobeAll = (Array.isArray(allItems) && allItems.length) ? allItems : items;
+function DayModal({ iso, plan, available, wardrobe: wardrobeProp, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
+  // Saved looks RESOLVE against the wardrobe, never against what's available —
+  // see the vocabulary in features/closet/useVisibleWardrobe.js. `available`
+  // stays the picker scope; this is only read to render what a day holds.
+  // App always passes `wardrobe`; the fallback only protects a caller that
+  // predates the prop (or a test), and it degrades to the scoped pool rather
+  // than to nothing.
+  const wardrobe = (Array.isArray(wardrobeProp) && wardrobeProp.length) ? wardrobeProp : available;
   // Language adapts to past/today/future. Past = "What you wore" (a log, not
   // a plan). Today = neutral. Future = "Plan". Keeps the wording honest —
   // you can't "plan" a day that's already happened.
@@ -722,7 +728,7 @@ function DayModal({ iso, plan, items, allItems, outfitLogs, forecast, forecastLa
         </div>
 
         {planOutfits.map((o, idx) => {
-          const outfitItems = resolveItemIds(wardrobeAll, o.items);
+          const outfitItems = resolveItemIds(wardrobe, o.items);
           if (outfitItems.length === 0) return null;
           return (
             <div key={o.id || idx} style={{ marginBottom: 12, padding: 12, background: PALETTE.cream, borderRadius: 6 }}>
@@ -818,7 +824,7 @@ function DayModal({ iso, plan, items, allItems, outfitLogs, forecast, forecastLa
               </div>
             )}
             {matching.map(log => {
-              const logItems = resolveItemIds(wardrobeAll, log.garment_ids).slice(0, 4);
+              const logItems = resolveItemIds(wardrobe, log.garment_ids).slice(0, 4);
               return (
                 <button key={log.id} onClick={() => onPickSaved(log, { weather: pickedWeather, label: hasLooks ? daypart : "" })}
                   style={{ display: "flex", gap: 10, width: "100%", padding: 10, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, marginBottom: 8, cursor: "pointer", alignItems: "center", textAlign: "left" }}>
@@ -868,7 +874,7 @@ function DayModal({ iso, plan, items, allItems, outfitLogs, forecast, forecastLa
 //   • shuffle a day's outfit, swap any single item, or remove an item
 // All edits stay local until "Pin to calendar".
 
-function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, onAssign }) {
+function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, apiKey, onClose, onAssign }) {
   const [start, setStart] = useState(isoDate(new Date()));
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
@@ -988,11 +994,11 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // and therefore un-unpinnable — while tripPacker, which seats pins by
   // filtering the pool it was handed, silently ignored it. Folding the union
   // in here makes one pool that both surfaces agree on.
-  const { genItems, preferItemIds, destRelaxed } = useMemo(() => {
-    const source = Array.isArray(allItems) && allItems.length ? allItems : items;
+  const { tripPool, preferItemIds, destRelaxed } = useMemo(() => {
+    const source = Array.isArray(wardrobe) && wardrobe.length ? wardrobe : available;
     if (!destClosetId) {
       return {
-        genItems: poolIncluding(items, source, mustIncludeIds),
+        tripPool: poolIncluding(available, source, mustIncludeIds),
         preferItemIds: null,
         destRelaxed: false,
       };
@@ -1001,7 +1007,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
     const pool = poolIncluding(scoped, source, mustIncludeIds);
     const atDest = pool.filter(it => closetOf(it) === destClosetId);
     return {
-      genItems: pool,
+      tripPool: pool,
       preferItemIds: new Set(atDest.map(it => it.id)),
       // A predominantly athleisure/loungewear closet marks a relaxed
       // destination — the trip is Casual days plus a few dinners, not a week
@@ -1009,7 +1015,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       destRelaxed: isRelaxedDestinationCloset(atDest),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destClosetId, allItems, items, homeClosetId, mustIncludeIds]);
+  }, [destClosetId, wardrobe, available, homeClosetId, mustIncludeIds]);
 
   // What the pin sheet offers. "Bringing for sure" means CARRYING it, so a piece
   // that already lives at the destination has nothing to pin — it's there. The
@@ -1022,19 +1028,19 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // invisible and therefore un-unpinnable while still driving the packer.
   const pinPool = useMemo(() => {
     const packable = destClosetId
-      ? genItems.filter(it => closetOf(it) !== destClosetId)
-      : genItems;
+      ? tripPool.filter(it => closetOf(it) !== destClosetId)
+      : tripPool;
     if (!mustIncludeIds.size) return packable;
     const shown = new Set(packable.map(it => it.id));
-    const source = Array.isArray(allItems) && allItems.length ? allItems : items;
+    const source = Array.isArray(wardrobe) && wardrobe.length ? wardrobe : available;
     const strays = source.filter(it => mustIncludeIds.has(it.id) && !shown.has(it.id));
     return strays.length ? [...packable, ...strays] : packable;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [genItems, mustIncludeIds, allItems, items, destClosetId]);
+  }, [tripPool, mustIncludeIds, wardrobe, available, destClosetId]);
 
   const pinnedItems = useMemo(
-    () => genItems.filter(it => mustIncludeIds.has(it.id)),
-    [genItems, mustIncludeIds],
+    () => tripPool.filter(it => mustIncludeIds.has(it.id)),
+    [tripPool, mustIncludeIds],
   );
 
   // If user re-runs Preview the working copy is rebuilt — but vibe/weather
@@ -1113,7 +1119,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
     const prevDayIds = dayIdx != null && dayIdx > 0
       ? (dayLooks?.[dayIdx - 1] || []).flatMap(o => (o.items || []).map(it => it.id))
       : [];
-    const single = buildDailyOutfits(genItems, [perDayHigh(dayIso)], {
+    const single = buildDailyOutfits(tripPool, [perDayHigh(dayIso)], {
       occasions: [occasion],
       activities: [dayAct],
       priorUse: usageExcluding(dayIdx, excludeOutfitIdx),
@@ -1148,7 +1154,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       // Per-day activity defaults to the trip-level activity for every day.
       // The user can override individual days from the preview cards.
       const activities = Array.from({ length: dayCount }, () => activity);
-      const { dailyOutfits, poolSuits } = buildDailyOutfits(genItems, highs, {
+      const { dailyOutfits, poolSuits } = buildDailyOutfits(tripPool, highs, {
         occasions,
         activity,
         activities,
@@ -1157,7 +1163,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       });
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
       if (totalItems === 0) {
-        setPreviewError(`No outfits could be built — the trip pool has ${genItems.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
+        setPreviewError(`No outfits could be built — the trip pool has ${tripPool.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
         return;
       }
       // Wrap each day's items as a single OutfitDraft. The user can add
@@ -1212,7 +1218,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
     // regular rebuild can no longer produce swim at all.
     const isPool = (target.items || []).length > 0 && target.items.every(it => it.category === "Swim");
     if (isPool) {
-      const single = buildDailyOutfits(genItems, [perDayHigh(dayIso)], {
+      const single = buildDailyOutfits(tripPool, [perDayHigh(dayIso)], {
         occasions: [target.occasion || "Casual"],
         activities: [dayAct],
         priorUse: usageExcluding(dayIdx, outfitIdx),
@@ -1789,7 +1795,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
         {swapTarget && (
           <SwapPicker
             target={swapTarget}
-            items={genItems}
+            items={tripPool}
             preferItemIds={preferItemIds}
             currentDayItems={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.items || []}
             weather={perDayBucket(addDaysIso(start, swapTarget.dayIdx))}

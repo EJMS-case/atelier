@@ -2,6 +2,34 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — One vocabulary for a set of clothes, and a test that renders the app — 2026-09-02
+
+### Why
+Owner: *"I want this working properly with the correct language for a set of clothes and everything else, every single time."*
+
+There were **thirteen** names for "a set of clothes" — `items`, `allItems`, `stylingItems`, `closetItems`, `builderItems`, `genItems`, `wardrobeAll`, `displayItems`, `pinPool`, `regenPool`, `tripPoolIds`, `packable`, `scoped` — and every serious bug of the week lived in that pile. Not because any single name was bad, but because none of them said **which question the array answers**, so the wrong array reached the wrong question and nothing complained.
+
+### Changed
+- **Two words, defined once** (header of `features/closet/useVisibleWardrobe.js`, restated at the top of App's state):
+  - **`wardrobe`** — everything she owns that can be styled, Misc always excluded. Answers *"does she own this?"*, so it RESOLVES anything already committed: a saved look's ids, a suitcase, a set's members, wear history.
+  - **`available`** — the active closet, or during a trip the destination closet plus what she's carrying. Answers *"may she pick this, here, now?"*, so it OFFERS choices: pickers, the grid, Style Me, generators.
+
+  A `<something>Pool` is an `available` widened for one surface, and its name says which: `builderPool`, `pinPool`, `tripPool`. **RESOLVE against the wardrobe. OFFER from what's available.** Renames: `stylingItems` → `wardrobe`, `closetItems` → `available`, `builderItems` → `builderPool`, `wardrobeAll` → `wardrobe`, `genItems` → `tripPool`, and the `allItems` prop → `wardrobe` at all 62 sites across nine files.
+- **Two deliberate exceptions, both documented at the point of use.** `items` in `App.jsx` stays the RAW persisted rows (Misc included) for the sync machinery and Settings' orphan scan — it styles nothing. And coord-set membership stays closet-scoped, because she owns the same set in both rooms.
+- **Three resolve-sites moved off the raw rows** onto `wardrobe`, which is what the vocabulary says they always meant: the style fingerprint, "build a similar silhouette", and the look-edit diff. All three were resolving committed ids against an array that still contained the holding room.
+
+### Added
+- **`npm run test:render`** (`scripts/render.test.mjs`) — loads the BUILT app in a headless browser **signed in**, with the whole Supabase REST layer mocked from the real-vocabulary fixture, and walks nine screens asserting each renders with no page error.
+
+  `npm run smoke` only ever loaded the **sign-in screen**, because `AuthGate` blocks the app until a session exists — so the closet, the planner, the trip views and the builder were verified by nothing at all. That is precisely where a rename like this one breaks: a bad identifier compiles fine and passes every unit assertion, then throws when the screen renders. The gate is opened by seeding a session under `lib/auth.js`'s `storageKey: "atelier:auth"`; nothing touches the real project.
+
+  **Validated by deliberately reintroducing the bug**: with one stale `items` reference back in `CalendarView`, `npm run build` passed, all twelve unit suites passed — and only the render harness failed, naming the screen and the `ReferenceError`. It now runs as part of `npm run smoke`.
+
+  The mock **honours PostgREST query filters**. The previous harness did not, and answered `trips?status=eq.active` with a *planning* trip, which put the whole app into trip mode against a trip that was not active. Returning "all rows for this table" is not a shortcut, it is a different app.
+
+### Notes
+No behaviour change beyond the three resolve-sites, no migration. Full `npm test` (12 suites), `npm run build`, `npm run smoke` (now smoke + render) green.
+
 ## [Unreleased] — A safety net under the pool rules — 2026-09-02
 
 ### Why

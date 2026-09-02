@@ -23,10 +23,18 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (~24 node:test files, no network)
+npm test           # full suite (~28 node:test files, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
-npm run smoke      # build, then scripts/smoke.mjs
+npm run smoke      # build, then a blank-screen check AND the signed-in render walk
+npm run test:render     # just the render walk (9 screens, headless, mocked REST)
+npm run doctor     # check the LIVE data against the app's own invariants
 ```
+
+**Run `npm run build` and `npm run smoke` before every push, not just `npm test`.**
+The unit suites test pure functions; they cannot see a bad identifier or a
+component that throws on render. A duplicate declaration once passed all 451
+assertions and failed only at esbuild, and a stale prop reference passes both —
+only `test:render` catches that one.
 
 There is no linter or formatter configured — match the style of the file you
 are editing.
@@ -58,6 +66,16 @@ Conventions worth knowing:
   import a tier (`MODEL_TOP`, `MODEL_STRONG`, `MODEL_STANDARD`, `MODEL_FAST`);
   changing a tier there moves every call site at once. Don't hardcode a model
   ID anywhere else.
+- **Two words for a set of clothes, and only two.** `wardrobe` = everything she
+  owns that can be styled (Misc excluded) — use it to RESOLVE something already
+  committed (a saved look's ids, a suitcase, a set's members). `available` =
+  what she may pick from right now (active closet, or during a trip the
+  destination closet plus what she's carrying) — use it to OFFER a choice. A
+  `<x>Pool` is an `available` widened for one surface. The full rule, and the
+  two documented exceptions, are in the header of
+  `src/features/closet/useVisibleWardrobe.js`. Read it before naming a variable
+  that holds garments; `src/features/closet/poolInvariants.js` turns the rule
+  into a check that runs in tests and against live data (`npm run doctor`).
 - **Structured AI output goes through tool-use + Zod**, not JSON parsing — see
   `src/lib/ai/schemas.js` and `src/lib/ai/toolUse.js`.
 - **Supabase data access is a hand-rolled REST client** (`src/lib/supabase.js`).

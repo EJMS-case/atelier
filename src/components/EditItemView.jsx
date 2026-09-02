@@ -7,7 +7,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
 
-export default function EditItemView({ item, allItems, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
+export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -332,7 +332,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
             const counts = new Map();       // all closets — enumeration only
             const closetCounts = new Map(); // this closet — the number shown
             const setClosets = new Map();
-            (allItems || []).forEach(it => {
+            (wardrobe || []).forEach(it => {
               if (!it.set_id) return;
               const inCloset = it.id === item.id
                 ? form.closet_id
@@ -428,7 +428,7 @@ export default function EditItemView({ item, allItems, closets, onSave, onDelete
       {/* "In Your Looks" — worn/planned/saved outfits featuring this piece,
           with dates, so she can judge repeat spacing at a glance. Renders
           nothing when the piece has no history. */}
-      {!isMisc && <ItemWearHistory item={item} allItems={allItems} logs={logs} plans={plans} />}
+      {!isMisc && <ItemWearHistory item={item} wardrobe={wardrobe} logs={logs} plans={plans} />}
 
       {onStyleAround && !isMisc && (
         <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}

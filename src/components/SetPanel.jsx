@@ -1,10 +1,10 @@
 import { s } from "../ui/styles.js";
 import { setMatesOf } from "../features/closet/setType.js";
 
-export default function SetPanel({ item, allItems, onClose }) {
-  // `allItems` must be the FULL wardrobe: a coord set can span both closets
+export default function SetPanel({ item, wardrobe, onClose }) {
+  // `wardrobe` must be the FULL wardrobe: a coord set can span both closets
   // (8 of hers do), and a scoped pool would show half the set.
-  const partners = setMatesOf(allItems, item);
+  const partners = setMatesOf(wardrobe, item);
   return (
     <div style={s.setPanel}>
       <div style={s.setPanelHeader}>
