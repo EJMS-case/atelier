@@ -2302,6 +2302,7 @@ export default function App() {
       {view === "favorites" && (
         <SavedView
           wardrobe={wardrobe}
+          available={available}
           apiKey={apiKey}
           favorites={favorites}
           toggleFav={toggleFav}

@@ -2,6 +2,37 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Saved looks can be narrowed to what she can actually wear — 2026-09-02
+
+### Why
+Owner: *"For saved looks, why are the two closets combined?"* Because nothing
+separated them — the list fetches every `outfit_logs` row and filters only by
+occasion, weather and worn/scheduled status. The pieces themselves resolve
+against the **wardrobe** (everything she owns), which is deliberate and stays:
+scoping that resolve to a pool is what made an Arizona look read as "my outfit
+lost its top" from NYC, four times. What was missing is that the list answers two
+different questions at once — "what have I worn?" and "what can I wear now?"
+
+### Added
+- **A scope chip on Saved → Looks: `All looks (101)` / `Wearable now (n)`.** It
+  keys off `available`, not a closet id, which is the only thing that gets the
+  mixed looks right: **16 of her 101 saved looks use pieces from both closets**
+  (a trip look pairs Arizona pieces with a top she flew out with), so "which
+  closet does this look belong to" has no honest answer for them. `available` is
+  already the destination closet plus what she is carrying during a trip, so such
+  a look is wearable in Arizona, not wearable in NYC while those pieces are still
+  in the suitcase, and wearable again once they come home. No per-look closet tag
+  to rot.
+- `isLookWearableNow()` in `useVisibleWardrobe.js`, beside the vocabulary it
+  belongs to; 7 assertions added to `npm run test:visible` (now 45).
+
+### Notes
+- **It defaults to `All looks`, and the chip only appears when it would actually
+  split the list.** Hiding saved looks by default is a mistake this app has made
+  once already; the render walk asserts an Arizona look still shows its pieces
+  from NYC, and it caught the first version of this change doing exactly that.
+  The list stays whole and the chip narrows it, not the reverse.
+
 ## [Unreleased] — The trip lifecycle has a reverse gear — 2026-09-02
 
 ### Why
