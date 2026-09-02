@@ -23,7 +23,7 @@ import {
   migrateLocalStorage,
 } from "./utils/storage.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
-import { compareSetsByName, compareSetsByType } from "./features/closet/setType.js";
+import { compareSetsByName, compareSetsByType, setMembers } from "./features/closet/setType.js";
 import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem, poolIncluding } from "./features/closet/useVisibleWardrobe.js";
 import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
 import { sb } from "./lib/supabase.js";
@@ -1519,7 +1519,7 @@ export default function App() {
       // whole point of tracking it.
       const misc = isMiscItem(item);
       return (
-        <ItemCard key={item.id} item={item} allItems={closetItems}
+        <ItemCard key={item.id} item={item} allItems={stylingItems}
           onDelete={deleteItem}
           onEdit={handleEditItemCard}
           onDuplicate={dupTarget ? duplicateItem : undefined}
@@ -1822,7 +1822,7 @@ export default function App() {
               <SetEditModal
                 setId={editingSet}
                 meta={setsMeta[editingSet] || { name: "", tags: [] }}
-                groupItems={closetItems.filter(it => it.set_id === editingSet)}
+                groupItems={setMembers(stylingItems, editingSet, activeCloset.id)}
                 allItems={closetItems}
                 onSave={(data) => { updateSetMeta(editingSet, data); setEditingSet(null); }}
                 onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
