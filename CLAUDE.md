@@ -23,7 +23,7 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (~28 node:test files, no network)
+npm test           # full suite (29 node:test files, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
 npm run test:render     # just the render walk (9 screens, headless, mocked REST)

@@ -10,6 +10,7 @@ import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeathe
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
+import ConfirmRemove from "./ConfirmRemove.jsx";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
@@ -217,10 +218,7 @@ export default function OutfitHistory({ wardrobe, onWearAgain, onDelete, onUnlog
                       </button>
                     </div>
                     {deleteId === log.id ? (
-                      <div style={{ display:"flex", gap:6 }}>
-                        <button style={{...s.histDeleteBtn, color:"var(--color-danger)"}} onClick={() => handleDelete(log.id)}>Confirm</button>
-                        <button style={s.histDeleteBtn} onClick={() => setDeleteId(null)}>Cancel</button>
-                      </div>
+                      <ConfirmRemove onConfirm={() => handleDelete(log.id)} onCancel={() => setDeleteId(null)} />
                     ) : (
                       <div style={{ display:"flex", gap:6 }}>
                         {onSaveLook && (

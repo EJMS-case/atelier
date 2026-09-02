@@ -30,6 +30,7 @@ import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
 // copy condensed to its stylist-relevant sentences (up to 40 items per
 // category × ~1 kB of copy each is real token money).
 import { promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
+import { readSSEText } from "../../lib/ai/sse.js";
 
 function formatItem(it) {
   return [
@@ -50,9 +51,12 @@ function formatItem(it) {
 // state changes every turn and would bust the cached system block.
 const PER_CATEGORY_CAP = 40;
 
-function closetReference(closetItems) {
+// The inventory block the model picks from. It is an "available", and naming
+// it so is load-bearing: an earlier name (`closetItems`, documented as "full
+// wardrobe array") described neither what it held nor what it was for.
+function availableReference(available) {
   const byCat = new Map();
-  for (const it of closetItems || []) {
+  for (const it of available || []) {
     const cat = it.category || "Other";
     if (!byCat.has(cat)) byCat.set(cat, []);
     byCat.get(cat).push(it);
@@ -69,7 +73,7 @@ function closetReference(closetItems) {
 
 // The stable system block: persona + personal grounding + full closet. Kept
 // byte-identical across turns within a session so the prompt cache hits.
-async function buildSystemBlock(closetItems) {
+async function buildSystemBlock(available) {
   const personal = [];
   const fp = await sb.fingerprintTextCached(800).catch(() => "");
   if (fp) personal.push(`HER STYLE FINGERPRINT (your standing read on her taste):\n${fp}`);
@@ -79,7 +83,7 @@ async function buildSystemBlock(closetItems) {
   }
   const prefs = loadStylePrefs();
   const manualPairs = prefs?.colorPairs || [];
-  const autoPairs = autoColorPairs(closetItems, { exclude: manualPairs, max: 3 }).map(p => p.label);
+  const autoPairs = autoColorPairs(available, { exclude: manualPairs, max: 3 }).map(p => p.label);
   const allPairs = [...manualPairs, ...autoPairs];
   if (allPairs.length) {
     personal.push(`HER COLOR PAIRINGS (hand-picked favorites${autoPairs.length ? " + in-fashion pairs her closet supports" : ""} — reaching for a pair is a signature move): ${allPairs.join(", ")}`);
@@ -96,7 +100,7 @@ ${personal.length ? `\n${personal.join("\n\n")}\n` : ""}
 HER CLOSET — everything she owns (grouped by category; suggest swaps from anywhere in it).
 ${NOTES_NEGATION_LEGEND}
 
-${closetReference(closetItems)}`;
+${availableReference(available)}`;
 }
 
 // Per-turn state — deliberately OUTSIDE the cached system block. Rebuilt on
@@ -121,7 +125,9 @@ function currentLookBlock(assembledItems, emptySlots, occasions, weathers) {
  * @param {Object}   params
  * @param {Object[]} params.messages       - full history [{role, content}] (raw text only)
  * @param {Object[]} params.assembledItems - items currently placed in the builder
- * @param {Object[]} params.closetItems    - full wardrobe array
+ * @param {Object[]} params.available     - what she may PICK from (the builder
+ *                                       pool), NOT the full wardrobe. See the
+ *                                       vocabulary in useVisibleWardrobe.js.
  * @param {string[]} params.emptySlots     - slot keys that have no selection yet
  * @param {string[]} params.occasions      - builder occasion chips
  * @param {string[]} params.weathers       - builder weather chips
@@ -129,11 +135,11 @@ function currentLookBlock(assembledItems, emptySlots, occasions, weathers) {
  * @param {Function} params.onDelta        - (textSoFar) => void, called as tokens arrive
  * @returns {Promise<string>}              - final assistant reply text
  */
-export async function sendBuilderMessage({ messages, assembledItems, closetItems, emptySlots, occasions = [], weathers = [], apiKey, onDelta }) {
+export async function sendBuilderMessage({ messages, assembledItems, available, emptySlots, occasions = [], weathers = [], apiKey, onDelta }) {
   if (!apiKey) throw new Error("API key required.");
   if (!assembledItems?.length) throw new Error("Assemble at least one item first.");
 
-  const system = await buildSystemBlock(closetItems);
+  const system = await buildSystemBlock(available);
   const stateBlock = currentLookBlock(assembledItems, emptySlots, occasions, weathers);
 
   // Fresh state rides the LAST user message; earlier messages stay raw so the
@@ -162,31 +168,10 @@ export async function sendBuilderMessage({ messages, assembledItems, closetItems
 
   if (!res.body) throw new Error("The stylist didn't answer — try again.");
 
-  // SSE parse (same shape as streamStyleProfile).
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let text = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      try {
-        const evt = JSON.parse(payload);
-        if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
-          text += evt.delta.text || "";
-          onDelta?.(text);
-        }
-      } catch { /* ignore partial JSON */ }
-    }
-  }
+  const text = await readSSEText(res.body, {
+    deltaType: "text_delta", field: "text", onDelta,
+  });
+
   const finalText = text.trim();
   if (!finalText) throw new Error("The stylist didn't answer — try again.");
   return finalText;

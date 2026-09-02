@@ -74,7 +74,7 @@ function formatItemLine(it) {
  * @param {Array}  items  - resolved wardrobe items on the canvas
  * @param {string} apiKey
  * @param {Object} opts   - { occasions?: string[], weathers?: string[],
- *                           closetItems? (full wardrobe, for auto color
+ *                           available? (the builder pool, for auto color
  *                           pairs), model?, signal? }
  */
 export async function evaluateLook(items, apiKey, opts = {}) {
@@ -99,8 +99,8 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   // material.
   const prefs = loadStylePrefs();
   const manualPairs = prefs?.colorPairs || [];
-  const autoPairs = opts.closetItems?.length
-    ? autoColorPairs(opts.closetItems, { exclude: manualPairs, max: 3 }).map(p => p.label)
+  const autoPairs = opts.available?.length
+    ? autoColorPairs(opts.available, { exclude: manualPairs, max: 3 }).map(p => p.label)
     : [];
   const allPairs = [...manualPairs, ...autoPairs];
   if (allPairs.length) {

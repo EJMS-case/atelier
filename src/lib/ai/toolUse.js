@@ -7,6 +7,7 @@
 
 import { logAiError } from "./logError.js";
 import { parseLooseJson } from "../../utils/coerce-shapes.js";
+import { readSSEEvents } from "./sse.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 
@@ -174,32 +175,18 @@ export async function invokeToolStream({
     tool_choice: { type: "tool", name: tool.name },
   }, { apiKey, signal });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let inputJson = "";
 
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-        if (!line.startsWith("data:")) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
-        try {
-          const evt = JSON.parse(payload);
-          if (evt.type === "content_block_delta" && evt.delta?.type === "input_json_delta") {
-            inputJson += evt.delta.partial_json || "";
-            onDelta?.(inputJson);
-          }
-        } catch { /* ignore malformed SSE lines */ }
+    // The frame parser is shared with the other two streaming call sites
+    // (lib/ai/sse.js); only the accumulation differs — this stream carries
+    // input_json_delta, not text_delta.
+    await readSSEEvents(res.body, (evt) => {
+      if (evt.type === "content_block_delta" && evt.delta?.type === "input_json_delta") {
+        inputJson += evt.delta.partial_json || "";
+        onDelta?.(inputJson);
       }
-    }
+    });
   } catch (e) {
     // The connection dropped mid-stream (Safari surfaces this as "Load failed").
     // Don't bubble a raw network error to the user — return null so the caller
