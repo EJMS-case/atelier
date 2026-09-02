@@ -2,6 +2,66 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The deferred retry loop, and two checks that were not running — 2026-09-02
+
+### Why
+The previous pass swept what was easy to see. This one went after what the docs
+claimed and what the harness only appeared to do — including one item that had sat
+on the deferred list for a month because nobody wanted to touch it without a test.
+
+### Changed
+- **The PGRST204 self-healing retry is one function.** It was **six** copies inside
+  `supabase.js` — `upsert`, `saveOutfitLog`, `updateOutfitLog`, `savePlan`,
+  `saveTrip`, `updateTrip` — not the four HANDOFF's deferred list claimed. Each one
+  POSTs or PATCHes, and when PostgREST answers `PGRST204` ("could not find the 'x'
+  column") strips that column and retries, so a client deployed ahead of its
+  hand-applied migration still saves the rest of the row. Now
+  `src/lib/selfHealingWrite.js`.
+- **The copies had drifted into two different error wordings** — `"Upsert failed:
+  <msg>"` versus PostgREST's own message with the label only as fallback — which is
+  exactly why this was flagged "behaviour-risky". Both are reproduced verbatim
+  behind `preferServerMessage`; unifying them is a separate decision from
+  de-duplicating the loop, and these strings reach the UI.
+- **`headers` is passed as a function**, called fresh on each attempt. Handing the
+  helper a prebuilt object would freeze signed-out headers for the whole retry
+  sequence — `wearApi.js` shipped that bug at module scope, and its writes are
+  fire-and-forget, so it failed silently.
+
+### Fixed
+- **`npm run smoke` was silently not running.** `playwright-core` was never listed
+  in `package.json`, so any fresh container took the harness's graceful skip and
+  printed nothing resembling a failure: "smoke green" could mean "smoke did not
+  run". It is a devDependency now, the eleven-screen signed-in walk actually runs,
+  and the skip message points at `npm install` rather than suggesting an ad-hoc one.
+- **`HANDOFF.md` contradicted `CLAUDE.md`.** CLAUDE.md sends every new session there
+  first, promising the newest entry is at the top; the file carried **twelve** blocks
+  headed "NEWEST" in no consistent order under a "Refreshed 2026-08-20" header, with
+  2026-09-02 work buried mid-file. It is now one dated session log in merge order,
+  each entry naming its PR, with the headings taken from the entries' own wording.
+- **The "never break" line named 19 test suites**, omitting every suite added since
+  2026-08-07. There are 31; the line now points at `package.json`'s `test` script as
+  the only source of truth, and states that `npm run build` and `npm run smoke` are
+  part of "never break" rather than units alone.
+
+### Added
+- `npm run test:selfheal` (24 assertions) — the retry loop had six copies and no
+  test in any of them. Covers the strip-and-retry itself, one attempt per unknown
+  column, that the caller's object is never mutated, that a `PGRST204` naming no
+  column is *not* retried, the bounded stop, per-attempt header construction, both
+  error wordings, and a non-JSON error body. Every assertion was validated by
+  reintroducing a real regression — hoisted headers, mutating the caller's object,
+  unifying the wordings, retrying a column-less `PGRST204` — and all four are caught.
+
+### Checked, found clean (recorded so it is not re-run)
+No dead exports (all ten candidates are used in their own file), no unused keys
+across the `s`/`si`/`ss` style objects, no orphan modules, no unused dependencies,
+no TODO/FIXME markers, no `console.log`, no commented-out code. `readCache` /
+`writeCache` are defined twice on purpose — `weather.js` has a memory layer and
+day-boundary invalidation, `geocode.js` is a flat TTL dictionary — and merging them
+would be wrong. Both closet rows carry real lat/lon, verified against the live
+project, so `fetchClosetForecast`'s NYC fallback cannot silently dress her for the
+wrong city.
+
 ## [Unreleased] — Stale, duplicated and lying code — 2026-09-02
 
 ### Why
