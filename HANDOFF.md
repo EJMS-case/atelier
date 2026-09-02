@@ -1,11 +1,15 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-02**, after PR #218. The session log below is in merge
+Refreshed **2026-09-02**, after PR #221. The session log below is in merge
 order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
 per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
 preferences" down is older standing context: search it, don't read it through.
 
 ## Session log
+
+### 2026-09-02 · PR #221 — a trip she was still on could not be un-completed
+
+Owner, from Arizona, day 5 of 9: *"I must have accidentally clicked that this trip is complete. Given the date, it is not. This means I can't make new outfits while I'm still here."* **A trip's status decides her POOL** — `useVisibleWardrobe` bridges the two closets only while a trip is `active` — so completing one mid-trip does not merely stop generation, it takes the whole suitcase out of styling and leaves her with the destination closet. `complete` was a **one-way door**: a read-only ✓ TRIP COMPLETE pill with nothing to undo it, so one mis-tap on a phone permanently ended a trip that was still happening. **The class is not "the complete button" — it is a status she can enter but not leave**, and `planning → active` had exactly the same shape, so both got a reverse gear. `src/features/planner/tripStatus.js` now owns the lifecycle as pure functions; `tripStatusActions()` is the single source of the moves the view offers, so buttons and guards cannot disagree. Reopening mid-trip lands on `active` (the pool bridge); a trip whose dates have passed reopens to `planning` instead, because making a finished trip active would hijack the pool of the room she is standing in. Completing early now warns in her terms — "day 5 of 9 — this trip runs through September 6" — naming what it costs. **`npm run test:tripstatus` (12) tests the PROPERTY, not the buttons**: every status has a way out at every date position, and every status is reachable from every other by walking the real graph, so a fourth status cannot become a third dead end without failing here. Validated by reintroducing four regressions (dead end → 5 failures; missing guard → 1; finished trip reopening as active → 1; last-day off-by-one → 3). **Live data: her Arizona row was set back to `active`; all 18 `trip_items` were still `suggested`, so the mis-tap moved no garments.** `npm test` is 32 suites.
 
 ### 2026-09-02 · PR #219 — the second cleanup pass, and two checks that were not running
 
@@ -381,6 +385,6 @@ deliberately left alone. Don't re-audit these without a new symptom.
 
 - Feature branch → PR → merge `main` (auto-deploy). Squash-merge with `(#NN)` in the title, matching history. **Parallel sessions ship to `main`**: always `git fetch origin main` and merge/rebase before pushing, and expect CHANGELOG conflicts at the top of the file.
 - Update `CHANGELOG.md` per feature (house style: Why / Added / Changed / Fixed).
-- **Never break**: `npm test` runs the whole battery — **31 suites**, listed in `package.json`'s `test` script, which is the only source of truth for what the battery contains (this doc used to hand-list them and the list rotted: it named 19 and omitted every suite added after 2026-08-07). Green units are not enough — **`npm run build` and `npm run smoke` too**, every push. A duplicate export once passed all 451 assertions and failed only at esbuild, and the eleven-screen render walk in `npm run smoke` is the only thing that exercises the app signed in. Run `npm ci` first in a fresh container.
+- **Never break**: `npm test` runs the whole battery — **32 suites**, listed in `package.json`'s `test` script, which is the only source of truth for what the battery contains (this doc used to hand-list them and the list rotted: it named 19 and omitted every suite added after 2026-08-07). Green units are not enough — **`npm run build` and `npm run smoke` too**, every push. A duplicate export once passed all 451 assertions and failed only at esbuild, and the eleven-screen render walk in `npm run smoke` is the only thing that exercises the app signed in. Run `npm ci` first in a fresh container.
 - Multi-agent sessions: agents share the working tree — scope each agent to disjoint files, keep CHANGELOG/HANDOFF/commits with the orchestrator, commit per-feature with explicit file lists (never `git add -A` while agents run).
 - Keep this HANDOFF.md current: when a session resolves or discovers items, rewrite the doc before ending — a stale handoff sends the next session chasing closed issues.
