@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The suitcase was invisible for the whole trip — 2026-09-02
+
+### Why
+Owner, from Arizona, mid-trip: *"When building outfits while on my trip to Arizona, it's adding a bag that I didn't pack (nyc closet bucket bag) and excluding the bow bag that I did pack. I noticed this with a few other items as well. It did, however, show me the 2 bags already in Arizona."*
+
+Checked against the live rows before touching anything. Her active Arizona trip has **18 pinned pieces and 18 `trip_items` rows, every one of them `status = 'suggested'`. Not one row is `'packed'`.**
+
+### Fixed
+- **A pinned piece counts as carried** (`resolveVisibleWardrobe`). The active-trip pool was `destination closet ∪ trip_items status 'packed'`, and nothing in the app forces a tick before departure — so starting a trip with the checklist untouched collapsed the pool to the destination closet alone. Every piece she had physically flown out with was invisible to styling for the length of the trip; the Arizona closet was all she had. A pin is the same claim as a tick, made at planning time instead of at packing time — "bringing for sure" — and it cannot mean "left behind", because taking a piece out of the suitcase (untick, or "Close with N unpacked") routes through `regenerateWithout`, which unpins it first so the two can never disagree. The rule is now `destination closet ∪ packed ∪ pinned`, via a new shared `carriedItemIds()`. `'suggested'` deliberately still doesn't carry: it is the packer's opinion that she needs a piece, not evidence she has it, and that distinction is the entire point of the checklist.
+- **Starting a trip with unconfirmed pieces now says so** (`TripDetailView`). `handleStartTrip` had no packing check at all. It now names the pieces that are neither ticked nor pinned and asks before activating, pointing at the tick and at "Close with unpacked" — which restyles those days rather than leaving a look that dresses her in something 2,000 miles away. Pinned pieces are not counted, so a trip planned entirely by pinning starts without a prompt.
+- The active-trip header label reads "Pool = Arizona + what you're carrying" rather than "+ packed pieces", which was true of the code and not of the suitcase.
+
+### Notes
+The bag she *was* offered came in by a different door and is working as designed: the Mini Mini Bucket Bag is on her Sep 2 look, and the builder pool is widened by the edited look's own pieces (#215) so that saving can't delete what the pool can't see. With this fix her pinned bags join it in the picker, so there is something to swap to. Two pieces on her saved trip looks are neither pinned nor in Arizona — the Mini Mini Bucket Bag (Sep 2, Sep 6) and 501 Shorts (Aug 31) — and restyling those days is hers to ask for; the data is untouched here.
+
+No migration.
+
+### Tests
+`visible-wardrobe` +15 → 38: her exact live shape (pinned, row still `'suggested'`, destination closet selected) resolves with the bag in the pool; a pin with no `trip_items` row at all still counts; an unpinned `'suggested'` piece stays out; pins and ticks union rather than override; a pinned Misc piece is still refused, so the holding room stays shut through the new door too; with no destination closet the pool is exactly what she carries. New `carriedItemIds` unit tests cover dedupe and degenerate input, and assert `packedItemIds` did NOT grow pin behaviour — the "🧳 N packed" counter and the closet's 🧳 badge still mean ticked. Full `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — A trip look keeps its pieces whichever closet you're standing in — 2026-09-01
 
 ### Why
@@ -33,6 +53,32 @@ Owner report: *"When I remove things from an outfit on this screen, it scrolls m
 
 ### Notes
 Removing an outfit (the ✕) does **not** jump to the top: measured on a 6-day trip, the page shortens by exactly the removed card and everything above it holds position. Same for clearing a whole day and for unticking on the Packing tab. Verified in a headless browser at 390×844 against fixture data.
+
+## [Unreleased] — Trip days saved one day early; swim tops and cross-closet pieces vanished from cards — 2026-08-29
+
+### Why
+Owner testing the shipped pin feature, in one sitting: the ✕ scrolls the sheet to the top, the pin sheet lists her whole Arizona closet, the category chips run off the right edge of the phone, every pool look warns "missing a core piece", saved outfits lose their tops, a pool look "didn't save the swim top", and the whole trip "keeps landing in the day before the trip".
+
+Three of those are the same class of bug — data was correct and the UI couldn't show it — and one was corrupting dates.
+
+### Fixed
+- **Trip days saved one day early** (`CalendarView`, 8 call sites). Day isos were `isoDate(addDays(new Date(start), n))`. `new Date("2026-08-29")` parses as UTC **midnight**; `isoDate()` then reads **local** components, which in New York is the previous evening — so every day of an Aug 29 – Sep 6 trip wrote to Aug 28 – Sep 5, and the last day came out empty. The preview labels rendered with `timeZone:"UTC"` and so read correctly, which is exactly why it hid. All eight now use `addDaysIso()` — the UTC-anchored helper that already sat in `lib/time.js` directly below `isoDate`, with the comment "noon UTC keeps tz drift away". The preview card's date label now derives from the same iso the day saves under, so a card can't claim a date the database disagrees with. Seasonal-fallback month lookup fixed the same way.
+- **A two-piece swimsuit rendered as one piece** (`EditorialCollage`). Every swim row in her closet is subcategory `Swimsuits`, which matches none of the role regexes, so both halves fell through to `"top"` — and `place()` only ever draws `g[role][0]`. The second piece vanished from the card while sitting safely in the data. `swimPieceKind` moved to `utils/item-helpers.js` (joining the other shared classifiers) and both `tripPacker` and the collage now use it; a bikini lays out as top + bottom.
+- **Saved outfits rendered from the active closet only** (`CalendarView` month grid / day modal / saved-look strip, `TripDetailView` outfit cards). A trip outfit mixes closets by design, so from NYC every Arizona piece silently dropped out of the thumbnail — "all these outfits had tops when I hit save and now the top is gone". They were never gone. Pre-existing since multi-closet Phase B. **Superseded on merge:** the entry above ("A trip look keeps its pieces whichever closet you're standing in") landed the same fix first and goes further — the display sites here now resolve through its `wardrobeAll` / `poolIncluding`, and this branch's parallel `displayItems` was dropped rather than kept alongside it.
+- **The preview jumped to the top on every edit** (`CalendarView`). The auto-scroll that makes "Preview looks" visibly land was keyed on `dayLooks`, which every edit replaces — remove a piece, swap, shuffle, change an occasion. It fires once now, re-arming when the preview is cleared.
+- **The pin sheet offered pieces already at the destination.** "Bringing for sure" means *carrying* it; a piece already in Arizona has no packing decision. Excluded from both pickers (already-pinned pieces stay listed so they can be un-pinned).
+- **The picker's category filter wrapped instead of scrolling sideways** — on a 390px phone most categories sat off the right edge of a row that didn't look scrollable.
+- **Pool looks no longer warn "missing a core piece."** A placed suit ships as its own look, so it has no top/bottom/shoes by design; `outfitCoverageGaps` treats an all-swim look as complete. Unchanged everywhere else, including swim that has wandered into a regular outfit.
+
+- **The closet grid snapped to the top after saving an item edit or delete.** The save/restore was already there, but restored with a single `requestAnimationFrame` — and the grid remounts short and grows as every photo decodes and is trimmed, so one `scrollTo` clamped against a nearly-empty page and landed at the top. The converge-and-hold logic written for the trip screen is now a shared, unit-tested helper (`utils/restoreScroll.js`) used by both. It handles the two traps that make the naive version fail: the page still being short on the first frame, and the browser's own scroll anchoring looking exactly like the user taking over.
+
+- **A trip with a destination closet stops rationing** (`tripPacker`, `tripAdvisor`). Owner, on Arizona: *"it's ok if pieces are worn twice. I should have enough there plus what's in my suitcase to have the stylist make me some really tasteful outfits."* The packer's economy rules all exist to keep a suitcase small — fresh top every day (`-6` per prior wear), a statement piece once per trip, and a hard ceiling on distinct shoes and bags. None of that applies to a wardrobe already sitting at the destination, and applying it rationed her own closet against her: the ceiling counted at-destination pieces toward the carry cap, and reuse-first pinned a whole week to one pair of sandals while five more hung in the closet. New `plentiful` mode, switched on by the presence of a destination closet: the repeat penalty drops (`6 → 2.5`), a hero may return once restyled (`6 → 3`), the ceiling counts only pieces she carries, and reuse-first earns nothing on an at-destination piece. **Deliberately unchanged in both modes:** never the same piece on consecutive days, never two statement pieces in one look. The stylist prompt splits the same way — the "pack light, tops should not repeat" block is replaced on a destination-closet trip by one that says re-wearing is fine when restyled and to spend the range she has.
+
+### Tests
+`trip-packer` +6 → 282 for plentiful mode, all single-day builds seeded with `priorUse` so the winner turns on score margins well above the 0.6 jitter rather than on sampling (a first attempt asserted a distinct-shoe count and was measured flaky across 400 runs — min 2, p1 3 — so it was replaced): the ceiling still blocks a fresh carried shoe but never an at-destination one, and a better top already worn once beats the fresh alternative only in plentiful mode. Consecutive-day and one-statement-per-look assertions cover what must not relax. Verified deterministic over 12 consecutive runs. New `scripts/scroll-restore.test.mjs` (12) — the DOM surface is injected, so the converge/cancel logic is pinned offline with a fake clock and a scripted page height: waits while the page is short, survives anchoring drift, yields instantly to a real gesture, settles at the bottom of a genuinely shorter page instead of looping, and no-ops on a zero/negative target. New `scripts/trip-dates.test.mjs` (13), wired into `npm test` and **run under `TZ=America/New_York`** — in UTC the old code was accidentally correct, so the suite asserts its own precondition before testing the day sequence, DST fall-back/spring-forward, leap day, and year boundaries. `trip-packer` +18 → 276: pool looks read as complete with every other coverage case unchanged, and swim classification on her real item names (the test's hand-copied mirror of `swimPieceKind` is now the shared export, so it can't drift). Full chain, build, and smoke green.
+
+### Data
+Her Arizona closet renamed `Arizona — Mom's` → `Arizona` (her request) and migration `0033` applied to the live project, both directly in Supabase. **The existing Arizona trip's nine plan rows are still shifted one day early** — the code fix stops it recurring but does not move rows already written; offered to her rather than done unasked.
 
 ## [Unreleased] — Trip packing: pre-select the pieces you know you're bringing — 2026-08-29
 

@@ -12,7 +12,8 @@ import {
   scoreForOccasion, heatScore, SCORCHING_F,
   tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE,
 } from "../src/features/planner/tripPacker.js";
-import { filterByWeather } from "../src/utils/item-helpers.js";
+import { filterByWeather, swimPieceKind } from "../src/utils/item-helpers.js";
+import { outfitCoverageGaps } from "../src/features/planner/outfits.js";
 
 let passed = 0, failed = 0;
 function assert(cond, label) {
@@ -213,12 +214,10 @@ function hotBasics() {
     mk("Bags", "", "Canvas Tote"),
   ];
 }
-// Mirrors the packer's name-based swimPieceKind() for assertions.
-const swimKind = (it) =>
-  /one.?piece|maillot/i.test(it.name) ? "one-piece"
-  : /\btop\b/i.test(it.name) ? "top"
-  : /\bbottoms?\b|\bbrief\b/i.test(it.name) ? "bottom"
-  : "one-piece";
+// The real classifier, not a mirror of it — swimPieceKind moved to
+// item-helpers so the packer and EditorialCollage share one body, and a copy
+// here could drift from both.
+const swimKind = swimPieceKind;
 const firstWord = (it) => it.name.trim().split(/\s+/)[0].toLowerCase();
 
 // ── 8. Swim separates pack complete suits, on a bounded number of days ───────
@@ -1282,6 +1281,169 @@ const idsIn = (dailyOutfits, poolSuits = []) => new Set([
   });
   assert(idsIn(dailyOutfits).has(pinnedSkirt.id), "the pin still lands alongside a destination closet");
   assert(idsIn(dailyOutfits).has(destTote.id), "the destination-closet bag is still preferred");
+}
+
+// ── 22. Pool looks are complete by definition ────────────────────────────────
+// A placed suit ships as its OWN look (poolSuits), so measuring it against
+// top/bottom/shoes flagged every pool day "missing a core piece" in the trip
+// preview and the packing tab. Owner saw that warning on every swim look.
+section("pool looks don't read as incomplete");
+{
+  const onePiece = mk("Swim", "Swimsuits", "Black One-Piece");
+  const top      = mk("Swim", "Swimsuits", "Aluka Top");
+  const bottom   = mk("Swim", "Swimsuits", "Aluka Bottom");
+  assert(outfitCoverageGaps([onePiece]).length === 0, "a one-piece pool look is complete");
+  assert(outfitCoverageGaps([top, bottom]).length === 0, "a matched two-piece pool look is complete");
+
+  // The rule is unchanged for everything else — including a swim piece that has
+  // wandered into a regular outfit, which SHOULD still read as incomplete.
+  const tee    = mk("Tops", "T-Shirts", "Cotton Tee");
+  const jean   = mk("Bottoms", "Jeans", "Light Wash Jean");
+  const shoe   = mk("Shoes", "Sneakers", "White Leather Sneaker");
+  assert(outfitCoverageGaps([tee, jean, shoe]).length === 0, "a complete regular outfit still passes");
+  assert(outfitCoverageGaps([tee, jean]).join(",") === "shoes", "a shoeless outfit still reports shoes");
+  assert(outfitCoverageGaps([tee, shoe]).join(",") === "bottom", "a bottomless outfit still reports bottom");
+  assert(outfitCoverageGaps([onePiece, shoe]).length > 0, "swim mixed into a regular look is still incomplete");
+  assert(outfitCoverageGaps([]).length > 0, "an empty look is still incomplete");
+}
+
+// The packer's own `uncovered` list agrees: a trip that places a pool suit
+// reports no coverage gap for it.
+{
+  const items = [
+    ...hotBasics(),
+    mk("Swim", "Swimsuits", "Aluka Top", { color: "Sky Blue" }),
+    mk("Swim", "Swimsuits", "Aluka Bottom", { color: "Sky Blue" }),
+  ];
+  const { poolSuits, uncovered, dailyOutfits } = buildDailyOutfits(items, Array(4).fill(90), {
+    occasions: defaultOccasions(4),
+    activity: "Beach",
+  });
+  assert(poolSuits.some(Boolean), "control: the trip placed a pool suit");
+  assert(uncovered.length === 0, `no day reports a coverage gap (got ${uncovered.length})`);
+  assert(dailyOutfits.every(d => d.length >= 3), "…because every day outfit is genuinely complete");
+}
+
+// ── 23. Swim piece classification on her real naming ─────────────────────────
+// Every swim row in her closet is subcategory "Swimsuits", so the NAME is the
+// only signal. EditorialCollage now shares this classifier: without it both
+// halves of a bikini classified as the same role and the collage drew only the
+// first, so a saved pool look rendered as a lone bottom (owner report: "this
+// second outfit didn't save the swim top I picked" — it had saved it).
+section("swim piece kinds");
+{
+  const named = (n) => ({ id: "x", category: "Swim", subcategory: "Swimsuits", name: n });
+  assert(swimPieceKind(named("Bri Top")) === "top", "\"Bri Top\" is a top");
+  assert(swimPieceKind(named("Eliza Full Coverage Bottom")) === "bottom", "\"Eliza Full Coverage Bottom\" is a bottom");
+  assert(swimPieceKind(named("Full Coverage One-Piece")) === "one-piece",
+    "one-piece wins over the word 'coverage'");
+  assert(swimPieceKind(named("Rocky Bikini Bottom")) === "bottom", "bikini bottom is a bottom");
+  assert(swimPieceKind(named("Swimsuit")) === "one-piece", "an unsignposted name defaults to one-piece");
+  assert(swimPieceKind(named("Maillot")) === "one-piece", "maillot is a one-piece");
+  assert(swimPieceKind({ name: null }) === "one-piece", "a missing name doesn't throw");
+  // The two halves of a real suit must land in DIFFERENT kinds — that is the
+  // whole point, and what the collage keys its layout roles off.
+  assert(swimPieceKind(named("Bri Top")) !== swimPieceKind(named("Eliza Full Coverage Bottom")),
+    "a matched pair classifies as two different kinds");
+}
+
+// ── 24. Plentiful mode: a destination closet is not a pack-light problem ─────
+// Owner, on Arizona: "it's ok if pieces are worn twice. I should have enough
+// there plus what's in my suitcase to have the stylist make me some really
+// tasteful outfits." With a destination closet the binding constraint is taste,
+// not luggage, so repeats get cheap and the capsule ceiling counts only what
+// she CARRIES — capping at-destination pieces was rationing her own closet.
+section("plentiful mode (destination closet)");
+
+// Both cases below are single-day builds seeded with priorUse, so the winner is
+// decided by score margins well above the 0.6 jitter rather than by sampling.
+
+// THE CEILING. Seed a 7-day trip whose shoe slot already holds its full target
+// of CARRIED shoes. A fresh shoe should be blocked — unless it is already at
+// the destination, where it costs nothing and the ceiling has no business
+// applying.
+{
+  const worn = Array.from({ length: capsuleTargets(7).shoes }, (_, i) =>
+    mk("Shoes", "Sandals", `Home Sandal ${i + 1}`));
+  const fresh = mk("Shoes", "Sandals", "AZ Sandal");
+  const filler = [
+    ...Array.from({ length: 4 }, (_, i) => mk("Tops", "T-Shirts", `Tee ${i + 1}`)),
+    ...Array.from({ length: 4 }, (_, i) => mk("Bottoms", "Shorts", `Short ${i + 1}`)),
+  ];
+  const items = [...worn, fresh, ...filler];
+  const priorUse = Object.fromEntries(worn.map(it => [it.id, 1]));
+  const opts = { occasions: ["Casual"], priorUse, tripDayCount: 7 };
+
+  const carried = buildDailyOutfits(items, [76], opts);
+  const pickedCarried = carried.dailyOutfits[0].find(it => it.category === "Shoes");
+  assert(pickedCarried && pickedCarried.id !== fresh.id,
+    "control: with no destination closet the ceiling still blocks a fresh shoe");
+
+  const atDest = buildDailyOutfits(items, [76], { ...opts, preferItemIds: new Set([fresh.id]) });
+  const pickedDest = atDest.dailyOutfits[0].find(it => it.category === "Shoes");
+  assert(pickedDest && pickedDest.id === fresh.id,
+    "an at-destination shoe is never rationed by the carry ceiling");
+}
+
+// REUSE. A top she has already worn once, with a real occasion edge over the
+// fresh alternative. Packing light says take the fresh one anyway; a full
+// destination closet says wear the better piece again.
+{
+  const better = mk("Tops", "T-Shirts", "Cotton Tee A", { occasion: ["Casual"] });  // +4 occasion tag
+  const plain  = mk("Tops", "T-Shirts", "Cotton Tee B");
+  const filler = [
+    ...Array.from({ length: 3 }, (_, i) => mk("Bottoms", "Shorts", `Short ${i + 1}`)),
+    mk("Shoes", "Sandals", "Sandal"),
+  ];
+  const items = [better, plain, ...filler];
+  const opts = { occasions: ["Casual"], priorUse: { [better.id]: 1 }, tripDayCount: 6 };
+
+  const packLight = buildDailyOutfits(items, [76], opts);
+  assert(packLight.dailyOutfits[0].find(it => it.category === "Tops")?.id === plain.id,
+    "control: packing light takes the fresh top even though it suits the day less");
+
+  // Both at the destination, so the destination bonus cancels and the only
+  // difference left is what a second wear costs.
+  const plentiful = buildDailyOutfits(items, [76], {
+    ...opts, preferItemIds: new Set([better.id, plain.id]),
+  });
+  assert(plentiful.dailyOutfits[0].find(it => it.category === "Tops")?.id === better.id,
+    "with a destination closet the better top is worn a second time instead");
+}
+
+// What does NOT relax: never the same piece two days running.
+{
+  const items = [
+    ...Array.from({ length: 2 }, (_, i) => mk("Tops", "T-Shirts", `Tee ${i + 1}`)),
+    ...Array.from({ length: 2 }, (_, i) => mk("Bottoms", "Shorts", `Short ${i + 1}`)),
+    mk("Shoes", "Sandals", "Flat Sandal"),
+  ];
+  const preferItemIds = new Set(items.map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits(items, Array(4).fill(76), {
+    occasions: defaultOccasions(4), preferItemIds,
+  });
+  let backToBack = 0;
+  for (let d = 1; d < dailyOutfits.length; d++) {
+    const prev = new Set(dailyOutfits[d - 1].filter(it => it.category === "Bottoms").map(it => it.id));
+    if (dailyOutfits[d].some(it => it.category === "Bottoms" && prev.has(it.id))) backToBack++;
+  }
+  assert(backToBack === 0, `no bottom repeats on consecutive days even in plentiful mode (got ${backToBack})`);
+}
+
+// And still at most one statement piece per look.
+{
+  const items = wardrobe();
+  const preferItemIds = new Set(items.map(it => it.id));
+  const { dailyOutfits } = buildDailyOutfits(items, Array(5).fill(76), {
+    occasions: defaultOccasions(5), preferItemIds,
+  });
+  const leopard = items.find(it => it.name === "Leopard Print Blouse").id;
+  const fringe  = items.find(it => it.name === "Fringe Suede Bag").id;
+  const together = dailyOutfits.filter(d => {
+    const ids = new Set(d.map(it => it.id));
+    return ids.has(leopard) && ids.has(fringe);
+  }).length;
+  assert(together === 0, "the leopard blouse and the fringe bag never share a look");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────

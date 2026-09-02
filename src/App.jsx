@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef, lazy, Suspense } from "react";
+import { restoreScroll } from "./utils/restoreScroll.js";
 // The stylist pipeline is dynamic-imported at its call sites (see
 // generateAndAppendLooks) so the AI chunk stays off the cold-start path —
 // only the small feedback helpers are imported statically here.
@@ -166,18 +167,27 @@ export default function App() {
   const [view,       setViewRaw]    = useState("home");
   const closetScrollRef = useRef(0);
   const viewRef = useRef("home");
+  const cancelClosetRestoreRef = useRef(null);
   const setView = useCallback((v) => {
-    // Save scroll position when leaving closet
+    // Save scroll position when leaving closet. Read here, in the click
+    // handler, while the grid is still mounted and scrollY still means
+    // something — not in an effect cleanup, which runs after the browser has
+    // already clamped the offset against the shorter page.
     if (viewRef.current === "closet" && v !== "closet") {
       closetScrollRef.current = window.scrollY;
     }
     viewRef.current = v;
     setViewRaw(v);
-    // Restore scroll position when returning to closet
+    // Restore it on the way back. One requestAnimationFrame is NOT enough: the
+    // grid remounts short and grows as every photo decodes and is trimmed, so a
+    // single scrollTo clamps against a nearly-empty page and lands at the top —
+    // owner report, "when I delete or edit a garment and hit save, it snaps
+    // back up to the top again". restoreScroll converges instead; see the notes
+    // in utils/restoreScroll.js for the two traps it handles.
+    cancelClosetRestoreRef.current?.();
+    cancelClosetRestoreRef.current = null;
     if (v === "closet") {
-      requestAnimationFrame(() => {
-        window.scrollTo(0, closetScrollRef.current);
-      });
+      cancelClosetRestoreRef.current = restoreScroll(closetScrollRef.current);
     }
   }, []);
   const [activeFilters, setActiveFilters] = useState({ category: [], subcategory: [], color: [], brand: [], sleeveLength: "", sets: "", lastWorn: "" });

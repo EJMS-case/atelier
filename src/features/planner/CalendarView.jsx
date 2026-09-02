@@ -7,7 +7,7 @@ import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, r
 import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
-import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
+import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
@@ -19,6 +19,7 @@ import TripDetailView from "./TripDetailView.jsx";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
+import { restoreScroll } from "../../utils/restoreScroll.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
@@ -187,47 +188,13 @@ export default function CalendarView({ items, allItems, closets, activeCloset, o
     return () => { lastTripScrollY = window.scrollY; };
   }, [activeTrip]);
 
-  // …and put her back there. The page grows in stages after mount — plans and
-  // the forecast arrive over the network, then every outfit photo decodes — so
-  // one scrollTo would just clamp against a page that is still short. Converge
-  // instead: each frame, scroll as close to the target as the current height
-  // allows; once it's reachable, hold it briefly, because the browser's scroll
-  // anchoring keeps nudging the offset while images above the viewport land.
-  //
-  // Only a real gesture cancels the restore. An earlier version bailed whenever
-  // the offset moved on its own, which scroll anchoring does constantly — so
-  // the restore aborted on its first frame and left her at the top anyway.
+  // …and put her back there. The converge/cancel logic lives in
+  // utils/restoreScroll.js — shared with the closet grid, which had the same
+  // "snaps back to the top" failure for the same two reasons (the page is
+  // still short on the first frame; scroll anchoring looks like a gesture).
   useEffect(() => {
     if (!activeTrip || !lastTripScrollY) return;
-    const target = lastTripScrollY;
-    const deadline = Date.now() + 4000;
-    let raf = 0;
-    let cancelled = false;
-    let holdUntil = 0;
-    const cancel = () => { cancelled = true; };
-    const opts = { passive: true };
-    window.addEventListener("wheel", cancel, opts);
-    window.addEventListener("touchstart", cancel, opts);
-    window.addEventListener("keydown", cancel, opts);
-    const stop = () => {
-      window.removeEventListener("wheel", cancel);
-      window.removeEventListener("touchstart", cancel);
-      window.removeEventListener("keydown", cancel);
-    };
-    const tick = () => {
-      if (cancelled) return stop();
-      const room = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      const y = Math.min(target, room);
-      if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
-      if (y >= target) {
-        if (!holdUntil) holdUntil = Date.now() + 600;
-        if (Date.now() > holdUntil) return stop();
-      }
-      if (Date.now() > deadline) return stop();
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); stop(); };
+    return restoreScroll(lastTripScrollY);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTrip?.id]);
 
@@ -953,11 +920,19 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // cards render below it, off-screen. Without auto-scroll users tap Preview
   // and see no reaction, even though state updated correctly.
   const previewRef = useRef(null);
-
+  // Fires ONCE, when the preview first appears. The dependency is `dayLooks`,
+  // which every edit replaces — remove a piece, swap one, shuffle a day, change
+  // an occasion — so this used to yank the sheet back to the top of the preview
+  // on every single tap. Owner report: "when I remove things from an outfit on
+  // this screen, it scrolls me back up to the top." The scroll is only there to
+  // show her the result of tapping Preview; after that she is reading and
+  // editing, and the view must stay where she left it.
+  const previewScrolledRef = useRef(false);
   useEffect(() => {
-    if (dayLooks && previewRef.current) {
-      previewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if (!dayLooks) { previewScrolledRef.current = false; return; }  // re-arm for the next Preview
+    if (previewScrolledRef.current) return;
+    previewScrolledRef.current = true;
+    previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [dayLooks]);
 
   // Geocode the destination + pull per-day Open-Meteo forecast. Same path
@@ -1036,6 +1011,27 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destClosetId, allItems, items, homeClosetId, mustIncludeIds]);
 
+  // What the pin sheet offers. "Bringing for sure" means CARRYING it, so a piece
+  // that already lives at the destination has nothing to pin — it's there. The
+  // packer still reaches for those pieces on their own merits (that's what the
+  // destination closet is for); they just don't belong in a packing decision.
+  // Owner report: the sheet listed her whole Arizona closet.
+  //
+  // Anything already pinned stays listed even if it drops out of the pool (she
+  // switched the destination closet after pinning), otherwise a pin could go
+  // invisible and therefore un-unpinnable while still driving the packer.
+  const pinPool = useMemo(() => {
+    const packable = destClosetId
+      ? genItems.filter(it => closetOf(it) !== destClosetId)
+      : genItems;
+    if (!mustIncludeIds.size) return packable;
+    const shown = new Set(packable.map(it => it.id));
+    const source = Array.isArray(allItems) && allItems.length ? allItems : items;
+    const strays = source.filter(it => mustIncludeIds.has(it.id) && !shown.has(it.id));
+    return strays.length ? [...packable, ...strays] : packable;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genItems, mustIncludeIds, allItems, items, destClosetId]);
+
   const pinnedItems = useMemo(
     () => genItems.filter(it => mustIncludeIds.has(it.id)),
     [genItems, mustIncludeIds],
@@ -1049,7 +1045,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   function effectiveWeather() {
     if (weather !== "auto") return weather;
     if (brief?.tempHighF != null) return tempToBucket(brief.tempHighF);
-    const month = new Date(start).getMonth();
+    const month = new Date(start + "T12:00:00Z").getUTCMonth();
     return tempToBucket(SEASONAL_HIGHS[month]);
   }
   function effectiveHigh() {
@@ -1147,7 +1143,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       // Everywhere else this still returns all-Casual, exactly as
       // defaultOccasions(dayCount) did.
       const occasions = tripDayOccasions({ dayCount, startDate: start, relaxed: destRelaxed });
-      const dayIsos = Array.from({ length: dayCount }, (_, i) => isoDate(addDays(new Date(start), i)));
+      const dayIsos = Array.from({ length: dayCount }, (_, i) => addDaysIso(start, i));
       const highs = dayIsos.map(iso => perDayHigh(iso));
       // Per-day activity defaults to the trip-level activity for every day.
       // The user can override individual days from the preview cards.
@@ -1206,7 +1202,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
 
   function reshuffleOutfit(dayIdx, outfitIdx) {
     if (!dayLooks) return;
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const dayAct = dayActivities?.[dayIdx] || activity;
     const target = dayLooks[dayIdx]?.[outfitIdx];
     if (!target) return;
@@ -1243,7 +1239,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
     // All-swim "Pool" looks are left as-is — the regular composer can never
     // produce swim, so rebuilding one here would silently destroy the suit.
     // The user can remove or reshuffle the pool look explicitly.
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const rebuilt = (dayLooks[dayIdx] || []).map(o => {
       const isPool = (o.items || []).length > 0 && o.items.every(it => it.category === "Swim");
       if (isPool) return o;
@@ -1254,7 +1250,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   }
 
   function changeOccasion(dayIdx, outfitIdx, occ) {
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const dayAct = dayActivities?.[dayIdx] || activity;
     const built = buildOneOutfit({ dayIso, dayAct, occasion: occ, dayIdx, excludeOutfitIdx: outfitIdx });
     mutateOutfit(dayIdx, outfitIdx, prev => ({
@@ -1269,7 +1265,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
   }
 
   function addOutfit(dayIdx) {
-    const dayIso = isoDate(addDays(new Date(start), dayIdx));
+    const dayIso = addDaysIso(start, dayIdx);
     const dayAct = dayActivities?.[dayIdx] || activity;
     // Default new outfits to Dinner when the day already has a daytime look —
     // otherwise fall through to Casual. Cheap heuristic that picks the right
@@ -1421,7 +1417,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
       }
 
       const plans = dayLooks.map((looks, i) => {
-        const dayIso = isoDate(addDays(new Date(start), i));
+        const dayIso = addDaysIso(start, i);
         return buildPlanPayload({
           date: dayIso,
           outfits: looks.map(o => ({
@@ -1604,8 +1600,10 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
                 the same day. */}
             <div style={{ marginBottom: 12 }}>
               {dayLooks.map((looks, dayIdx) => {
-                const dayIso = isoDate(addDays(new Date(start), dayIdx));
-                const dateLabel = new Date(addDays(new Date(start), dayIdx)).toLocaleDateString("en-US", {
+                const dayIso = addDaysIso(start, dayIdx);
+                // Label from the SAME iso the day saves under, so the card can
+                // never again claim a date the database disagrees with.
+                const dateLabel = new Date(dayIso + "T12:00:00Z").toLocaleDateString("en-US", {
                   weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
                 });
                 const dayAct = dayActivities?.[dayIdx] || activity;
@@ -1778,7 +1776,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
 
         {showPinPicker && (
           <MustIncludePicker
-            items={genItems}
+            items={pinPool}
             selectedIds={mustIncludeIds}
             onChange={(next) => { setMustIncludeIds(next); invalidatePreview(); }}
             onClose={() => setShowPinPicker(false)}
@@ -1794,7 +1792,7 @@ function TripModal({ items, allItems, closets, activeCloset, apiKey, onClose, on
             items={genItems}
             preferItemIds={preferItemIds}
             currentDayItems={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.items || []}
-            weather={perDayBucket(isoDate(addDays(new Date(start), swapTarget.dayIdx)))}
+            weather={perDayBucket(addDaysIso(start, swapTarget.dayIdx))}
             occasion={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.occasion}
             onPick={(newItem) => swapItem(swapTarget.dayIdx, swapTarget.outfitIdx, swapTarget.item.id, newItem)}
             onClose={() => setSwapTarget(null)}

@@ -260,6 +260,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // scoped `items` prop excludes still-suggested home pieces, which are
   // exactly the rows the checklist is about).
   const wardrobeAll = (allItems && allItems.length) ? allItems : items;
+
   const itemsById = useMemo(
     () => new Map(wardrobeAll.map(it => [it.id, it])),
     [wardrobeAll],
@@ -605,6 +606,29 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
         alert(`Finish or complete "${other.destination || other.destination_city || "your other trip"}" first — only one trip can be active at a time.`);
         return;
       }
+      // A piece that is neither ticked nor pinned is only a SUGGESTION — the
+      // packer thinks she needs it; nothing says she has it. Starting the trip
+      // anyway leaves those pieces out of the trip pool (see
+      // resolveVisibleWardrobe) while the looks that use them still name them,
+      // so she gets dressed in something sitting in the other closet. Say so
+      // once, here, rather than letting her find out mid-trip: "it's adding a
+      // bag that I didn't pack."
+      //
+      // Pinned pieces are NOT counted — a pin travels with her, so it needs no
+      // tick. This only fires for genuinely unconfirmed pieces.
+      const unconfirmed = suggestedRows.filter(r => !mustIncludeIds.has(r.item_id));
+      if (unconfirmed.length > 0) {
+        const names = unconfirmed
+          .slice(0, 4)
+          .map(r => itemsById.get(r.item_id)?.name || "a piece");
+        const more = unconfirmed.length - names.length;
+        const list = names.join(", ") + (more > 0 ? `, and ${more} more` : "");
+        if (!window.confirm(
+          `${unconfirmed.length} piece${unconfirmed.length === 1 ? " is" : "s are"} still unticked on the Packing tab — ${list}. `
+          + `Start the trip anyway? Looks using ${unconfirmed.length === 1 ? "it" : "them"} will show ${unconfirmed.length === 1 ? "a piece" : "pieces"} you may not have with you. `
+          + `Cancel to tick ${unconfirmed.length === 1 ? "it" : "them"} off, or use "Close with unpacked" to restyle those days first.`,
+        )) return;
+      }
       await updateTrip(trip.id, { status: "active" });
       setTrip(prev => ({ ...prev, status: "active" }));
       await onRefreshActiveTrip?.();
@@ -682,6 +706,16 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
     () => resolveItemIds(wardrobeAll, [...mustIncludeIds]),
     [wardrobeAll, mustIncludeIds],
   );
+
+  // Pieces the pin sheet may offer: "bringing for sure" means CARRYING it, so
+  // anything already at the destination is excluded — it needs no packing
+  // decision. Already-pinned pieces stay listed regardless so they can be
+  // un-pinned. Mirrors TripModal's pinPool.
+  const pinPool = useMemo(() => {
+    if (!destClosetId) return genItems;
+    return genItems.filter(it => closetOf(it) !== destClosetId || mustIncludeIds.has(it.id));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genItems, destClosetId, mustIncludeIds]);
 
   // Persist a pin change to trips.must_include_ids. Optimistic: the local set
   // drives generation immediately and a failed write only costs the persisted
@@ -1116,7 +1150,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
           ) : null}
           {trip.status === "active" && (
             <span style={{ fontSize: 10, color: PALETTE.muted }}>
-              Pool = {destClosetId ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination closet") : "suitcase only"} + packed pieces
+              Pool = {destClosetId ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination closet") : "suitcase only"} + what you're carrying
             </span>
           )}
         </div>
@@ -1640,7 +1674,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
           destination closet; everything else keeps its home closet. */}
       {showPinPicker && (
         <MustIncludePicker
-          items={genItems}
+          items={pinPool}
           selectedIds={mustIncludeIds}
           onChange={changePins}
           onClose={() => setShowPinPicker(false)}

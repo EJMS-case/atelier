@@ -114,6 +114,11 @@ export function tripCommittedIds({ plans, tripItems, mustIncludeIds }) {
 // piece (dress or set) covers both top and bottom.
 export function outfitCoverageGaps(items) {
   const slots = new Set((items || []).filter(Boolean).map(slotForItem));
+  // An all-swim look IS a pool look — a complete suit is the whole outfit, and
+  // it ships as its own look beside the day's regular one (tripPacker's
+  // poolSuits). Measuring it against top/bottom/shoes flagged every pool day
+  // "missing a core piece", which is noise, not a gap.
+  if (slots.size === 1 && slots.has("swim")) return [];
   const hasDress = slots.has("dress") || slots.has("set");
   const gaps = [];
   if (!hasDress && !slots.has("top")) gaps.push("top");
