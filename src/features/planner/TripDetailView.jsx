@@ -13,7 +13,8 @@ import { reconcileTripItems } from "./packingSync.js";
 import { analyzeTripDestination, generateTripDayLook } from "../../lib/ai/tripAdvisor.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
-import { SEASONAL_HIGHS } from "../../lib/time.js";
+import { SEASONAL_HIGHS, nyToday } from "../../lib/time.js";
+import { tripStatusActions, statusOf, isTripUnderway } from "./tripStatus.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds } from "./outfits.js";
@@ -24,6 +25,10 @@ import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
+
+// In-flight label per transition. `statusBusy` holds the status being written
+// (or false), so only the button she actually pressed changes its wording.
+const BUSY_LABEL = { active: "Starting…", complete: "Completing…", planning: "Saving…" };
 
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
 // alpha variants by string concatenation (`${PALETTE.accent}0A`), which a
@@ -594,55 +599,83 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     }
   }
 
-  // ── Trip activation + completion (wave 2 — status transitions) ────────────
-  async function handleStartTrip() {
+  // ── Trip status transitions (wave 2; reverse gear 2026-09-02) ───────────
+  // Every move is one of tripStatusActions() — there is no button that writes
+  // a status this function doesn't know about, which is what keeps the
+  // lifecycle free of dead ends. The copy and the date guard live in
+  // tripStatus.js; the guards that need a fetch live here.
+  const statusActions = tripStatusActions(trip, nyToday());
+
+  // The shared tail of every transition: write it, reflect it, and tell App so
+  // the POOL re-resolves. That last call is the one that matters — leaving or
+  // entering 'active' is what swaps her suitcase in and out of styling.
+  async function applyStatus(next) {
+    await updateTrip(trip.id, { status: next });
+    setTrip(prev => ({ ...prev, status: next }));
+    await onRefreshActiveTrip?.();
+  }
+
+  // A piece that is neither ticked nor pinned is only a SUGGESTION — the
+  // packer thinks she needs it; nothing says she has it. Starting the trip
+  // anyway leaves those pieces out of the trip pool (see resolveVisibleWardrobe)
+  // while the looks that use them still name them, so she gets dressed in
+  // something sitting in the other closet. Say so once, at the door, rather
+  // than letting her find out mid-trip: "it's adding a bag that I didn't pack."
+  //
+  // Pinned pieces are NOT counted — a pin travels with her, so it needs no
+  // tick. This only fires for genuinely unconfirmed pieces, and only when
+  // STARTING from planning: reopening a trip she is already on has nothing
+  // left to warn about.
+  function confirmUnticked() {
+    const unconfirmed = suggestedRows.filter(r => !mustIncludeIds.has(r.item_id));
+    if (unconfirmed.length === 0) return true;
+    const names = unconfirmed
+      .slice(0, 4)
+      .map(r => itemsById.get(r.item_id)?.name || "a piece");
+    const more = unconfirmed.length - names.length;
+    const list = names.join(", ") + (more > 0 ? `, and ${more} more` : "");
+    return window.confirm(
+      `${unconfirmed.length} piece${unconfirmed.length === 1 ? " is" : "s are"} still unticked on the Packing tab — ${list}. `
+      + `Start the trip anyway? Looks using ${unconfirmed.length === 1 ? "it" : "them"} will show ${unconfirmed.length === 1 ? "a piece" : "pieces"} you may not have with you. `
+      + `Cancel to tick ${unconfirmed.length === 1 ? "it" : "them"} off, or use "Close with unpacked" to restyle those days first.`,
+    );
+  }
+
+  async function runStatusAction(action) {
     if (statusBusy) return;
-    setStatusBusy(true);
+    // The action's own confirm first — for 'complete' that is the
+    // ending-a-trip-early guard, and it has to be answered before the
+    // staying-behind sheet takes over the screen.
+    if (action.confirm && !window.confirm(action.confirm)) return;
+
+    if (action.to === "complete") {
+      openCompleteFlow({ alreadyConfirmed: !!action.confirm });
+      return;
+    }
+
+    setStatusBusy(action.to);
     setError("");
     try {
-      // Only one active trip at a time — block with a clear message rather
-      // than silently demoting the other one. Strict: a failed read must NOT
-      // pass as "no other active trip" (fail closed into the catch below).
-      const other = await fetchActiveTrip({ strict: true });
-      if (other && other.id !== trip.id) {
-        alert(`Finish or complete "${other.destination || other.destination_city || "your other trip"}" first — only one trip can be active at a time.`);
-        return;
+      if (action.to === "active") {
+        // Only one active trip at a time — block with a clear message rather
+        // than silently demoting the other one. Strict: a failed read must NOT
+        // pass as "no other active trip" (fail closed into the catch below).
+        const other = await fetchActiveTrip({ strict: true });
+        if (other && other.id !== trip.id) {
+          alert(`Finish or complete "${other.destination || other.destination_city || "your other trip"}" first — only one trip can be active at a time.`);
+          return;
+        }
+        if (statusOf(trip) === "planning" && !confirmUnticked()) return;
       }
-      // A piece that is neither ticked nor pinned is only a SUGGESTION — the
-      // packer thinks she needs it; nothing says she has it. Starting the trip
-      // anyway leaves those pieces out of the trip pool (see
-      // resolveVisibleWardrobe) while the looks that use them still name them,
-      // so she gets dressed in something sitting in the other closet. Say so
-      // once, here, rather than letting her find out mid-trip: "it's adding a
-      // bag that I didn't pack."
-      //
-      // Pinned pieces are NOT counted — a pin travels with her, so it needs no
-      // tick. This only fires for genuinely unconfirmed pieces.
-      const unconfirmed = suggestedRows.filter(r => !mustIncludeIds.has(r.item_id));
-      if (unconfirmed.length > 0) {
-        const names = unconfirmed
-          .slice(0, 4)
-          .map(r => itemsById.get(r.item_id)?.name || "a piece");
-        const more = unconfirmed.length - names.length;
-        const list = names.join(", ") + (more > 0 ? `, and ${more} more` : "");
-        if (!window.confirm(
-          `${unconfirmed.length} piece${unconfirmed.length === 1 ? " is" : "s are"} still unticked on the Packing tab — ${list}. `
-          + `Start the trip anyway? Looks using ${unconfirmed.length === 1 ? "it" : "them"} will show ${unconfirmed.length === 1 ? "a piece" : "pieces"} you may not have with you. `
-          + `Cancel to tick ${unconfirmed.length === 1 ? "it" : "them"} off, or use "Close with unpacked" to restyle those days first.`,
-        )) return;
-      }
-      await updateTrip(trip.id, { status: "active" });
-      setTrip(prev => ({ ...prev, status: "active" }));
-      await onRefreshActiveTrip?.();
+      await applyStatus(action.to);
     } catch (e) {
-      setError(e.message || "Couldn't start the trip.");
+      setError(e.message || "Couldn't update the trip.");
     } finally {
       setStatusBusy(false);
     }
   }
 
-  function handleCompleteClick() {
-    if (statusBusy) return;
+  function openCompleteFlow({ alreadyConfirmed } = {}) {
     // The staying-behind prompt (B5) only makes sense when the trip HAS a
     // destination closet and something was actually packed.
     if (destClosetId && packedRows.length > 0) {
@@ -650,14 +683,15 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
       setCompleteModalOpen(true);
       return;
     }
-    if (window.confirm("Mark this trip complete? Your closet pool goes back to the active closet.")) {
+    if (alreadyConfirmed
+      || window.confirm("Mark this trip complete? Your closet pool goes back to the active closet.")) {
       finishTrip([]);
     }
   }
 
   async function finishTrip(stayingIdList) {
     if (statusBusy) return;
-    setStatusBusy(true);
+    setStatusBusy("complete");
     setError("");
     try {
       if (destClosetId && stayingIdList.length > 0) {
@@ -669,10 +703,8 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
         setTripItems(ts => ts.map(r => stayingIdList.includes(r.item_id) ? { ...r, status: "left_behind" } : r));
         onItemsClosetChanged?.(stayingIdList, destClosetId);
       }
-      await updateTrip(trip.id, { status: "complete" });
-      setTrip(prev => ({ ...prev, status: "complete" }));
+      await applyStatus("complete");
       setCompleteModalOpen(false);
-      await onRefreshActiveTrip?.();
     } catch (e) {
       setError(e.message || "Couldn't complete the trip.");
     } finally {
@@ -1126,8 +1158,9 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
           </div>
         </div>
 
-        {/* ── Trip status (wave 2): planning → Start trip; active → badge +
-            Mark complete; complete → read-only badge. ── */}
+        {/* ── Trip status: the badge, then every move available from here.
+            The moves come from tripStatusActions() — including the way OUT of
+            'complete', which used to be a read-only badge and nothing else. ── */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0 6px", flexWrap: "wrap" }}>
           {trip.status === "active" && (
             <span style={{ padding: "4px 10px", background: PALETTE.ink, color: PALETTE.bg, borderRadius: 12, fontSize: 10, letterSpacing: "0.1em", fontWeight: 600 }}>
@@ -1139,20 +1172,27 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
               ✓ TRIP COMPLETE
             </span>
           )}
-          {trip.status === "active" ? (
-            <button onClick={handleCompleteClick} disabled={statusBusy}
-              style={{ padding: "5px 12px", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: statusBusy ? "default" : "pointer", opacity: statusBusy ? 0.6 : 1 }}>
-              {statusBusy ? "Saving…" : "✓ Mark trip complete"}
+          {statusActions.map(a => (
+            <button key={a.to} onClick={() => runStatusAction(a)} disabled={!!statusBusy}
+              style={a.primary
+                ? { padding: "5px 12px", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: statusBusy ? "default" : "pointer", opacity: statusBusy ? 0.6 : 1 }
+                : { padding: "5px 12px", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: statusBusy ? "default" : "pointer", opacity: statusBusy ? 0.6 : 1 }}>
+              {statusBusy === a.to ? BUSY_LABEL[a.to] : a.label}
             </button>
-          ) : trip.status !== "complete" ? (
-            <button onClick={handleStartTrip} disabled={statusBusy}
-              style={{ padding: "5px 12px", background: PALETTE.ink, color: PALETTE.bg, border: "none", borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: statusBusy ? "default" : "pointer", opacity: statusBusy ? 0.6 : 1 }}>
-              {statusBusy ? "Starting…" : "✈ Start trip"}
-            </button>
-          ) : null}
+          ))}
           {trip.status === "active" && (
             <span style={{ fontSize: 10, color: PALETTE.muted }}>
               Pool = {destClosetId ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination closet") : "suitcase only"} + what you're carrying
+            </span>
+          )}
+          {/* A trip marked complete while she is STILL ON IT is the mis-tap
+              this reverse gear exists for. Say what it cost her — the suitcase
+              left the pool and generation stopped — right next to the button
+              that undoes it, rather than leaving her to work it out from an
+              outfit that won't generate. */}
+          {trip.status === "complete" && isTripUnderway(trip, nyToday()) && (
+            <span style={{ fontSize: 10, color: PALETTE.accent }}>
+              Still on this trip? Reopening puts your suitcase back in the pool and turns styling back on.
             </span>
           )}
         </div>

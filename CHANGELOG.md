@@ -2,6 +2,54 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The trip lifecycle has a reverse gear — 2026-09-02
+
+### Why
+Owner, from Arizona, on day 5 of a 9-day trip: *"I must have accidentally clicked
+that this trip is complete. Given the date, it is not. This means I can't make new
+outfits while I'm still here."*
+
+She was right, and the cost was larger than a wrong badge. A trip's status is not
+cosmetic — `useVisibleWardrobe` bridges her two closets only while a trip is
+`active`, so marking a trip complete mid-trip takes **every piece in the suitcase**
+out of styling and leaves her with the destination closet alone, on top of
+switching generation off. `complete` was a one-way door: the view drew a read-only
+✓ TRIP COMPLETE pill and offered nothing to undo it, so one mis-tap on a phone
+permanently ended a trip that was still happening.
+
+### Fixed
+- **A completed trip can be reopened.** Mid-trip it goes straight back to `active`
+  — the only status that restores the suitcase pool. A trip whose dates have passed
+  reopens to `planning` instead: making a finished trip active again would hijack
+  the pool of whatever room she is standing in.
+- **Completing a trip she is still on now warns in her terms** — "You're on day 5
+  of 9 — this trip runs through September 6" — and names what it costs (suitcase
+  out of styling, no new outfits) rather than a generic "are you sure".
+- **`planning → active` was the same one-way shape** and got the same treatment: an
+  active trip can step back to planning. That is the family, not just the button
+  she pressed.
+- A trip marked complete while its dates still cover today now says so on screen,
+  beside the button that undoes it.
+
+### Added
+- `src/features/planner/tripStatus.js` — the lifecycle as pure functions.
+  `tripStatusActions()` is the single source of the moves offered, so the buttons
+  and the guards cannot disagree, and a fourth status added later cannot quietly
+  become a third dead end.
+- `npm run test:tripstatus` (12 assertions, under `TZ=America/New_York`). It tests
+  the **property**, not the two buttons: every status offers a way out at every
+  date position, and every status is reachable from every other by walking the real
+  graph `tripStatusActions()` returns. Validated by reintroducing four regressions
+  — the original dead end (5 failures), the missing early-completion guard (1), a
+  finished trip reopening as active (1), and an off-by-one that reads the last day
+  of a trip as over (3).
+
+### Data
+- Her live Arizona row (Aug 29 – Sep 6) was `status='complete'` on Sep 2 and is set
+  back to `active`. Nothing else was touched: all 18 `trip_items` were still
+  `suggested`, so the mis-tap moved no garments and left nothing behind. `npm test`
+  is 32 suites.
+
 ## [Unreleased] — The deferred retry loop, and two checks that were not running — 2026-09-02
 
 ### Why
