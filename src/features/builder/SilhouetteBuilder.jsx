@@ -650,7 +650,7 @@ export default function SilhouetteBuilder({
       const reply = await sendBuilderMessage({
         messages: next,
         assembledItems: pickedItems.map(p => p.item),
-        closetItems: items,
+        available: items,
         emptySlots,
         // The builder chips ARE the brief — the stylist should never ask
         // where she's going when Work is already selected.
@@ -685,7 +685,7 @@ export default function SilhouetteBuilder({
       const result = await evaluateLook(pickedItems.map(p => p.item), apiKey, {
         occasions: asArray(occasions),
         weathers: asArray(weathers),
-        closetItems: items,
+        available: items,
       });
       setEvaluation(result);
     } catch (err) {

@@ -4,7 +4,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
-import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
+import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
@@ -986,7 +986,6 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
   // (home) closet items, preferring pieces already at the destination —
   // packing cost zero (tripPacker's preferItemIds). Without one: the scoped
   // `items` prop, no preference (pre-Phase-B behavior).
-  const closetOf = (it) => it.closet_id || DEFAULT_CLOSET_ID;
   const homeClosetId = activeCloset?.id || DEFAULT_CLOSET_ID;
   // Pins ride INSIDE the pool, not alongside it. A pinned piece that the
   // closet scoping leaves out (she pinned from a different closet, or switched

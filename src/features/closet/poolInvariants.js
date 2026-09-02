@@ -35,10 +35,9 @@
 // Everything here is read-only and allocation-cheap: the doctor runs it over
 // the full 533-row wardrobe, and tests run it per case.
 
-import { DEFAULT_CLOSET_ID } from "./closets.js";
+import { DEFAULT_CLOSET_ID, closetOf } from "./closets.js";
 import { isMiscItem } from "./useVisibleWardrobe.js";
 
-const closetOf = (item) => item?.closet_id || DEFAULT_CLOSET_ID;
 
 /** Normalise the several shapes an "item reference" takes across the codebase. */
 export function idOf(ref) {

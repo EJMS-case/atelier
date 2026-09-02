@@ -166,7 +166,7 @@ test("miscItemsForCloset is trip-blind and degenerate-input safe", () => {
 // ── 4. The cross-closet (full-wardrobe) props ────────────────────────────────
 // App hands the FULL wardrobe to two places that legitimately reach across
 // closets: the trip planner's destination-closet pool and EditItemView's
-// set-mate lookup. Both now receive withoutMisc(items) ("stylingItems"), which
+// set-mate lookup. Both now receive withoutMisc(items) — the `wardrobe`, which
 // is the only reason the planner path is safe — it does NOT go through
 // resolveVisibleWardrobe. This mirrors the two real pool formulas, in
 // CalendarView.TripModal and TripDetailView.

@@ -2,6 +2,33 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Stale, duplicated and lying code — 2026-09-02
+
+### Why
+A pass over the codebase for anything stale, duplicative, useless or incorrect. Findings, in order of how misleading they were.
+
+### Fixed — names that lied
+- **`closetItems` in the AI/builder path held the pick pool, and its JSDoc called it "full wardrobe array".** It is what the model may choose from — `SilhouetteBuilder` passes it the builder pool — so it is now `available`, and `closetReference()` is `availableReference()`. The doc no longer says the opposite of the truth.
+- **`closetItems` in the styling prompt was a rendered STRING**, not items — it is the inventory text block interpolated into the prompt, and is now `inventoryBlock`.
+- **`SEED_CLOSETS` still said `"Arizona — Mom's"`.** The owner asked for that name change days ago; the live row was updated and this fallback constant was missed, so a device with a cold cache would still render the old name.
+
+### Fixed — duplication
+- **`closetOf` was defined five times**, and the copies had drifted: `CalendarView`'s dropped the optional chaining the other four had, so a null garment threw there and returned the default everywhere else. One exported definition in `closets.js` now.
+- **The Anthropic SSE frame parser existed in three byte-identical copies** — `stylist.js`, `builderChat.js` (whose own comment read *"SSE parse (same shape as streamStyleProfile)"*) and `toolUse.js`. Only the accumulation differs: two carry `text_delta`, one `input_json_delta`. New `lib/ai/sse.js` holds the parser; each caller keeps its own accumulation, and `toolUse` keeps its own try/catch, because swallowing a mid-stream drop is its decision to make.
+- **The dist server and chromium lookup were copy-pasted** between `smoke.mjs` and `render.test.mjs` — now `scripts/browser-harness.mjs`. `smoke.mjs` went 56 → 34 lines.
+- **A two-tap Confirm/Cancel** was duplicated between the saved-looks list and the wear history, identical down to the danger colour. Two copies of a destructive affordance is one that can drift into looking less dangerous than the other. Now `components/ConfirmRemove.jsx`.
+
+### Added
+- **`npm run test:sse`** (17) — the frame parser had three copies and **no test in any of them**. Covers what a real stream does and a naive parser gets wrong: frames split across chunk boundaries (including byte-at-a-time), a truncated final frame, `event:`/comment/`[DONE]`/malformed-JSON noise, and that `onDelta` receives the text *so far* rather than each new piece.
+
+### Deliberately left alone
+- The two JSON schemas in `schemas.js` and `tripAdvisor.js` share an outer skeleton but differ where it matters (W-IDs vs real ids, different fields). Merging them would be wrong.
+- Several internal helpers are exported without an importer (`dinnerDayIndices`, `GARMENT_CATS`, `fetchNycForecast`, the alpha-matte thresholds). All are used inside their own file; narrowing them is churn without a reader-facing win.
+- No unused dependencies, no orphaned files, no leftover TODO/FIXME markers.
+
+### Notes
+`npm test` is now 13 suites, `npm run build` and `npm run smoke` (blank-screen + eleven-screen walk) green. No migration, no behaviour change intended anywhere in this entry.
+
 ## [Unreleased] — Saved looks called her Arizona pieces deleted — 2026-09-02
 
 ### Why

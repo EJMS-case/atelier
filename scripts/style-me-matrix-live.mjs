@@ -97,7 +97,7 @@ async function runCell(occasion, weather) {
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
     weather,
-    closetItems: inventory,
+    inventoryBlock: inventory,
     closetCount: CLOSET.length,
     occasionSlots: slots,
     availabilityNote: `AVAILABLE LOWER-HALF OPTIONS: ${CLOSET.filter(it => it.category === "Bottoms").length} pants/skirts, ${CLOSET.filter(it => it.category === "Dresses").length} dresses.`,

@@ -19,7 +19,7 @@ export const SEED_CLOSETS = [
   },
   {
     id: ARIZONA_CLOSET_ID,
-    name: "Arizona — Mom's",
+    name: "Arizona",
     city: "Scottsdale, AZ",
     lat: 33.4942,
     lon: -111.9261,
@@ -27,3 +27,14 @@ export const SEED_CLOSETS = [
     is_default: false,
   },
 ];
+
+// ── Which room is this garment in? ───────────────────────────────────────────
+// A row with no closet_id predates the multi-closet migration and belongs to
+// the default (NYC) closet — the same rule everywhere, so it lives here rather
+// than being re-written per file.
+//
+// It WAS re-written per file: five copies, and one of them (CalendarView) had
+// dropped the optional chaining, so a null garment threw there and returned the
+// default in the other four. That is the whole argument against copying a
+// one-liner.
+export const closetOf = (item) => item?.closet_id || DEFAULT_CLOSET_ID;

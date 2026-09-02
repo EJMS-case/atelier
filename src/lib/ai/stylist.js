@@ -15,6 +15,7 @@ import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSu
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, shuffle, slotForItem, resolveItemIds } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
+import { readSSEText } from "./sse.js";
 import { summarizeLookEdits } from "../../features/stylist/lookEdits.js";
 import { summarizeOccasionMemory } from "../../features/stylist/occasionMemory.js";
 import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
@@ -233,7 +234,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     activeExclusions,
     recentlySuggestedItems,
     stylePreferences: stylePrefs,
-    closetItems: inventory,
+    inventoryBlock: inventory,
     closetCount: sampled.length,
     occasionSlots: slots,
     availabilityNote,
@@ -401,31 +402,9 @@ export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, on
   );
   if (!res.body) throw new Error("Profile generation failed");
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let text = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      try {
-        const evt = JSON.parse(payload);
-        if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
-          text += evt.delta.text || "";
-          onDelta?.(text);
-        }
-      } catch { /* ignore partial JSON */ }
-    }
-  }
+  const text = await readSSEText(res.body, {
+    deltaType: "text_delta", field: "text", onDelta,
+  });
   return text;
 }
 

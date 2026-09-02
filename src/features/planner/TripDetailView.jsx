@@ -20,7 +20,7 @@ import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCov
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
-import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
+import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
@@ -252,7 +252,6 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
   const tempHighForDay = (iso) =>
     forecast?.[iso]?.high ?? brief?.tempHighF ?? null;
 
-  const closetOf = (it) => it?.closet_id || DEFAULT_CLOSET_ID;
   const destClosetId = trip.destination_closet_id || null;
 
   // FULL-wardrobe lookup — the packing checklist + reconcile must see every

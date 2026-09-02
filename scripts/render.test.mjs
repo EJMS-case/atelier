@@ -27,26 +27,12 @@
 // Skips gracefully (exit 0) when playwright-core or chromium is unavailable,
 // like smoke does.
 
-import http from "http";
-import fs from "fs";
-import path from "path";
+import { findBrowser, serveDist } from "./browser-harness.mjs";
 import { buildWardrobe, buildDuplicatedSet, NYC_CLOSET, AZ_CLOSET } from "./fixtures/build-wardrobe.mjs";
 
-let chromium;
-try { ({ chromium } = await import("playwright-core")); }
-catch { console.log("render: playwright-core not installed — skipping"); process.exit(0); }
-
-const browsersDir = "/opt/pw-browsers";
-const exe = fs.existsSync(browsersDir)
-  ? fs.readdirSync(browsersDir).map(d => `${browsersDir}/${d}/chrome-linux/chrome`).find(p => fs.existsSync(p))
-  : null;
-if (!exe) { console.log("render: no chromium binary found — skipping"); process.exit(0); }
-
-const dist = path.resolve("dist");
-if (!fs.existsSync(path.join(dist, "index.html"))) {
-  console.error("render: dist/index.html missing — run `npm run build` first");
-  process.exit(1);
-}
+const found = await findBrowser("render");
+if (!found) process.exit(0);
+const { chromium, executablePath: exe } = found;
 
 // ── Fixture data ─────────────────────────────────────────────────────────────
 // The wardrobe uses her REAL vocabulary (see scripts/fixtures/), split across
@@ -105,18 +91,7 @@ const TABLE = {
   user_settings: [], inspiration_images: [], shopping_collages: [], ai_errors: [],
 };
 
-// ── Serve dist ───────────────────────────────────────────────────────────────
-const MIME = { ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".html": "text/html", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".woff2": "font/woff2", ".webmanifest": "application/manifest+json" };
-const server = http.createServer((req, res) => {
-  let f = path.join(dist, decodeURIComponent(req.url.split("?")[0]));
-  if (!f.startsWith(dist) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(dist, "index.html");
-  fs.readFile(f, (e, data) => {
-    if (e) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { "Content-Type": MIME[path.extname(f)] || "application/octet-stream" });
-    res.end(data);
-  });
-});
-await new Promise(r => server.listen(4322, r));
+const { server } = await serveDist(4322);
 
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } });

@@ -114,7 +114,7 @@ export function buildStylingPrompt({
   activeExclusions = [],
   recentlySuggestedItems = [],
   stylePreferences = {},
-  closetItems,
+  inventoryBlock,
   closetCount,
   occasionSlots,
   availabilityNote,
@@ -300,7 +300,7 @@ ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
 ────────────────────────────────────────────────────────
 WARDROBE INVENTORY (${closetCount} items — USE ONLY THESE):
-${closetItems}
+${inventoryBlock}
 
 CRITICAL ID RULE: every \`items[].id\` in your response MUST be a W-ID from the inventory above in EXACT 3-digit padded format (W001, W014, W092). NEVER drop leading zeros — "W51" is wrong, "W051" is correct. Never invent IDs, never use timestamps, never use UUIDs. If you can't satisfy a constraint with the inventory, choose the closest match — don't fabricate.
 

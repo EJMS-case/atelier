@@ -82,15 +82,14 @@
 // suitcase IS the closet). During a trip the active closet is deliberately
 // ignored — switching closets takes effect after the trip ends.
 //
-// Pure functions, no React: every consumer (App's closetItems memo, tests)
-// calls through here so the rule never forks.
+// Pure functions, no React: every consumer (App's `available` memo, the tests,
+// the doctor) calls through here so the rule never forks.
 
-import { DEFAULT_CLOSET_ID } from "./closets.js";
+import { DEFAULT_CLOSET_ID, closetOf } from "./closets.js";
 import { MISC_CATEGORY } from "../../constants/taxonomy.js";
 
 // Items whose closet_id is missing (locally cached pre-migration rows) are
 // treated as the default/NYC closet — same rule as Phase A.
-const closetOf = (item) => item?.closet_id || DEFAULT_CLOSET_ID;
 
 // ── MISC — the holding room ──────────────────────────────────────────────────
 // Odds and ends parked in a closet she never dresses from (PJs at her mother's

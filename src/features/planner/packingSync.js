@@ -24,9 +24,8 @@
 // (scripts/packing-sync.test.mjs) exercise the rule directly.
 
 import { outfitsOf } from "./outfits.js";
-import { DEFAULT_CLOSET_ID } from "../closet/closets.js";
+import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 
-const closetOf = (item) => item?.closet_id || DEFAULT_CLOSET_ID;
 
 // Order-independent, dedupe-tolerant id-list compare (outfit_ids arrays).
 function sameIdList(a, b) {
