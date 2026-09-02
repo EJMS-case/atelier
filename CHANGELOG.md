@@ -2,6 +2,29 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A safety net under the pool rules — 2026-09-02
+
+### Why
+Owner, after a week of six user-found bugs: *"How can we avoid these issues when implementing changes in the future? I want things to be right the first time."*
+
+The suite was 27 files and 451 assertions, **all green the entire time the app was broken in six ways**. That is not a coverage gap. The tests encoded the same assumptions as the code, so they agreed with it and were wrong together:
+
+- **18 of her 61 subcategories appeared in no test at all.** `Swimsuits` only arrived after a two-piece swimsuit rendered as one piece in her hands.
+- The date suite passed because it ran in UTC, where that bug is invisible.
+- No test ever constructed "trip active, 18 pinned, 0 packed" — the invisible-suitcase state — because it looked like a state that could not happen. Nothing prevented it and nothing handled it.
+
+### Added
+- **`src/features/closet/poolInvariants.js`** — the rules the app has always assumed and never checked, as pure functions, so the same rule runs in unit tests AND against live data. The one that matters: *a committed set of ids must be resolvable in the pool it is shown and edited from.* Closet scoping answers "what may I PICK here"; it must never decide what an already-committed thing CONTAINS. `unreachableIds` / `classifyUnreachable` (which distinguishes a piece the pool HIDES from one the wardrobe genuinely lost — conflating those two is how every bug this week stayed invisible), `looksReachable`, `setsSpanningClosets`, `activeTripCarriesSomething`, `taxonomyAnomalies`, `miscLeaks`.
+- **`scripts/fixtures/`** — a snapshot of the vocabulary that actually occurs in her wardrobe, and a builder that turns it into a test wardrobe. No invented category strings: a classifier that silently drops a value she really uses now fails immediately. Includes both blank spellings live data uses (Belts carry `""` on 11 rows and `null` on 3) and every real swim name, because the two-piece/one-piece split lives only in the name.
+- **`npm run doctor`** (`scripts/doctor.mjs`) — runs the same invariants against the live database and reports where reality disagrees with the app's assumptions, with a remedy per finding. Read-only; it never writes. `--from <dump.json>` checks an export instead, so it runs without a privileged key. Exit 1 on any error, so it can gate CI later.
+- **`npm run test:invariants`** (49) — wired into `npm test`. Every bug of the week of 2026-08-29 is kept as a case that fails against the old behaviour, including the exact live shape of the Arizona trip.
+
+### Fixed
+- **The Coord Set panel and the set editor were showing half a set.** Found by applying the rule above, not by reading for defects: `SetPanel` and `SetEditModal`'s member list both answered "what does this set contain" against a **closet-scoped** pool, while **8 of her coord sets have members in both closets** (she buys the Never Better / Good Karma / In-Stride athleisure sets in twos, one half per room). Standing in Arizona, a four-piece set showed two pieces with no hint the others existed. Both now resolve against the full styling wardrobe through one shared `setMembers()` / `setMatesOf()` in `setType.js`, so the fix cannot drift back into an inline filter. The set editor's *candidate* list stays deliberately unscoped too — adding the other room's half to a set is exactly what she needs to do — and it already has a search box, so the longer list costs nothing.
+
+### Notes
+Running the doctor over her live rows found two things beyond the set issue, both left for her: one of the Arizona trip's 18 pins names a garment that has since been deleted (a dangling suitcase entry), and `Sports Bra` (1 row) vs `Sports Bras` (19 rows) is one idea filed two ways, so any code comparing that subcategory covers only half the rows. No migration, no data written.
+
 ## [Unreleased] — The suitcase was invisible for the whole trip — 2026-09-02
 
 ### Why

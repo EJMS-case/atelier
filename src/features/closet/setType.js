@@ -58,3 +58,31 @@ export function compareSetsByName(a, b) {
   if (!nb) return -1;
   return na.localeCompare(nb, undefined, { sensitivity: "base" });
 }
+
+// ── SET MEMBERSHIP ───────────────────────────────────────────────────────────
+// What a coord set CONTAINS — a committed fact about the garment, not a
+// question the active closet gets to answer.
+//
+// This exists because the same one-line filter was written inline in two places
+// (the Coord Set panel and the set editor) and both were handed a
+// closet-scoped pool. She buys her athleisure sets in twos, one half per
+// closet, so 8 of her sets have members in both rooms and both surfaces showed
+// half a set: two pieces of a four-piece set, with no hint the others existed.
+//
+// One function, so a future caller cannot quietly re-scope it. Pass the full
+// styling wardrobe. See src/features/closet/poolInvariants.js for the general
+// rule this is an instance of.
+//
+// @param {Object[]} wardrobe - the FULL wardrobe (never a closet-scoped pool)
+// @param {string}   setId
+// @returns {Object[]} every piece in the set, wherever it lives
+export function setMembers(wardrobe, setId) {
+  if (!setId) return [];
+  return (wardrobe || []).filter(it => it?.set_id && it.set_id === setId);
+}
+
+// The set's OTHER pieces — what the Coord Set panel shows beside the one you
+// tapped.
+export function setMatesOf(wardrobe, item) {
+  return setMembers(wardrobe, item?.set_id).filter(it => it.id !== item?.id);
+}
