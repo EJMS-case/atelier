@@ -1,6 +1,55 @@
-// ── VISIBLE WARDROBE (Phase B — trips + packing) ─────────────────────────────
-// THE single pool-resolution rule. One wardrobe split across rooms (closets);
-// a trip is the temporary bridge between them:
+// ── THE WARDROBE VOCABULARY ──────────────────────────────────────────────────
+// Read this before naming any variable that holds garments.
+//
+// This app kept THIRTEEN names for "a set of clothes" — items, allItems,
+// stylingItems, closetItems, builderItems, genItems, wardrobeAll, displayItems,
+// pinPool, regenPool, tripPoolIds, packable, scoped — and every serious bug of
+// the week of 2026-08-29 lived in that pile. Not because any one name was bad,
+// but because the names did not say WHICH QUESTION the array answers, so the
+// wrong array got passed to the wrong question and nothing complained.
+//
+// There are only ever two questions:
+//
+//   ┌─ wardrobe ──────────────────────────────────────────────────────────────┐
+//   │ "Does she own this?"                                                    │
+//   │ Every garment she owns that can be styled. Misc (the holding room) is   │
+//   │ excluded — always, everywhere. Not scoped by closet, not by trip.       │
+//   │ Use it to RESOLVE something already committed: a saved outfit's ids, a  │
+//   │ suitcase, a set's members, a wear-history row.                          │
+//   └─────────────────────────────────────────────────────────────────────────┘
+//
+//   ┌─ available ─────────────────────────────────────────────────────────────┐
+//   │ "May she pick this, here, now?"                                         │
+//   │ The active closet — or, during a trip, the destination closet plus what │
+//   │ she is carrying. Use it to OFFER a choice: Style Me, a picker, the      │
+//   │ closet grid, a generator.                                               │
+//   └─────────────────────────────────────────────────────────────────────────┘
+//
+// A `<something>Pool` is an `available` widened for one surface, and its name
+// says which: `builderPool`, `pinPool`, `tripPool`. A pool is still a "may I
+// pick" answer — widening it never makes it a wardrobe.
+//
+// The rule that ties them together, and the one the bugs broke:
+//
+//   RESOLVE against the wardrobe. OFFER from what's available.
+//   Never resolve a committed thing against a pool.
+//
+// A pool used as a lookup table silently drops what it cannot see, and the
+// caller cannot tell that from the piece having been deleted — which is how a
+// trip look lost its top, how the builder DELETED the out-of-closet half of a
+// look on save, and how an 18-piece suitcase stayed invisible for a whole trip.
+// See poolInvariants.js, which turns that rule into a check.
+//
+// Two deliberate exceptions, both narrow:
+//   · `items` in App.jsx is the RAW persisted rows, Misc included. It exists
+//     for the sync machinery and Settings' closet-agnostic maintenance, and it
+//     styles nothing. Derive `wardrobe` or `available` before use.
+//   · Coord-set membership is closet-scoped ON PURPOSE — she owns the same set
+//     in both rooms. See setMembers() in setType.js.
+//
+// ── THE POOL RULE ────────────────────────────────────────────────────────────
+// One wardrobe split across rooms (closets); a trip is the temporary bridge
+// between them:
 //
 //   no active trip → pool = items in the active closet
 //   active trip    → pool = items in the trip's destination closet
@@ -159,17 +208,17 @@ export function resolveVisibleWardrobe({ items, activeClosetId, activeTrip, trip
  * @param {Object[]} pool     - the scoped pool to widen (returned as-is when
  *                              nothing is missing, so callers keep referential
  *                              stability inside a useMemo)
- * @param {Object[]} allItems - the full wardrobe to pull missing pieces from
+ * @param {Object[]} wardrobe - everything she owns, to pull missing pieces from
  * @param {Iterable<string>} ids - ids that must be present in the result
  * @returns {Object[]} pool, plus any named piece it lacked (appended in
- *                     `allItems` order)
+ *                     `wardrobe` order)
  */
-export function poolIncluding(pool, allItems, ids) {
+export function poolIncluding(pool, wardrobe, ids) {
   const base = pool || [];
   const wanted = ids instanceof Set ? ids : new Set(ids || []);
   if (wanted.size === 0) return base;
   const have = new Set(base.map(it => it.id));
-  const extra = (allItems || []).filter(
+  const extra = (wardrobe || []).filter(
     it => it && wanted.has(it.id) && !have.has(it.id) && !isMiscItem(it),
   );
   return extra.length ? [...base, ...extra] : base;

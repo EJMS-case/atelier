@@ -99,14 +99,18 @@ export function buildDuplicatedSet() {
 }
 
 /**
- * THE ANOMALY: a set spanning both rooms that duplication does NOT explain —
- * no piece on either side is a copy of a piece on the other. Hers is a Good
- * Karma bra in NYC filed with two Never Better pieces in Arizona, which are
- * different products. One of her eight looks like this, and it is the only one
- * worth reporting.
+ * A cross-room set that duplication does NOT explain — different product lines
+ * filed together. This looked like a data error, and it is not one.
+ *
+ * Owner, when it was reported to her: *"The sets you noted aren't a misfire,
+ * it's just two pieces from the same brand in the same color that I wear as a
+ * set because they match."*
+ *
+ * Kept as a fixture precisely so nobody re-adds a checker that flags it. Her
+ * filing is the specification; a set is whatever she wears together.
  */
-export function buildMisfiledSet() {
-  const setId = "fx-set-misfiled";
+export function buildMatchingSet() {
+  const setId = "fx-set-matching";
   return {
     setId,
     items: [

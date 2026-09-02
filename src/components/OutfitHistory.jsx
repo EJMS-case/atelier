@@ -16,7 +16,7 @@ import { nyToday } from "../lib/time.js";
 // opened, even if the user never tapped Edit on a logged outfit.
 const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuilder.jsx"));
 
-export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
+export default function OutfitHistory({ wardrobe, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
   const [plans,      setPlans]      = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -72,7 +72,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
   // Free-text search across item names, occasion tags, and notes — AND'd with
   // the chip filters below so search narrows within the selected occasion/weather.
   const nameById = {};
-  (items || []).forEach(it => { nameById[it.id] = it.name || ""; });
+  (wardrobe || []).forEach(it => { nameById[it.id] = it.name || ""; });
   const q = searchQ.trim().toLowerCase();
   const matchesSearch = (log) => {
     if (!q) return true;
@@ -133,7 +133,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     return (
       <Suspense fallback={<RouteFallback/>}>
         <SilhouetteBuilder
-          items={items}
+          wardrobe={wardrobe}
           apiKey={apiKey}
           initialLook={editingLog}
           onSave={async (log) => {
@@ -154,7 +154,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
     <div style={wrapStyle}>
       {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>}
       {allWorn.length > 0 && (
-        <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Search items, occasion, notes…"/>
+        <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Search wardrobe, occasion, notes…"/>
       )}
       {allWorn.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
@@ -196,7 +196,7 @@ export default function OutfitHistory({ items, onWearAgain, onDelete, onUnlog, i
               </>
             );
             return (
-              <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
+              <SavedLookCard key={log.id} log={log} wardrobe={wardrobe} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
                 actions={log.__planner ? (
                   // Planner-worn entry: it's managed on the calendar (edit/remove
                   // it there), so History shows it read-only rather than exposing

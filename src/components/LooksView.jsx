@@ -23,7 +23,7 @@ const badgeStyle = {
   borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap",
 };
 
-export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
+export default function LooksView({ wardrobe, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -104,7 +104,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
     return (
       <Suspense fallback={<RouteFallback/>}>
         <SilhouetteBuilder
-          items={items}
+          wardrobe={wardrobe}
           apiKey={apiKey}
           initialLook={editingLook}
           onSave={async (log) => {
@@ -200,7 +200,7 @@ export default function LooksView({ items, onDelete, onLogAsWorn, isFav, toggleF
           </>
         );
         return (
-          <SavedLookCard key={log.id} log={log} items={items} subtitle={subtitle} headerRight={statusBadge} notes={log.notes} onEditItem={onEditItem}
+          <SavedLookCard key={log.id} log={log} wardrobe={wardrobe} subtitle={subtitle} headerRight={statusBadge} notes={log.notes} onEditItem={onEditItem}
             actions={
               <>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>

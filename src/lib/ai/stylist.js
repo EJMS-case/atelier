@@ -45,6 +45,11 @@ export function buildImgSource(imgStr) {
 
 // ── GENERATE OUTFIT (3 validated looks) ─────────────────────────────────────
 export async function generateOutfit(items, occasion, weather, request, apiKey, previousLooks = [], stylePrefs, aboutMe = {}, styleExcludes = new Set(), extras = {}) {
+  // `items` is what the stylist may PICK from (the active closet, or the trip
+  // pool). `wardrobe` is everything she owns, used only to resolve records —
+  // her history, her loved looks — which can name pieces from the other room.
+  // See features/closet/useVisibleWardrobe.js for the vocabulary.
+  const wardrobe = (extras.wardrobe && extras.wardrobe.length) ? extras.wardrobe : items;
   const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], outfitLogs = [], lovedFeedback = [], favoriteItemIds = [], count = 3 } = extras;
   // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
   // classic 3-up generation. Values outside this range fall back to 3.
@@ -147,7 +152,11 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // (was three hand-copies of the same 12-line body); returns null when
   // fewer than 2 pieces resolve — a one-piece line teaches nothing.
   const describeLookLine = (ids, occasion) => {
-    const pieces = resolveItemIds(items, ids)
+    // History RESOLVES, it does not offer: a past look can hold a piece from
+    // the other closet, and describing it from the pick pool silently drops
+    // those pieces from the stylist's picture of her taste. `extras.wardrobe`
+    // is the full wardrobe; it falls back to the pool when absent.
+    const pieces = resolveItemIds(wardrobe, ids)
       .slice(0, 8)
       .map(it => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " "));
     if (pieces.length < 2) return null;
@@ -373,7 +382,8 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
   const anchors = analysis.wardrobeAnchors.map(a => `${a.item.name} (${a.count}x)`).join(", ") || "none yet";
   const underutil = analysis.underutilized.slice(0, 3).map(it => it.name).join(", ") || "none";
   const recentLogs = outfitLogs.slice(0, 10).map(l => {
-    const logItems = resolveItemIds(items, l.garment_ids);
+    // Records again: resolve her worn history against everything she owns.
+    const logItems = resolveItemIds(wardrobe?.length ? wardrobe : items, l.garment_ids);
     return `${l.date_worn}: ${logItems.map(it => `${it.category}:${it.name}`).join(", ")} (${l.occasion || "casual"})`;
   }).join("\n");
   return `Write a 2-3 sentence monthly style profile for this wardrobe user. Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
@@ -383,7 +393,7 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
 // the final string. Falls back to a thrown error if the API call fails.
 // (A non-streaming generateStyleProfile once lived here but had no callers —
 // StyleInsightsView uses the streaming path below.)
-export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, onDelta) {
+export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, onDelta, wardrobe = null) {
   const prompt = buildProfilePrompt(items, outfitLogs, analysis);
   const res = await anthropicFetch(
     { model: MODEL_STANDARD, max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] },
@@ -546,6 +556,9 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
     }, "gaps");
   }
 
+  // Deliberately the PICK pool, not the wardrobe: these are the pieces she has
+  // selected in the closet grid right now, so they are available by
+  // construction. The one resolve in this file that is correctly scoped.
   const selectedItems = resolveItemIds(items, selectedIds);
   const outfitStr = selectedItems.map(it =>
     `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`

@@ -107,6 +107,6 @@
   ],
   "_swimNamesNote": "Every swim row is subcategory 'Swimsuits' — the two-piece/one-piece distinction lives ONLY in the name. This is why swimPieceKind is name-based and why these names are in the fixture.",
   "setsWithMembersInBothClosets": 8,
-  "setsSplitWithoutDuplication": 1,
-  "_splitSetsNote": "8 coord sets have members in BOTH closets — and 7 of them are the SAME set owned twice: she buys athleisure in twos and the duplicate feature copies a piece into the other room keeping its set_id, so the Arizona rows carry duplicate_of pointing at their NYC twins. Set membership is therefore closet-scoped BY DESIGN; resolving it across rooms lists each garment twice. Exactly 1 of the 8 is a genuine anomaly (a Good Karma bra filed with Never Better pieces), which is what setsSplitAcrossClosets reports."
+  "setsCrossRoomWithoutDuplication": 1,
+  "_splitSetsNote": "8 coord sets have members in BOTH closets — and 7 of them are the SAME set owned twice: she buys athleisure in twos and the duplicate feature copies a piece into the other room keeping its set_id, so the Arizona rows carry duplicate_of pointing at their NYC twins. Set membership is therefore closet-scoped BY DESIGN; resolving it across rooms lists each garment twice. The 8th is a Good Karma bra filed with Never Better pieces; that looked like an anomaly and is NOT one — owner: \"it\u0027s just two pieces from the same brand in the same color that I wear as a set because they match.\" No checker reports it."
 }

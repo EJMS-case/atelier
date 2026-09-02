@@ -84,7 +84,7 @@ function healPlan(r) {
  *                                       destination_closet_id, destination_city, status }
  * @param {Object[]} props.items      - the app's scoped pool (active closet, or the
  *                                      trip pool while a trip is active)
- * @param {Object[]} [props.allItems] - the FULL wardrobe — source of destination-
+ * @param {Object[]} [props.wardrobe] - the FULL wardrobe — source of destination-
  *                                      closet pieces when the trip has one (Phase B)
  * @param {Object[]} [props.closets]  - closet rows, to name the destination closet
  * @param {string}   props.apiKey
@@ -95,7 +95,7 @@ function healPlan(r) {
  * @param {Function} [props.onItemsClosetChanged] - (ids, closetId) → patch App's local
  *                                      items state after a bulk closet reassign (B5)
  */
-export default function TripDetailView({ trip: initialTrip, items, allItems, closets, apiKey, onBack, onBuildDay, onRefreshActiveTrip, onItemsClosetChanged }) {
+export default function TripDetailView({ trip: initialTrip, available, wardrobe: wardrobeProp, closets, apiKey, onBack, onBuildDay, onRefreshActiveTrip, onItemsClosetChanged }) {
   // Local copy so "+ Add day" can mutate end_date without re-fetching the
   // trip list. Re-syncs to the parent's prop if the user picks a different
   // trip (handled by the useEffect on initialTrip.id below).
@@ -259,11 +259,14 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // item regardless of the current pool scoping (during an ACTIVE trip the
   // scoped `items` prop excludes still-suggested home pieces, which are
   // exactly the rows the checklist is about).
-  const wardrobeAll = (allItems && allItems.length) ? allItems : items;
+  // App always passes `wardrobe`; the fallback only protects a caller that
+  // predates the prop (or a test), and it degrades to the scoped pool rather
+  // than to nothing.
+  const wardrobe = (Array.isArray(wardrobeProp) && wardrobeProp.length) ? wardrobeProp : available;
 
   const itemsById = useMemo(
-    () => new Map(wardrobeAll.map(it => [it.id, it])),
-    [wardrobeAll],
+    () => new Map(wardrobe.map(it => [it.id, it])),
+    [wardrobe],
   );
 
   // Resolve an item-id list to item objects, dropping only ids the WARDROBE no
@@ -273,7 +276,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // tapping the Arizona chip must not make that tee vanish from the collage,
   // from the coverage check ("no top or dress" on a look that has one), or
   // from the ⊞ Build canvas that saves the look back.
-  const resolveItems = (ids) => resolveItemIds(wardrobeAll, ids);
+  const resolveItems = (ids) => resolveItemIds(wardrobe, ids);
 
   // Everything this trip has already committed to, by id: the pins, every
   // piece on every saved look, and every row in the suitcase. These are facts
@@ -293,22 +296,22 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // preview pool. Without one, this is just `items` and no preference
   // (pre-Phase-B behavior). Either way it is widened by `committedIds` so the
   // pool can only ever grow as the trip fills in, never shrink under it.
-  const { genItems, preferItemIds } = useMemo(() => {
-    let scoped = items;
+  const { tripPool, preferItemIds } = useMemo(() => {
+    let scoped = available;
     if (destClosetId) {
-      const seen = new Set(items.map(it => it.id));
-      const extra = (allItems || []).filter(it => closetOf(it) === destClosetId && !seen.has(it.id));
-      scoped = extra.length ? [...items, ...extra] : items;
+      const seen = new Set(available.map(it => it.id));
+      const extra = (wardrobe || []).filter(it => closetOf(it) === destClosetId && !seen.has(it.id));
+      scoped = extra.length ? [...available, ...extra] : available;
     }
-    const pool = poolIncluding(scoped, wardrobeAll, committedIds);
+    const pool = poolIncluding(scoped, wardrobe, committedIds);
     return {
-      genItems: pool,
+      tripPool: pool,
       preferItemIds: destClosetId
         ? new Set(pool.filter(it => closetOf(it) === destClosetId).map(it => it.id))
         : null,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, allItems, wardrobeAll, destClosetId, committedIds]);
+  }, [available, wardrobe, destClosetId, committedIds]);
 
   // ── Trip_items reconcile (wave 2 — B4) ────────────────────────────────────
   // ONE reconcile site for the whole view (per the handoff warning about the
@@ -424,7 +427,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
         .filter(r => r.status === "packed" || r.status === "suggested")
         .map(r => r.item_id),
     );
-    return wardrobeAll.filter(it =>
+    return wardrobe.filter(it =>
       !excludedIds.has(it.id) &&
       ((destClosetId && closetOf(it) === destClosetId) || inSuitcase.has(it.id)),
     );
@@ -488,7 +491,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
         dayChanged = true;
         // An all-swim "Pool" look can't be rebuilt by the regular composer —
         // just drop the excluded piece(s) from it.
-        const resolved = resolveItemIds(wardrobeAll, o.items);
+        const resolved = resolveItemIds(wardrobe, o.items);
         const isPool = resolved.length > 0 && resolved.every(it => it.category === "Swim");
         const kept = (o.items || []).filter(id => !excluded.has(id));
         if (isPool) return { ...o, items: kept };
@@ -703,8 +706,8 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   };
 
   const pinnedItems = useMemo(
-    () => resolveItemIds(wardrobeAll, [...mustIncludeIds]),
-    [wardrobeAll, mustIncludeIds],
+    () => resolveItemIds(wardrobe, [...mustIncludeIds]),
+    [wardrobe, mustIncludeIds],
   );
 
   // Pieces the pin sheet may offer: "bringing for sure" means CARRYING it, so
@@ -712,10 +715,10 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
   // decision. Already-pinned pieces stay listed regardless so they can be
   // un-pinned. Mirrors TripModal's pinPool.
   const pinPool = useMemo(() => {
-    if (!destClosetId) return genItems;
-    return genItems.filter(it => closetOf(it) !== destClosetId || mustIncludeIds.has(it.id));
+    if (!destClosetId) return tripPool;
+    return tripPool.filter(it => closetOf(it) !== destClosetId || mustIncludeIds.has(it.id));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [genItems, destClosetId, mustIncludeIds]);
+  }, [tripPool, destClosetId, mustIncludeIds]);
 
   // Persist a pin change to trips.must_include_ids. Optimistic: the local set
   // drives generation immediately and a failed write only costs the persisted
@@ -788,7 +791,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
       const skipOutfitId = outfitIdx === "append" ? null
         : (outfitIdx == null ? existing[0]?.id : existing[outfitIdx]?.id) || null;
-      const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, {
+      const look = await generateTripDayLook(tripPool, occasion, weather, trip.destination, apiKey, {
         priorDays, brief, activity, preferItemIds,
         mustIncludeIds: unplacedPins(plans, skipOutfitId),
       });
@@ -833,7 +836,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
         const weather   = weatherForDay(iso);
         const priorDays = buildPriorDays(iso, running);
         const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
-        const look = await generateTripDayLook(genItems, occasion, weather, trip.destination, apiKey, {
+        const look = await generateTripDayLook(tripPool, occasion, weather, trip.destination, apiKey, {
           priorDays, brief, activity, preferItemIds,
           // `running` grows as days are generated, so each day is told about
           // only the pins the earlier days didn't already use.
@@ -1039,7 +1042,7 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
     const allIds = Object.keys(itemDays);
     // Resolve against the FULL wardrobe: during an ACTIVE trip the scoped
     // pool excludes still-suggested home pieces — exactly the checklist rows.
-    const usedItems = resolveItemIds(wardrobeAll, allIds);
+    const usedItems = resolveItemIds(wardrobe, allIds);
 
     // Pulled vs at-destination (Phase B): pieces already living in the trip's
     // destination closet don't need carrying — they get a badge instead of a
@@ -1084,12 +1087,12 @@ export default function TripDetailView({ trip: initialTrip, items, allItems, clo
       warnings,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plans, days, wardrobeAll, destClosetId, mustIncludeIds]);
+  }, [plans, days, wardrobe, destClosetId, mustIncludeIds]);
 
   // Handed to the ⊞ Build canvas so editing a trip look offers the TRIP's
   // pool rather than whichever closet the chip happens to be on — the look is
   // cross-closet by construction, so a closet-scoped swap sheet is wrong.
-  const tripPoolIds = useMemo(() => genItems.map(it => it.id), [genItems]);
+  const tripPoolIds = useMemo(() => tripPool.map(it => it.id), [tripPool]);
 
   const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
   const weatherBucket = brief ? bucketFromHigh(brief.tempHighF) : null;

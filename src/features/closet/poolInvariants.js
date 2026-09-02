@@ -24,9 +24,9 @@
 //   · "it's excluding the bow bag that I did pack"
 //     — the trip pool read only 'packed' rows, so an 18-piece suitcase that
 //       had been pinned rather than ticked was invisible for the whole trip
-//   · a Coord Set panel scoped wrongly — first by showing half a set, then,
-//     when that was "fixed" without checking the data, by showing the same
-//     garment twice. She owns these sets in BOTH rooms; see setMembers().
+//   · a Coord Set panel scoped wrongly — "fixed" by resolving membership
+//     across rooms, which would have shown the same garment twice. She owns
+//     these sets in BOTH rooms; see setMembers() in setType.js.
 //
 // Each was found by a person using the app, days apart, after a green test run.
 // The point of this module is that the NEXT one is found by a machine, before
@@ -140,50 +140,6 @@ function safeParse(s) {
 }
 
 /**
- * A coord set living in two rooms is NORMAL here and must not be reported: she
- * buys her athleisure sets in twos and the ⧉ duplicate feature copies a piece
- * into the other closet keeping its set_id, so one set_id routinely holds the
- * NYC set and its Arizona twin. Seven of her eight cross-closet sets are that.
- *
- * What IS worth reporting is a set spanning rooms that duplication cannot
- * explain — no member on either side is a copy of a member on the other. That
- * is a mis-filed piece, not a pair: hers is a Good Karma bra in NYC sharing a
- * set with two Never Better pieces in Arizona, which are different products.
- *
- * Identity = `duplicate_of` when the row is a copy, else its own id. Two rows
- * in different rooms sharing an identity are one garment owned twice.
- *
- * @param {Object[]} wardrobe - the full wardrobe
- * @returns {Array<{setId: string, closets: string[], pieces: number}>}
- *          only the sets duplication does not account for
- */
-export function setsSplitAcrossClosets(wardrobe) {
-  const bySet = new Map();
-  for (const it of (wardrobe || [])) {
-    if (!it?.set_id) continue;
-    if (!bySet.has(it.set_id)) bySet.set(it.set_id, []);
-    bySet.get(it.set_id).push(it);
-  }
-  const identity = (it) => it.duplicate_of || it.id;
-  const out = [];
-  for (const [setId, members] of bySet) {
-    const closets = [...new Set(members.map(closetOf))];
-    if (closets.length < 2) continue;
-    // Explained when ANY identity appears in more than one room — that is a
-    // duplicate pair, and the set is the same set owned twice.
-    const rooms = new Map();                     // identity → Set(closet)
-    for (const it of members) {
-      const key = identity(it);
-      if (!rooms.has(key)) rooms.set(key, new Set());
-      rooms.get(key).add(closetOf(it));
-    }
-    const paired = [...rooms.values()].some(r => r.size > 1);
-    if (!paired) out.push({ setId, closets, pieces: members.length });
-  }
-  return out;
-}
-
-/**
  * An ACTIVE trip must be able to dress her. If the pool holds nothing she is
  * carrying, either the trip started without the suitcase being recorded or the
  * carry rule has regressed — and she spends the trip styling from one closet
@@ -226,32 +182,54 @@ export function activeTripCarriesSomething({ trip, tripItems, wardrobe }) {
 }
 
 /**
- * Taxonomy hygiene. Not a correctness invariant — a data-quality one — but it
- * feeds the same class of bug: two spellings of one idea mean every downstream
- * `subcategory === "..."` check silently covers half the rows. She currently
- * carries both "Sports Bra" and "Sports Bras", and Belts split between "" and
- * null.
+ * A stored subcategory the taxonomy does not recognise and has no alias for.
+ *
+ * ── What this deliberately does NOT report, and why ──────────────────────────
+ * An earlier version flagged any two spellings of one idea, and any mix of the
+ * two ways a blank is stored. Run against the real wardrobe it produced three
+ * findings and ALL THREE were false alarms:
+ *
+ *   · "Sports Bra" vs "Sports Bras" — ATHLEISURE_SUBCATEGORY_ALIASES already
+ *     folds the singular in normalizeItem, on every load. The stored value was
+ *     stale; the app was never confused. (Fixed at rest by migration 0034.)
+ *   · Belts blank as "" on 11 rows and null on 3 — NOTHING in the codebase
+ *     compares subcategory to either; all 25 read sites coalesce with `|| ""`.
+ *     Pure noise.
+ *   · A coord set spanning both closets — the owner: "it's just two pieces from
+ *     the same brand in the same color that I wear as a set because they
+ *     match." Her filing, not a fault.
+ *
+ * A check that is wrong every time it speaks is worse than no check: it trains
+ * you to skim past the one that matters. So this now reports only a value the
+ * app genuinely cannot place — no canonical entry and no alias — which is the
+ * case that actually loses rows from a filter.
+ *
+ * Recognised means: a level-2 value for its category (TAXONOMY), a level-3
+ * value under any of them (SUBCATEGORY_L3 — "Jeans" and "Midi" are stored as
+ * subcategories but live a level down), or anything an alias maps. Missing the
+ * L3 tier would flag most of her Bottoms and Shoes, which is precisely the kind
+ * of wrong-every-time noise this function exists to avoid.
  *
  * @param {Object[]} wardrobe
- * @returns {{ nearDuplicates: Array<[string,string]>, blankStyles: string[] }}
+ * @param {Object}   vocab - { taxonomy, l3, aliases } from constants/taxonomy
+ * @returns {Array<{category: string, subcategory: string, count: number}>}
  */
-export function taxonomyAnomalies(wardrobe) {
-  const subs = new Map();       // normalised → Set of raw spellings
-  const blankStyles = new Set();
+export function unknownSubcategories(wardrobe, { taxonomy, l3, aliases }) {
+  const everyL3 = new Set(Object.values(l3 || {}).flat());
+  const counts = new Map();
   for (const it of (wardrobe || [])) {
     const raw = it?.subcategory;
-    if (raw === null) { blankStyles.add("null"); continue; }
-    if (raw === "") { blankStyles.add("empty string"); continue; }
-    if (raw === undefined) { blankStyles.add("undefined"); continue; }
-    const key = String(raw).toLowerCase().replace(/[^a-z]/g, "").replace(/s$/, "");
-    if (!subs.has(key)) subs.set(key, new Set());
-    subs.get(key).add(raw);
+    if (raw == null || raw === "") continue;            // blank is legitimate
+    if ((taxonomy?.[it.category] || []).includes(raw)) continue;
+    if (everyL3.has(raw)) continue;
+    if (aliases?.[raw]) continue;
+    const key = `${it.category}|${raw}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
   }
-  const nearDuplicates = [];
-  for (const spellings of subs.values()) {
-    if (spellings.size > 1) nearDuplicates.push([...spellings].sort());
-  }
-  return { nearDuplicates, blankStyles: [...blankStyles].sort() };
+  return [...counts.entries()].map(([key, count]) => {
+    const [category, subcategory] = key.split("|");
+    return { category, subcategory, count };
+  });
 }
 
 /**

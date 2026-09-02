@@ -23,11 +23,17 @@ export const LookSearchContext = createContext("");
 // `layout_data` arrangement (e.g. edited via the planner), the collage restores
 // it on desktop.
 
-export default function SavedLookCard({ log, items, subtitle, headerRight, notes, actions, onEditItem }) {
+export default function SavedLookCard({ log, wardrobe, subtitle, headerRight, notes, actions, onEditItem }) {
   const [detailItem, setDetailItem] = useState(null);
   const searchQ = useContext(LookSearchContext);
 
-  const logItems = sortByCategoryOrder(resolveItemIds(items, log.garment_ids));
+// A saved look is a RECORD of what she wore, and it can hold a piece from
+// either room. So it resolves against the wardrobe, never against what's
+// available here — resolving it against a closet-scoped pool made the app
+// report her Arizona pieces as deleted. Owner, from NYC: "atelier is pulling
+// in saved outfits from Arizona and marking them as nonexistent."
+// See the vocabulary in features/closet/useVisibleWardrobe.js.
+  const logItems = sortByCategoryOrder(resolveItemIds(wardrobe, log.garment_ids));
 
   // Mirror OutfitHistory's search semantics: case-insensitive substring match
   // over constituent item names, occasion tags, and notes.
@@ -60,7 +66,7 @@ export default function SavedLookCard({ log, items, subtitle, headerRight, notes
         />
       ) : (
         <div style={{...s.histThumbPh, height: 120, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"var(--color-text-muted)"}}>
-          These pieces are no longer in your closet.
+          These pieces have been deleted from your wardrobe.
         </div>
       )}
 

@@ -157,7 +157,7 @@ export default function App() {
   // ── Trip mode (Phase B) ──
   // The single status='active' trip row (null when none) + its trip_items.
   // While a trip is active the visible pool is destination closet ∪ packed
-  // items — see the closetItems memo below.
+  // items — see the available memo below.
   const [activeTrip, setActiveTrip] = useState(null);
   const [activeTripItems, setActiveTripItems] = useState([]);
   // Bulk "move to closet" select mode on the closet grid.
@@ -356,63 +356,70 @@ export default function App() {
       : f));
   }, []);
 
-  // THE one place wardrobe scoping happens: every scoped consumer (the grid,
-  // FilterBar, sets, Style Me, planner, Home, insights, shopping, …) receives
-  // this array instead of `items`, so the whole app follows the pool rule
-  // automatically. The rule itself lives in resolveVisibleWardrobe (Phase B):
-  // active closet normally; destination closet ∪ packed trip items while a
-  // trip is active (activeCloset is deliberately ignored then). Missing
-  // closet_id = NYC. Full `items` stays reserved for App-internal sync
-  // machinery (persistItems / mergeItems / forceSyncAll), SettingsView's
-  // closet-agnostic orphan scan, and the planner's cross-closet trip pool.
-  // Scope by the RESOLVED closet (not the raw persisted id): a stale
-  // localStorage id would otherwise render every surface empty while the
-  // chip and weather claim NYC.
-  const closetItems = useMemo(
+  // ── THE THREE ARRAYS ───────────────────────────────────────────────────────
+  // The whole app's garment vocabulary is defined here, and it is only three
+  // things. The full statement of the rule lives in the header of
+  // features/closet/useVisibleWardrobe.js — read that before adding a fourth.
+  //
+  //   items      RAW persisted rows, Misc included. App-internal ONLY: the sync
+  //              machinery (persistItems / mergeItems / forceSyncAll) and
+  //              SettingsView's closet-agnostic orphan scan. Styles nothing.
+  //   wardrobe   Everything she OWNS that can be styled. Answers "does she own
+  //              this?" — so it resolves anything already committed: a saved
+  //              look's ids, a suitcase, a set's members, wear history.
+  //   available  What she may PICK from, here and now. Answers "may she choose
+  //              this?" — so it feeds pickers, the grid, Style Me, generators.
+  //
+  // RESOLVE against `wardrobe`. OFFER from `available`. Handing a committed set
+  // of ids to `available` is the bug family that cost the week of 2026-08-29:
+  // it silently drops what it cannot see, and the caller cannot tell that from
+  // the piece having been deleted.
+
+  // Everything she owns, minus the holding room. Misc is stripped here so no
+  // styling surface can ever reach it — the only door back in is `miscItems`.
+  const wardrobe = useMemo(() => withoutMisc(items), [items]);
+
+  // THE one place closet/trip scoping happens, so every scoped consumer follows
+  // the pool rule automatically. resolveVisibleWardrobe: the active closet
+  // normally; during a trip the destination closet ∪ what she is carrying
+  // (packed ∪ pinned), with the active closet deliberately ignored. Missing
+  // closet_id counts as NYC.
+  //
+  // Scope by the RESOLVED closet, not the raw persisted id: a stale
+  // localStorage id would render every surface empty while the chip and the
+  // weather still claim NYC.
+  const available = useMemo(
     () => resolveVisibleWardrobe({ items, activeClosetId: activeCloset.id, activeTrip, tripItems: activeTripItems }),
     [items, activeCloset.id, activeTrip, activeTripItems],
   );
 
   // ── MISC — the holding room ────────────────────────────────────────────────
-  // resolveVisibleWardrobe strips Misc items from `closetItems` unconditionally
-  // (see its header), so the entire app is blind to them. These two memos are
-  // the only doors back in, and neither one leads to a stylist:
-  //
-  //   miscItems     → the closet GRID, and only while the Misc chip is on.
-  //   stylingItems  → the full wardrobe MINUS Misc, for the handful of props
-  //                   that legitimately need to see across closets (the trip
-  //                   planner's destination-closet pool, EditItemView's
-  //                   set-mate lookup). Passing raw `items` there would let
-  //                   the trip packer pull an Arizona PJ set into an outfit.
-  //
-  // Raw `items` stays reserved for App-internal sync machinery and Settings'
-  // closet-agnostic photo/orphan maintenance, neither of which styles anything.
+  // Neither `wardrobe` nor `available` ever contains a Misc piece. This memo is
+  // the single door back in, and it leads to the closet GRID only, and only
+  // while the Misc chip is selected. Never to a stylist.
   const miscItems = useMemo(
     () => miscItemsForCloset(items, activeCloset.id),
     [items, activeCloset.id],
   );
-  const stylingItems = useMemo(() => withoutMisc(items), [items]);
 
-  // ── Builder pool ───────────────────────────────────────────────────────────
-  // SilhouetteBuilder distributes initialLook.garment_ids into slots by
-  // LOOKING EACH ID UP IN ITS POOL, and its Save writes back only the ids that
-  // survived. So a scoped pool doesn't merely hide an out-of-closet piece
-  // while you edit — it deletes it the moment you save. That is exactly what
-  // happens on a trip look: every trip day mixes home and destination pieces
-  // by design, so opening one with the wrong closet chip selected silently
-  // strips half the outfit.
+  // ── builderPool — `available`, widened for one surface ─────────────────────
+  // SilhouetteBuilder slots initialLook.garment_ids by LOOKING EACH ID UP IN
+  // ITS POOL, and Save writes back only the ids that survived. So handing it a
+  // narrow pool does not merely hide an out-of-closet piece while she edits —
+  // it deletes the piece the moment she saves. Every trip day mixes rooms by
+  // design, so opening one from the wrong closet used to strip half the outfit.
   //
-  // The look being edited therefore brings its own pieces into the pool.
-  // Everything else stays closet-scoped: this widens what the canvas can HOLD,
-  // never what the swap sheet offers to add.
-  const builderItems = useMemo(() => {
+  // The look being edited therefore brings its own pieces in, and a trip look
+  // brings the trip's pool. This widens what the canvas can HOLD; it is still
+  // an "available", so it also decides what the swap sheet may offer.
+  const builderPool = useMemo(() => {
     const editedIds = editingPlan ? (editingPlan.plan?.items || []) : (builderSeed?.garment_ids || []);
     const widen = [
       ...editedIds.map(it => (typeof it === "object" && it !== null ? it.id : it)),
       ...(editingPlan?.poolIds || []),
     ];
-    return poolIncluding(closetItems, stylingItems, widen);
-  }, [closetItems, stylingItems, editingPlan, builderSeed]);
+    return poolIncluding(available, wardrobe, widen);
+  }, [available, wardrobe, editingPlan, builderSeed]);
 
   // Suitcase pieces during an ACTIVE trip (wave 2 — packed-item marker). The
   // closet grid badges these 🧳 so packed pieces read apart from destination-
@@ -564,7 +571,7 @@ export default function App() {
         if (fp && count - have < 10) return;   // still fresh enough
         const { generateStyleFingerprint } = await import("./features/stylist/styleFingerprint.js");
         const edits = await sb.fetchLookEdits().catch(() => []);
-        const fresh = await generateStyleFingerprint({ items, logs, plans, edits, apiKey });
+        const fresh = await generateStyleFingerprint({ items: wardrobe, logs, plans, edits, apiKey });
         if (fresh?.text) { setStyleFingerprint(fresh); sb.saveStyleFingerprint(fresh).catch(() => {}); }
       } catch { /* non-fatal — regenerate next session */ }
     };
@@ -942,7 +949,7 @@ export default function App() {
   // pieces — not regenerate the same outfit.
   const buildSimilarLook = useCallback((log) => {
     const ids = log?.garment_ids || [];
-    const wear = ids.map(id => items.find(it => it.id === id)).filter(Boolean);
+    const wear = ids.map(id => wardrobe.find(it => it.id === id)).filter(Boolean);
     const silhouetteParts = wear.map(it => {
       const sub = (it.subcategory || it.category || "").toLowerCase().trim();
       const color = (it.color || "").toLowerCase().trim();
@@ -966,7 +973,7 @@ export default function App() {
     if (wx) setWeather(new Set([wx]));
     setView("style");
     setStylePanelOpen(true);
-  }, [items, setView]);
+  }, [wardrobe, setView]);
 
   const isFav = useCallback((type, refId) =>
     favorites.some(f => f.type === type && f.reference_id === refId),
@@ -987,7 +994,7 @@ export default function App() {
   const { recentItems, uncategorized } = useMemo(() => {
     const now = Date.now();
     const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
-    const stamped = closetItems
+    const stamped = available
       .map(it => ({ it, t: it.created_at ? Date.parse(it.created_at) : NaN }))
       .filter(x => Number.isFinite(x.t) && now - x.t < TWO_WEEKS)
       .sort((a, b) => b.t - a.t);
@@ -996,9 +1003,9 @@ export default function App() {
       // True uncategorized = missing top-level category. Subcategory is not
       // always available (Belts/Jumpsuits have no subcategory list in
       // taxonomy.js, so checking !it.subcategory left them stranded).
-      uncategorized: closetItems.filter(it => !it.category),
+      uncategorized: available.filter(it => !it.category),
     };
-  }, [closetItems]);
+  }, [available]);
 
   const toggleFav = useCallback(async (type, refId) => {
     const existing = favorites.find(f => f.type === type && f.reference_id === refId);
@@ -1030,8 +1037,8 @@ export default function App() {
         typeof item === "object" && item.id && ok(item)
       );
       // Only trust AI layout if every item has valid coordinates.
-      const allItems = (look.items || []).filter(i => typeof i === "object" && i.id);
-      if (coords.length < allItems.length || coords.length < 2) return null;
+      const wardrobe = (look.items || []).filter(i => typeof i === "object" && i.id);
+      if (coords.length < wardrobe.length || coords.length < 2) return null;
       return coords.map(item => ({ id: item.id, x: item.x, y: item.y, w: item.w, h: item.h }));
     })();
     return {
@@ -1097,7 +1104,7 @@ export default function App() {
       // Overlay calendar-derived wear so the stylist sees accurate last_worn
       // (drives the [RESTING] rediscovery tag). Falls back to the item as-is
       // when there's no wear record.
-      const itemsForStyling = applyWearStats(closetItems, wearStatsRef.current);
+      const itemsForStyling = applyWearStats(available, wearStatsRef.current);
       // Auto color pairs — in-fashion pairs her closet already supports,
       // merged alongside her hand-picked list (deterministic, zero AI calls).
       // She asked to stop having to type her own colors; this is that.
@@ -1110,7 +1117,7 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         stylePrefsWithAuto, loadAboutMe(), styleExcludes,
-        { feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
+        { wardrobe, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
           // Occasion memory inputs (roadmap A4) — raw rows already in state,
           // summarized to text lines inside generateOutfit (occasionMemory.js).
           outfitLogs: wearData.logs || [], lovedFeedback,
@@ -1190,7 +1197,7 @@ export default function App() {
 
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
-    if (closetItems.length < 3) { setStyleErr(`Add at least 3 items to this closet first (you have ${closetItems.length}).`); return; }
+    if (available.length < 3) { setStyleErr(`Add at least 3 items to this closet first (you have ${available.length}).`); return; }
     setStyling(true); setStyleErr(""); setOutfits(null);
     await generateAndAppendLooks(1, "fresh");
     setStyling(false);
@@ -1224,7 +1231,7 @@ export default function App() {
   }, [selectMode, isSetView, view]);
   const setGroupsRaw = isSetView ? (() => {
     const groups = {};
-    closetItems.filter(it => it.set_id).forEach(it => {
+    available.filter(it => it.set_id).forEach(it => {
       if (!groups[it.set_id]) groups[it.set_id] = [];
       groups[it.set_id].push(it);
     });
@@ -1282,7 +1289,7 @@ export default function App() {
     // nothing to say about them — the view is simply the closet's Misc items,
     // A→Z by name (miscItemsForCloset already sorts).
     if (isMiscView) return miscItems;
-    let base = closetItems;
+    let base = available;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
     // subcatMatches is L2-aware (2026-08-13): selecting "Hosiery"/"Skirts"
@@ -1338,7 +1345,7 @@ export default function App() {
       });
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
-  }, [closetItems, activeFilters, deferredSearch, isSetView, isMiscView, miscItems]);
+  }, [available, activeFilters, deferredSearch, isSetView, isMiscView, miscItems]);
 
   // Sync status indicator
   const syncLabel = syncStatus === "syncing" ? "⟳ syncing"
@@ -1353,8 +1360,8 @@ export default function App() {
   // each group the most-worn types lead. Falls back to the full static list
   // until items load. activeKeys keeps a toggled chip visible regardless.
   const filterChips = useMemo(
-    () => computeFilterChips(closetItems, wearData.stats || {}, styleExcludes),
-    [closetItems, wearData.stats, styleExcludes],
+    () => computeFilterChips(available, wearData.stats || {}, styleExcludes),
+    [available, wearData.stats, styleExcludes],
   );
 
   // Style Me generator — rendered on both Closet and Style views via
@@ -1519,7 +1526,7 @@ export default function App() {
       // whole point of tracking it.
       const misc = isMiscItem(item);
       return (
-        <ItemCard key={item.id} item={item} allItems={stylingItems}
+        <ItemCard key={item.id} item={item} wardrobe={wardrobe}
           onDelete={deleteItem}
           onEdit={handleEditItemCard}
           onDuplicate={dupTarget ? duplicateItem : undefined}
@@ -1580,8 +1587,8 @@ export default function App() {
           >
             <span style={s.brandMark}>✦</span>
             <span style={s.brandName}>ATELIER</span>
-            {closetItems.length > 0 && (
-              <span style={s.badge}>{closetItems.length}</span>
+            {available.length > 0 && (
+              <span style={s.badge}>{available.length}</span>
             )}
             {syncLabel && (
               <span
@@ -1688,7 +1695,8 @@ export default function App() {
             <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Atelier</h2>
           </div>
           <HomeView
-            items={closetItems}
+            items={available}
+            wardrobe={wardrobe}
             activeCloset={activeCloset}
             favorites={favorites}
             apiKey={apiKey}
@@ -1713,7 +1721,7 @@ export default function App() {
 
       {view === "closet" && (
         <div style={s.page}>
-          <FilterBar items={closetItems} activeFilters={activeFilters} onChange={setActiveFilters}
+          <FilterBar items={available} activeFilters={activeFilters} onChange={setActiveFilters}
             showMisc={miscItems.length > 0}/>
 
           {/* Global search bar */}
@@ -1751,7 +1759,7 @@ export default function App() {
 
           {/* Bulk "move to closet" — Select toggles a multi-select mode on
               the grids below; the sticky bottom bar does the actual move. */}
-          {!isSetView && closetItems.length > 0 && closets.length > 1 && (
+          {!isSetView && available.length > 0 && closets.length > 1 && (
             <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
               <button
                 style={selectMode ? {...s.chip, ...s.chipActive} : s.chip}
@@ -1822,8 +1830,8 @@ export default function App() {
               <SetEditModal
                 setId={editingSet}
                 meta={setsMeta[editingSet] || { name: "", tags: [] }}
-                groupItems={setMembers(stylingItems, editingSet, activeCloset.id)}
-                allItems={closetItems}
+                groupItems={setMembers(wardrobe, editingSet, activeCloset.id)}
+                wardrobe={available}
                 onSave={(data) => { updateSetMeta(editingSet, data); setEditingSet(null); }}
                 onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
                 onClose={() => setEditingSet(null)}
@@ -1879,7 +1887,7 @@ export default function App() {
 
           {/* Empty closet state — a closet holding nothing but Misc items is
               not "empty" while she's standing in the holding room. */}
-          {closetItems.length === 0 && !isMiscView && (
+          {available.length === 0 && !isMiscView && (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
               <p style={s.emptyText}>This closet is empty — add your first piece.</p>
@@ -1941,7 +1949,7 @@ export default function App() {
       {view === "edit" && editItem && (
         <EditItemView
           item={editItem}
-          allItems={stylingItems}
+          wardrobe={wardrobe}
           closets={closets}
           setsMeta={setsMeta}
           onSaveSetMeta={updateSetMeta}
@@ -1961,7 +1969,7 @@ export default function App() {
       {/* ── LOOKS ── */}
       {view === "style" && manualBuilderOpen && (
         <SilhouetteBuilder
-          items={builderItems}
+          items={builderPool}
           setsMeta={setsMeta}
           apiKey={apiKey}
           initialLook={editingPlan ? {
@@ -1997,7 +2005,7 @@ export default function App() {
                 const savedIds = log.garment_ids || [];
                 const seedSet = new Set(seedIds);
                 const savedSet = new Set(savedIds);
-                const byId = new Map(items.map(it => [it.id, it]));
+                const byId = new Map(wardrobe.map(it => [it.id, it]));
                 const removed = seedIds.filter(id => !savedSet.has(id)).map(id => byId.get(id)).filter(Boolean);
                 const added = savedIds.filter(id => !seedSet.has(id)).map(id => byId.get(id)).filter(Boolean);
                 const addedBySlot = new Map();
@@ -2149,7 +2157,7 @@ export default function App() {
             </div>
           )}
           {outfits && outfits.map((look, i) => (
-            <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} items={closetItems}
+            <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} wardrobe={wardrobe}
               onEditItem={handleEditItemCard}
               onEditInBuilder={(lk) => {
                 const ids = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
@@ -2242,7 +2250,7 @@ export default function App() {
 
       {/* ── COLOR ADVISOR ── */}
       {view === "color" && (
-        <ColorAdvisorView items={closetItems} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <ColorAdvisorView items={available} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── PLANNER (F3) ── */}
@@ -2253,8 +2261,8 @@ export default function App() {
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
           <PlannerWrapper
-            items={closetItems}
-            allItems={stylingItems}
+            available={available}
+            wardrobe={wardrobe}
             closets={closets}
             activeCloset={activeCloset}
             onRefreshActiveTrip={refreshActiveTrip}
@@ -2293,7 +2301,7 @@ export default function App() {
       {/* ── SAVED (Looks / History / Favorites) ── */}
       {view === "favorites" && (
         <SavedView
-          items={closetItems}
+          wardrobe={wardrobe}
           apiKey={apiKey}
           favorites={favorites}
           toggleFav={toggleFav}
@@ -2419,12 +2427,12 @@ export default function App() {
 
       {/* ── INSIGHTS ── */}
       {view === "insights" && (
-        <StyleInsightsView items={closetItems} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <StyleInsightsView items={available} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── SHOPPING ── */}
       {view === "shop" && (
-        <ShoppingView items={closetItems} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <ShoppingView items={available} apiKey={apiKey} onBack={() => setView("settings")}/>
       )}
 
       {/* ── SETTINGS ── */}
@@ -2451,7 +2459,8 @@ export default function App() {
              pointer in Settings; placement "Inside Home" chosen by owner) ── */}
       {view === "profile" && (
         <StyleProfileView
-          items={closetItems}
+          items={available}
+          wardrobe={wardrobe}
           apiKey={apiKey}
           styleFingerprint={styleFingerprint}
           setStyleFingerprint={setStyleFingerprint}
@@ -2466,7 +2475,7 @@ export default function App() {
              on explicit tap inside the view) ── */}
       {view === "discovery" && (
         <BrandDiscoveryView
-          items={closetItems}
+          items={available}
           apiKey={apiKey}
           discovery={brandDiscovery}
           setDiscovery={setBrandDiscovery}
@@ -2476,7 +2485,7 @@ export default function App() {
 
       {view === "visionpilot" && (
         <VisionPilotView
-          items={closetItems}
+          items={available}
           apiKey={apiKey}
           onBack={() => setView("settings")}
           onEnriched={(id, vd) => setItems(prev => prev.map(it => it.id === id ? { ...it, vision_data: vd } : it))}

@@ -9,13 +9,14 @@
 // Run: npm run test:invariants
 
 import {
-  unreachableIds, classifyUnreachable, looksReachable, setsSplitAcrossClosets,
-  activeTripCarriesSomething, taxonomyAnomalies, miscLeaks, idOf,
+  unreachableIds, classifyUnreachable, looksReachable,
+  activeTripCarriesSomething, unknownSubcategories, miscLeaks, idOf,
 } from "../src/features/closet/poolInvariants.js";
 import { resolveVisibleWardrobe, poolIncluding } from "../src/features/closet/useVisibleWardrobe.js";
 import { swimPieceKind } from "../src/utils/item-helpers.js";
 import { setMembers, setMatesOf } from "../src/features/closet/setType.js";
-import { buildWardrobe, buildDuplicatedSet, buildMisfiledSet, everyTaxonomyPair, SHAPES, NYC_CLOSET, AZ_CLOSET }
+import { TAXONOMY, SUBCATEGORY_L3, ATHLEISURE_SUBCATEGORY_ALIASES } from "../src/constants/taxonomy.js";
+import { buildWardrobe, buildDuplicatedSet, buildMatchingSet, everyTaxonomyPair, SHAPES, NYC_CLOSET, AZ_CLOSET }
   from "./fixtures/build-wardrobe.mjs";
 
 let passed = 0, failed = 0;
@@ -165,31 +166,29 @@ section("coord sets: owned twice, one per room");
   // Asking the genuinely cross-room question is still possible, explicitly.
   assert(setMembers(items, setId, null).length === 4, "closetId=null asks across rooms, for the doctor");
 
-  // A duplicate pair is NOT an anomaly and must never be reported.
-  assert(setsSplitAcrossClosets(items).length === 0,
-    "the same set owned in both rooms is normal — reported as nothing");
-
   assert(setMembers(items, null).length === 0, "no set id → no members");
   assert(setMembers(null, setId).length === 0 && setMatesOf(null, nycTop).length === 0, "degenerate input");
   assert(setMatesOf(items, { id: "x" }).length === 0, "an item with no set has no mates");
 }
 
-// ── 5b. The one anomaly worth reporting ─────────────────────────────────────
-section("coord sets: a genuinely mis-filed set");
+// ── 5b. A cross-room set is NEVER reported ──────────────────────────────────
+// There was briefly a checker for "a set spanning both rooms that duplication
+// cannot explain". Run against the real wardrobe it found exactly one, and the
+// owner's answer was that it is not a fault: "it's just two pieces from the
+// same brand in the same color that I wear as a set because they match."
+//
+// The checker was deleted. These assertions stand in its place: her filing is
+// the specification, and a set is whatever she wears together.
+section("coord sets: her filing is the specification");
 {
-  const { setId, items } = buildMisfiledSet();
-  const found = setsSplitAcrossClosets(items);
-  assert(found.length === 1 && found[0].setId === setId,
-    "a cross-room set with NO duplicate link is reported — different products filed together");
-  assert(found[0].pieces === 3, "and counts every piece");
+  const { setId, items } = buildMatchingSet();
+  const nycBra = items.find(it => it.closet_id === NYC_CLOSET);
 
-  // Mixing both shapes: only the unexplained one surfaces.
-  const both = [...items, ...buildDuplicatedSet().items];
-  assert(setsSplitAcrossClosets(both).length === 1,
-    "with both shapes present, only the anomaly is reported");
-
-  assert(setsSplitAcrossClosets(buildWardrobe()).length === 0, "a single-room wardrobe reports nothing");
-  assert(setsSplitAcrossClosets([]).length === 0 && setsSplitAcrossClosets(null).length === 0, "degenerate input");
+  assert(setMembers(items, setId, NYC_CLOSET).length === 1, "the NYC half is one piece");
+  assert(setMembers(items, setId, AZ_CLOSET).length === 2, "the Arizona half is two");
+  assert(setMatesOf(items, nycBra).length === 0,
+    "a piece whose matches live in the other room has no mates HERE — correct, not a fault");
+  assert(setMembers(items, setId, null).length === 3, "and all three resolve when asked across rooms");
 }
 
 // ── 6. Regression: her real vocabulary (the swimsuit family) ────────────────
@@ -235,16 +234,46 @@ section("misc leaks");
   assert(miscLeaks([]).length === 0 && miscLeaks(null).length === 0, "degenerate input");
 }
 
-// ── 8. Taxonomy hygiene ─────────────────────────────────────────────────────
-section("taxonomy anomalies");
+// ── 8. Only a subcategory the app truly cannot place ────────────────────────
+// This check used to flag near-duplicate spellings and mixed blanks. Against
+// the real wardrobe it produced three findings and ALL THREE were false:
+// "Sports Bra" was already aliased on load, the two blank spellings are read
+// identically at all 25 sites, and the cross-room set was her own filing.
+// A check that is wrong every time trains you to ignore the one that matters.
+section("unknown subcategories only");
 {
-  const { nearDuplicates, blankStyles } = taxonomyAnomalies(wardrobe);
-  const flat = nearDuplicates.map(p => p.join("/"));
-  assert(flat.some(p => p.includes("Sports Bra") && p.includes("Sports Bras")),
-    "'Sports Bra' and 'Sports Bras' are flagged as one idea spelled two ways");
-  assert(blankStyles.includes("null") && blankStyles.includes("empty string"),
-    "both blank spellings are reported");
-  assert(taxonomyAnomalies([]).nearDuplicates.length === 0, "degenerate input");
+  const vocab = { taxonomy: TAXONOMY, l3: SUBCATEGORY_L3, aliases: ATHLEISURE_SUBCATEGORY_ALIASES };
+
+  // Her whole real vocabulary must come back clean — this is the regression
+  // that keeps the check from crying wolf again.
+  assert(unknownSubcategories(wardrobe, vocab).length === 0,
+    "every subcategory she actually uses is recognised — no false alarms");
+
+  // Blank, in both spellings, is legitimate and silent.
+  assert(unknownSubcategories([
+    { category: "Belts", subcategory: "" }, { category: "Belts", subcategory: null },
+  ], vocab).length === 0, "neither kind of blank is reported");
+
+  // An aliased legacy value is silent — the app folds it on load.
+  assert(unknownSubcategories([{ category: "Athleisure", subcategory: "Sports Bra" }], vocab).length === 0,
+    "a value with an alias is not reported — normalizeItem already folds it");
+
+  // A level-3 value stored as a subcategory is legitimate.
+  assert(unknownSubcategories([{ category: "Bottoms", subcategory: "Jeans" }], vocab).length === 0,
+    "a level-3 value is recognised — missing this tier would flag most of her Bottoms");
+
+  // What SHOULD be reported: nothing maps it, at any tier.
+  const found = unknownSubcategories([
+    { category: "Tops", subcategory: "Wingdings" },
+    { category: "Tops", subcategory: "Wingdings" },
+  ], vocab);
+  assert(found.length === 1 && found[0].subcategory === "Wingdings" && found[0].count === 2,
+    "a value nothing maps IS reported, with its count");
+
+  assert(unknownSubcategories([], vocab).length === 0, "degenerate input");
+  assert(unknownSubcategories(null, vocab).length === 0, "null wardrobe");
+  assert(unknownSubcategories([{ category: "Tops", subcategory: "X" }], {}).length === 1,
+    "an empty vocab reports rather than throwing");
 }
 
 // ── Result ──────────────────────────────────────────────────────────────────

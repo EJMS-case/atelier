@@ -2,7 +2,7 @@ import { useState } from "react";
 import { s, ss } from "../ui/styles.js";
 import { SET_TAGS } from "../constants/taxonomy.js";
 
-export default function SetEditModal({ setId, meta, groupItems, allItems, onSave, onDelete, onClose, onEditItem, onAddItem }) {
+export default function SetEditModal({ setId, meta, groupItems, wardrobe, onSave, onDelete, onClose, onEditItem, onAddItem }) {
   const [name, setName] = useState(meta.name || "");
   const [tags, setTags] = useState(meta.tags || []);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -17,7 +17,7 @@ export default function SetEditModal({ setId, meta, groupItems, allItems, onSave
   // Items currently assigned to a DIFFERENT set are still listed with a hint
   // so the user can reassign — picking them moves them into this set.
   const groupIds = new Set(groupItems.map(it => it.id));
-  const candidates = (allItems || []).filter(it => !groupIds.has(it.id));
+  const candidates = (wardrobe || []).filter(it => !groupIds.has(it.id));
   const filteredCandidates = candidates.filter(it => {
     if (!pickerQuery.trim()) return true;
     const q = pickerQuery.toLowerCase();

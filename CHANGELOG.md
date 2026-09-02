@@ -2,6 +2,100 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Saved looks called her Arizona pieces deleted — 2026-09-02
+
+### Why
+Owner, from NYC: *"In my saved pieces, atelier is pulling in saved outfits from Arizona and marking them as nonexistent. I assume it's the same in reverse. I thought you said it would be two totally separate closets?"* And: *"think bigger picture and plan ahead for things like this when making all changes moving forward."*
+
+Fair. This is the **fourth** appearance of one bug — a committed set of ids resolved against the closet-scoped pool — and the previous three fixes each stopped at the screen that was reported. The planner was clean; nothing else had been swept.
+
+### Fixed
+A saved look is a **record** of what she wore, and it can hold a piece from either room. Whether she can wear it *here* is a different question from whether it *exists*, and the app was answering the second with the first — then printing "no longer in your closet", which was simply false.
+
+Swept every site in the codebase that resolves committed ids, not just the reported one. Seven surfaces moved onto the wardrobe:
+
+- `SavedLookCard` (the reported one) and `LookCard`, plus the four views that feed them — `SavedView`, `LooksView`, `FavoritesView`, `OutfitHistory`.
+- `HomeView` — today's plan and the upcoming days. `items` stays scoped where the question really is "what's resting in **this** closet".
+- `StyleProfileView` — loved looks, used to suggest colour pairs.
+- `LookBackCard` — the recap of past looks.
+- `stylist.js` — her worn history and loved looks, which shape the AI's picture of her taste. The pick pool is unchanged; a new `extras.wardrobe` resolves the records. One resolve in that file is *correctly* scoped (the pieces she has selected right now) and is commented as such so it doesn't read as an oversight.
+
+The empty state now says pieces were **deleted from your wardrobe**, and only genuinely deleted pieces can reach it.
+
+### Also fixed — a bug this branch introduced
+`App` passed `items={available}` to `PlannerWrapper` after the prop was renamed, so `available` was **undefined** all the way down the planner chain. Opening a trip threw. `npm run build` passed and all twelve unit suites passed; the render walk missed it because its itinerary never opened a trip.
+
+### Changed — the render walk now refuses to pass vacuously
+Three of its checks were theatre, and validating them is what exposed it:
+
+- The Arizona-look check asserted the **absence of a message this same commit had reworded** — it could never fail. It now asserts the *piece is present by name*. Assert on what the user sees, never on a string you control.
+- The active closet wasn't pinned, so the app booted into Arizona and an Arizona piece was legitimately available — the premise of the assertion was never established. `atelier:active-closet:v1` is now seeded to NYC.
+- The trip check clicked the strip rather than its "View →", and a click that navigates nowhere reported a tick. It now fails if it can't find the affordance, and again if the trip screen doesn't mount.
+- The fixture trip is dated relative to today, because the calendar opens on the current month and a hard-coded trip silently drifts out of view.
+
+Each is validated by reintroducing the real bug: build green, twelve unit suites green, walk red.
+
+### Notes
+Two coord-set views were also repaired: a blanket rename had turned the `.items` **property** on outfit rows into `.wardrobe`. Caught by the walk.
+
+`npm test` 12 suites, `npm run build`, `npm run smoke` (blank-screen + eleven-screen walk) green. No migration.
+
+## [Unreleased] — The doctor was wrong three times out of three — 2026-09-02
+
+### Why
+Every finding `npm run doctor` produced against the real wardrobe turned out to be a false alarm. All three. Owner, on two of them:
+
+> *"Combine sports bra and sports bras. Moving forward be smarter about errors like that."*
+> *"The sets you noted aren't a misfire, it's just two pieces from the same brand in the same color that I wear as a set because they match."*
+
+A check that is wrong every time it speaks is worse than no check: it trains you to skim past the one that matters.
+
+### What each finding actually was
+- **"Sports Bra" vs "Sports Bras"** — `ATHLEISURE_SUBCATEGORY_ALIASES` has folded the singular into the plural inside `normalizeItem` since 2026-08-28, and that runs on every load. The app was never confused; only the stored value was stale, because migration 0023 rewrote the rows that existed then and *Twist Sports Bra* was created afterwards. My stated reason — "any code comparing this subcategory covers only half your rows" — was **wrong**.
+- **Belts blank two ways** (`""` on 11 rows, `null` on 3) — **nothing** in the codebase compares `subcategory` to either value. All 25 read sites coalesce with `|| ""`. Pure noise.
+- **A coord set spanning both closets** — her filing, not a fault. See her words above.
+
+### Changed
+- **`setsSplitAcrossClosets` deleted.** Zero true positives, one false positive on the only data that matters. The tests that replaced it assert her filing is the specification, so nobody re-adds it.
+- **`taxonomyAnomalies` → `unknownSubcategories`**, and it now reports only a value the app genuinely cannot place: no canonical entry at level 2 (`TAXONOMY`), none at level 3 (`SUBCATEGORY_L3` — "Jeans" and "Midi" are stored as subcategories but live a tier down), and no alias. Missing the L3 tier would have flagged most of her Bottoms and Shoes, which is the same mistake one layer deeper.
+- The blank-spelling check is gone entirely.
+
+### Fixed (data)
+- **Migration `0034`** folds the one remaining stored `"Sports Bra"` into `"Sports Bras"` — **applied live**; that subcategory is now a single bucket of 20. The rollback names the single affected row rather than reversing in bulk, which would wrongly demote the other 19.
+
+### Notes
+`npm run doctor` over the live 533-garment wardrobe now reports **no findings**, which is the honest answer. The checks that survive are the ones that caught something real: a saved look naming a piece the pool can't reach, an active trip carrying nothing, a suitcase naming a deleted garment, and a Misc leak.
+
+`pool-invariants` 53 → 56. Full `npm test`, `npm run build`, `npm run smoke` green.
+
+## [Unreleased] — One vocabulary for a set of clothes, and a test that renders the app — 2026-09-02
+
+### Why
+Owner: *"I want this working properly with the correct language for a set of clothes and everything else, every single time."*
+
+There were **thirteen** names for "a set of clothes" — `items`, `allItems`, `stylingItems`, `closetItems`, `builderItems`, `genItems`, `wardrobeAll`, `displayItems`, `pinPool`, `regenPool`, `tripPoolIds`, `packable`, `scoped` — and every serious bug of the week lived in that pile. Not because any single name was bad, but because none of them said **which question the array answers**, so the wrong array reached the wrong question and nothing complained.
+
+### Changed
+- **Two words, defined once** (header of `features/closet/useVisibleWardrobe.js`, restated at the top of App's state):
+  - **`wardrobe`** — everything she owns that can be styled, Misc always excluded. Answers *"does she own this?"*, so it RESOLVES anything already committed: a saved look's ids, a suitcase, a set's members, wear history.
+  - **`available`** — the active closet, or during a trip the destination closet plus what she's carrying. Answers *"may she pick this, here, now?"*, so it OFFERS choices: pickers, the grid, Style Me, generators.
+
+  A `<something>Pool` is an `available` widened for one surface, and its name says which: `builderPool`, `pinPool`, `tripPool`. **RESOLVE against the wardrobe. OFFER from what's available.** Renames: `stylingItems` → `wardrobe`, `closetItems` → `available`, `builderItems` → `builderPool`, `wardrobeAll` → `wardrobe`, `genItems` → `tripPool`, and the `allItems` prop → `wardrobe` at all 62 sites across nine files.
+- **Two deliberate exceptions, both documented at the point of use.** `items` in `App.jsx` stays the RAW persisted rows (Misc included) for the sync machinery and Settings' orphan scan — it styles nothing. And coord-set membership stays closet-scoped, because she owns the same set in both rooms.
+- **Three resolve-sites moved off the raw rows** onto `wardrobe`, which is what the vocabulary says they always meant: the style fingerprint, "build a similar silhouette", and the look-edit diff. All three were resolving committed ids against an array that still contained the holding room.
+
+### Added
+- **`npm run test:render`** (`scripts/render.test.mjs`) — loads the BUILT app in a headless browser **signed in**, with the whole Supabase REST layer mocked from the real-vocabulary fixture, and walks nine screens asserting each renders with no page error.
+
+  `npm run smoke` only ever loaded the **sign-in screen**, because `AuthGate` blocks the app until a session exists — so the closet, the planner, the trip views and the builder were verified by nothing at all. That is precisely where a rename like this one breaks: a bad identifier compiles fine and passes every unit assertion, then throws when the screen renders. The gate is opened by seeding a session under `lib/auth.js`'s `storageKey: "atelier:auth"`; nothing touches the real project.
+
+  **Validated by deliberately reintroducing the bug**: with one stale `items` reference back in `CalendarView`, `npm run build` passed, all twelve unit suites passed — and only the render harness failed, naming the screen and the `ReferenceError`. It now runs as part of `npm run smoke`.
+
+  The mock **honours PostgREST query filters**. The previous harness did not, and answered `trips?status=eq.active` with a *planning* trip, which put the whole app into trip mode against a trip that was not active. Returning "all rows for this table" is not a shortcut, it is a different app.
+
+### Notes
+No behaviour change beyond the three resolve-sites, no migration. Full `npm test` (12 suites), `npm run build`, `npm run smoke` (now smoke + render) green.
+
 ## [Unreleased] — A safety net under the pool rules — 2026-09-02
 
 ### Why

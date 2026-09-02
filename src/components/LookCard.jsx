@@ -10,7 +10,7 @@ import SaveLookModal from "./SaveLookModal.jsx";
 // SwapItemSheet were removed; the builder already does all of it with full
 // canvas control, and App diffs the result for the A1 "learn from her edits"
 // signal.
-export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem, onEditItem, onEditInBuilder }) {
+export default function LookCard({ look, wardrobe, onSaveLook, onRate, onStyleItem, onEditItem, onEditInBuilder }) {
   const [expanded,      setExpanded]      = useState(false);
   const [showSave,      setShowSave]      = useState(false);
   const [rated,         setRated]         = useState(0);
@@ -18,7 +18,10 @@ export default function LookCard({ look, items, onSaveLook, onRate, onStyleItem,
 
   // No pre-sort here: EditorialCollage sorts by the shared
   // CATEGORY_DISPLAY_ORDER (see utils/item-helpers.js).
-  const lookItems = resolveItemIds(items, look.items);
+  // Generated looks come from `available` by construction, but a look that
+  // has been edited or restored can hold a piece from the other room —
+  // resolving against the wardrobe costs nothing and cannot lie.
+  const lookItems = resolveItemIds(wardrobe, look.items);
 
   return (
     <div style={s.lookCard}>

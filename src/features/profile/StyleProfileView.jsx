@@ -30,7 +30,7 @@ const NEUTRAL_FAMILIES = new Set(["Black", "Gray", "Brown", "Neutrals", "White"]
 
 // Pairs of non-neutral color families that co-occur inside looks she LOVED,
 // most-frequent first, excluding pairs (in either order) already on her list.
-function suggestPairsFromLoved(lovedLooks, items, existingPairs) {
+function suggestPairsFromLoved(lovedLooks, wardrobe, existingPairs) {
   const existing = new Set(
     (existingPairs || []).map(p =>
       p.toLowerCase().split("+").map(x => x.trim()).sort().join("+")
@@ -39,7 +39,8 @@ function suggestPairsFromLoved(lovedLooks, items, existingPairs) {
   const counts = new Map();
   (lovedLooks || []).forEach(ll => {
     const fams = [...new Set(
-      resolveItemIds(items, ll.garment_ids)
+      // Loved looks are RECORDS — resolve against the wardrobe, not this closet.
+      resolveItemIds(wardrobe, ll.garment_ids)
         .map(it => familyForColorString(it.color || ""))
         .filter(f => f && !NEUTRAL_FAMILIES.has(f))
     )].sort();
@@ -58,7 +59,7 @@ function suggestPairsFromLoved(lovedLooks, items, existingPairs) {
 }
 
 export default function StyleProfileView({
-  items = [], apiKey, styleFingerprint, setStyleFingerprint,
+  items = [], wardrobe = [], apiKey, styleFingerprint, setStyleFingerprint,
   lovedLooks = [], logCount = null, onBack, onEditItem,
 }) {
   const [prefs, setPrefs] = useState(() => loadStylePrefs());
@@ -78,8 +79,8 @@ export default function StyleProfileView({
   };
 
   const suggestions = useMemo(
-    () => suggestPairsFromLoved(lovedLooks, items, prefs.colorPairs),
-    [lovedLooks, items, prefs.colorPairs],
+    () => suggestPairsFromLoved(lovedLooks, wardrobe.length ? wardrobe : items, prefs.colorPairs),
+    [lovedLooks, wardrobe, items, prefs.colorPairs],
   );
 
   // In-fashion pairs her closet already supports (auto-derived — she never

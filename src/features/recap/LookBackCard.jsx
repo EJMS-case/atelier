@@ -40,7 +40,7 @@ function monthLabel(startIso, endIso) {
   } catch { return "last 30 days"; }
 }
 
-export default function LookBackCard({ items, favorites = [], apiKey, plans: allPlans, onEditItem, onStyleItem }) {
+export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, plans: allPlans, onEditItem, onStyleItem }) {
   const todayIso = nyToday();
   const [period, setPeriod] = useState("month");
   const [stylish, setStylish] = useState(null);
@@ -124,7 +124,9 @@ export default function LookBackCard({ items, favorites = [], apiKey, plans: all
     }
   };
 
-  const piecesOf = (look) => resolveItemIds(items, look.itemIds);
+  // A past look is a record — resolve it against everything she owns, so a
+  // piece from the other closet reads as itself rather than as missing.
+  const piecesOf = (look) => resolveItemIds(wardrobe?.length ? wardrobe : items, look.itemIds);
 
   return (
     <section style={card}>

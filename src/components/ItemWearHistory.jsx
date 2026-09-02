@@ -38,9 +38,9 @@ function agoLabel(iso, today) {
 }
 
 // One outfit row: date/label line + a strip of the OTHER pieces in the look.
-function OutfitRow({ entry, item, allItems, today }) {
+function OutfitRow({ entry, item, wardrobe, today }) {
   const companions = sortByCategoryOrder(
-    resolveItemIds(allItems, entry.ids).filter(it => it.id !== item.id)
+    resolveItemIds(wardrobe, entry.ids).filter(it => it.id !== item.id)
   );
   const shown = companions.slice(0, MAX_THUMBS);
   const extra = companions.length - shown.length;
@@ -84,7 +84,7 @@ function OutfitRow({ entry, item, allItems, today }) {
   );
 }
 
-function Section({ label, entries, item, allItems, today }) {
+function Section({ label, entries, item, wardrobe, today }) {
   const [expanded, setExpanded] = useState(false);
   if (entries.length === 0) return null;
   const shown = expanded ? entries : entries.slice(0, PREVIEW_ROWS);
@@ -93,7 +93,7 @@ function Section({ label, entries, item, allItems, today }) {
       <div style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--color-text-muted)", marginBottom: 2 }}>
         {label} · {entries.length}
       </div>
-      {shown.map(e => <OutfitRow key={e.key} entry={e} item={item} allItems={allItems} today={today} />)}
+      {shown.map(e => <OutfitRow key={e.key} entry={e} item={item} wardrobe={wardrobe} today={today} />)}
       {entries.length > PREVIEW_ROWS && (
         <button onClick={() => setExpanded(x => !x)}
           style={{ background: "none", border: "none", padding: "6px 0 0", fontSize: 11, color: "var(--color-text-muted)", textDecoration: "underline", cursor: "pointer" }}>
@@ -104,7 +104,7 @@ function Section({ label, entries, item, allItems, today }) {
   );
 }
 
-export default function ItemWearHistory({ item, allItems, logs, plans }) {
+export default function ItemWearHistory({ item, wardrobe, logs, plans }) {
   const today = nyToday();
 
   const { worn, saved } = useMemo(() => {
@@ -155,8 +155,8 @@ export default function ItemWearHistory({ item, allItems, logs, plans }) {
           ? <>Worn <strong>{wearDays.size}</strong> day{wearDays.size !== 1 ? "s" : ""}{lastWorn ? <> · last {friendlyDate(lastWorn)}{agoLabel(lastWorn, today) ? ` (${agoLabel(lastWorn, today)})` : ""}</> : null}.</>
           : "Not worn yet — it appears in your saved looks below."}
       </p>
-      <Section label="WORN & PLANNED" entries={worn} item={item} allItems={allItems} today={today} />
-      <Section label="SAVED LOOKS" entries={saved} item={item} allItems={allItems} today={today} />
+      <Section label="WORN & PLANNED" entries={worn} item={item} wardrobe={wardrobe} today={today} />
+      <Section label="SAVED LOOKS" entries={saved} item={item} wardrobe={wardrobe} today={today} />
     </div>
   );
 }
