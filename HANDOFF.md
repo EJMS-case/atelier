@@ -1,11 +1,19 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-07**, after PR #226. The session log below is in merge
+Refreshed **2026-09-07**, after PR #227. The session log below is in merge
 order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
 per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
 preferences" down is older standing context: search it, don't read it through.
 
 ## Session log
+
+### 2026-09-07 · PR #227 — the other two surfaces that assemble outfits were capping her closet
+
+**Style Me is not the only place a look gets built**, and "is it pulling my whole closet" has to be answered for every surface that builds one. The closet sampler's caps were lifted long ago ("the user wanted every eligible piece in play"); **two surfaces never got the memo, and both were found by grepping for `.slice(` across the AI surfaces rather than by reasoning about them.**
+
+(1) **The builder's stylist chat capped every category at 40** — against her real closet that hid **89 of 462 pieces** (53 tops, 28 bottoms, 8 athleisure), *always the same ones*, because the cut is by array position and nothing sorts first. Cap removed. **The cost is genuinely cheap and this is why: that block is the CACHED system prefix**, byte-identical across turns, so the whole closet is written once per session and read at cache rates after — ~13.8k → ~17.2k tokens measured on her closet. (2) **The trip advisor's per-category caps were tuned for prompt size alone** and cut into her real Arizona trip: **Athleisure fell to the 4-item fallback with 19 in the closet, on a vacation**; Shoes 13 → 8; Dresses 10 → 8. Now a uniform 40 per category — a destination closet plus what she carries is ~100 pieces, so that is "all of it" in practice while still bounding a pathological pool. The ordering (CAT_ORDER, preferred/pinned pieces floated to the front) is untouched; only the cut changed, and the vestigial `CAT_CAP` table is deleted rather than left as an empty object.
+
+`evaluateLook` was checked and needed nothing — it takes the pool only for auto colour pairs, never as an inventory. **`availableReference` is now exported from builderChat for the test**; the assertion fails with the cap put back. **The general lesson for the next audit: `grep -rn "\.slice(0" src/lib/ai src/features` is the check for this class — a cap is invisible in behaviour and only ever shows up as "why doesn't it ever suggest X".**
 
 ### 2026-09-07 · PR #226 — 26 of her 29 coats and jackets were retry-bait in every hot pool
 
