@@ -311,3 +311,41 @@ test("filterByWeather: corduroy/bouclé/cape are out of Hot; light knits stay in
   assert.equal(filterByWeather([out[0]], "Cool (40-54°F)").length, 1, "corduroy is fine when it's cool");
   assert.equal(filterByWeather([out[3]], "Cool (40-54°F)").length, 1, "a cape is fine when it's cool");
 });
+
+// ── The prompt-side half of the policy, which nothing was checking ───────────
+// promptNotes() prefers `stylist_line` — the curated ≤200-char line migration
+// 0018 stores NEXT TO the (possibly long) notes. formatInventory gated the call
+// on `if (it.notes)`, so a piece carrying a stylist_line and NO notes reached
+// the model as a bare name: no fabric, no silhouette, no "work to weekend".
+//
+// That is 21 of her 462 NYC pieces, and they are among the best-described she
+// owns — the curation pass wrote the line and left notes empty. Audit,
+// 2026-09-07.
+test("inventory: a piece with a stylist_line and no notes still carries its description", () => {
+  const items = [
+    { id: "a", name: "Mini Bucket Bag", category: "Bags", subcategory: "Crossbody", color: "Black",
+      stylist_line: "Black leather mini bucket crossbody, red interior, gold hardware; work to weekend to travel, any season" },
+    { id: "b", name: "Ponte Pant", category: "Bottoms", subcategory: "Ponte", color: "Black", notes: "" },
+  ];
+  const inv = formatInventory(items, getSleeveType, {});
+  assert.match(inv, /red interior, gold hardware/,
+    "the curated stylist_line must reach the prompt even with notes empty");
+  const bagLine = inv.split("\n").find(l => l.includes("Mini Bucket Bag"));
+  assert.ok(bagLine.includes("work to weekend"), "the whole line rides, not a fragment");
+});
+
+test("inventory: stylist_line still outranks notes when BOTH are present", () => {
+  const inv = formatInventory([{
+    id: "c", name: "Ruffle Neck Top", category: "Tops", subcategory: "Blouses", color: "Black",
+    stylist_line: "Black woven blouse, ruffle-trim V-neck, layers under blazers",
+    notes: "PRODUCT COPY: ".padEnd(400, "marketing filler about other garments "),
+  }], getSleeveType, {});
+  assert.match(inv, /ruffle-trim V-neck/, "her curated line wins");
+  assert.ok(!inv.includes("marketing filler"), "product copy stays off the prompt body");
+});
+
+test("inventory: a piece with neither notes nor stylist_line adds no empty separator", () => {
+  const inv = formatInventory([{ id: "d", name: "Plain Tee", category: "Tops", subcategory: "T-Shirts", color: "White" }],
+    getSleeveType, {});
+  assert.ok(!/\|\s*$/.test(inv), "no trailing pipe from an empty notes slot");
+});

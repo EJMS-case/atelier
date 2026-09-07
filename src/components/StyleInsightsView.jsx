@@ -127,7 +127,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
           <div style={si.divider}/><div style={{...si.sectionLabel,marginBottom:8}}>WARDROBE ANCHORS</div>
           {analysis.wardrobeAnchors.map((a, i) => (
             <div key={i} style={si.insightRow}>
-              <div style={si.anchorThumb}>{a.item.image ? <img src={a.item.image} alt="" style={si.anchorImg}/> : <span style={{color:"var(--color-border-muted)"}}>{a.item.category?.[0]}</span>}</div>
+              <div style={si.anchorThumb}>{a.item.image ? <img src={a.item.image} alt="" loading="lazy" decoding="async" style={si.anchorImg}/> : <span style={{color:"var(--color-border-muted)"}}>{a.item.category?.[0]}</span>}</div>
               <div style={si.insightText}><strong>{a.item.name}</strong> — worn {a.count} times.</div>
             </div>
           ))}
@@ -159,7 +159,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
           {analysis.underutilized.map(item => {
             const days = item.last_worn ? Math.floor((Date.now() - new Date(item.last_worn).getTime()) / 86400000) : null;
             return (<div key={item.id} style={si.underutilCard}><div style={si.underutilImg}>
-              {item.image ? <img src={item.image} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{color:"var(--color-border-muted)",fontSize:22}}>{item.category?.[0]}</span>}
+              {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{color:"var(--color-border-muted)",fontSize:22}}>{item.category?.[0]}</span>}
             </div><div style={si.underutilMeta}><div style={{fontSize:10,letterSpacing:"0.1em",color:"var(--color-text-muted)"}}>{item.category}</div>
               <div style={{fontSize:12,marginTop:2}}>{item.name}</div>
               <div style={{fontSize:10,color:"var(--color-accent)",marginTop:3}}>{days ? `${days} days ago` : "Never worn"}</div>

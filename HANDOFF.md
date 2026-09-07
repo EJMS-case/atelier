@@ -1,11 +1,25 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-07**, after PR #224. The session log below is in merge
+Refreshed **2026-09-07**, after PR #225. The session log below is in merge
 order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
 per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
 preferences" down is older standing context: search it, don't read it through.
 
 ## Session log
+
+### 2026-09-07 · PR #225 — the audit: her whole closet, measured against the live rows
+
+Owner: *"Make sure it's pulling my whole closet to assemble outfits. Check every area necessary to make sure categories, weather, and notes are pulling correctly."* **Measured, not reasoned about**: her live 462-piece NYC closet was pulled down and run through the REAL sampler for all 45 occasion × weather cells.
+
+**The headline is that the closet promise holds. ZERO of her 462 pieces are unreachable** — every one reaches the stylist in at least one cell, pools run **228–426 items per cell** (Work/Mild 274, Casual/Warm 369, Vacation/Hot 373), and the `BUCKET_TARGETS: 9999` really do mean the whole surviving pool goes to the model. **Categories are 100% known** once `normalizeItem` runs — the one apparent miss, `Athleisure > Pants`, is already folded to `Leggings` by `ATHLEISURE_SUBCATEGORY_ALIASES`; **my first pass read raw rows and would have reported her data as wrong, which is the exact mistake CLAUDE.md warns about — normalize before you accuse.** Weather labels line up end to end. The id-index WeakMap cache is already in place, so 105 saved-look cards do not rebuild a 462-entry Map each. **Live integrity clean: 878 garment references across saved looks and planner rows, 0 dangling, 0 Misc leaks.**
+
+**The one real bug, and it was invisible: a curated `stylist_line` never reached the styling prompt when the piece had no `notes`.** `formatInventory` gated on `if (it.notes)` before calling `promptNotes()` — but `promptNotes` PREFERS `stylist_line`, the ≤200-char line migration 0018 stores *next to* the notes. **21 of her 462 pieces are exactly that shape and they are the best-described ones she owns** ("Black leather mini bucket crossbody, red interior, gold hardware; work to weekend to travel, any season" arrived as a bare name). **The lesson generalises: gate on what the accessor RETURNS, never on the raw field it might read from** — grep found this was the only such site, every other caller goes straight to `promptNotes`/`classifierNotes`.
+
+**Duplication removed, both of it the kind that drifts silently.** (1) The weather bucket ranges lived in THREE places — `styling-system-prompt` and `stylist.js` each carried inline `/warm|70-84/` regexes, private copies of `WEATHER_BUCKETS`; #218 swept exactly these out of the rest of the pipeline and these two survived. Both now call `weatherMatches`. (2) The heavy-fabric test existed **twice** and the winter-only test **three times**, byte-identical, under a comment asking whoever edits one to remember the others — now `WEATHER_HEAVY_RE` / `WEATHER_WINTER_ONLY_RE` in `item-helpers`, imported by validator and sampler. **Do NOT merge those with `filterByWeather`'s wider `isHeavyFabric`** (corduroy/bouclé/tweed/velvet): that one answers "should this be packed for a 103°F week" and is deliberately blunter.
+
+**Perf: the builder's slot picker rendered every image eagerly — 173 for TOP, 103 for BOTTOM against her closet.** Now lazy + async-decoded, like the closet grid already was; same for the colour-advisor audit list and the insights grids. **`npm run test:coverage-pool` is the audit made permanent** over her real vocabulary: every garment kind reachable somewhere, no cell too thin for the stylist (it throws below 5), the buckets still uncapped (a re-introduced `slice()` fails it), every weather bucket still producing a brief. All four validated by reintroducing the real regression. `npm test` is 35 suites.
+
+**Checked and deliberately left alone, so nobody re-opens them:** 74 of 132 tops/knits classify as sleeve `unknown` — that IS the design (unknown is never weather-excluded because she layers, and most are cardigans/pullovers). No dead exports (the four that scan as unused are the doctor's checks, used from `scripts/`). The 586 kB main bundle is React + `@supabase/supabase-js` + the shell — every view, the validator, the sampler and the imgly WASM are already split out, and the rest is the auth client CLAUDE.md keeps on purpose.
 
 ### 2026-09-07 · PR #224 — Saved now narrows itself to the closet she is standing in
 

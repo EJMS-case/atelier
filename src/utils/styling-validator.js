@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -468,8 +468,8 @@ function checkWeatherCompliance(response, idMap, allItems, weather, forceInclude
       // failing bottoms out of Hot/Warm. Curated notes keep full power.
       const text = ((resolved.name || "") + " " + classifierNotes(resolved) + " " + (resolved.subcategory || "") + " " + (resolved.material || "")).toLowerCase();
       const sw = (resolved.season_weight || "").toLowerCase();
-      const heavy = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i.test(text);
-      const winterOnly = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(text);
+      const heavy = WEATHER_HEAVY_RE.test(text);
+      const winterOnly = WEATHER_WINTER_ONLY_RE.test(text);
       // For cool/cold: reject pieces that genuinely can't be worn into warmth.
       // Tanks/sleeveless tops are intentionally NOT here — the user layers them
       // under blazers and knits, so a tank as a cold-weather base is fine. Only
