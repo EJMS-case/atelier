@@ -1969,7 +1969,7 @@ export default function App() {
       {/* ── LOOKS ── */}
       {view === "style" && manualBuilderOpen && (
         <SilhouetteBuilder
-          items={builderPool}
+          builderPool={builderPool}
           setsMeta={setsMeta}
           apiKey={apiKey}
           initialLook={editingPlan ? {
@@ -2303,6 +2303,7 @@ export default function App() {
         <SavedView
           wardrobe={wardrobe}
           available={available}
+          setsMeta={setsMeta}
           apiKey={apiKey}
           favorites={favorites}
           toggleFav={toggleFav}

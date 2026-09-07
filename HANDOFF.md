@@ -1,11 +1,21 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-02**, after PR #222. The session log below is in merge
+Refreshed **2026-09-07**, after PR #223. The session log below is in merge
 order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
 per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
 preferences" down is older standing context: search it, don't read it through.
 
 ## Session log
+
+### 2026-09-07 · PR #223 — tapping Edit on a saved outfit opened an empty builder
+
+Owner, from her phone: *"I am editing a saved outfit"*, with a screenshot of the look and a screenshot of what Edit gave her — **blank canvas, every slot chip reading `+`, nothing in the picker**. `SilhouetteBuilder` reads its pool from a prop; **the pool-vocabulary rename (#217) renamed that prop at the call site and not in the component**, so `LooksView` and `OutfitHistory` both passed `wardrobe={…}` to a signature that says `items`. **React does not check prop names** — the component ran with its pool `undefined`, the look's ids resolved against nothing, every picker list filtered nothing, and the screen rendered *perfectly*, empty. Build green, 32 suites green, render walk green: **the walk never opened the builder.** Every route into the builder from Saved was dead, not just Edit (Build a Look, History → Edit); Style Me's was fine, which is what made it read as a Saved-tab bug rather than a builder bug. **Her looks were never at risk** — Save is disabled below two pieces, so the empty builder could not write an empty look back.
+
+**The fix is the family, not the screen.** The prop is now **`builderPool`** — the name the vocabulary already gives it (an `available` widened for one surface) — documented in the signature, and all three call sites pass it. `LooksView` and `OutfitHistory` now build that pool the way App.jsx does: `poolIncluding(available, wardrobe, <ids of the look being edited>)`. **Both halves are load-bearing**: the widening keeps an out-of-closet piece on the canvas (and stops Save writing the thinned look back — that is #215's bug), the `available` base stops the swap sheet offering pieces that are 2,000 miles away. `available` + `setsMeta` are threaded through `SavedView` to reach them.
+
+**`npm run test:props` is the new standing check, and it is the point of this PR.** It pairs every JSX call site of a local component against that component's declared props, **both ways**: a prop passed that the component never reads (this bug), and a no-default prop that no call site ever passes (its mirror — it found a dead `wardrobe` param on `StyleInsightsView`, now gone). 64 call sites, 46 components, ~0.1s, no dependencies. **It fails on a call site it cannot parse rather than skipping it**, and prints its own blind spot (6 components taking props whole or with a rest, 0 spread call sites) so the coverage cannot quietly rot — an earlier draft of the scanner ran off the end of a file on an apostrophe inside a comment and silently reported that call site clean, which is exactly the failure mode this repo keeps re-learning. Comments are stripped before scanning; the unparsed bucket exists so that can never pass silently again.
+
+The render walk now **opens the builder** (11 screens): Edit must land the look in its slots and on the canvas, and the picker must offer the wardrobe *including the look's own out-of-closet piece* — which also pins the widening. Plus a runtime guard in the builder: no pool → a console error, which the walk fails on. **All three validated by reintroducing the real bug**: build passes, 33 unit suites pass, all three go red. **The lesson to carry: the render walk is only as good as its itinerary — #217 wrote that sentence in this very file and the builder still wasn't on it. When you add a screen or a modal, add the step; when you rename a prop, `npm run test:props` is now the grep you were going to forget.**
 
 ### 2026-09-02 · PR #222 — saved looks can be narrowed to what she can actually wear
 

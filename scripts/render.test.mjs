@@ -244,6 +244,54 @@ await check("Saved: a look made in Arizona still shows its pieces from NYC", asy
   }
 });
 
+// ── The builder, opened from Saved ───────────────────────────────────────────
+// Her report of 2026-09-07: tapping Edit on a saved outfit opened a builder
+// with a blank canvas and a picker offering nothing. The cause was a prop
+// renamed at the call site and not in the component (#217), so the pool
+// arrived as `undefined` — no crash, no failing suite, five days live.
+//
+// Two checks, because the two halves fail independently: the look must LAND in
+// its slots, and the pool must OFFER the wardrobe (including the look's own
+// out-of-closet piece, which is the widening App.jsx documents).
+await check("Saved → Edit opens the builder ON the look, not on a blank canvas", async () => {
+  await clickText("button", "Edit");
+  await page.waitForTimeout(1400);
+  const state = await page.evaluate(() => ({
+    mounted: /BUILD A LOOK/.test(document.body.innerText),
+    filledChip: [...document.querySelectorAll("button")]
+      .map(b => (b.textContent || "").trim())
+      .find(t => /(\u2713|\u00d7\d+)$/.test(t)) || "",
+    onCanvas: document.querySelectorAll("[data-resize]").length,
+  }));
+  if (!state.mounted) throw new Error("Edit did not open the builder");
+  if (!state.filledChip) throw new Error("every slot chip reads empty — the look's pieces never resolved in the builder's pool");
+  if (state.onCanvas < 1) throw new Error("the canvas holds no pieces — the look opened blank");
+});
+
+await check("Saved → the builder's picker offers the wardrobe, the look's own piece included", async () => {
+  const opened = await page.evaluate(() => {
+    const chip = [...document.querySelectorAll("button")]
+      .find(b => /(\u2713|\u00d7\d+)$/.test((b.textContent || "").trim()));
+    if (!chip) return false;
+    chip.click(); return true;
+  });
+  if (!opened) throw new Error("no filled slot chip to open the picker with");
+  await page.waitForTimeout(700);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (/No items in this category/.test(text)) {
+    throw new Error("the picker is empty — the builder was handed no pool");
+  }
+  if (!text.toLowerCase().includes(AZ_LOOK_PIECE.toLowerCase())) {
+    throw new Error(`"${AZ_LOOK_PIECE}" is missing from its own look's picker — the pool was not widened by the look's ids`);
+  }
+  // Leave the builder so the remaining screens start from the Saved list.
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .filter(b => /^\u2190\s*Back$/.test((b.textContent || "").trim()))
+      .pop()?.click();
+  });
+});
+
 await check("Inspo", tab("Inspo"));
 await check("Style Me", tab("Style Me"));
 // Opening a trip is what dereferences `available` down the planner chain. The

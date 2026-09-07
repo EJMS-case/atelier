@@ -110,7 +110,19 @@ const DEFAULT_POSITIONS = {
 };
 
 export default function SilhouetteBuilder({
-  items,
+  // ── builderPool — an `available`, widened for this surface ────────────────
+  // Everything the canvas may HOLD and the picker may OFFER. Callers build it
+  // with poolIncluding(available, wardrobe, <the ids of the look being
+  // edited>): the closet she is standing in, plus the pieces the look already
+  // commits to, so opening an Arizona look from NYC neither hides half of it
+  // nor deletes that half on save.
+  //
+  // It is REQUIRED. Passing it under any other name leaves it undefined and
+  // every derived list empty — a builder that renders perfectly with a blank
+  // canvas and a picker offering nothing, which is what shipped for five days
+  // after the pool-vocabulary rename touched two call sites and not this
+  // signature. scripts/prop-contract.test.mjs now fails on that mismatch.
+  builderPool,
   setsMeta = {},
   onSave,
   onFavoriteLook,
@@ -126,6 +138,16 @@ export default function SilhouetteBuilder({
   initialSaveMode = "looks",
   initialScheduleDate = null,
 }) {
+  // Belt to the prop-contract check's braces. A caller that renames or forgets
+  // the pool leaves every derived list empty and the builder renders a blank
+  // canvas over a picker with nothing in it — no crash to notice. This says so
+  // out loud, and scripts/render.test.mjs fails the walk on any console error.
+  useEffect(() => {
+    if (!builderPool) {
+      console.error("SilhouetteBuilder: no builderPool prop — the canvas and the picker will both be empty.");
+    }
+  }, [builderPool]);
+
   // Pre-populate selections / name / occasion when editing an existing log.
   // We distribute the log's garment_ids back into slots by matching each
   // item's category against the slot's `match` predicate, in slot order. An
@@ -135,7 +157,7 @@ export default function SilhouetteBuilder({
     if (!initialLook?.garment_ids) return {};
     const out = {};
     for (const id of initialLook.garment_ids) {
-      const it = (items || []).find(i => i.id === id);
+      const it = (builderPool || []).find(i => i.id === id);
       if (!it) continue;
       const slot = SLOTS.find(s => s.match(it));
       if (!slot) continue;
@@ -162,7 +184,7 @@ export default function SilhouetteBuilder({
     const fitted = new Set();
     for (const entry of arr) {
       if (!entry || !entry.id) continue;
-      const it = (items || []).find(i => i.id === entry.id);
+      const it = (builderPool || []).find(i => i.id === entry.id);
       if (!it) continue;
       const slot = SLOTS.find(s => s.match(it));
       if (!slot) continue;
@@ -320,11 +342,11 @@ export default function SilhouetteBuilder({
   // resolved per item against its OWN category.
   const subcatsForSlot = useMemo(() => {
     const def = SLOTS.find(s => s.key === activeSlot);
-    const all = (items || []).filter(it => def?.match(it));
+    const all = (builderPool || []).filter(it => def?.match(it));
     return [...new Set(all
       .map(it => it.subcategory ? (getSubcatL2(it.category, it.subcategory) || it.subcategory) : "")
       .filter(Boolean))].sort();
-  }, [activeSlot, items]);
+  }, [activeSlot, builderPool]);
 
   // The L2 chip the current filter lives under (the filter itself when it IS
   // an L2; its parent when it's a child), and that parent's owned children.
@@ -332,25 +354,25 @@ export default function SilhouetteBuilder({
     ? (subcatsForSlot.includes(subcatFilter)
         ? subcatFilter
         : subcatsForSlot.find(p =>
-            (items || []).some(it => getL3Options(it.category, p).includes(subcatFilter))) || "")
+            (builderPool || []).some(it => getL3Options(it.category, p).includes(subcatFilter))) || "")
     : "";
   const subcatChildren = useMemo(() => {
     if (!subcatParent) return [];
     const def = SLOTS.find(s => s.key === activeSlot);
-    const all = (items || []).filter(it => def?.match(it));
+    const all = (builderPool || []).filter(it => def?.match(it));
     // getL3Options is category-aware, resolved per item against its OWN
     // category (slots span categories): an Athleisure "Skirts" row yields no
     // children — the Mini/Midi/Maxi axis belongs to Bottoms alone.
     const l3s = [...new Set(all.flatMap(it => getL3Options(it.category, subcatParent)))];
     return l3s.filter(l3 => all.some(it => it.subcategory === l3));
-  }, [activeSlot, items, subcatParent]);
+  }, [activeSlot, builderPool, subcatParent]);
 
   // Slot pool split into core wardrobe + comfortwear (Athleisure/Loungewear).
   // Comfort pieces render behind a collapsed section at the end of the grid
   // (owner request 2026-08-12) — present, never leading.
   const poolForSlot = useMemo(() => {
     const def = SLOTS.find(s => s.key === activeSlot);
-    let pool = (items || []).filter(it => def?.match(it));
+    let pool = (builderPool || []).filter(it => def?.match(it));
     // subcatMatches is L2-aware: a parent chip ("Skirts", "Heels") includes
     // every row filed under its L3 children; a child chip matches literally.
     if (subcatFilter) pool = pool.filter(it => subcatMatches(it, subcatFilter));
@@ -364,7 +386,7 @@ export default function SilhouetteBuilder({
       );
     }
     return { core: pool.filter(it => !isComfortItem(it)), comfort: pool.filter(isComfortItem) };
-  }, [activeSlot, items, search, subcatFilter]);
+  }, [activeSlot, builderPool, search, subcatFilter]);
 
   // The comfort section opens itself while she's actively narrowing — a
   // search, or a subcategory chip whose matches are all comfortwear (e.g.
@@ -383,7 +405,7 @@ export default function SilhouetteBuilder({
 
   const coordSets = useMemo(() => {
     const groups = new Map();
-    (items || []).forEach(it => {
+    (builderPool || []).forEach(it => {
       if (!it.set_id) return;
       if (!groups.has(it.set_id)) groups.set(it.set_id, []);
       groups.get(it.set_id).push(it);
@@ -398,13 +420,13 @@ export default function SilhouetteBuilder({
         label: setsMeta?.[setId]?.name
           || `Set · ${[...new Set(members.map(m => m.subcategory || m.category).filter(Boolean))].slice(0, 3).join(" + ")}`,
       }));
-  }, [items, setsMeta]);
+  }, [builderPool, setsMeta]);
 
   // category="Sets" one-piece items that aren't part of a coordinated group —
   // still individually pickable (a co-ord photographed as a single garment).
   const singleSetItems = useMemo(
-    () => (items || []).filter(it => it.category === "Sets" && !it.set_id),
-    [items]
+    () => (builderPool || []).filter(it => it.category === "Sets" && !it.set_id),
+    [builderPool]
   );
 
   const setEntries = useMemo(() => {
@@ -453,13 +475,13 @@ export default function SilhouetteBuilder({
   // ~470-item closet per selection per render, and drag/resize renders fire
   // continuously.
   const pickedItems = useMemo(() => {
-    const byId = itemIdIndex(items || []);
+    const byId = itemIdIndex(builderPool || []);
     return Object.entries(selections).flatMap(([slot, ids]) =>
       asArray(ids)
         .map(id => ({ slot, item: byId.get(String(id)) }))
         .filter(x => x.item)
     );
-  }, [selections, items]);
+  }, [selections, builderPool]);
 
   // Toggle helper. Multi-slots accumulate; single-slots replace.
   const togglePick = (slot, id) => {
@@ -650,7 +672,7 @@ export default function SilhouetteBuilder({
       const reply = await sendBuilderMessage({
         messages: next,
         assembledItems: pickedItems.map(p => p.item),
-        available: items,
+        available: builderPool,
         emptySlots,
         // The builder chips ARE the brief — the stylist should never ask
         // where she's going when Work is already selected.
@@ -685,7 +707,7 @@ export default function SilhouetteBuilder({
       const result = await evaluateLook(pickedItems.map(p => p.item), apiKey, {
         occasions: asArray(occasions),
         weathers: asArray(weathers),
-        available: items,
+        available: builderPool,
       });
       setEvaluation(result);
     } catch (err) {

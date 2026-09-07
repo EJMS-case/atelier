@@ -6,7 +6,7 @@ import FavoritesView from "./FavoritesView.jsx";
 import SearchInput from "./SearchInput.jsx";
 import { LookSearchContext } from "./SavedLookCard.jsx";
 
-export default function SavedView({ wardrobe, available, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar }) {
+export default function SavedView({ wardrobe, available, setsMeta, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar }) {
   // The Wear tab and its metrics (most-worn / neglected / cost-per-wear) moved
   // to the Home dashboard. Saved is now strictly: All your saved looks,
   // History (with subcategories), and Favorites.
@@ -30,12 +30,14 @@ export default function SavedView({ wardrobe, available, favorites, toggleFav, o
       )}
       <LookSearchContext.Provider value={tab === "history" ? "" : searchQ}>
       {tab === "looks" && (
-        <LooksView wardrobe={wardrobe} available={available} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar}/>
+        <LooksView wardrobe={wardrobe} available={available} setsMeta={setsMeta} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar}/>
       )}
       {tab === "history" && (
         <OutfitHistory
           nested
           wardrobe={wardrobe}
+          available={available}
+          setsMeta={setsMeta}
           apiKey={apiKey}
           onWearAgain={onWearAgain}
           onDelete={onDeleteLog}
