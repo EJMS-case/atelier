@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -517,11 +517,11 @@ function checkWeatherCompliance(response, idMap, allItems, weather, forceInclude
         // Previously the validator hard-failed ANY Outerwear in hot while the
         // sampler kept offering these pieces and the prompt banned them — a
         // three-way contradiction that burned retries.
-        const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(
+        const isLightOuter = LIGHT_OUTER_RE.test(
           ((resolved.name || "") + " " + classifierNotes(resolved) + " " + (resolved.material || "")).toLowerCase()
         );
         if (resolved.subcategory === "Coats") {
-          const isHeavyCoat = /wool|cashmere|shearling|sherpa|puffer|parka|down|quilted|long|heavy/i.test(text);
+          const isHeavyCoat = HEAVY_COAT_RE.test(text);
           if ((isHot && !isLightOuter) || isHeavyCoat) {
             failures.push(`Look ${i + 1}: "${resolved.name}" (Coats) is wrong for ${weather} — pick lighter.`);
           }
@@ -534,7 +534,7 @@ function checkWeatherCompliance(response, idMap, allItems, weather, forceInclude
         // "linen|cotton|unstructured" in its text, which combined with the
         // HC_SHOULDER rule produced unsatisfiable Work + Warm validations.
         if (resolved.category === "Outerwear") {
-          const isHeavyOuter = /parka|puffer|sherpa|shearling|fleece|down|quilted|overcoat|peacoat|long\s*wool|heavy/i.test(text);
+          const isHeavyOuter = HEAVY_OUTER_RE.test(text);
           if (isHot && !isLightOuter) {
             failures.push(`Look ${i + 1}: "${resolved.name}" is outerwear without an explicitly lightweight/unlined fabric — wrong for ${weather}. Only genuinely light linen/cotton layers work in this heat; otherwise skip the layer entirely.`);
           } else if (!isHot && isHeavyOuter) {

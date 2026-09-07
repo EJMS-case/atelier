@@ -1,11 +1,21 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-07**, after PR #225. The session log below is in merge
+Refreshed **2026-09-07**, after PR #226. The session log below is in merge
 order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
 per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
 preferences" down is older standing context: search it, don't read it through.
 
 ## Session log
+
+### 2026-09-07 · PR #226 — 26 of her 29 coats and jackets were retry-bait in every hot pool
+
+Fell out of the audit's consolidation: having made the sampler and validator SHARE the weather regexes (#225), asserting the two actually agreed turned up a disagreement the sharing had not fixed. **The step-3a pool gate skipped Outerwear entirely** — "Outerwear has its own conditional rules, leave those to the validator" — **and those rules are not conditional.** `checkWeatherCompliance` rejects ANY non-light outerwear in Hot, and heavy outerwear / heavy coats in Warm, 100% of the time. Measured on her live closet: **26 of her 29 outerwear pieces sat in every Hot pool** and 7 heavy coats in every Warm one, each one rejected every single time it was picked.
+
+**This is the boots-in-summer bug (2026-08-05) in the bucket next door**, with the same second-order harm the sampler's own comments name as the starvation lesson: a piece that can never be suggested never accrues a suggestion count, so it stays eternally *fresh* and **leads** the outerwear bucket's freshness ordering — pushing the three layers she CAN wear in the heat down the inventory behind twenty-six she can't. **When you find a never-suggestible piece in a pool, check the bucket ordering too; that is where it does the real damage.**
+
+The gate now mirrors both validator rejections exactly, off the shared constants (`LIGHT_OUTER_RE` — the fourth duplicated fabric regex, written out twice under the comment describing the last three-way contradiction — plus new `HEAVY_OUTER_RE` / `HEAVY_COAT_RE`). Hot pools drop ~25, Warm ~7, and **nothing becomes unreachable**: every coat is still in play in Mild/Cool/Cold, which the coverage sweep asserts. **The escape hatches still run after the gate and are untouched** — an active "Include Blazers" toggle re-unions up to MIN_INCLUDE removed members, and an explicitly named piece still returns.
+
+`npm run test:coverage-pool` now pins the agreement in BOTH directions: the Hot pool must keep the light jacket the validator accepts and drop the wool coat it rejects (that second one failed before the fix). **Timing, measured over her real 462 pieces: `sampleClosetItems` ~4.8 ms, `formatInventory` ~0.9 ms — the hot path is not a problem, so don't go optimising it.**
 
 ### 2026-09-07 · PR #225 — the audit: her whole closet, measured against the live rows
 

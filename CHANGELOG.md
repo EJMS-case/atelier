@@ -2,6 +2,52 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — 26 of her 29 coats and jackets were retry-bait in every hot pool — 2026-09-07
+
+### Why
+The audit (previous entry) consolidated the weather regexes; asserting the two
+sides then AGREED turned up something the consolidation had not: the sampler's
+pool gate and `checkWeatherCompliance` disagree about outerwear, and have all
+along.
+
+The gate skipped Outerwear on the grounds that "Outerwear has its own
+conditional rules — leave those to the validator". Those rules are not
+conditional. In Hot the validator rejects **any** outerwear that isn't
+explicitly light; in Warm it rejects heavy outerwear and heavy coats. Measured
+against her live closet: **26 of her 29 outerwear pieces sat in every Hot pool**,
+each rejected 100% of the time it was picked, and 7 heavy coats did the same in
+Warm.
+
+That is the boots-in-summer bug (2026-08-05) in the bucket next door, and it
+carries the same second-order harm the sampler's own comments call the
+starvation lesson: a piece that can never be suggested never accrues a
+suggestion count, so it stays eternally "fresh" and **leads** the outerwear
+bucket's freshness ordering — pushing the three layers she can actually wear in
+the heat down the inventory behind twenty-six she can't.
+
+### Fixed
+- The step-3a gate now mirrors `checkWeatherCompliance`'s two outerwear
+  rejections exactly, using the same shared constants. Hot pools drop ~25
+  pieces, Warm ~7. **Nothing becomes unreachable** — every coat is still in play
+  in Mild, Cool and Cold, which the coverage sweep asserts.
+- The escape hatches are untouched and still run after the gate: an active
+  "Include Blazers" toggle still re-unions up to `MIN_INCLUDE` removed members,
+  and an explicitly named piece still returns.
+
+### Changed
+- `HEAVY_OUTER_RE`, `HEAVY_COAT_RE` and `LIGHT_OUTER_RE` join the shared weather
+  constants in `item-helpers`. `LIGHT_OUTER_RE` was the fourth duplicated
+  fabric regex — written out twice, identically, under the validator comment
+  describing the last time these two disagreed ("a three-way contradiction that
+  burned retries").
+
+### Notes
+- Two assertions in `npm run test:coverage-pool` now pin the agreement in both
+  directions: the Hot pool must KEEP the light jacket the validator accepts, and
+  DROP the wool coat it rejects. The second one failed before this fix.
+- Timing, measured over her real 462-piece closet: `sampleClosetItems` ~4.8 ms,
+  `formatInventory` ~0.9 ms per generation. The hot path is not a problem.
+
 ## [Unreleased] — Audit: the whole closet, measured against the live rows — 2026-09-07
 
 ### Why
