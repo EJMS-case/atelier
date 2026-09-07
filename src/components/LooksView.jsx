@@ -10,7 +10,9 @@ import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
 import ConfirmRemove from "./ConfirmRemove.jsx";
-import { isLookWearableNow, poolIncluding } from "../features/closet/useVisibleWardrobe.js";
+import { poolIncluding } from "../features/closet/useVisibleWardrobe.js";
+import { countScopes, filterToScope, resolveScope } from "../features/closet/lookScope.js";
+import ScopeChips from "./ScopeChips.jsx";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
@@ -37,15 +39,11 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
   // (unworn + unscheduled) with one tap; "Worn" shows only worn looks.
   const [filterStatus, setFilterStatus] = useState("All");
   // Where she is standing. Saved looks are a HISTORY — both closets, always,
-  // because a look resolves against the wardrobe — but the list conflates
-  // "what have I worn?" with "what can I wear now?". This chip separates them.
-  //
-  // It DEFAULTS TO "All looks", and that is not timidity: hiding saved looks by
-  // default is a mistake this app has already made once ("the old behavior of
-  // filtering them out made saved outfits look lost", above), and the render
-  // walk asserts an Arizona look still shows its pieces from NYC. So the list
-  // stays whole and the chip narrows it, rather than the reverse.
-  const [filterScope, setFilterScope] = useState("All looks");
+  // because a look RESOLVES against the wardrobe — but the list conflates
+  // "what have I worn?" with "what can I wear now?". This chip separates them,
+  // and `null` means she hasn't chosen: see resolveScope() for what an
+  // unchosen scope defaults to and why it is allowed to hide anything at all.
+  const [filterScope, setFilterScope] = useState(null);
   const [showBuilder, setShowBuilder] = useState(false);
   // Garment-set signatures for every outfit currently pinned on the planner —
   // used to badge saved looks that have already been scheduled.
@@ -112,20 +110,15 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
     () => poolIncluding(available, wardrobe, editingLook?.garment_ids || []),
     [available, wardrobe, editingLook],
   );
-  const inScope = (l) => filterScope === "All looks"
-    || isLookWearableNow(l.garment_ids, availableIds);
   const matchesFilters = (l) =>
     matchesStatus(l) && rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx);
-  const displayed = visibleLogs.filter(l => inScope(l) && matchesFilters(l));
-  // Both counts ride ON the chips, so neither view is a mystery: she can see
-  // what "Wearable now" would drop before she taps it.
-  const scopeCounts = visibleLogs.reduce((acc, l) => {
-    if (!matchesFilters(l)) return acc;
-    acc.all++;
-    if (isLookWearableNow(l.garment_ids, availableIds)) acc.wearable++;
-    return acc;
-  }, { all: 0, wearable: 0 });
-  const outOfScopeCount = scopeCounts.all - scopeCounts.wearable;
+  // Counted over the rows that already passed every OTHER filter, so the chip
+  // describes the list she is actually looking at.
+  const filteredLogs = visibleLogs.filter(matchesFilters);
+  const scopeCounts = countScopes(filteredLogs, availableIds);
+  const scope = resolveScope(filterScope, scopeCounts.outOfScope);
+  const outOfScopeCount = scopeCounts.outOfScope;
+  const displayed = filterToScope(filteredLogs, scope, availableIds);
   // Only offer the status chips when they'd actually split the list.
   const hasWornOrScheduled = logs.some(l => l.date_worn || isScheduled(l));
 
@@ -186,15 +179,8 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
           Build a Look
         </button>
       )}
-      {/* Only worth offering when it would actually split the list — the same
-          rule the status chips follow. */}
-      {!loading && logs.length > 0 && outOfScopeCount > 0 && (
-        <div style={{...s.filterRow, marginBottom: 8}}>
-          {[["All looks", scopeCounts.all], ["Wearable now", scopeCounts.wearable]].map(([sc, n]) => (
-            <button key={sc} onClick={() => setFilterScope(sc)}
-              style={{...s.chip, ...(filterScope === sc ? s.chipActive : {})}}>{sc} ({n})</button>
-          ))}
-        </div>
+      {!loading && logs.length > 0 && (
+        <ScopeChips scope={scope} counts={scopeCounts} onChange={setFilterScope}/>
       )}
       {!loading && logs.length > 0 && hasWornOrScheduled && (
         <div style={{...s.filterRow, marginBottom: 8}}>
@@ -230,7 +216,7 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
         <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
           {filterStatus === "Ready to wear" && filterOcc === "All" && filterWx === "All"
             ? "Every saved look is already worn or scheduled."
-            : filterScope === "Wearable now"
+            : scope === "Wearable now"
               ? `Nothing here is wearable from where you are right now — tap "All looks" to see the other ${outOfScopeCount}.`
               : "No saved looks match these filters."}
         </p></div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { s, si } from "../ui/styles.js";
 import { HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
@@ -6,6 +6,8 @@ import { OCCASIONS, OCCASION_ALIASES } from "../constants/taxonomy.js";
 import { formatDate } from "../lib/lookFilters.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import Thumb from "./Thumb.jsx";
+import ScopeChips from "./ScopeChips.jsx";
+import { countScopes, filterToScope, resolveScope } from "../features/closet/lookScope.js";
 
 // The Outfits tab merges TWO favorite signals into one occasion-grouped list:
 //   1. hearted outfit logs (the `favorites` table — heart buttons in History)
@@ -14,8 +16,13 @@ import Thumb from "./Thumb.jsx";
 // unused for weeks while loves accumulated), so the tab surfaces both.
 // A loved look whose item set matches a hearted log is shown once, as the log
 // (it carries date/notes/layout; the feedback row doesn't).
-export default function FavoritesView({ wardrobe, favorites, toggleFav, onEditItem, nested }) {
+export default function FavoritesView({ wardrobe, available, favorites, toggleFav, onEditItem, nested }) {
   const [tab, setTab] = useState("outfits");
+  // Scope chip, null until she taps one. Favorites is somewhere she picks
+  // something to PUT ON, so it narrows itself when a look needs a piece that
+  // is in the other closet — same default as Saved → All, opposite of
+  // History. See resolveScope().
+  const [filterScope, setFilterScope] = useState(null);
   const [logs, setLogs] = useState([]);
   const [loved, setLoved] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +60,16 @@ export default function FavoritesView({ wardrobe, favorites, toggleFav, onEditIt
     })),
   ];
 
-  const tabs = [["outfits","Outfits",entries.length],["pieces","Pieces",favPieces.length]];
+  // Both entry shapes name their pieces by id — a hearted log in `garment_ids`,
+  // a Style Me love in `item_ids` — so the scope rule reads them through one
+  // accessor rather than caring which source an entry came from.
+  const idsOfEntry = (entry) => (entry.kind === "log" ? entry.log.garment_ids : entry.fb.item_ids) || [];
+  const availableIds = useMemo(() => new Set((available || []).map(it => it.id)), [available]);
+  const scopeCounts = countScopes(entries, availableIds, idsOfEntry);
+  const scope = resolveScope(filterScope, scopeCounts.outOfScope);
+  const inScopeEntries = filterToScope(entries, scope, availableIds, idsOfEntry);
+
+  const tabs = [["outfits","Outfits",inScopeEntries.length],["pieces","Pieces",favPieces.length]];
 
   // Group by occasion so the page is scannable instead of one long date-sorted
   // list. Occasions are normalized to their current bucket via aliases; groups
@@ -62,7 +78,7 @@ export default function FavoritesView({ wardrobe, favorites, toggleFav, onEditIt
   const occRank = (occ) => { const i = OCCASIONS.indexOf(occ); return i === -1 ? OCCASIONS.length : i; };
   const groupedEntries = (() => {
     const map = new Map();
-    entries.forEach(entry => {
+    inScopeEntries.forEach(entry => {
       const occ = OCCASION_ALIASES[entry.occasion] || entry.occasion || "Other";
       if (!map.has(occ)) map.set(occ, []);
       map.get(occ).push(entry);
@@ -126,10 +142,17 @@ export default function FavoritesView({ wardrobe, favorites, toggleFav, onEditIt
           </button>
         ))}
       </div>
+      {!loading && tab === "outfits" && (
+        <ScopeChips scope={scope} counts={scopeCounts} onChange={setFilterScope}/>
+      )}
       {loading && <div style={s.empty}><span style={s.spinner}/><p style={s.emptyText}>Loading favorites…</p></div>}
       {!loading && tab === "outfits" && (
         entries.length === 0
           ? <div style={s.empty}><p style={s.emptyText}>Nothing here yet — tap ♥ on a look in Style Me or in History.</p></div>
+          : inScopeEntries.length === 0
+          ? <div style={s.empty}><p style={s.emptyText}>
+              None of your favorites can be worn from where you are right now — tap "All looks" to see the other {scopeCounts.outOfScope}.
+            </p></div>
           : groupedEntries.map(([occ, group]) => (
               <div key={occ}>
                 <div style={{ ...si.sectionLabel, textTransform:"uppercase", marginTop:8 }}>
