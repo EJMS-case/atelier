@@ -358,6 +358,19 @@ export function isStatementPiece(item, { fringeCounts = false } = {}) {
 // question than "would the validator hard-fail this look".
 export const WEATHER_HEAVY_RE = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i;
 export const WEATHER_WINTER_ONLY_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted/i;
+// "Light enough to keep in the heat" — the exemption that lets an unlined linen
+// jacket survive a Hot day on both sides of the pipeline. It was written out
+// twice, identically, under a validator comment describing the last time the
+// sampler, the validator and the prompt disagreed about outerwear in heat ("a
+// three-way contradiction that burned retries"). One definition now.
+export const LIGHT_OUTER_RE = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i;
+// The two OUTERWEAR rejections checkWeatherCompliance makes unconditionally:
+// heavy outerwear outside Hot, and a heavy coat in any warm-or-hotter weather.
+// Exported so the sampler's pool gate can mirror them instead of leaving 26 of
+// her 29 outerwear pieces in every Hot pool for the validator to reject every
+// single time — see the note in closet-sampler's step 3a.
+export const HEAVY_OUTER_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted|overcoat|peacoat|long\s*wool|heavy/i;
+export const HEAVY_COAT_RE = /wool|cashmere|shearling|sherpa|puffer|parka|down|quilted|long|heavy/i;
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
 // Categories where leather/suede is fine even in extreme heat — the ban below
@@ -390,7 +403,7 @@ export function filterByWeather(items, weather) {
     // dropped wholesale in Hot below, plus chunky/cable/thick here.
     const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit|corduroy|boucl[eé]|tweed|velvet|velour|flannel|mohair|angora|alpaca|teddy/i.test(nameNotes);
     const isWinterOuter = WEATHER_WINTER_ONLY_RE.test(nameNotes);
-    const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(nameNotes);
+    const isLightOuter = LIGHT_OUTER_RE.test(nameNotes);
     const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
     const seasonTag = (it.season_weight || "").toLowerCase();
 

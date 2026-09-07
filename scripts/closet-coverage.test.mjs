@@ -29,6 +29,7 @@ import { sampleClosetItems } from "../src/utils/closet-sampler.js";
 import { OCCASION_SLOTS } from "../src/constants/styling.js";
 import { normalizeItem } from "../src/utils/item-helpers.js";
 import { buildStylingPrompt } from "../src/prompts/styling-system-prompt.js";
+import { runAllChecks } from "../src/utils/styling-validator.js";
 import { WEATHER_BUCKETS } from "../src/constants/taxonomy.js";
 import { buildWardrobe, NYC_CLOSET } from "./fixtures/build-wardrobe.mjs";
 
@@ -109,4 +110,51 @@ test("every weather bucket produces a weather brief in the styling prompt", () =
   }
   assert.equal(WEATHER_BUCKETS.length, WEATHERS.length,
     "a bucket was added or removed without updating the labels this suite sweeps");
+});
+
+// ── The pool gate must never be WIDER than the validator ────────────────────
+// The sampler's step-3a weather gate exists to keep retry-bait out of the pool,
+// and its own comment sets the rule: it "may only be equal or NARROWER, never
+// wider, or the pool loses pieces the validator would pass". The heavy /
+// winter-only / light-outer tests are now shared constants precisely so that
+// stays true, but shared constants are not the same as checked behaviour.
+//
+// The case that matters is the exemption, because it is the one a tightening
+// edit breaks: an unlined linen jacket is fine in the heat, the validator says
+// so, and the pool must still be offering it. The validator's own comment
+// records what it costs when they disagree — the sampler kept offering these
+// while the prompt banned them, "a three-way contradiction that burned
+// retries".
+const HOT = "Hot (85°F+)";
+const LINEN_JACKET = { id: "lin", name: "Unlined Linen Jacket", category: "Outerwear", subcategory: "Jackets", material: "Linen" };
+const WOOL_COAT = { id: "wool", name: "Wool Overcoat", category: "Outerwear", subcategory: "Coats", material: "Wool" };
+const HOT_BASE = [
+  { id: "tank", name: "Ribbed Tank", category: "Tops", subcategory: "Tanks", material: "Cotton" },
+  { id: "short", name: "501 Shorts", category: "Bottoms", subcategory: "Shorts", material: "Denim" },
+  { id: "sand", name: "Una Sandal", category: "Shoes", subcategory: "Sandals" },
+];
+
+test("Hot pool keeps the light outerwear the validator accepts", () => {
+  const items = [...HOT_BASE, LINEN_JACKET];
+  const { sampled } = sampleClosetItems({
+    items, occasion: "Casual", occasionSlots: OCCASION_SLOTS.Casual, weather: HOT, userId: "coverage",
+  });
+  assert.ok(sampled.some(it => it.id === "lin"),
+    "the pool dropped a light jacket — it is now narrower than the validator");
+
+  const idMap = { W001: "tank", W002: "short", W003: "sand", W004: "lin" };
+  const look = { looks: [{ vibe: "Quiet Luxury", silhouette: "", focal_point: "", color_strategy: "",
+    texture_story: "", rationale: "", items: ["W001","W002","W003","W004"].map(id => ({ id, role: "supporting" })) }] };
+  const failures = runAllChecks(look, idMap, items, [], {}, "Casual", HOT);
+  assert.ok(!failures.some(f => /too (heavy|warm)|weather/i.test(f.message)),
+    `validator rejected the same light jacket: ${failures.map(f => f.message)}`);
+});
+
+test("Hot pool still drops the heavy outerwear the validator rejects", () => {
+  const { sampled } = sampleClosetItems({
+    items: [...HOT_BASE, WOOL_COAT], occasion: "Casual",
+    occasionSlots: OCCASION_SLOTS.Casual, weather: HOT, userId: "coverage",
+  });
+  assert.ok(!sampled.some(it => it.id === "wool"),
+    "a wool overcoat in the Hot pool is pure retry-bait");
 });

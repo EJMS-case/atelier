@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 
@@ -630,9 +630,30 @@ export function sampleClosetItems({
         if (it.knit_weight === "Chunky/Winter" || it.subcategory === "Pullovers" || HEAVY_RE.test(wxText(it))) return false;
       }
       // Heavy fabric on-body (non-Outerwear) is an unconditional fail in both
-      // Hot and Warm; Outerwear has its own conditional rules — leave those
-      // to the validator.
+      // Hot and Warm.
       if (it.category !== "Outerwear" && HEAVY_RE.test(wxText(it))) return false;
+      // OUTERWEAR mirrors checkWeatherCompliance. Its rules read as
+      // "conditional", and this gate used to leave them to the validator on
+      // that basis — but both branches are UNCONDITIONAL rejections there, and
+      // the audit of 2026-09-07 measured what that cost: 26 of her 29 outerwear
+      // pieces sat in EVERY Hot pool, each one rejected 100% of the time it was
+      // picked. That is the boots-in-summer bug again, in the bucket next door,
+      // and it carries the same second-order harm (the 0y starvation lesson):
+      // a piece that can never be suggested never accrues a suggestion count,
+      // so it stays eternally "fresh" and leads the outerwear bucket's
+      // freshness ordering — pushing the three layers she CAN wear in the heat
+      // down the inventory behind twenty-six she can't.
+      //
+      // The light-outer text mirrors the validator's isLightOuter exactly
+      // (name + curated notes + material, no subcategory); the heavy tests read
+      // the same wxText the validator's `text` is built from.
+      if (it.category === "Outerwear") {
+        const lightText = ((it.name || "") + " " + classifierNotes(it) + " " + (it.material || "")).toLowerCase();
+        const isLightOuter = LIGHT_OUTER_RE.test(lightText);
+        if (isHotBucket && !isLightOuter) return false;
+        if (!isHotBucket && HEAVY_OUTER_RE.test(wxText(it))) return false;   // Warm
+        if (it.subcategory === "Coats" && HEAVY_COAT_RE.test(wxText(it))) return false;
+      }
       return true;
     });
   }
