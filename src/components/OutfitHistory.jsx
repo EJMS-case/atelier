@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect, useMemo } from "react";
 import RouteFallback from "./RouteFallback.jsx";
 import { s } from "../ui/styles.js";
 import { HeartIcon } from "../ui/icons.jsx";
@@ -11,13 +11,14 @@ import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
 import ConfirmRemove from "./ConfirmRemove.jsx";
+import { poolIncluding } from "../features/closet/useVisibleWardrobe.js";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
 // opened, even if the user never tapped Edit on a logged outfit.
 const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuilder.jsx"));
 
-export default function OutfitHistory({ wardrobe, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
+export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
   const [plans,      setPlans]      = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -128,13 +129,24 @@ export default function OutfitHistory({ wardrobe, onWearAgain, onDelete, onUnlog
   const weathers  = weatherChipsFor(allWorn);
   const wrapStyle = nested ? {} : s.page;
 
+  // What the builder may hold and offer while she edits this logged outfit:
+  // `available` (the closet she is standing in — on a trip, the destination
+  // closet plus what she is carrying) widened by the ids this log already
+  // commits to, so an out-of-closet piece is neither hidden from the canvas
+  // nor dropped when she saves. Same pool LooksView and App.jsx build.
+  const builderPool = useMemo(
+    () => poolIncluding(available, wardrobe, editingLog?.garment_ids || []),
+    [available, wardrobe, editingLog],
+  );
+
   // Editing a logged outfit replaces it via the parent's onSaveLook path
   // (which routes to sb.updateOutfitLog when editing_log_id is set).
   if (editingLog && onSaveLook) {
     return (
       <Suspense fallback={<RouteFallback/>}>
         <SilhouetteBuilder
-          wardrobe={wardrobe}
+          builderPool={builderPool}
+          setsMeta={setsMeta}
           apiKey={apiKey}
           initialLook={editingLog}
           onSave={async (log) => {

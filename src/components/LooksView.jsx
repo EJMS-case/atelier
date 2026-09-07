@@ -10,7 +10,7 @@ import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
 import ConfirmRemove from "./ConfirmRemove.jsx";
-import { isLookWearableNow } from "../features/closet/useVisibleWardrobe.js";
+import { isLookWearableNow, poolIncluding } from "../features/closet/useVisibleWardrobe.js";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
@@ -25,7 +25,7 @@ const badgeStyle = {
   borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap",
 };
 
-export default function LooksView({ wardrobe, available, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
+export default function LooksView({ wardrobe, available, setsMeta, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -98,6 +98,20 @@ export default function LooksView({ wardrobe, available, onDelete, onLogAsWorn, 
   // in Arizona, not in NYC while that top is still in her suitcase, and
   // wearable again once it comes home.
   const availableIds = useMemo(() => new Set((available || []).map(it => it.id)), [available]);
+  // What the builder may hold and offer when she taps "Build a Look" or edits
+  // a saved look: `available` — the closet she is standing in, or on a trip the
+  // destination closet plus what she is carrying — widened by the ids the look
+  // being edited already commits to.
+  //
+  // Both halves are load-bearing. Without the widening, opening an Arizona look
+  // from NYC shows an empty canvas and saving writes the thinned look back.
+  // Without `available` as the base, the swap sheet offers her pieces that are
+  // 2,000 miles away. Same pool App.jsx builds for the Style Me builder; see
+  // the `builderPool` note there and in useVisibleWardrobe.js.
+  const builderPool = useMemo(
+    () => poolIncluding(available, wardrobe, editingLook?.garment_ids || []),
+    [available, wardrobe, editingLook],
+  );
   const inScope = (l) => filterScope === "All looks"
     || isLookWearableNow(l.garment_ids, availableIds);
   const matchesFilters = (l) =>
@@ -134,7 +148,8 @@ export default function LooksView({ wardrobe, available, onDelete, onLogAsWorn, 
     return (
       <Suspense fallback={<RouteFallback/>}>
         <SilhouetteBuilder
-          wardrobe={wardrobe}
+          builderPool={builderPool}
+          setsMeta={setsMeta}
           apiKey={apiKey}
           initialLook={editingLook}
           onSave={async (log) => {

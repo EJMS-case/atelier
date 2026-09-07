@@ -2,6 +2,63 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Editing a saved look opened an empty builder — 2026-09-07
+
+### Why
+Owner, from her phone: *"I am editing a saved outfit"* — with a screenshot of the
+maroon-blazer look, and a second screenshot of what tapping **Edit** gave her: a
+blank canvas, every slot chip reading `+`, nothing to pick from.
+
+`SilhouetteBuilder` reads its pool from a prop named `items`. The pool-vocabulary
+rename (#217) renamed that prop **at the call site and not in the component** —
+`LooksView` and `OutfitHistory` both passed `wardrobe={…}`. React does not check
+prop names, so the component ran with its pool `undefined`: the look's ids
+resolved against nothing, every picker list filtered nothing, and the screen
+rendered perfectly empty. Build green, 32 suites green, the render walk green —
+it never opened the builder.
+
+Every path into the builder from **Saved** was affected, not just Edit: "Build a
+Look" and History → Edit opened the same empty screen. Style Me's builder was
+fine (App.jsx passed the prop it declared), which is why this looked like a
+Saved-tab problem rather than a builder problem.
+
+### Fixed
+- **The builder's pool prop is now `builderPool`**, the name the vocabulary
+  already gives it (an `available` widened for one surface), documented in the
+  signature — and all three call sites hand it that.
+- **`LooksView` and `OutfitHistory` now build the pool properly**, with
+  `poolIncluding(available, wardrobe, <the ids of the look being edited>)` —
+  the same pool `App.jsx` builds for Style Me. Both halves matter: the widening
+  keeps an out-of-closet piece on the canvas (and stops Save writing the thinned
+  look back), and the `available` base stops the swap sheet offering her pieces
+  that are 2,000 miles away. `available` and `setsMeta` are threaded through
+  `SavedView` to reach them.
+- `StyleInsightsView` declared a `wardrobe` prop that nothing passed and nothing
+  read — dropped.
+
+### Added
+- **`npm run test:props` — the prop contract.** Statically pairs every JSX call
+  site of a local component against that component's declared props, both ways:
+  a prop passed that the component never reads (this bug), and a
+  no-default prop that no call site ever passes (its mirror image — it found the
+  dead `wardrobe` above). 64 call sites, 46 components. It fails on any call site
+  it cannot parse rather than skipping it, and prints its own blind spot — the
+  components taking props whole or with a rest, and the call sites using
+  `{…spread}` — so the coverage stays visible.
+- **Two render-walk steps that actually open the builder**: Edit must land the
+  look in its slots and on the canvas, and the picker must offer the wardrobe
+  including the look's own out-of-closet piece. The walk is 11 screens.
+- A runtime guard in `SilhouetteBuilder`: no pool → a console error, which the
+  render walk fails on.
+
+### Notes
+- **Validated by reintroducing the bug**, per the standing rule: with
+  `wardrobe={…}` put back, `npm run build` passes, all 33 unit suites pass, and
+  all three new guards go red — the prop contract names the file and line, and
+  both walk steps fail with what she saw.
+- Nothing was lost from her saved looks. Save is disabled below two pieces, so
+  the empty builder could not write an empty look back over the one she opened.
+
 ## [Unreleased] — Saved looks can be narrowed to what she can actually wear — 2026-09-02
 
 ### Why

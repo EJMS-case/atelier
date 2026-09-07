@@ -23,10 +23,10 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (29 node:test files, no network)
+npm test           # full suite (33 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (9 screens, headless, mocked REST)
+npm run test:render     # just the render walk (11 screens, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -35,6 +35,12 @@ The unit suites test pure functions; they cannot see a bad identifier or a
 component that throws on render. A duplicate declaration once passed all 451
 assertions and failed only at esbuild, and a stale prop reference passes both —
 only `test:render` catches that one.
+
+A prop reference that goes stale WITHOUT throwing — the call site renamed, the
+component not — passes even the render walk unless the walk opens that screen.
+`npm run test:props` (in `npm test`) is the check for that class: it pairs every
+JSX call site against the component's declared props, both directions. Run it
+after any rename, and add a walk step whenever a new screen or modal lands.
 
 There is no linter or formatter configured — match the style of the file you
 are editing.
