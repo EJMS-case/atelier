@@ -2,6 +2,78 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Audit: the whole closet, measured against the live rows — 2026-09-07
+
+### Why
+Owner: *"Make sure it's pulling my whole closet to assemble outfits. Check every
+area necessary to make sure categories, weather, and notes are pulling
+correctly."*
+
+Measured rather than reasoned about. Her live 462-piece NYC closet was pulled
+down and run through the REAL sampler for all 45 occasion × weather cells.
+
+### What the measurement found — the good half
+- **Zero unreachable pieces.** Every one of her 462 items reaches the stylist in
+  at least one cell. Pools run 228–426 items per cell (Work/Mild 274,
+  Vacation/Hot 373); the bucket targets really are uncapped, so the whole
+  surviving pool goes to the model.
+- **Categories: 100% known.** Every live (category, subcategory) pair resolves
+  against the taxonomy once `normalizeItem` runs. The one apparent miss —
+  `Athleisure > Pants` — is already folded to `Leggings` by the alias map. Her
+  data is right; the first pass of the audit was reading raw rows.
+- **Weather labels line up** end to end, and the five briefs each fire.
+- **The id-index cache is already in place**, so resolving 105 saved looks
+  against a 462-piece closet does not rebuild a Map per card.
+- **Live integrity: clean.** 878 garment references across saved looks and
+  planner rows, 0 dangling, 0 Misc leaks.
+
+### Fixed
+- **A curated `stylist_line` never reached the styling prompt when the piece had
+  no `notes`.** `formatInventory` gated on `if (it.notes)` before calling
+  `promptNotes()` — but `promptNotes` prefers `stylist_line`, the ≤200-char line
+  migration 0018 stores *next to* the notes. **21 of her 462 pieces** are in
+  exactly that shape, and they are among the best-described she owns: "Black
+  leather mini bucket crossbody, red interior, gold hardware; work to weekend to
+  travel, any season" reached the model as a bare name. The gate now reads what
+  `promptNotes` returns.
+- **Tapping a slot in the builder rendered every image at once** — 173 for TOP,
+  103 for BOTTOM against her closet. The picker grid, the colour-advisor audit
+  list, and the insights grids now lazy-load and async-decode, like the closet
+  grid already did.
+
+### Changed — one definition, not several
+- **The weather bucket ranges lived in three places.** `styling-system-prompt`
+  and `stylist.js` each carried their own inline `/warm|70-84/`-style regexes —
+  private copies of `WEATHER_BUCKETS`, the exact duplication #218 swept out of
+  the rest of the pipeline. Both now call `weatherMatches`.
+- **The heavy-fabric and winter-only tests existed twice and three times**,
+  byte-identical, with a comment asking whoever edits one to remember the
+  others. They are now `WEATHER_HEAVY_RE` / `WEATHER_WINTER_ONLY_RE` in
+  `item-helpers`, imported by the validator and the sampler. Deliberately NOT
+  merged with `filterByWeather`'s wider `isHeavyFabric` — that one answers a
+  different question (packing for a 103°F week) and is meant to be blunter.
+- No dead exports: the four that looked unused are the doctor's checks, used
+  from `scripts/`.
+
+### Added
+- **`npm run test:coverage-pool`** — the audit as a permanent check, over her
+  real vocabulary: every garment kind reachable somewhere, no cell too thin for
+  the stylist, the buckets still uncapped (a re-introduced `slice()` fails it),
+  and every weather bucket still producing its brief.
+- Three inventory assertions in `npm run test:notes` covering the
+  `stylist_line`-without-notes case and its neighbours.
+
+### Notes
+- Every new check validated by reintroducing the real regression: the notes
+  guard, a capped bucket, a broken weather bucket, and a category banned
+  everywhere — each caught by the assertion meant to catch it.
+- **Not changed, on purpose:** 74 of 132 tops/knits classify as sleeve
+  "unknown" — that is the documented design (unknown is never weather-excluded,
+  because she layers), and most are cardigans and pullovers. The 586 kB main
+  bundle is React + `@supabase/supabase-js` + the shell; every view, the
+  validator, the sampler and the background-removal WASM are already split out,
+  and the remaining weight is the auth client CLAUDE.md deliberately keeps.
+
 ## [Unreleased] — Saved narrows itself to the closet she is standing in — 2026-09-07
 
 ### Why

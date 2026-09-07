@@ -5,7 +5,7 @@
 // Callers are responsible for UI state.
 
 import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
-import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
+import { STYLING_TAXONOMY, normalizeOccasion, weatherMatches } from "../../constants/taxonomy.js";
 import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
@@ -66,7 +66,9 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const comfortMode = COMFORT_OCCASIONS.has(occasion);
   const baseSlots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Casual;
   const w = (weather || "").toLowerCase();
-  const isHotOrWarm = /hot|warm|85|70-84/i.test(w);
+  // weatherMatches, not an inline regex: WEATHER_BUCKETS is the one definition
+  // of these ranges, and a private copy here is one that can drift from it.
+  const isHotOrWarm = weatherMatches(w, "Hot", "Warm");
   const slots = (() => {
     if (!isHotOrWarm || !baseSlots.required?.layer) return baseSlots;
     const { layer, ...restRequired } = baseSlots.required;

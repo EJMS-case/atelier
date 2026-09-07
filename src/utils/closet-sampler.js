@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 
@@ -608,17 +608,19 @@ export function sampleClosetItems({
   // so keeping these in the pool is retry-bait, and (the 0y starvation lesson)
   // never-suggestible pieces stay eternally "fresh" and crowd the KEEP_FLOOR
   // backfill out of their bucket: knits in Hot could starve the TOPS bucket
-  // exactly the way boots starved shoes. Regexes are copied from
-  // checkWeatherCompliance — keep them in sync with the validator, not vice
-  // versa (the validator stays authoritative; this gate may only be equal or
-  // NARROWER, never wider, or the pool loses pieces the validator would pass).
+  // exactly the way boots starved shoes. The heavy / winter-only tests ARE
+  // checkWeatherCompliance's, imported from item-helpers rather than copied
+  // (the validator stays authoritative; this gate may only be equal or
+  // NARROWER, never wider, or the pool loses pieces the validator would pass —
+  // sharing the constant is what keeps "equal" true without anyone remembering
+  // to check it).
   // classifierNotes, not raw notes (item-helpers NOTES POLICY): this gate must
   // stay a mirror of checkWeatherCompliance, which reads classifierNotes too —
   // product copy saying "pairs with shorts" must not empty an item out of the
   // pool any more than it may hard-fail the look.
   const wxText = (it) => ((it.name || "") + " " + classifierNotes(it) + " " + (it.subcategory || "") + " " + (it.material || "")).toLowerCase();
-  const HEAVY_RE = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i;
-  const WINTER_ONLY_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted/i;
+  const HEAVY_RE = WEATHER_HEAVY_RE;
+  const WINTER_ONLY_RE = WEATHER_WINTER_ONLY_RE;
   const isHotBucket = weatherMatches(wRaw, "Hot");
   if (hotOrWarm) {
     pool = pool.filter(it => {
@@ -1039,10 +1041,16 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
     // UNCACHED dynamic body, and closet-wide copy at full length was ~5× the
     // whole inventory's token cost (owner's explicit priority is token cost).
     // Full text stays on the item for display/search surfaces.
-    if (it.notes) {
-      const pn = promptNotes(it);
-      if (pn) parts.push(pn);
-    }
+    //
+    // Gate on what promptNotes RETURNS, never on `it.notes`. promptNotes
+    // prefers `stylist_line` — the curated ≤200-char line migration 0018 stores
+    // NEXT TO the notes — so an `if (it.notes)` guard silently dropped the
+    // description of every piece that has a stylist_line and no notes. That was
+    // 21 of her 462 pieces, and they are the best-described ones she owns:
+    // "Black leather mini bucket crossbody, red interior, gold hardware; work
+    // to weekend to travel, any season" reached the model as a bare name.
+    const pn = promptNotes(it);
+    if (pn) parts.push(pn);
     // Visual-AI read (when the closet has been enriched): a compact fabric /
     // drape / formality / vibe signal the model reads straight off the garment's
     // photo. Supplements her notes — never overrides her colour. Kept short so

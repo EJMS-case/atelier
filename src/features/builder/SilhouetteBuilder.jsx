@@ -962,7 +962,10 @@ export default function SilhouetteBuilder({
                 ))}
               </div>
             )}
-            {/* 3-column item grid */}
+            {/* 3-column item grid. Images are lazy/async-decoded: this grid is
+                closet-sized — her TOP slot alone is 173 pieces, BOTTOM 103 —
+                and eagerly fetching and decoding that many thumbnails is a
+                visible stall on a phone the moment a slot chip is tapped. */}
             <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 32px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignContent: "start" }}>
               {/* SET slot shows coordinated sets (+ one-piece "Sets" items).
                   Tapping a coordinated set drops all its pieces onto the canvas. */}
@@ -976,7 +979,7 @@ export default function SilhouetteBuilder({
                     <button key={entry.key} onClick={() => toggleSet(entry)}
                       style={{ background: state === "full" ? PALETTE.ink : "#fff", border: `2px solid ${on ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: state === "full" ? PALETTE.bg : PALETTE.soft, textAlign: "left", position: "relative" }}>
                       <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4, position: "relative" }}>
-                        {entry.image && <img src={entry.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {entry.image && <img src={entry.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                         {entry.kind === "coord" && (
                           <span style={{ position: "absolute", top: 3, right: 3, fontSize: 8, fontWeight: 600, letterSpacing: "0.04em", background: "rgba(28,24,20,0.82)", color: "#fff", borderRadius: 8, padding: "1px 5px" }}>
                             {entry.members.length} pcs{state === "partial" ? " ·" : ""}
@@ -997,7 +1000,7 @@ export default function SilhouetteBuilder({
                     <button key={it.id} onClick={() => togglePick(activeSlot, it.id)}
                       style={{ background: isPicked ? PALETTE.ink : "#fff", border: `2px solid ${isPicked ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: isPicked ? PALETTE.bg : PALETTE.soft, textAlign: "left" }}>
                       <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                        {it.image && <img src={it.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                       </div>
                       <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", overflow: "hidden", maxHeight: 22 }}>
                         {pickerLabel(it)}

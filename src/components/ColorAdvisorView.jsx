@@ -127,7 +127,7 @@ export default function ColorAdvisorView({ items, apiKey, onBack }) {
                   return (
                     <div key={id} style={s.pairingItem}>
                       {item.image
-                        ? <img src={item.image} alt={item.name} style={s.pairingThumb}/>
+                        ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.pairingThumb}/>
                         : <div style={{...s.pairingThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-text-muted)"}}>{item.category?.[0]}</div>}
                       <div style={s.pairingName}>{item.name}</div>
                     </div>
@@ -179,7 +179,7 @@ export default function ColorAdvisorView({ items, apiKey, onBack }) {
                 {group.map(item => (
                   <div key={item.id} style={s.auditRow}>
                     {item.image
-                      ? <img src={item.image} alt={item.name} style={s.auditThumb}/>
+                      ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.auditThumb}/>
                       : <div style={{...s.auditThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-border-muted)"}}>{item.category?.[0]}</div>}
                     <div style={s.auditInfo}>
                       <div style={s.auditName}>{item.name}</div>

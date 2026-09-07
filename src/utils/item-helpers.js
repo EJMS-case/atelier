@@ -339,6 +339,26 @@ export function isStatementPiece(item, { fringeCounts = false } = {}) {
   return false;
 }
 
+// ── WEATHER FABRIC REGEXES ──────────────────────────────────────────────────
+// The pair checkWeatherCompliance judges a garment's warmth by, exported so the
+// closet sampler's pre-filter gate can BE that rule instead of carrying a copy
+// of it. The sampler's own comment said it plainly — "copied from
+// checkWeatherCompliance — keep them in sync with the validator" — and a rule
+// kept in sync by hand is a rule that drifts: the heavy test existed twice and
+// the winter-only test three times, all byte-identical, with nothing to catch
+// the day one of them changed alone.
+//
+// The validator stays authoritative and the sampler's gate may only be equal or
+// NARROWER, never wider, or the pool loses pieces the validator would pass.
+// Sharing the constant is what makes "equal" checkable instead of aspirational.
+//
+// NOT to be merged with filterByWeather's `isHeavyFabric` below, which is
+// deliberately WIDER (corduroy, bouclé, tweed, velvet, flannel…): that gate
+// answers "should this be packed for a 103°F week", a different and blunter
+// question than "would the validator hard-fail this look".
+export const WEATHER_HEAVY_RE = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|parka|overcoat|trench|cable[-\s]?knit|thick.?knit/i;
+export const WEATHER_WINTER_ONLY_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted/i;
+
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
 // Categories where leather/suede is fine even in extreme heat — the ban below
 // is about leather ON the body, not leather you carry or step in.
@@ -369,7 +389,7 @@ export function filterByWeather(items, weather) {
     // heat. Genuinely warm knits are already covered — the Knits CATEGORY is
     // dropped wholesale in Hot below, plus chunky/cable/thick here.
     const isHeavyFabric = /wool|cashmere|chunky|heavy|fleece|sherpa|shearling|puffer|cable-knit|thick.?knit|corduroy|boucl[eé]|tweed|velvet|velour|flannel|mohair|angora|alpaca|teddy/i.test(nameNotes);
-    const isWinterOuter = /parka|puffer|sherpa|shearling|fleece|down|quilted/i.test(nameNotes);
+    const isWinterOuter = WEATHER_WINTER_ONLY_RE.test(nameNotes);
     const isLightOuter = /linen|cotton|silk|seersucker|unstructured|unlined|lightweight|sheer/i.test(nameNotes);
     const isKnitDress = it.category === "Dresses" && /knit|sweater|cable|rib/i.test(nameNotes);
     const seasonTag = (it.season_weight || "").toLowerCase();
