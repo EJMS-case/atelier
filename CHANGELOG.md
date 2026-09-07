@@ -2,6 +2,68 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Saved narrows itself to the closet she is standing in — 2026-09-07
+
+### Why
+Owner, home in NYC the day after a 9-day Arizona trip: *"I am in my NY closet
+and seeing many Arizona outfits."*
+
+Verified against the live rows before changing anything: **105 saved looks, 86
+wearable from NYC.** The 19 are 3 looks built entirely from Arizona pieces during
+the trip — which sit at positions 5, 6 and 7 of her list, near the top — and 16
+New York looks worn in New York last July that each contain **one** piece she has
+since moved to Arizona (8 garments in all: a satin pant, a sleeveless top, two
+pairs of sandals, and four more). No pool leak: the NYC closet is 462 items, her
+only upcoming plan is all-NYC, and the completed Arizona trip is not bridging
+anything.
+
+So the count was right and the chip was right. Two things were wrong:
+
+1. **The scope chip existed on ONE of Saved's three surfaces.** History (15 of
+   its 64 worn looks out of scope) and Favorites (3 of 22) had no way to narrow
+   at all — the same "the fix stopped at the screen she screenshotted" shape
+   this repo has now hit five times.
+2. **On the surface that had it, the default was "All looks"** — left open for
+   her in #222, and this is her answering it.
+
+### Changed
+- **Saved → All and Favorites now open narrowed** when — and only when —
+  something would be hidden. Both counts stay on the chips, and the list says in
+  words how many are hidden and why (`19 looks are hidden — they need pieces
+  that aren't in this closet.`). Nothing is hidden silently; one tap is the whole
+  way back, and the tap sticks in both directions.
+- **History does NOT narrow itself, deliberately.** It is a record of what she
+  wore, and she wore those looks: 16 of the 19 are New York outfits worn in New
+  York, out of scope only because a garment moved afterwards. Hiding them would
+  be rewriting her history to match her closet. The chip is offered there — "what
+  could I wear again today?" is a real question — but it starts on All.
+
+### Added
+- `src/features/closet/lookScope.js` — the rule as pure functions, next to the
+  vocabulary it belongs to, so a fourth surface gets it by importing rather than
+  by reimplementing. `components/ScopeChips.jsx` is the one chip pair all three
+  surfaces render.
+- `npm run test:scope` (10 assertions) — built from her real numbers, including
+  the 105/86/19 split and the both-directions stickiness.
+- Three render-walk steps: the narrowing must be loud (both counts + the
+  sentence), "All looks" must bring the Arizona look back with its pieces, and
+  History must show a worn Arizona look by default. The walk is 13 screens.
+
+### Notes
+- **The 2026-09-02 Arizona check was rewritten, not loosened.** It taps
+  "All looks" first, because that is where the whole list lives now; it still
+  fails if the piece cannot be reached, if the tap does not stick, or if a look
+  renders as "pieces gone".
+- **A fixture flaw was found and fixed while doing it.** The wardrobe mirrors the
+  same vocabulary in both rooms, so `"<subcategory> piece"` names a NYC row as
+  well as an Arizona one — asserting on that name proved nothing about which
+  closet the piece came from. The Arizona look's piece now has a name unique in
+  the fixture, checked by a precondition that exits if it is ever shared. This
+  also strengthens #223's picker assertion, which had the same hole.
+- Validated by reintroducing three regressions — never narrowing, History
+  narrowing too, and a tap that does not stick — each caught, each by the step
+  that should catch it.
+
 ## [Unreleased] — Editing a saved look opened an empty builder — 2026-09-07
 
 ### Why

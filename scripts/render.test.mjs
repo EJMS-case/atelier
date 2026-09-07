@@ -38,11 +38,33 @@ const { chromium, executablePath: exe } = found;
 // The wardrobe uses her REAL vocabulary (see scripts/fixtures/), split across
 // both rooms, with a coord set owned in both — so the screens render against
 // the shapes that actually occur rather than invented ones.
+// The Arizona piece the saved look below is made of, asserted by name in the
+// walk. Named here, applied in the map, checked for uniqueness underneath.
+const AZ_LOOK_ITEM = buildWardrobe({ closetId: AZ_CLOSET })[0];
+const AZ_LOOK_ID = `az-${AZ_LOOK_ITEM.id}`;
+const AZ_LOOK_PIECE = "Sedona Sheer Camisole";
+
 const wardrobe = [
   ...buildWardrobe({ closetId: NYC_CLOSET }),
   ...buildWardrobe({ closetId: AZ_CLOSET }).map(it => ({ ...it, id: `az-${it.id}` })),
   ...buildDuplicatedSet().items,
-].map(it => ({ ...it, color: "Black", brand: "Fixture", image: null, wear_count: 0 }));
+].map(it => ({ ...it, color: "Black", brand: "Fixture", image: null, wear_count: 0 }))
+ // The Arizona piece the saved look is made of gets a name that occurs NOWHERE
+ // else in the fixture. The wardrobe deliberately mirrors the same vocabulary
+ // in both rooms, so "<subcategory> piece" names a NYC row too — and an
+ // assertion on a shared name proves nothing about which closet the piece came
+ // from. An earlier version of this walk asserted exactly that, and reported
+ // "the Arizona look is still listed" while it was correctly hidden, because a
+ // NYC piece of the same name was on screen.
+ .map(it => (it.id === AZ_LOOK_ID ? { ...it, name: AZ_LOOK_PIECE } : it));
+
+// A test whose premise is unpinned proves nothing: if this name were shared
+// with a NYC row, every assertion below would pass on the wrong garment.
+const namedRows = wardrobe.filter(it => it.name === AZ_LOOK_PIECE);
+if (namedRows.length !== 1 || namedRows[0].closet_id !== AZ_CLOSET) {
+  console.error(`\n\u274c fixture broken — "${AZ_LOOK_PIECE}" must name exactly one Arizona row, found ${namedRows.length}\n`);
+  process.exit(1);
+}
 
 const CLOSETS = [
   { id: NYC_CLOSET, name: "NYC", is_default: true },
@@ -69,9 +91,6 @@ const PLANS = [{
   items: [wardrobe[0].id, wardrobe[5].id],
   outfits: [{ id: "o1", label: "", occasion: "Casual", items: [wardrobe[0].id, wardrobe[5].id] }],
 }];
-// The Arizona piece the saved look below is made of, asserted by name in the walk.
-const AZ_LOOK_ITEM = buildWardrobe({ closetId: AZ_CLOSET })[0];
-const AZ_LOOK_PIECE = AZ_LOOK_ITEM.name;
 
 const TABLE = {
   wardrobe_items: wardrobe,
@@ -79,12 +98,24 @@ const TABLE = {
   trips: TRIPS,
   trip_items: [{ trip_id: TRIP_ID, item_id: wardrobe[0].id, status: "suggested", outfit_ids: [] }],
   planned_outfits: PLANS,
-  // A saved look made in Arizona, viewed from NYC. Owner's report of
-  // 2026-09-02: it rendered as "These pieces are no longer in your closet."
-  // The walk below asserts that message never appears.
+  // Two saved looks, both worn, so Saved has something in EVERY scope:
+  //
+  //  · one made in Arizona — owner's report of 2026-09-02: it rendered as
+  //    "These pieces are no longer in your closet." The walk asserts that
+  //    message never appears and that the piece itself is on screen.
+  //  · one made in NYC, so the NYC scope is not empty. A one-look fixture
+  //    would narrow to nothing and the walk would be asserting on an empty
+  //    list, which proves far less than it looks like it does.
+  //
+  // The Arizona one is worn more recently, so it sorts first and the walk's
+  // "Edit" click lands on it.
   outfit_logs: [{
     id: "log-az", date_worn: "2026-08-30", occasion: "Casual", notes: "",
-    garment_ids: [`az-${AZ_LOOK_ITEM.id}`],
+    garment_ids: [AZ_LOOK_ID],
+    layout_data: null,
+  }, {
+    id: "log-nyc", date_worn: "2026-08-01", occasion: "Work", notes: "",
+    garment_ids: [wardrobe[0].id, wardrobe[5].id],
     layout_data: null,
   }],
   look_edits: [], look_feedback: [], favorites: [], sets: [],
@@ -227,20 +258,51 @@ await check("Planner → day modal", async () => {
 });
 await check("Saved", tab("Saved"));
 
-// Her exact report, from NYC: "atelier is pulling in saved outfits from
-// Arizona and marking them as nonexistent."
+// ── The scope chip, from NYC ─────────────────────────────────────────────────
+// Owner, home in NYC the day after an Arizona trip: "I am in my NY closet and
+// seeing many Arizona outfits." Saved → All now starts narrowed when something
+// would be hidden — and the whole risk of that default is the mistake this app
+// has already made once, where filtered-out looks read as LOST. So the walk
+// asserts the narrowing is LOUD: both counts on screen, and a sentence saying
+// how many are hidden. A silent narrowing must fail here.
+await check("Saved: standing in NYC, the list narrows itself and says so", async () => {
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/All looks \(2\)/.test(text) || !/Wearable now \(1\)/.test(text)) {
+    throw new Error("the scope chips are missing their counts — she cannot see what was hidden");
+  }
+  if (!/1 look is hidden/.test(text)) {
+    throw new Error("the list narrowed itself without saying so — this is how looks read as lost");
+  }
+  if (text.includes(AZ_LOOK_PIECE)) {
+    throw new Error("the Arizona look is still listed — the default did not narrow");
+  }
+});
+
+// Her exact report, from NYC, 2026-09-02: "atelier is pulling in saved outfits
+// from Arizona and marking them as nonexistent."
 //
 // Asserts the PIECE IS THERE, not that some message is absent — an earlier
-// version checked for the old wording, which this same commit had already
+// version checked for the old wording, which that same commit had already
 // changed, so it could never fail. Assert on what the user sees, never on a
 // string you control.
-await check("Saved: a look made in Arizona still shows its pieces from NYC", async () => {
+//
+// It now taps "All looks" first, because that is where the whole list lives.
+// That is NOT a loosening of the check: the thing it has always protected is
+// that a look never renders as "my pieces are gone", and it still fails if the
+// Arizona piece cannot be reached, if the tap does not stick, or if the look
+// comes back without its pieces.
+await check("Saved: All looks brings the Arizona look back, with its pieces", async () => {
+  await clickText("button", "All looks");
+  await page.waitForTimeout(700);
   const text = await page.evaluate(() => document.body.innerText);
   if (!text.includes(AZ_LOOK_PIECE)) {
     throw new Error(`the Arizona piece "${AZ_LOOK_PIECE}" is missing from the saved look`);
   }
   if (/no longer in your closet|deleted from your wardrobe/.test(text)) {
     throw new Error("a saved look reports its pieces as gone while they exist");
+  }
+  if (/looks? (is|are) hidden/.test(text)) {
+    throw new Error('"All looks" still claims to be hiding something — the tap did not stick');
   }
 });
 
@@ -290,6 +352,27 @@ await check("Saved → the builder's picker offers the wardrobe, the look's own 
       .filter(b => /^\u2190\s*Back$/.test((b.textContent || "").trim()))
       .pop()?.click();
   });
+});
+
+// The other half of the scope decision, and the one that is easy to get wrong.
+// History is a RECORD of what she wore. 16 of the 19 looks the NYC scope drops
+// from her real data are New York outfits worn in New York last July that hold
+// one piece she has since moved to Arizona — hiding those would be rewriting
+// her history to match her closet. So History offers the chip and never
+// applies it on its own.
+await check("Saved → History shows a worn Arizona look by default", async () => {
+  await clickText("button", "History");
+  await page.waitForTimeout(900);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!text.includes(AZ_LOOK_PIECE)) {
+    throw new Error("History hid a worn look — a record must not narrow itself to the current closet");
+  }
+  if (/looks? (is|are) hidden/.test(text)) {
+    throw new Error("History narrowed itself; it must start on All looks");
+  }
+  if (!/Wearable now \(/.test(text)) {
+    throw new Error("History never offers the scope chip — the fix stopped at one surface again");
+  }
 });
 
 await check("Inspo", tab("Inspo"));

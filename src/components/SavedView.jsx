@@ -51,7 +51,7 @@ export default function SavedView({ wardrobe, available, setsMeta, favorites, to
         />
       )}
       {tab === "favorites" && (
-        <FavoritesView nested wardrobe={wardrobe} favorites={favorites} toggleFav={toggleFav} onEditItem={onEditItem}/>
+        <FavoritesView nested wardrobe={wardrobe} available={available} favorites={favorites} toggleFav={toggleFav} onEditItem={onEditItem}/>
       )}
       </LookSearchContext.Provider>
     </div>

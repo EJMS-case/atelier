@@ -1,11 +1,25 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-07**, after PR #223. The session log below is in merge
+Refreshed **2026-09-07**, after PR #224. The session log below is in merge
 order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
 per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
 preferences" down is older standing context: search it, don't read it through.
 
 ## Session log
+
+### 2026-09-07 · PR #224 — Saved now narrows itself to the closet she is standing in
+
+Owner, home in NYC the day after a 9-day Arizona trip: *"I am in my NY closet and seeing many Arizona outfits."* **Checked the live rows before changing anything, and the numbers say the app was not lying:** 105 saved looks, 86 wearable from NYC — 3 built entirely from Arizona pieces during the trip (**sitting at positions 5–7 of her list**, which is why "many" is a fair description of 19/105) and **16 New York looks worn in New York last July that each hold ONE piece she has since moved to Arizona** (8 garments: Claire Sleeveless Top ×5, Satin Pant ×4, Leather Strap Heeled Sandal ×3, and five more). No pool leak anywhere: NYC closet is 462 items (matches her nav badge), her only upcoming plan is all-NYC, the Arizona trip is `complete` so nothing is bridging. **The count was right and the chip was right — the DEFAULT and the COVERAGE were wrong.**
+
+**Two things, and the second is the one that matters.** (1) #222's scope chip landed on **one of Saved's three surfaces**; History (15 of 64 worn looks out of scope) and Favorites (3 of 22) had no way to narrow at all — the fifth appearance of "the fix stopped at the screen she screenshotted". The rule now lives in `src/features/closet/lookScope.js` as pure functions beside the vocabulary, with `components/ScopeChips.jsx` as the single chip pair, so a fourth surface gets it by importing. (2) The default on Saved → All is now **Wearable now**, but only when something would actually be hidden — that was the question #222 left open for her, and this message is her answering it.
+
+**The half of the decision that is easy to get wrong, and is now pinned by a test: HISTORY MUST NOT NARROW ITSELF.** It is a record of what she wore, and 16 of the 19 dropped looks are New York outfits *worn in New York*, out of scope only because a garment moved afterwards — hiding them would be rewriting her history to match her closet. `resolveScope(chosen, outOfScope, { autoNarrow })` carries that distinction; All and Favorites (surfaces where she PICKS something to put on) narrow, History (a record) does not. **Do not "simplify" that flag away.**
+
+**The narrowing is deliberately loud**, because hiding saved looks is a mistake this app has already made once: both counts ride on the chips and a sentence underneath says how many are hidden and why, an explicit tap sticks in BOTH directions (a default that reasserts itself is its own bug — there is a test for it), and the walk fails if any of that goes quiet. `npm run test:scope` is 10 assertions built from her real 105/86/19 split. **The 2026-09-02 Arizona check was rewritten, not loosened** — it taps "All looks" first because that is where the whole list lives now, and still fails if the piece can't be reached or a look renders as "pieces gone".
+
+**A fixture flaw worth remembering, found while doing this:** the fixture wardrobe mirrors the same vocabulary in BOTH rooms, so `"<subcategory> piece"` names a NYC row as well as an Arizona one — the walk's Arizona assertions were matching a name, not a closet, and reported "the Arizona look is still listed" while it was correctly hidden. The Arizona look's piece now carries a name unique in the fixture, with a precondition that exits if it is ever shared. **This also retroactively strengthens #223's picker assertion, which had the same hole** — the "pool was widened by the look's ids" claim is only now actually proven. Validated by reintroducing three regressions (never narrow; History narrows too; a tap that doesn't stick), each caught by the step that should catch it. `npm test` is 34 suites, the walk is 13 screens.
+
+**Open, hers:** the 8 garments above are the whole reason 16 July looks are out of scope in NYC. If any of them came home from Arizona and the row was never moved back, those looks return to "Wearable now" the moment the closet is corrected — worth her checking, not mine to change.
 
 ### 2026-09-07 · PR #223 — tapping Edit on a saved outfit opened an empty builder
 

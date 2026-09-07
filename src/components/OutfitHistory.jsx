@@ -12,6 +12,8 @@ import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
 import ConfirmRemove from "./ConfirmRemove.jsx";
 import { poolIncluding } from "../features/closet/useVisibleWardrobe.js";
+import { countScopes, filterToScope, resolveScope } from "../features/closet/lookScope.js";
+import ScopeChips from "./ScopeChips.jsx";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
 // import made the whole builder chunk download as soon as the Saved tab
@@ -31,6 +33,11 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
   // Editing flow: when set, render SilhouetteBuilder pre-populated with the
   // chosen log so the user can change pieces and save updates in place.
   const [editingLog, setEditingLog] = useState(null);
+  // Scope chip, null until she taps one. History is a RECORD, so it starts on
+  // "All looks" and never narrows itself — see resolveScope(). The chip is
+  // still offered, because "which of these could I wear again today?" is a
+  // real question and every card here carries a "Wear again" button.
+  const [filterScope, setFilterScope] = useState(null);
 
   const loadLogs = () => {
     sb.fetchOutfitLogs()
@@ -90,9 +97,13 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
   // the two sources arrive independently ordered, so without this the month
   // groups (insertion-ordered) rendered out of order.
   const sortDateOf = (l) => l.date_worn || l.created_at?.slice(0, 10) || "";
-  const filtered = allWorn
+  const beforeScope = allWorn
     .filter(l => rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx) && matchesSearch(l))
     .sort((a, b) => String(sortDateOf(b)).localeCompare(String(sortDateOf(a))));
+  const availableIds = useMemo(() => new Set((available || []).map(it => it.id)), [available]);
+  const scopeCounts = countScopes(beforeScope, availableIds);
+  const scope = resolveScope(filterScope, scopeCounts.outOfScope, { autoNarrow: false });
+  const filtered = filterToScope(beforeScope, scope, availableIds);
   const grouped = {};
   filtered.forEach(log => {
     const d = log.date_worn || log.created_at?.slice(0, 10) || "Unknown";
@@ -168,6 +179,9 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
       {!nested && <h2 style={{...s.pageTitle, fontFamily:"'DM Serif Display',Georgia,serif"}}>Outfit History</h2>}
       {allWorn.length > 0 && (
         <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Search wardrobe, occasion, notes…"/>
+      )}
+      {allWorn.length > 0 && (
+        <ScopeChips scope={scope} counts={scopeCounts} onChange={setFilterScope}/>
       )}
       {allWorn.length > 0 && occasions.length > 1 && (
         <div style={s.filterRow}>
