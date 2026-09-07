@@ -2,6 +2,36 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The other two surfaces that assemble outfits were capping her closet — 2026-09-07
+
+### Why
+Style Me is not the only place a look gets built, and the audit's question —
+*"is it pulling my whole closet to assemble outfits?"* — has to be answered for
+every surface that does. The sampler's caps were lifted long ago ("the user
+wanted every eligible piece in play"). Two surfaces never got the memo.
+
+### Fixed
+- **The builder's stylist chat capped every category at 40**, which against her
+  real closet hid **89 of her 462 pieces** — 53 tops, 28 bottoms, 8 athleisure —
+  and always the same ones, because the cut is by array position and nothing
+  sorts first. The cap is gone. The cost is bounded and cheap: this block is the
+  **cached** system prefix, byte-identical across turns, so the whole closet is
+  written once per session and read at cache rates after (~13.8k → ~17.2k
+  tokens, measured on her closet).
+- **The trip advisor's per-category caps were tuned for prompt size alone** and
+  cut into her real trip: on Arizona, Athleisure fell to the 4-item fallback
+  with **19 pieces in the closet — on a vacation** — Shoes 13 → 8, Dresses
+  10 → 8. Now a uniform, generous 40 per category: a destination closet plus
+  what she carries is about a hundred pieces, so that is "all of it" in practice
+  while still bounding a pathological pool. Ordering is unchanged; only the cut
+  is. The now-vestigial `CAT_CAP` table is deleted rather than left empty.
+- `evaluateLook` was checked and needed nothing — it uses the pool only for
+  auto colour pairs, never as an inventory.
+
+### Added
+- An assertion in `npm run test:coverage-pool` that the builder chat's reference
+  carries every piece it is handed. It fails with the cap put back.
+
 ## [Unreleased] — 26 of her 29 coats and jackets were retry-bait in every hot pool — 2026-09-07
 
 ### Why

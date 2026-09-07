@@ -174,8 +174,16 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // tops+bottoms+dresses exceeded 60, leaving the model unable to complete a
   // look it's required to build (silent no-result for the day). Per-category
   // caps keep the prompt bounded.
+  //
+  // The caps are per-category and GENEROUS: a destination closet plus what she
+  // carries is around a hundred pieces (Arizona is 80 + 18 carried), so 40 a
+  // category is "all of it" in practice while still bounding a pathological
+  // pool. The old per-category numbers were tuned for prompt size alone and
+  // hid real pieces from her real trip: Athleisure fell to the 4-item
+  // fallback with 19 in the closet — on a vacation — Shoes 13 → 8, Dresses
+  // 10 → 8. Measured 2026-09-07. Ordering is unchanged; only the cut is.
   const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts"];
-  const CAT_CAP = { Outerwear: 6, Dresses: 8, Jumpsuits: 3, Tops: 12, Knits: 6, Bottoms: 10, Shoes: 8, Bags: 5, Accessories: 5, Belts: 2 };
+  const PER_CATEGORY_CAP = 40;
   const byCat = {};
   eligible.forEach(it => { (byCat[it.category] ||= []).push(it); });
   const prefer = opts.preferItemIds instanceof Set && opts.preferItemIds.size > 0
@@ -192,9 +200,11 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     }
   }
   const sampled = [
-    ...CAT_ORDER.flatMap(cat => (byCat[cat] || []).slice(0, CAT_CAP[cat] ?? 5)),
-    // categories not in CAT_ORDER (Sets, Athleisure, Swim on beach days…)
-    ...Object.keys(byCat).filter(cat => !CAT_ORDER.includes(cat)).flatMap(cat => byCat[cat].slice(0, 4)),
+    ...CAT_ORDER.flatMap(cat => (byCat[cat] || []).slice(0, PER_CATEGORY_CAP)),
+    // categories not in CAT_ORDER (Sets, Athleisure, Swim on beach days…) —
+    // these took the harshest cut of all at 4, which on her Arizona trip meant
+    // 15 of 19 athleisure pieces were invisible to every day's look.
+    ...Object.keys(byCat).filter(cat => !CAT_ORDER.includes(cat)).flatMap(cat => byCat[cat].slice(0, PER_CATEGORY_CAP)),
   ];
 
   // Inventory lines carry the same signals Style Me sends (2026-08-13 audit:

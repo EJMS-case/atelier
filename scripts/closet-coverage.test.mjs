@@ -30,6 +30,7 @@ import { OCCASION_SLOTS } from "../src/constants/styling.js";
 import { normalizeItem } from "../src/utils/item-helpers.js";
 import { buildStylingPrompt } from "../src/prompts/styling-system-prompt.js";
 import { runAllChecks } from "../src/utils/styling-validator.js";
+import { availableReference } from "../src/features/builder/builderChat.js";
 import { WEATHER_BUCKETS } from "../src/constants/taxonomy.js";
 import { buildWardrobe, NYC_CLOSET } from "./fixtures/build-wardrobe.mjs";
 
@@ -157,4 +158,24 @@ test("Hot pool still drops the heavy outerwear the validator rejects", () => {
   });
   assert.ok(!sampled.some(it => it.id === "wool"),
     "a wool overcoat in the Hot pool is pure retry-bait");
+});
+
+// ── The other surfaces that assemble outfits ────────────────────────────────
+// Style Me is not the only place a look gets built, and the whole-closet
+// promise has to hold on all of them. The builder's chat kept a per-category
+// cap of 40 that hid 89 of her 462 pieces — 53 tops, 28 bottoms, 8 athleisure,
+// always the same ones, since the cut is by array position. Measured 2026-09-07.
+test("the builder chat's reference carries every piece, no per-category cap", () => {
+  const many = [
+    ...Array.from({ length: 93 }, (_, i) => ({ id: `t${i}`, name: `Top ${i}`, category: "Tops", subcategory: "Blouses", color: "Black" })),
+    ...Array.from({ length: 68 }, (_, i) => ({ id: `b${i}`, name: `Bottom ${i}`, category: "Bottoms", subcategory: "Trousers", color: "Black" })),
+    ...Array.from({ length: 48 }, (_, i) => ({ id: `a${i}`, name: `Legging ${i}`, category: "Athleisure", subcategory: "Leggings", color: "Black" })),
+  ];
+  const ref = availableReference(many);
+  const missing = many.filter(it => !ref.includes(it.name));
+  assert.deepEqual(missing.map(m => m.name), [],
+    `${missing.length} pieces never reached the builder chat`);
+  // Every category still present and still grouped, not interleaved.
+  assert.match(ref, /Tops > Blouses/);
+  assert.match(ref, /Athleisure > Leggings/);
 });

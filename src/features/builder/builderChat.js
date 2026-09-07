@@ -45,16 +45,30 @@ function formatItem(it) {
   ].filter(Boolean).join(" | ");
 }
 
-// Cap per category so a large closet stays within context without ever
-// dropping an entire category. Grouping follows the FIXED taxonomy order —
-// deliberately NOT the empty-slots order the old code used, because slot
-// state changes every turn and would bust the cached system block.
-const PER_CATEGORY_CAP = 40;
+// Grouping follows the FIXED taxonomy order — deliberately NOT the empty-slots
+// order the old code used, because slot state changes every turn and would bust
+// the cached system block.
+//
+// There is NO per-category cap. There used to be one (40), and against her real
+// closet it hid 89 of her 462 pieces from the chat — 53 tops, 28 bottoms, 8
+// athleisure — always the same ones, since the cut is by array position and
+// nothing sorts first. This is the same call the closet sampler already made
+// for Style Me ("Was a strict ~92-item sample, but the user wanted every
+// eligible piece in play"), and the owner's reason is the same one: "the
+// purpose of this app is so I get use out of everything I have."
+//
+// The cost is bounded and cheap: this block is the CACHED system prefix, kept
+// byte-identical across turns, so the whole closet is written once per session
+// and read at cache rates after. Measured on her closet, 2026-09-07: ~13.8k
+// tokens capped → ~17.2k uncapped.
 
 // The inventory block the model picks from. It is an "available", and naming
 // it so is load-bearing: an earlier name (`closetItems`, documented as "full
 // wardrobe array") described neither what it held nor what it was for.
-function availableReference(available) {
+// Exported for scripts/closet-coverage.test.mjs — the whole-closet promise is
+// only as good as the check on it, and this is the unit that either keeps every
+// piece or quietly drops some.
+export function availableReference(available) {
   const byCat = new Map();
   for (const it of available || []) {
     const cat = it.category || "Other";
@@ -67,7 +81,7 @@ function availableReference(available) {
   };
   const lines = [...byCat.keys()]
     .sort((a, b) => order(a) - order(b) || a.localeCompare(b))
-    .flatMap(cat => byCat.get(cat).slice(0, PER_CATEGORY_CAP).map(formatItem));
+    .flatMap(cat => byCat.get(cat).map(formatItem));
   return lines.length > 0 ? lines.join("\n") : "(none)";
 }
 
