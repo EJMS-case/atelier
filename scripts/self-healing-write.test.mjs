@@ -9,6 +9,7 @@
 // Run: npm run test:selfheal
 
 import { selfHealingWrite, MAX_STRIP_ATTEMPTS } from "../src/lib/selfHealingWrite.js";
+import { mergeOutfitLogMeta, OUTFIT_LOG_COLUMNS } from "../src/lib/supabase.js";
 
 let passed = 0, failed = 0;
 function assert(cond, label) {
@@ -150,5 +151,33 @@ section("error wording");
 }
 
 // ── Result ──────────────────────────────────────────────────────────────────
+
+// ── Outfit-log slim fetch (2026-09-10) ───────────────────────────────────────
+// fetchOutfitLogs is now slim + a collage-meta sidecar (21 legacy rows carry
+// dead base64 collages nothing renders; select=* shipped 2.2 MB to every
+// caller, the Style Me tap included). The merge is the pure piece.
+section("mergeOutfitLogMeta");
+{
+  const rows = [
+    { id: "a", garment_ids: ["1"], occasion: "Work" },
+    { id: "b", garment_ids: ["2"], occasion: "Dinner" },
+    { id: "c", garment_ids: ["3"] },
+  ];
+  const meta = [{ id: "b", collage_url: '{"styling":"tonal column"}' }];
+  const merged = mergeOutfitLogMeta(rows, meta);
+  assert(merged[0].collage_url === null, "a row with no sidecar pair reads collage_url null (legacy base64 stays server-side)");
+  assert(merged[1].collage_url === '{"styling":"tonal column"}', "the small JSON meta newer saves store survives the merge");
+  assert(merged[2].collage_url === null, "a null collage merges as null");
+  assert(merged[1].occasion === "Dinner", "slim fields pass through untouched");
+  assert(rows[1].collage_url === undefined, "merge never mutates its inputs");
+  assert(mergeOutfitLogMeta(rows, null).length === 3, "a failed sidecar fetch degrades to null collages, not an empty table");
+  assert(mergeOutfitLogMeta(null, meta).length === 0, "no rows, no output");
+  const cols = OUTFIT_LOG_COLUMNS.split(",");
+  assert(!cols.includes("collage_url"), "the slim list must exclude the one heavy column");
+  for (const c of ["id", "garment_ids", "date_worn", "occasion", "layout_data", "source"]) {
+    assert(cols.includes(c), `slim list carries ${c} — SavedLookCard, wear stats, and builtLookLines read it`);
+  }
+}
+
 console.log(`\nselfheal: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

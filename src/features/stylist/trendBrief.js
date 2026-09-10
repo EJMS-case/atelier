@@ -46,12 +46,24 @@ export function composeTrendBlock(brief) {
 
 // Pull the "•" lines out of a model reply; drop a trailing Sources line into
 // its own field so the prompt never carries URLs.
+//
+// A line that starts mid-sentence belongs to the bullet ABOVE it: a web-search
+// reply arrives as several text blocks split around citations, and the first
+// stored brief (2026-09-10) was parsed with each fragment as its own line —
+// every bullet kept only its first fragment and the app spent a month telling
+// her "• Layer" and "• Go deeper this year:" as taste guidance. Fragments
+// rejoin; only prose BEFORE the first bullet is preamble and drops.
 export function parseTrendReply(text) {
   const lines = String(text || "").split("\n").map(l => l.trim()).filter(Boolean);
-  const bullets = lines.filter(l => /^[•\-–*]\s*/.test(l)).map(l => l.replace(/^[•\-–*]\s*/, "• ").replace(/\s+/g, " "));
-  const sourcesLine = lines.find(l => /^sources?:/i.test(l)) || "";
+  const bullets = [];
+  let sourcesLine = "";
+  for (const l of lines) {
+    if (/^sources?:/i.test(l)) { sourcesLine = l; continue; }
+    if (/^[•\-–*]\s*/.test(l)) bullets.push(l.replace(/^[•\-–*]\s*/, ""));
+    else if (bullets.length) bullets[bullets.length - 1] += ` ${l}`;
+  }
   const sources = sourcesLine.replace(/^sources?:\s*/i, "").split(/[,;]\s*/).map(s => s.trim()).filter(Boolean);
-  return { text: bullets.slice(0, 10).join("\n"), sources };
+  return { text: bullets.slice(0, 10).map(b => `• ${b.replace(/\s+/g, " ").trim()}`).join("\n"), sources };
 }
 
 export async function loadTrendBrief() {
@@ -91,7 +103,10 @@ Use web search to verify against at least two current, credible fashion sources 
     body = await res.json();
     rounds++;
   }
-  const textOf = (b) => (b.content || []).filter(x => x.type === "text").map(x => x.text || "").join("\n");
+  // Join text blocks with NOTHING: web-search replies split one sentence
+  // across blocks around citations, and a "\n" join manufactured line breaks
+  // mid-sentence (the parser bug above fed on exactly those).
+  const textOf = (b) => (b.content || []).filter(x => x.type === "text").map(x => x.text || "").join("");
   let parsed = parseTrendReply(textOf(body));
   if (!parsed.text && body.stop_reason === "max_tokens") {
     messages = [...messages, { role: "assistant", content: body.content },

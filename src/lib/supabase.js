@@ -70,6 +70,17 @@ function dataUrlToBlob(base64DataUrl, fallbackMime) {
   return { blob: new Blob([bytes], { type: mime }), mime };
 }
 
+// Every outfit_logs column except collage_url (see fetchOutfitLogs).
+export const OUTFIT_LOG_COLUMNS = "id,garment_ids,date_worn,occasion,notes,is_favorite,spend_actual,spend_estimated,created_at,weather,occasions,weathers,layout_data,source";
+
+// Overlay the sidecar id→collage_url pairs onto the slim rows. Pure; rows
+// without a pair (legacy base64, or null) read collage_url null so downstream
+// parseMeta readers behave exactly as they did on a full fetch.
+export function mergeOutfitLogMeta(rows, metaRows) {
+  const byId = new Map((Array.isArray(metaRows) ? metaRows : []).map(m => [m.id, m.collage_url]));
+  return (Array.isArray(rows) ? rows : []).map(r => ({ ...r, collage_url: byId.get(r.id) ?? null }));
+}
+
 export const sb = {
   async fetchAll() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?select=*&order=created_at.asc`, {
@@ -276,12 +287,37 @@ export const sb = {
       label: "Save outfit log",
     });
   },
+  // ── Outfit logs: slim by default ──────────────────────────────────────────
+  // `select=*` here was shipping 2.2 MB per call: 21 legacy rows still carry a
+  // full base64 collage in `collage_url`, and NOTHING renders those anymore —
+  // SavedLookCard rebuilds every collage from garment_ids + layout_data, and
+  // the only readers of collage_url (LooksView / OutfitHistory parseMeta) want
+  // the small {mood, styling} JSON that newer saves store there. Ten call
+  // sites fetch this table — App load, Style Me's learning path, Favorites,
+  // Planner, Insights, Style Profile — so every one of them was paying 2.2 MB
+  // on her phone (owner report 2026-09-10: Style Me "really really long to
+  // load"). Two parallel requests: every column EXCEPT collage_url, plus the
+  // id→collage_url pairs for rows whose value is NOT a data: URL. Merged, the
+  // result is shaped exactly like before (legacy base64 rows read collage_url
+  // null — the dead weight stays on the server). If the slim select ever
+  // hits schema drift (a column in the list dropped live), fall back to the
+  // old full fetch: slow beats broken.
+  // Keep OUTFIT_LOG_COLUMNS in sync with the table (migration 0036 is the
+  // newest column); a new column that readers need must be added here.
   async fetchOutfitLogs() {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=*&order=date_worn.desc,created_at.desc`, {
-      headers: sbHeaders(),
-    });
-    if (!res.ok) return [];
-    return res.json();
+    const order = "order=date_worn.desc,created_at.desc";
+    const [slimRes, metaRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=${OUTFIT_LOG_COLUMNS}&${order}`, { headers: sbHeaders() }),
+      fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=id,collage_url&collage_url=not.like.data:*`, { headers: sbHeaders() }).catch(() => null),
+    ]);
+    if (!slimRes.ok) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=*&${order}`, { headers: sbHeaders() });
+      if (!res.ok) return [];
+      return res.json();
+    }
+    const rows = await slimRes.json();
+    const meta = metaRes && metaRes.ok ? await metaRes.json().catch(() => []) : [];
+    return mergeOutfitLogMeta(rows, meta);
   },
   async deleteOutfitLog(id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {

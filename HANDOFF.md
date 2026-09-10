@@ -1,12 +1,28 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #234. The session log below
+Refreshed **2026-09-10**, after PR #235. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-10 · PR #235 — Style Me was slow because every log fetch shipped 2.2 MB of dead collages
+
+**Owner:** *"It's taking a really really long time to load in style me now."* Root cause verified against the live rows, not guessed: #232's `learnedForStyleMe` put a `fetchOutfitLogs()` on the Style Me tap, that fetch was `select=*`, and `outfit_logs` is **2.2 MB — 2.1 MB of it is 21 legacy rows carrying full base64 collages in `collage_url` that NOTHING renders anymore** (SavedLookCard rebuilds collages from `garment_ids` + `layout_data`; the only readers, LooksView/OutfitHistory `parseMeta`, want the small `{mood, styling}` JSON newer saves store there). Ten call sites fetch this table — App load, Favorites, Planner, Insights, Style Profile — so her phone was pulling 2.2 MB on cold start AND again on the tap, serially, before the model call even started.
+
+**Fix, at the fetch so every caller is cured:** `fetchOutfitLogs` is now slim + sidecar — every column except `collage_url` (~48 kB), plus `id→collage_url` pairs only for non-`data:` rows (~23 kB), merged (`mergeOutfitLogMeta`, pure, tested). Legacy base64 rows read `collage_url: null`; schema drift falls back to the old full fetch (slow beats broken). **And the tap now fetches nothing:** `learnedForStyleMe` accepts the logs App already holds (`extras.outfitLogs`), fetching only when a caller has none. 2.2 MB × 2 → ~71 kB × 1 per session.
+
+**Found on the way, fixed:** the stored trend brief was garbage — every bullet cut mid-sentence ("• Layer", "• Go deeper this year:"), read by EVERY surface as taste guidance. Cause: a web-search reply arrives as text blocks split around citations; `textOf` joined them with `\n` and `parseTrendReply` dropped every line not starting with "•". Blocks now join with nothing, fragments rejoin to their bullet, and the stored brief was marked stale (its `generated_at` backdated) so the next app open regenerates it with the fixed parser.
+
+**Her call, surfaced not actioned:** the 21 base64 collage rows (2.1 MB) are now unreachable dead weight on the server. Nulling that column in those rows (or a migration) would shrink her backups; it touches her rows, so it waits for her word.
+
+**Watch-items:**
+- Style Me should feel immediate again up to the model's own latency. If it is still slow, the next suspects are contact-sheet generation on tap (canvas work, per tap) and MODEL_TOP first-token latency — measure before touching.
+- The regenerated trend brief: bullets should now be full sentences. Style Profile shows it; if it still reads clipped, `parseTrendReply` fragments are the lever.
+
+**Verified before push:** `npm test` (37 suites; selfheal grew the merge tests, standard grew the fragment-rejoin test), `npm run build`, `npm run smoke` green. Live sizes verified by SQL (2.2 MB total, 48 kB slim, 23 kB meta).
 
 ### 2026-09-10 · PR #234 — the stylist line is written for every piece, not left to a fallback
 

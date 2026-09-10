@@ -215,7 +215,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // her stylist in conversation (features/stylist/learning.js). The one
   // personal signal App did not already hold in state; memoised, soft-fail.
   const { standing: standingPreferences, lessons: chatLessons, trendBrief, builtLines: builtLooks } =
-    await learnedForStyleMe({ wardrobe }).catch(() => ({ standing: [], lessons: [], trendBrief: null, builtLines: [] }));
+    await learnedForStyleMe({ wardrobe, logs: outfitLogs }).catch(() => ({ standing: [], lessons: [], trendBrief: null, builtLines: [] }));
 
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,

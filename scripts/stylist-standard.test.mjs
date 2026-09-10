@@ -582,6 +582,17 @@ test("the trend brief: parsed from bullets, stale by season or age, composed as 
   assert.equal(parsed.text.split("\n").length, 3);
   assert.ok(parsed.text.split("\n").every(l => l.startsWith("• ")));
   assert.deepEqual(parsed.sources, ["vogue.com", "businessoffashion.com"]);
+
+  // A web-search reply arrives as text blocks split around citations; a line
+  // that starts mid-sentence belongs to the bullet above it. The first stored
+  // brief was parsed without this and every surface read "• Layer" as taste
+  // guidance for a month's worth of taps.
+  const split = "• Wear your open blazer over a nipped-waist knit or crisp collar—\nnever zipped outerwear indoors.\n• Go deeper this year:\nespresso, black cherry, and ink over charcoal.\nSources: vogue.com";
+  const rejoined = parseTrendReply(split);
+  assert.equal(rejoined.text.split("\n").length, 2, "fragments rejoin instead of becoming bullets or vanishing");
+  assert.match(rejoined.text, /crisp collar— never zipped outerwear indoors/);
+  assert.match(rejoined.text, /Go deeper this year: espresso, black cherry/);
+  assert.ok(!/^• never/m.test(rejoined.text), "a continuation never starts its own bullet");
   const now = new Date("2026-09-10T12:00:00");
   const fresh = { text: parsed.text, season: briefSeasonLabel(now), generated_at: "2026-09-01T00:00:00Z" };
   assert.equal(trendBriefIsStale(fresh, now), false);
