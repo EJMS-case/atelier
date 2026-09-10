@@ -2,6 +2,49 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Every deploy was stranding her open app, and Style Me is where it showed (#236) — 2026-09-10
+
+### Why
+Owner, minutes after #235 deployed: *"Now it completely errors out."* The
+deploy, not the code: deploys are atomic, so the new one stops serving the
+previous build's hashed chunks. The app is a PWA she keeps open on her
+phone; Style Me is the code-split surface that dynamic-imports its chunk on
+tap; the first tap after a deploy fetched a file that no longer existed —
+and the service worker's asset handler cached that 404/HTML response under
+the chunk URL, so every subsequent tap failed from cache until a full
+reload. Three merges in one day made the window easy to hit.
+
+### Fixed
+- **`public/sw.js`:** each build precaches its own js/css chunks at install
+  (stamped in as `__ASSET_LIST__`; ort/wasm ML runtimes excluded — 24 MB,
+  only local bg removal). Activate keeps the newest TWO build caches via an
+  install-time registry and deletes everything else (pre-registry caches,
+  poisoned entries included). Asset lookup searches every cache, so a page
+  open across a deploy serves its own chunks from the retained previous
+  cache and keeps working through the deploy. Both fetch handlers cache
+  only `res.ok` responses — a failure can never be stored again.
+- **`src/main.jsx`:** `vite:preloadError` → one `location.reload()` (with a
+  2-minute guard against loops) — the floor for what precache can't cover:
+  two deploys while a page stays open, install races, and clients still on
+  the pre-fix worker.
+- **`scripts/stamp-sw.mjs`:** injects the chunk list alongside the build id,
+  validates both placeholders before and after the rewrite, and fails the
+  build on an empty precache list.
+
+### Downstream
+- **Efficiency:** ~0.4 MB (wire) precache per deploy, in the background at
+  SW install; Cache Storage bounded to two builds plus a tiny registry.
+- **Effectiveness/Speed:** a deploy no longer costs her an errored tap or a
+  manual reload; the poisoned-cache failure mode is structurally gone.
+- **Education:** unchanged.
+
+### Notes
+- Clients still on the pre-fix worker need one full close-and-reopen; from
+  the next deploy on, neither mechanism needs her.
+- No migration. The trend-brief backdate (deferred from #235) was run
+  directly with the correct `::jsonb` cast; the broken scheduled version
+  was deleted.
+
 ## [Unreleased] — Style Me was slow because every log fetch shipped 2.2 MB of dead collages (#235) — 2026-09-10
 
 ### Why
