@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — The whole-app sweep: photos read sleeves, a researched trend brief, swaps you can tap, and every save teaches — 2026-09-10
+## [Unreleased] — The whole-app sweep: photos read sleeves, a researched trend brief, swaps you can tap, and every save teaches (#232) — 2026-09-10
 
 ### Why
 Owner, re-sending the evaluator report: *"Still think big picture. Assess

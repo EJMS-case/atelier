@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #231. The session log below
+Refreshed **2026-09-10**, after PR #232. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-10 · the whole-app sweep — her goals, applied everywhere
+### 2026-09-10 · PR #232 — the whole-app sweep: her goals, applied everywhere
 
 **Owner:** *"Still think big picture … Focus on the full app, not just this fix. Be very creative and smart about my goals."* CHANGELOG has the full list. The live-data facts that shaped it: **`vision_data` is null on every row** (Visual AI was never run), **27 tops carry no sleeve word**, and nothing distinguished a look she built from one Style Me generated.
 
