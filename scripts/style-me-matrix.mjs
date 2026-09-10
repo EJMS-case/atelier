@@ -12,6 +12,7 @@
 
 import { runAllChecks } from "../src/utils/styling-validator.js";
 import { OCCASION_SLOTS } from "../src/constants/styling.js";
+import { weatherAdjustedSlots } from "../src/features/stylist/standard.js";
 
 const WEATHERS = [
   "Hot (85°F+)",
@@ -249,17 +250,12 @@ function candidateLooksFor(occasion, weather) {
 }
 
 // ── Slot adjustment mirroring stylist.js ─────────────────────────────────────
-// stylist.js softens the layer requirement on hot/warm — the matrix has to
-// mirror that so it runs the validator against the same shape the app uses.
-
+// The SAME heat adjustment the app applies (features/stylist/standard.js) —
+// not a private copy. It used to demote the layer in heat; it no longer does
+// (owner 2026-09-10: her office dress code holds in every weather), and the
+// matrix must run the validator against the shape the app actually uses.
 function slotsFor(occasion, weather) {
-  const base = OCCASION_SLOTS[occasion];
-  if (!base) return base;
-  const isHotOrWarm = /hot|warm|85|70-84/i.test(weather);
-  if (!isHotOrWarm || !base.required?.layer) return base;
-  const { layer, ...restRequired } = base.required;
-  const newOptional = { ...base.optional, layer: Array.isArray(layer) ? layer : true };
-  return { ...base, required: restRequired, optional: newOptional };
+  return weatherAdjustedSlots(OCCASION_SLOTS[occasion], weather);
 }
 
 // ── Run ──────────────────────────────────────────────────────────────────────
@@ -318,10 +314,10 @@ function expectRejected(name, response, ctx) {
   return { name, rejected: hard.length > 0, reason: hard[0]?.message };
 }
 
-// Specific regression guard for the bug the previous PR fixed: HC_SHOULDER
-// must not require a layer for Work / Work Dinner on Hot or Warm weather.
-// We build a candidate look that satisfies every other rule but deliberately
-// omits the layer; it must pass.
+// Regression guard: the office-coverage preference (HC_SHOULDER) is SOFT —
+// by the owner's instruction it steers retries and never walls a generation
+// — so a Work look with no layer must still be ACCEPTED (hard-clean) in every
+// weather. The preference itself is asserted in the soft-nudge section below.
 function expectAccepted(name, response, ctx) {
   const failures = runAllChecks(
     response, idMap, CLOSET, [], ctx.slots, ctx.occasion, ctx.weather, []
@@ -332,12 +328,12 @@ function expectAccepted(name, response, ctx) {
 
 const positives = [
   expectAccepted(
-    "Work + Warm with NO layer (HC_SHOULDER must be relaxed)",
+    "Work + Warm with NO layer (office coverage is a soft nudge, never a wall)",
     { looks: [buildLook({ vibe: "polished", items: [reverseMap["blouse"], reverseMap["trousers-light"], reverseMap["loafers"], reverseMap["bag"]] })] },
     { slots: slotsFor("Work", "Warm (70-84°F)"), occasion: "Work", weather: "Warm (70-84°F)" }
   ),
   expectAccepted(
-    "Work + Hot with NO layer",
+    "Work + Hot with NO layer (soft nudge, never a wall)",
     { looks: [buildLook({ vibe: "polished", items: [reverseMap["blouse"], reverseMap["trousers-light"], reverseMap["flats"], reverseMap["bag"]] })] },
     { slots: slotsFor("Work", "Hot (85°F+)"), occasion: "Work", weather: "Hot (85°F+)" }
   ),
@@ -369,15 +365,32 @@ const positives = [
   ),
 ];
 
+// ── Soft nudges ───────────────────────────────────────────────────────────
+// Her preferences that must FIRE (so the corrective prompt carries them) but
+// must never be hard: the office-coverage preference, in every weather. A
+// preference that stopped firing would be "the app doesn't know my work
+// dress"; a preference that walled a generation would be a hard rule.
+function expectSoftNudge(name, type, response, ctx) {
+  const failures = runAllChecks(response, idMap, CLOSET, [], ctx.slots, ctx.occasion, ctx.weather, []);
+  const hits = failures.filter(f => f.type === type);
+  const hard = failures.filter(f => f.hard);
+  return {
+    name,
+    ok: hits.length > 0 && hits.every(f => !f.hard) && hard.length === 0,
+    reason: hits.length === 0 ? "preference did not fire" : hits.some(f => f.hard) ? "fired HARD" : hard.length ? `other hard failure: ${hard[0].message}` : "",
+  };
+}
+const bareTankAtWork = (weather, bottom, shoes) => ({
+  response: { looks: [buildLook({ vibe: "polished", items: [reverseMap["tank"], reverseMap[bottom], reverseMap[shoes], reverseMap["bag"]] })] },
+  ctx: { slots: slotsFor("Work", weather), occasion: "Work", weather },
+});
+const softNudges = [
+  (() => { const c = bareTankAtWork("Cool (40-54°F)", "trousers-wool", "loafers"); return expectSoftNudge("Work + Cool, tank and no layer → office coverage nudges", "shoulder_coverage", c.response, c.ctx); })(),
+  (() => { const c = bareTankAtWork("Hot (85°F+)", "trousers-light", "flats"); return expectSoftNudge("Work + Hot, tank and no layer → office coverage nudges (weather-independent)", "shoulder_coverage", c.response, c.ctx); })(),
+  (() => { const c = bareTankAtWork("Warm (70-84°F)", "trousers-light", "loafers"); return expectSoftNudge("Work + Warm, tank and no layer → office coverage nudges", "shoulder_coverage", c.response, c.ctx); })(),
+];
+
 const negatives = [
-  // Work + Cool with a sleeveless tank and no layer must fail HC_SHOULDER —
-  // a sleeved blouse alone now satisfies the rule, so the negative case
-  // requires bare shoulders (tank) to verify the validator still triggers.
-  expectRejected(
-    "Work + Cool with sleeveless top and no layer",
-    { looks: [buildLook({ vibe: "polished", items: [reverseMap["tank"], reverseMap["trousers-wool"], reverseMap["loafers"], reverseMap["bag"]] })] },
-    { slots: slotsFor("Work", "Cool (40-54°F)"), occasion: "Work", weather: "Cool (40-54°F)" }
-  ),
   // Hot + a wool blazer must fail the weather check.
   expectRejected(
     "Casual + Hot with a wool blazer",
@@ -428,6 +441,14 @@ for (const p of positives) {
   if (!p.accepted) positiveFailures.push(p);
 }
 
+console.log("\nSoft nudges (each preference should FIRE, never hard)");
+console.log("──────────────────────────");
+const nudgeFailures = [];
+for (const n of softNudges) {
+  console.log(`  ${n.ok ? "✓" : "✗"}  ${n.name}${n.ok ? "" : `  ← ${n.reason}`}`);
+  if (!n.ok) nudgeFailures.push(n);
+}
+
 console.log("\nNegative checks (each line should be REJECTED)");
 console.log("──────────────────────────");
 const negativeFailures = [];
@@ -448,6 +469,10 @@ if (cellFailures.length > 0) {
 }
 if (positiveFailures.length > 0) {
   console.error(`\n${positiveFailures.length} positive check(s) wrongly rejected — a valid look pattern is being blocked.`);
+  process.exit(1);
+}
+if (nudgeFailures.length > 0) {
+  console.error(`\n${nudgeFailures.length} soft nudge(s) wrong — a preference stopped firing, or became a hard rule.`);
   process.exit(1);
 }
 if (negativeFailures.length > 0) {

@@ -97,7 +97,11 @@ Conventions worth knowing:
   violation. The validator's structural checks stay (they are what makes a
   look a look); taste-level checks are soft and phrased as what she keeps out
   of a room. **A blazer is always worn open** — never suggest buttoning or
-  belting one closed.
+  belting one closed. **Her office is business professional in every
+  weather**: a long sleeve stands alone; short sleeves or a tank take a knit
+  or blazer over them, the lightest she owns when it's hot. A weather branch
+  must never delete an occasion preference — heat changes *which* layer,
+  never *whether* (that exact bug survived a year, 2026-09-10).
 - **Everything the app knows about her comes from
   `src/features/stylist/learning.js`** — standing preferences (Style Profile
   → How I Wear Things), lessons distilled from her chats, fingerprint, loved

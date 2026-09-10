@@ -12,7 +12,7 @@ import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
 import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
-import { personalGrounding } from "../../features/stylist/standard.js";
+import { personalGrounding, occasionBrief } from "../../features/stylist/standard.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
 
@@ -329,10 +329,14 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   }
 
   const destNote = destination ? ` in ${destination}` : "";
+  // The same occasion brief Style Me and the builder read — a Work day on a
+  // trip is still her business-professional office (this generator used to
+  // send the bare word "Work" and nothing about how she dresses for it).
+  const occasionText = occasionBrief([occasion], weather);
   const prompt = `You are her personal stylist building ONE complete outfit for a trip day${destNote}.
 
 OCCASION: ${occasion}
-WEATHER: ${weather} (around ${highF}°F)${heatNote}
+${occasionText ? `${occasionText}\n` : ""}WEATHER: ${weather} (around ${highF}°F)${heatNote}
 ${destBlock}${activityBlock}${mustBlock}${preferBlock}${varietyBlock}${personalBlock}
 WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register. A line ending in "| AT DESTINATION" is already in her closet at the destination and costs nothing to pack — see PACKING PREFERENCE above. A line ending in "| MUST INCLUDE" is a piece she has already decided to bring — see the MUST-INCLUDE block above. ${NOTES_NEGATION_LEGEND}):
 ${inventory}
