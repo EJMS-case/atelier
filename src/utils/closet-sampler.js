@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 
@@ -626,7 +626,7 @@ export function sampleClosetItems({
     pool = pool.filter(it => {
       if ((it.season_weight || "").toLowerCase() === "winter") return false;
       if (it.category === "Knits") {
-        if (isHotBucket) return false; // Hot: every knit hard-fails
+        if (isHotBucket && !isLightCardigan(it)) return false; // Hot: every knit but a fine cardigan (the office layer) hard-fails
         if (it.knit_weight === "Chunky/Winter" || it.subcategory === "Pullovers" || HEAVY_RE.test(wxText(it))) return false;
       }
       // Heavy fabric on-body (non-Outerwear) is an unconditional fail in both

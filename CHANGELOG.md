@@ -2,6 +2,70 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Her office is business professional, in every weather (#230) — 2026-09-10
+
+### Why
+Owner, on a Work + Hot/Warm chat where she had to type "I need to cover my
+shoulders at work" before the stylist mentioned it: *"Do I need to add a hard
+rule that my shoulders need to be covered at work? My office is business
+professional. Long sleeves, or if short sleeves or tank, I need a knit or
+blazer. This should be obvious for my work selection. Why is it not obvious?
+… avoid as much as possible setting hard rules. I am annoyed … we've worked
+on this app for almost a year and it still doesn't know my appropriate work
+dress."*
+
+**No hard rule was needed. The app knew her dress code and then told the
+stylist to forget it every summer.** Three places said so, all written in
+August 2026 to stop unsatisfiable Work + Hot validations from walling:
+- `weatherAdjustedSlots` rewrote the Work brief in Hot/Warm to *"Layers are
+  OPTIONAL in this heat"* and demoted the layer.
+- `HC_SHOULDER` — prompt and validator — stood down entirely in Hot/Warm, and
+  in every other weather accepted a **short sleeve** alone.
+- The HOT weather block said *"if no such piece exists, skip the layer
+  entirely"*, and the Hot weather gates dropped **every knit**, so a fine
+  cardigan — the one layer that works at 90° — could never reach Style Me.
+The occasion said one thing and the weather overrode it. The stylist chat
+read the same brief, so it waited to be asked.
+
+### Changed
+- **The Work and Work Dinner briefs now state her dress code, weather-
+  independent**: *"HOW SHE DRESSES FOR THE OFFICE, in every weather: a
+  long-sleeve top or a long-sleeved dress stands on its own; a short-sleeve
+  top, a tank, or anything sleeveless takes a knit or a blazer over it — worn
+  open, always — and in heat that means the lightest layer she owns (a fine
+  cardigan, an unlined or linen blazer), never no layer."* Heat now changes
+  **which** layer, never **whether**: `weatherAdjustedSlots` keeps the layer
+  and appends `HEAT_LAYER_NOTE` instead of demoting it.
+- **HC_SHOULDER, in the preamble and the validator, runs in every weather,
+  and only a long sleeve (`[L]`/`[3Q]`) stands alone**; short sleeves and
+  sleeveless take a Knits or Outerwear layer. **It is SOFT** — by her
+  instruction it steers the corrective prompt and never walls a generation.
+  The tank-layering nudge now catches sleeveless tops filed outside `Tanks`.
+- **A fine cardigan survives Hot** on all three sides of the pipeline —
+  `filterByWeather`, the sampler's pool gate, `checkWeatherCompliance` — via
+  one predicate, `isLightCardigan` (her `knit_weight` tag wins; otherwise the
+  piece must say it is light and not read heavy). Pullovers and chunky knits
+  still go. The HOT weather block carries the same exception for the office.
+- The standard's office line, the seeded standing preference, and the chat's
+  HOW TO WORK all say it in her words — and the chat is told to raise a
+  LOOK FACTS finding **in its first reply, unprompted**, before answering
+  what she asked. LOOK FACTS already carried the finding; the stylist had
+  been told "layers are optional" in the same message.
+- The trip-day generator now receives the occasion brief for the day (it used
+  to send the bare word "Work").
+
+### Tests
+- `npm run test:standard` → 30: Work + Hot with a tee or a tank alone runs
+  against how she dresses for the office; a long sleeve alone or a cardigan
+  over it does not; a fine cardigan passes every Hot gate and reaches the
+  Hot Work pool while a chunky one does not; the bare-tank finding is soft;
+  the preamble, weather block, standard, chat, and seed all carry it.
+- `npm run test:matrix` gains a **soft-nudge section**: the office preference
+  must FIRE in Cool, Warm, and Hot, and must never be hard. The old negative
+  check that demanded a hard rejection is retired; the "HC_SHOULDER must be
+  relaxed" positives are relabelled — a layerless Work look is still
+  accepted (soft), it is just no longer *correct*.
+
 ## [Unreleased] — Preferences, not rules; swaps, not tips; "you", not "her"; and the app learns from every chat (#229) — 2026-09-10
 
 ### Why

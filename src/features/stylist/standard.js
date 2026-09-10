@@ -72,8 +72,8 @@ HOW SHE WEARS THINGS — her standing preferences, learned from her closet, her 
 - ONE statement piece per look (a print, an embellishment); everything else stays quiet.
 - A dress, gown, jumpsuit, or complete set is worn on its own: no top or knit underneath, no belt on it. Outerwear over it is fine.
 - One pair of shoes on the body (Lounge may go barefoot), and a bag where the occasion calls for one.
-- At Work, Work Dinner, Dinner, and Occasion a tank or sleeveless shell is a layering base — under a blazer, jacket, or knit — unless the piece's own notes say it dresses up alone.
-- Work and Work Dinner in mild, cool, or cold weather: shoulders covered — a sleeved top or dress, or a layer over a sleeveless one.
+- Her office is business professional (Work, Work Dinner): a long-sleeve top or long-sleeved dress stands on its own; a short-sleeve top, a tank, or anything sleeveless takes a knit or a blazer over it — in every weather, the lightest layer she owns when it's hot, worn open. This is not a weather call: the office is air-conditioned and the room is the room. Say so unprompted when a look misses it.
+- At Dinner and Occasion a tank or sleeveless shell is a layering base — under a blazer, jacket, or knit — unless the piece's own notes say it dresses up alone.
 - A skirt or dress in Cool or Cold takes hosiery from her closet; hosiery never goes under trousers.
 - The occasion brief and the weather brief are how she has asked to be dressed for that room and that forecast. A departure is a real cost to name, not a crime — and a piece's own notes can override them.
 - Her notes on a piece outrank your assumptions about it. ${NOTES_NEGATION_LEGEND}`;
@@ -92,23 +92,19 @@ export const VOICE_RULES = `VOICE: You are talking TO Elyce. Everything she read
 
 // ── Occasion + weather briefs (the same ones Style Me is held to) ─────────────
 
-// Style Me's hot-weather relaxation of the Work/Work Dinner layer rule, lifted
-// out of generateOutfit so the chat and the evaluator apply the SAME
-// adjustment: at 70°F+ the "blazer is the default" line becomes "layers are
-// optional", and the required layer becomes an optional one.
+// The heat adjustment for occasions that carry a layer (Work, Work Dinner),
+// shared by Style Me, the chat and the evaluator. It used to DEMOTE the
+// layer ("Layers are OPTIONAL in this heat") — a 2026-08 workaround for
+// unsatisfiable Work + Hot validations that quietly deleted her office dress
+// code every summer (owner, 2026-09-10: "it still doesn't know my appropriate
+// work dress"). Heat now changes WHICH layer, never whether: the layer stays
+// in the brief, and the note says to reach for the lightest one she owns.
+export const HEAT_LAYER_NOTE = "In this heat the layer is for coverage, not warmth — the lightest she owns (a fine cardigan, an unlined or linen blazer), worn open. A long-sleeve top stands alone; a short-sleeve, tank, or sleeveless top still takes the layer.";
 export function weatherAdjustedSlots(baseSlots, weather) {
   if (!baseSlots) return baseSlots;
   const w = (weather || "").toLowerCase();
   if (!weatherMatches(w, "Hot", "Warm") || !baseSlots.required?.layer) return baseSlots;
-  const { layer, ...restRequired } = baseSlots.required;
-  const newOptional = { ...baseSlots.optional, layer: Array.isArray(layer) ? layer : true };
-  const newPromptNote = baseSlots.promptNote
-    ? baseSlots.promptNote.replace(
-        /Blazer.*?(on|required|mandatory).*?\./i,
-        "Layers are OPTIONAL in this heat — skip blazers/coats unless the piece is truly lightweight and unlined."
-      )
-    : baseSlots.promptNote;
-  return { ...baseSlots, required: restRequired, optional: newOptional, promptNote: newPromptNote || baseSlots.promptNote };
+  return { ...baseSlots, promptNote: `${baseSlots.promptNote || ""} ${HEAT_LAYER_NOTE}`.trim() };
 }
 
 // Canonical occasion list from whatever the chips hold: aliases folded

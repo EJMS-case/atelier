@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -485,8 +485,11 @@ function checkWeatherCompliance(response, idMap, allItems, weather, forceInclude
           // "Fine/Summer" — including the common null case — so it rejected
           // pieces the sampler had legitimately offered, wasting retries and
           // silently dropping looks.
+          // Hot: only a fine-gauge cardigan survives — it is the office layer
+          // her dress code needs at 90° (item-helpers isLightCardigan; the
+          // sampler's pool gate and filterByWeather read the same predicate).
           const knitTooWarm = isHot
-            ? true
+            ? !isLightCardigan(resolved)
             : (resolved.knit_weight === "Chunky/Winter" || heavy || resolved.subcategory === "Pullovers" || sw === "winter");
           if (knitTooWarm) {
             failures.push(`Look ${i + 1}: "${resolved.name}" is a knit — too warm for ${weather}.`);
@@ -805,7 +808,7 @@ function checkTankLayering(response, idMap, allItems, occasion) {
     const resolved = resolveLookItems(look, idMap, allItems);
     const roles = resolved.map(getGarmentRole);
     if (roles.includes("dress")) return;
-    const tank = resolved.find(it => it.category === "Tops" && it.subcategory === "Tanks");
+    const tank = resolved.find(it => it.category === "Tops" && (it.subcategory === "Tanks" || getSleeveType(it) === "sleeveless"));
     if (!tank) return;
     const hasLayer = resolved.some(it => it.category === "Outerwear" || it.category === "Knits");
     if (!hasLayer) {
@@ -841,14 +844,17 @@ function checkStatementCount(response, idMap, allItems) {
  * Relaxed on hot/warm days — combined with the strict warm-weather rejection
  * of most outerwear and all non-summer knits this was unsatisfiable.
  */
-function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
+// Her office is business professional, in every weather (owner, 2026-09-10:
+// "Long sleeves, or if short sleeves or tank, I need a knit or blazer").
+// This check used to stand down in Hot/Warm and accept a short sleeve alone —
+// which is why the app "still didn't know her appropriate work dress" every
+// summer. It now runs in every weather and only a LONG sleeve stands alone.
+// It is SOFT, by her instruction ("avoid hard rules"): a soft failure never
+// walls a generation, it only steers the corrective prompt when a retry
+// happens for a hard reason. The prompt (HC_SHOULDER) carries the preference;
+// the weather gates let a fine cardigan through in Hot so it is satisfiable.
+function checkShoulderCoverage(response, idMap, allItems, occasion) {
   if (!["Work", "Work Dinner"].includes(occasion)) return [];
-  const w = (weather || "").toLowerCase();
-  // No weather / "any" matches checkWeatherCompliance's early-out: the prompt
-  // only states the shoulder rule for cool/mild/cold, so enforcing it on an
-  // unweathered generation would fail looks the model was never told to layer.
-  if (w === "" || w === "any") return [];
-  if (weatherMatches(w, "Hot", "Warm")) return [];
   const failures = [];
 
   response.looks.forEach((look, i) => {
@@ -857,17 +863,17 @@ function checkShoulderCoverage(response, idMap, allItems, occasion, weather) {
     const hasLayer = resolved.some(it =>
       it.category === "Outerwear" || it.category === "Knits"
     );
-    // A sleeved top or sleeved dress/jumpsuit covers shoulders on its own;
-    // no extra layer needed. getSleeveType returns "long" | "short" | "sleeveless".
-    const hasSleevedCoverage = resolved.some(it => {
+    // A long-sleeved top or long-sleeved dress/jumpsuit stands on its own.
+    // getSleeveType returns "long" | "threeQuarter" | "short" | "sleeveless" | "unknown".
+    const hasLongSleeve = resolved.some(it => {
       const isTop = it.category === "Tops";
       const isDress = it.category === "Dresses" || it.category === "Jumpsuits";
       if (!isTop && !isDress) return false;
       const sleeve = getSleeveType(it);
-      return sleeve === "long" || sleeve === "short";
+      return sleeve === "long" || sleeve === "threeQuarter";
     });
-    if (!hasLayer && !hasSleevedCoverage) {
-      failures.push(`Look ${i + 1}: ${occasion} requires shoulder coverage — pair a sleeved top/dress, or add an outerwear/knit layer over a sleeveless piece (HC_SHOULDER).`);
+    if (!hasLayer && !hasLongSleeve) {
+      failures.push(`Look ${i + 1}: ${occasion} — her office is business professional: a short-sleeve, tank, or sleeveless top takes a knit or blazer over it in every weather (the lightest she owns when it's hot, worn open). Add a Knits or Outerwear layer, or switch to a long-sleeve top (HC_SHOULDER).`);
     }
   });
   return failures;
@@ -983,7 +989,9 @@ export function runAllChecks(response, idMap, allItems, activeExclusions, occasi
   // still steers any retry triggered by a real (hard) problem.
   allFailures.push(...checkStatementCount(response, idMap, allItems).map(f => ({ type: "statement_count", message: f, hard: false })));
   allFailures.push(...checkTankLayering(response, idMap, allItems, occasion).map(f => ({ type: "tank_layering", message: f, hard: false })));
-  allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion, weather).map(f => ({ type: "shoulder_coverage", message: f, hard: true })));
+  // Office coverage is her PREFERENCE, held in every weather, and soft by her
+  // instruction — it steers retries, it never walls a generation.
+  allFailures.push(...checkShoulderCoverage(response, idMap, allItems, occasion).map(f => ({ type: "shoulder_coverage", message: f, hard: false })));
 
   // Under-minimum item count is hard — a look with only accessories/outerwear and no clothing is invalid.
   // Over-maximum is soft — acceptable to show, just noisy.

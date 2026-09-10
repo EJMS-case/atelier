@@ -372,6 +372,24 @@ export const LIGHT_OUTER_RE = /linen|cotton|silk|seersucker|unstructured|unlined
 export const HEAVY_OUTER_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted|overcoat|peacoat|long\s*wool|heavy/i;
 export const HEAVY_COAT_RE = /wool|cashmere|shearling|sherpa|puffer|parka|down|quilted|long|heavy/i;
 
+// ── THE OFFICE LAYER IN HEAT ────────────────────────────────────────────────
+// A fine-gauge cardigan is the one knit that survives a Hot day: it is the
+// layer her business-professional office needs over a short-sleeve or
+// sleeveless top when it is 90° outside (owner, 2026-09-10). Her knit_weight
+// tag wins when present; otherwise the piece has to say it is light in its
+// own name/notes/material and not read heavy. ONE predicate, read by
+// filterByWeather, the sampler's pool gate, and checkWeatherCompliance, so the
+// three can never disagree about which cardigan is allowed in the heat.
+const LIGHT_KNIT_RE = /\b(fine|light|lightweight|summer|linen|cotton|silk|gauze|sheer|unlined|tissue)\b/i;
+export function isLightCardigan(item) {
+  if (!item || item.category !== "Knits" || item.subcategory !== "Cardigans") return false;
+  if (item.knit_weight === "Fine/Summer") return true;
+  if (item.knit_weight === "Chunky/Winter") return false;
+  const text = ((item.name || "") + " " + classifierNotes(item) + " " + (item.material || "")).toLowerCase();
+  if ((item.season_weight || "").toLowerCase() === "winter") return false;
+  return LIGHT_KNIT_RE.test(text) && !WEATHER_HEAVY_RE.test(text);
+}
+
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
 // Categories where leather/suede is fine even in extreme heat — the ban below
 // is about leather ON the body, not leather you carry or step in.
@@ -421,6 +439,12 @@ export function filterByWeather(items, weather) {
     if (isHosieryItem(it)) return !(isHot || isWarm);
 
     if (isHot) {
+      // Hot: every knit goes EXCEPT a fine cardigan — the office layer over a
+      // short-sleeve or sleeveless top (see isLightCardigan above). Accepted
+      // here, before the wider fabric test below: her knit_weight tag wins
+      // over a fibre word (a Fine/Summer alpaca cardigan is light because she
+      // says so — the tag is the curated signal, the fibre is a guess).
+      if (isLightCardigan(it)) return true;
       if (it.category === "Knits") return false;
       if (isKnitDress) return false;
       if (it.subcategory === "Sweater Dress") return false;

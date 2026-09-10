@@ -76,7 +76,7 @@ test("a clean Work look has no violations and reads its colour story", () => {
 test("a tagged sleeveless top at Work in the cold, with no layer, IS a violation", () => {
   const tank = pick("Tops", "Tanks", { color: "Ivory", material: "silk", formality: 5 });
   const r = readLook([tank, trouser(), pump(), tote()], { occasions: ["Work"], weathers: ["Cool (40-54°F)"] });
-  assert.ok(r.against.some(v => /shoulder coverage/.test(v)), r.against.join("\n"));
+  assert.ok(r.against.some(v => /business professional/.test(v)), r.against.join("\n"));
   assert.ok(r.against.some(v => /only visible top/.test(v)), r.against.join("\n"));
   assert.match(r.text, /Sleeveless: .* — no layer over it/);
 });
@@ -175,7 +175,7 @@ test("an empty canvas reads as nothing, and duplicates collapse", () => {
 
 test("the occasion brief is Style Me's rule, re-cut for one look", () => {
   const work = occasionBrief(["Work"]);
-  assert.match(work, /^WORK BRIEF \(how she has asked[^)]*\): WORK: Polished/);
+  assert.match(work, /^WORK BRIEF \(how she has asked[^)]*\): WORK: Business professional/);
   assert.match(work, /She keeps these out of Work: .*Sandals.*open sandal-form shoe/);
   assert.match(work, /Work calls for a bag/);
   assert.match(work, /is the default here/);
@@ -185,13 +185,88 @@ test("the occasion brief is Style Me's rule, re-cut for one look", () => {
   assert.doesNotMatch(dinner, /one of the 3 looks/);
 });
 
-test("the hot-weather layer relaxation is the same one Style Me applies", () => {
+test("heat changes WHICH layer, never whether — the office layer stays in the brief", () => {
   const hot = weatherAdjustedSlots(OCCASION_SLOTS.Work, "Hot (85°F+)");
-  assert.equal(hot.required.layer, undefined);
-  assert.match(hot.promptNote, /Layers are OPTIONAL in this heat/);
+  assert.ok(Array.isArray(hot.required.layer), "the layer must stay required in heat");
+  assert.match(hot.promptNote, /lightest she owns/);
+  assert.doesNotMatch(hot.promptNote, /OPTIONAL/);
   const cool = weatherAdjustedSlots(OCCASION_SLOTS.Work, "Cool (40-54°F)");
   assert.deepEqual(cool, OCCASION_SLOTS.Work);
-  assert.match(occasionBrief(["Work"], "Hot (85°F+)"), /Layers are OPTIONAL/);
+  for (const occ of ["Work", "Work Dinner"]) {
+    assert.match(OCCASION_SLOTS[occ].promptNote, /in every weather/);
+    assert.match(OCCASION_SLOTS[occ].promptNote, /short-sleeve top, a tank, or anything sleeveless takes a knit or a blazer/);
+    assert.doesNotMatch(OCCASION_SLOTS[occ].promptNote, /Avoid a tank as the only visible top/);
+  }
+  assert.match(occasionBrief(["Work"], "Hot (85°F+)"), /never no layer/);
+});
+
+// ── 5. Her office is business professional, in every weather ────────────────
+
+test("Work + Hot: a short-sleeve or sleeveless top alone runs against how she dresses for the office", async () => {
+  const tee = pick("Tops", "T-Shirts", { color: "White", material: "cotton", formality: 5 });
+  const tank = pick("Tops", "Tanks", { color: "Burgundy", material: "silk", formality: 5 });
+  for (const top of [tee, tank]) {
+    const r = readLook([top, trouser({ material: "cotton" }), pump(), tote()], { occasions: ["Work"], weathers: ["Hot (85°F+)"] });
+    assert.ok(r.against.some(v => /business professional/.test(v)), `${top.name}: ${r.against.join("\n")}`);
+  }
+  // …and the two things that satisfy it: a long sleeve alone, or a layer over it.
+  const longSleeve = pick("Tops", "Blouses", { color: "Navy", material: "silk", formality: 5, name: "Long-sleeve silk blouse" });
+  const alone = readLook([longSleeve, trouser({ material: "cotton" }), pump(), tote()], { occasions: ["Work"], weathers: ["Hot (85°F+)"] });
+  assert.ok(!alone.against.some(v => /business professional/.test(v)), alone.against.join("\n"));
+  const cardigan = pick("Knits", "Cardigans", { color: "Blush", knit_weight: "Fine/Summer", material: "cotton", formality: 5 });
+  const layered = readLook([tank, cardigan, trouser({ material: "cotton" }), pump(), tote()], { occasions: ["Work"], weathers: ["Hot (85°F+)"] });
+  assert.deepEqual(layered.against, [], layered.against.join("\n"));
+  // Casual has no such preference.
+  const casual = readLook([tee, trouser({ material: "cotton" }), pump()], { occasions: ["Casual"], weathers: ["Hot (85°F+)"] });
+  assert.ok(!casual.against.some(v => /business professional/.test(v)));
+});
+
+test("the office layer is satisfiable in the heat: a fine cardigan passes every weather gate, a chunky one does not", async () => {
+  const { runAllChecks } = await import("../src/utils/styling-validator.js");
+  const { filterByWeather, isLightCardigan } = await import("../src/utils/item-helpers.js");
+  const { sampleClosetItems } = await import("../src/utils/closet-sampler.js");
+  const fine = pick("Knits", "Cardigans", { color: "Blush", knit_weight: "Fine/Summer", material: "alpaca" });
+  const named = pick("Knits", "Cardigans", { color: "Ivory", material: "cotton", name: "Lightweight cotton cardigan" });
+  const chunky = pick("Knits", "Cardigans", { color: "Camel", knit_weight: "Chunky/Winter", material: "wool" });
+  const pullover = pick("Knits", "Pullovers", { color: "Navy", knit_weight: "Fine/Summer", material: "cotton" });
+  assert.equal(isLightCardigan(fine), true);
+  assert.equal(isLightCardigan(named), true);
+  assert.equal(isLightCardigan(chunky), false);
+  assert.equal(isLightCardigan(pullover), false, "a pullover is never the office layer in heat");
+  const hot = "Hot (85°F+)";
+  assert.deepEqual(filterByWeather([fine, named, chunky, pullover], hot).map(it => it.id), [fine.id, named.id]);
+  const tank = pick("Tops", "Tanks", { color: "Burgundy", material: "silk", formality: 5 });
+  const items = [tank, fine, chunky, trouser({ material: "cotton" }), pump(), tote()];
+  const idMap = Object.fromEntries(items.map(it => [it.id, it.id]));
+  const look = (ids) => ({ looks: [{ items: ids.map(id => ({ id })), vibe: "", silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "" }] });
+  const fineFailures = runAllChecks(look([tank.id, fine.id, items[3].id, items[4].id, items[5].id]), idMap, items, [], OCCASION_SLOTS.Work, "Work", hot);
+  assert.deepEqual(fineFailures.filter(f => f.type === "weather"), []);
+  assert.deepEqual(fineFailures.filter(f => f.type === "shoulder_coverage"), []);
+  const chunkyFailures = runAllChecks(look([tank.id, chunky.id, items[3].id, items[4].id, items[5].id]), idMap, items, [], OCCASION_SLOTS.Work, "Work", hot);
+  assert.ok(chunkyFailures.some(f => f.type === "weather" && /too warm/.test(f.message)));
+  // Bare tank at the office in the heat: the preference fires — and it is SOFT.
+  const bare = runAllChecks(look([tank.id, items[3].id, items[4].id, items[5].id]), idMap, items, [], OCCASION_SLOTS.Work, "Work", hot);
+  const shoulder = bare.filter(f => f.type === "shoulder_coverage");
+  assert.equal(shoulder.length, 1);
+  assert.equal(shoulder[0].hard, false, "her preference steers, it never walls");
+  // The sampler's Hot pool keeps the fine cardigan and drops the chunky one.
+  const { sampled } = sampleClosetItems({ items, occasion: "Work", occasionSlots: OCCASION_SLOTS.Work, weather: hot, userId: "t" });
+  const ids = new Set(sampled.map(it => it.id));
+  assert.ok(ids.has(fine.id), "fine cardigan must reach the Hot Work pool");
+  assert.ok(!ids.has(chunky.id), "chunky cardigan must not");
+});
+
+test("the standard, the preamble, and the chat all carry the office preference unprompted", async () => {
+  assert.match(STYLIST_STANDARD, /Her office is business professional/);
+  assert.match(STYLIST_STANDARD, /Say so unprompted/);
+  assert.match(composeSystemBlock({ available: [] }), /say so in your FIRST reply, unprompted/);
+  const { buildStylingPrompt } = await import("../src/prompts/styling-system-prompt.js");
+  const { staticPreamble, dynamicBody } = buildStylingPrompt({ occasion: "Work", weather: "Hot (85°F+)", inventoryBlock: "", closetCount: 0, occasionSlots: weatherAdjustedSlots(OCCASION_SLOTS.Work, "Hot (85°F+)") });
+  assert.match(staticPreamble, /HC_SHOULDER Work and Work Dinner only, in EVERY weather/);
+  assert.match(staticPreamble, /never no layer over a short-sleeve or sleeveless top/);
+  assert.match(dynamicBody, /EXCEPT at Work and Work Dinner/);
+  assert.match(dynamicBody, /lightest she owns/);
+  assert.match(STANDING_PREFERENCES.join("\n"), /Your office is business professional/);
 });
 
 test("the weather brief is the same block the generator reads; chips fold aliases", () => {

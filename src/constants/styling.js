@@ -42,7 +42,7 @@ LAYERING: blazer over blouse, cardigan over tee, coat over knit.
 // Written to her, in the second person, because she reads them.
 export const STANDING_PREFERENCES = [
   "You always wear a blazer open — never buttoned, never belted closed. What's under it is meant to be seen.",
-  "Tanks and sleeveless shells are layering bases under a blazer, jacket, or knit for anything dressier than Casual — unless a piece's own notes say it dresses up alone.",
+  "Your office is business professional. A long-sleeve top stands on its own; short sleeves or a tank take a knit or blazer over them — in every weather, the lightest layer you own when it's hot, worn open.",
   "Clean, dark, well-fit jeans are fine for Work; ripped, distressed, or shorts are not.",
   "In cool and cold weather a blazer under a coat or jacket is a move you wear — one blazer, one coat.",
   "Skirts and dresses are winter-viable with tights: opaque for daytime cold, sheer for evening.",
@@ -87,7 +87,15 @@ export const OCCASION_SLOTS = {
     // banned list below no longer drops "Jeans" so denim pants reach the AI.
     required: { layer: ["Blazers","Coats","Jackets","Cardigans"], bag: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["T-Shirts","Shorts","Sandals","Cocktail Dresses","Gowns","Formal Separates","Evening Accessories","Printed"], sandalForms: true, keywords: ["evening","cocktail","gown","formal","ripped","distressed"] },
-    promptNote: "WORK: Polished and current, never stiff or corporate — everyday office through executive meetings and interviews. She should read powerful and effortless: sharp tailoring, considered layering, one quiet point of interest. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind. Tanks and sleeveless shells are LAYERING bases here: under a blazer, jacket, or knit they read polished — check each piece's own notes for how she wears it. Avoid a tank as the only visible top unless its notes say it dresses up.",
+    // HOW SHE DRESSES FOR THE OFFICE is weather-independent by her own
+    // instruction (2026-09-10: "My office is business professional. Long
+    // sleeves, or if short sleeves or tank, I need a knit or blazer … Why is
+    // it not obvious?"). It was not obvious because the heat branch used to
+    // rewrite this note to "layers are OPTIONAL" and the shoulder check stood
+    // down in Hot/Warm — a 2026-08 workaround for retry walls that quietly
+    // deleted her dress code every summer. The office is air-conditioned; heat
+    // changes WHICH layer, never whether.
+    promptNote: "WORK: Business professional office — polished and current, never stiff or corporate; everyday office through executive meetings and interviews. She should read powerful and effortless: sharp tailoring, considered layering, one quiet point of interest. HOW SHE DRESSES FOR THE OFFICE, in every weather: a long-sleeve top or a long-sleeved dress stands on its own; a short-sleeve top, a tank, or anything sleeveless takes a knit or a blazer over it — worn open, always — and in heat that means the lightest layer she owns (a fine cardigan, an unlined or linen blazer), never no layer. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind. Check each piece's own notes for how she wears it.",
   },
   "Work Dinner": {
     // No Occasionwear pulled here per the user — Work Dinner stays this side
@@ -95,7 +103,7 @@ export const OCCASION_SLOTS = {
     // gowns are all dropped at the sampler stage.
     required: { bag: true },
     banned: { categories: ["Athleisure","Loungewear","Swim","Jumpsuits","Occasionwear"], subcategories: ["Jeans","T-Shirts","Shorts","Sandals","Gowns","Formal Separates","Cocktail Dresses","Evening Accessories"], sandalForms: true, keywords: ["gown","formal","cocktail"] },
-    promptNote: "WORK DINNER: Desk to restaurant without changing — client dinners, after-work events, evening meetings. Tailored separates or a midi dress that still reads professional, sharpened with ONE evening cue: satin sheen, leather, a finer heel, a stronger earring. Mix fabric weights (wool, leather, silk, satin, fine knit, structured cotton). Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO occasionwear (this is still work-adjacent, not a party). Tanks and sleeveless shells are LAYERING bases here: under a blazer, jacket, or knit they read polished — check each piece's own notes for how she wears it. Avoid a tank as the only visible top unless its notes say it dresses up.",
+    promptNote: "WORK DINNER: Desk to restaurant without changing — client dinners, after-work events, evening meetings. Tailored separates or a midi dress that still reads professional, sharpened with ONE evening cue: satin sheen, leather, a finer heel, a stronger earring. Mix fabric weights (wool, leather, silk, satin, fine knit, structured cotton). Heels or a refined boot. NO jeans, NO sneakers, NO athleisure, NO occasionwear (this is still work-adjacent, not a party). HOW SHE DRESSES FOR THE OFFICE holds here too, in every weather: a long-sleeve top or long-sleeved dress stands on its own; a short-sleeve top, a tank, or anything sleeveless takes a knit or a blazer over it, worn open — the lightest layer she owns when it's hot. Check each piece's own notes for how she wears it.",
   },
   Casual: {
     // Athleisure + Loungewear are explicitly allowed per the user. Denim

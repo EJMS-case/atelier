@@ -1,12 +1,27 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #229. The session log below
+Refreshed **2026-09-10**, after PR #230. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-10 · PR #230 — her dress code held in every weather, and no hard rule
+
+**Owner:** *"Do I need to add a hard rule that my shoulders need to be covered at work? My office is business professional. Long sleeves, or if short sleeves or tank, I need a knit or blazer … Why is it not obvious? … avoid setting hard rules … it still doesn't know my appropriate work dress."*
+
+**Answer: no hard rule.** The app already knew — `OCCASION_SLOTS.Work` said tanks are layering bases — and then three August-2026 workarounds for Work + Hot retry walls told the stylist to forget it in heat: `weatherAdjustedSlots` rewrote the brief to "layers are OPTIONAL", HC_SHOULDER stood down in Hot/Warm (and accepted a short sleeve alone everywhere), and the Hot gates dropped every knit so a fine cardigan could never reach Style Me. The chat read that brief and waited to be asked. **Lesson for the next audit: an occasion preference that a weather branch can silently delete is not a preference the app holds.** `grep -n "OPTIONAL\|RELAXED\|stand down" src/` is the check for that class.
+
+**What changed** (CHANGELOG has the detail): the Work/Work Dinner briefs state her dress code weather-independently; heat changes which layer (`HEAT_LAYER_NOTE`), never whether; HC_SHOULDER runs in every weather, only a long sleeve stands alone, and it is **soft**; `isLightCardigan` lets a fine cardigan through Hot on all three sides of the pipeline; the chat raises a LOOK FACTS finding unprompted; trip days get the occasion brief. The matrix now asserts the preference FIRES in Cool/Warm/Hot and is never hard.
+
+**Watch-items:**
+- Style Me on Work + Hot should now show a fine cardigan or unlined blazer over any short-sleeve/sleeveless top. If it still ships bare tanks, the soft nudge is not reaching the corrective prompt often enough — the next lever is a light-layer rescue in the sampler (like the include-toggle re-union), not a hard rule.
+- Her `knit_weight` tags decide which cardigans count as light in heat. Untagged cardigans need "fine/light/cotton/linen/silk" in their name, notes, or material; the AI-readiness audit could flag untagged cardigans.
+- She had not yet chatted on the #229 build when she reported (the `stylist_chats` table was empty), so the "unprompted" behaviour is unverified in her hands.
+
+**Verified before push:** `npm test` (36 suites incl. the matrix), `npm run build`, `npm run smoke` green.
 
 ### 2026-09-10 · PR #229 — preferences not rules, swaps not tips, "you" not "her"
 
