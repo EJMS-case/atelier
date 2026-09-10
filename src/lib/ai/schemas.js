@@ -333,3 +333,24 @@ export const CompletionsTool = {
     required: ["completions"],
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. writeStylistLine — the one-line stylist note per piece
+//    (features/profile/stylistLines.js)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const StylistLineSchema = z.object({
+  line: z.string().min(1),
+});
+
+export const StylistLineTool = {
+  name: "write_stylist_line",
+  description: "Return the one-line stylist note for the piece, written only from her fields, her notes, and the photo.",
+  input_schema: {
+    type: "object",
+    properties: {
+      line: { type: "string", description: "One line, ≤140 characters, lowercase phrases separated by commas." },
+    },
+    required: ["line"],
+  },
+};

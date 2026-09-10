@@ -361,6 +361,17 @@ export const sb = {
     });
     if (!res.ok) throw new Error(`Save vision failed (${res.status})`);
   },
+  // Persist one piece's stylist line (the ≤200-char line every classifier and
+  // prompt reads). Best-effort per item so the closet-wide sweep in Style
+  // Profile → AI Readiness can continue past one failure.
+  async saveStylistLine(id, line) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { ...sbHeaders(), "Prefer": "return=minimal" },
+      body: JSON.stringify({ stylist_line: line }),
+    });
+    if (!res.ok) throw new Error(`Save stylist line failed (${res.status})`);
+  },
   async listStorageImages() {
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/wardrobe-images`, {
       method: "POST",

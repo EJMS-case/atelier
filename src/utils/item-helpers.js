@@ -33,8 +33,11 @@ import {
 //
 // stylist_line (2026-08-20, migration 0018) is the designed end state from
 // the descriptions plan: a curated ≤200-char line stored NEXT TO the full
-// copy. When present it outranks notes for classifiers AND prompts —
-// promptNotes() below is the one helper prompt call sites should use.
+// copy. Prompts read the line alone when present (promptNotes() below is the
+// one helper prompt call sites should use); classifiers read the line PLUS
+// her short notes, so a keyword she typed keeps firing after a line lands.
+// The app writes the line for every piece that has none — Style Profile →
+// AI Readiness, features/profile/stylistLines.js (2026-09-10).
 export const CURATED_NOTES_MAX = 200;
 // Prompt legend for READING notes, shared by every AI surface that shows the
 // model raw or digested notes (evaluateLook, builder chat, trip-day looks;
@@ -46,11 +49,16 @@ export const CURATED_NOTES_MAX = 200;
 // not-for-casual). Negation must be resolved before any "for X" reading.
 export const NOTES_NEGATION_LEGEND =
   'Read her notes exactly as written: "for X" / "X only" says where a piece belongs; "NOT for X" / "never for X" / "no X" ONLY excludes it from X and implies nothing about anywhere else. E.g. "for casual or vacation — NOT FOR WORK" = great for casual/vacation, excluded from work. Never invert a negation.';
+// A classifier reads the line AND her short notes when both exist: the line
+// is the app's write-up, the notes are her words, and a keyword she typed
+// ("NOT FOR WORK") must keep firing after a line lands beside it. Long copy
+// is still excluded (the line speaks for it).
 export function classifierNotes(item) {
-  const line = item && item.stylist_line ? String(item.stylist_line).trim() : "";
-  if (line) return line.slice(0, CURATED_NOTES_MAX);
+  const line = item && item.stylist_line ? String(item.stylist_line).trim().slice(0, CURATED_NOTES_MAX) : "";
   const notes = item && item.notes ? String(item.notes) : "";
-  return notes.length <= CURATED_NOTES_MAX ? notes : "";
+  const shortNotes = notes.length <= CURATED_NOTES_MAX ? notes : "";
+  if (line && shortNotes && shortNotes.trim() && shortNotes.trim() !== line) return `${line} ${shortNotes}`;
+  return line || shortNotes;
 }
 
 // ── SWIM PIECE KIND ─────────────────────────────────────────────────────────

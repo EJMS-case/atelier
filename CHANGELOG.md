@@ -2,6 +2,78 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The stylist line is written for every piece, not left to a fallback (#234) — 2026-09-10
+
+### Why
+Owner, on #233: *"if notes aren't long, but the stylist line doesn't exist,
+why would you not update the stylist line anyway? Isn't that what the code
+reads? I need you to be more resourceful and innovative and smarter across
+the board. That should be common sense at this point."*
+
+#233 found every long-notes row already had a stylist line and stopped
+there, because short notes reach the readers through a fallback. But the
+stylist line is the field the app designed to be "what the AI reads"
+(migration 0018), and it was empty on 356 of 541 pieces. A designed field
+being done by a fallback is the gap, not a non-issue — now point 7 of
+CLAUDE.md's "How to think about every change".
+
+### Added
+- **`features/profile/stylistLines.js` — the line writer.** One `MODEL_STANDARD`
+  call per piece (photo + her fields), tool-use + Zod (`StylistLineTool`).
+  Three sources and nothing else: her fields (name, category, colour,
+  material, pattern, knit weight with its evidence, knit fit, sleeve, season,
+  formality, brand), her notes verbatim, and the photo plus the vision read
+  the app already made. The prompt forbids stating any occasion, fabric, fit,
+  or season neither her notes nor the photo shows, and says her notes win.
+- **`carryGuidance` / `finishStylistLine`** — the enforceable half of "never
+  invent, never drop": every occasion clause in her notes ("NOT GOOD FOR
+  WORK", "good for cold weather", "for casual or vacation") is carried into
+  the line word for word if the model's line dropped it; when the 200-char
+  cap has to give, the line gives, never her clause. `needsStylistLine` is
+  false the moment any line exists, so a line she wrote is never overwritten.
+- Lines are written in the vocabulary the readers key on (`LINE_VOCABULARY`:
+  sleeve words, knit weight words, light/heavy cloth words, form words), so a
+  line feeds the classifiers as well as the prompt.
+- **Style Profile → AI Readiness → "Write stylist lines for N pieces."**
+  Three workers, resumable (only pieces with no line), progress and a retry
+  message; the module is imported on tap so the stylist/zod bundle stays off
+  the profile chunk. `sb.saveStylistLine(id, line)` persists per piece; App
+  patches the row in state via `onLineWritten`.
+- AI Readiness flags **`stylist_line_missing`** (enhancer) so the count is
+  visible and the button clears it.
+
+### Changed
+- **`classifierNotes` reads the line PLUS her short notes** when both exist —
+  a keyword she typed keeps firing after a written line lands beside it.
+  Prompts (`promptNotes`) still read the line alone, for tokens. Long copy
+  stays excluded.
+- **`formatInventory` drops the `seen:` vision segment when the piece has a
+  stylist line** — the line was written from that read, so saying it twice
+  on the uncached body is pure cost.
+
+### Downstream
+- **Efficiency:** the line replaces the notes AND the `seen:` segment on the
+  inventory line; with a 140-char target the closet-wide sweep is roughly
+  token-neutral per Style Me tap rather than +8k tokens. The sweep itself is
+  one `MODEL_STANDARD` call per piece, once.
+- **Effectiveness:** every piece is read through one curated line in the
+  app's own vocabulary; sleeve and knit weight words the vision pass saw
+  now reach the keyword classifiers, not just the prompt.
+- **Speed:** none at generation time.
+- **Education:** the app's own write-up of each piece, grounded in her words
+  and the photo, is now a field she can read and correct in Edit.
+
+### Tests
+- `test:lines` (new, 10): needsStylistLine; guidance clauses on her live
+  notes; carryGuidance never trims her clause; the cap at a word boundary;
+  finishStylistLine on quotes/period/empty; the prompt carries her facts,
+  the derived knit weight with evidence, the vision read, the three-source
+  clause, the vocabulary, and the negation legend; schema + tool agree;
+  readers see the line and her notes; the audit flag; the inventory line
+  stays token-neutral.
+- `test:audit` fixtures carry a stylist line (the new definition of
+  fully-tagged) and blank it where the fallback is under test.
+
 ## [Unreleased] — How to think about every change, and the knit weight her notes already stated (#233) — 2026-09-10
 
 ### Why
