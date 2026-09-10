@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — The office layer is ADDED, never demanded: the downstream sweep of #230 — 2026-09-10
+## [Unreleased] — The office layer is ADDED, never demanded: the downstream sweep of #230 (#231) — 2026-09-10
 
 ### Why
 Owner, after #230: *"Are you thinking big picture too? Stale code, downward

@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #230. The session log below
+Refreshed **2026-09-10**, after PR #231. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-10 · the completion PR — the downstream sweep of #230
+### 2026-09-10 · PR #231 — the downstream sweep of #230
 
 **Owner:** *"Are you thinking big picture too? Stale code, downward impact, etc.?"* Five things #230 left behind, one a real regression — CHANGELOG has the list. The one to remember: **a soft validator check on its own changes nothing at generation time.** Soft failures only reach the model inside a retry prompt, and a retry only happens for a hard failure. So "make it soft" without a completion step = "delete it". The office preference is now honored by **`completeOfficeCoverage`** — the layer is added to every look that ships (streamed, final, salvaged), never demanded. That is the pattern for any future preference she wants held without a rule: soft check + completion, like `salvageByAddingShoes` and `salvageByAddingIncludes`.
 
