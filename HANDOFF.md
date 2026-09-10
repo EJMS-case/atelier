@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after the stylist-standard PR. The session log below
+Refreshed **2026-09-10**, after PR #228. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-10 · stylist-standard PR — the chat had a persona and no standard
+### 2026-09-10 · PR #228 — the chat had a persona and no standard
 
 **Owner report, verbatim:** *"Review my recent chat with my stylist … It is not giving good recommendations. I'm pushing back and it's saying I'm right. My whole app should be smart and chic stylish using the items in My wardrobe. Think bigger picture … I do not trust it."*
 

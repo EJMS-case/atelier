@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — The stylist chat had a persona and no standard — 2026-09-10
+## [Unreleased] — The stylist chat had a persona and no standard (#228) — 2026-09-10
 
 ### Why
 Owner, from her phone: *"It is not giving good recommendations. I'm pushing
