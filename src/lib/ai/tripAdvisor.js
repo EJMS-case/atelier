@@ -95,7 +95,7 @@ const TripLooksTool = {
                 required: ["id"],
               },
             },
-            rationale: { type: "string", description: "One sentence on why this works for the day." },
+            rationale: { type: "string", description: "One sentence, written TO her ('you', 'your' — never 'she'), on why this works for the day." },
           },
           required: ["items"],
         },

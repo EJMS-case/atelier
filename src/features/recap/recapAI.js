@@ -74,7 +74,7 @@ Rules:
 - A look flagged [❤ hearted] is one she already loves — give it a meaningful boost; only leave it out if a non-hearted look is clearly stronger.
 - [trip] looks are eligible and count fully.
 - Favor RANGE across the winners — a ${periodLabel} in review should show her best Work look and her best off-duty look, not four variations of one recipe.
-- Reason must be ONE short clause (≤14 words), specific to that look — name what makes it work.${fp ? `
+- Reason must be ONE short clause (≤14 words), specific to that look — name what makes it work, written TO her ("your", never "her").${fp ? `
 
 HER STYLE FINGERPRINT (judge against her taste, not a generic one):
 ${fp}` : ""}

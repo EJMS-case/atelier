@@ -2,27 +2,28 @@
 // A live conversation with a senior stylist while she assembles a look.
 //
 // Reworked 2026-09-10 (owner: "It is not giving good recommendations. I'm
-// pushing back and it's saying I'm right … I do not trust it."). The chat had
-// a persona and no STANDARD: Style Me's whole method — one hero, the colour
-// line, fitted × relaxed, two fabric weights, the hard rules, the occasion
-// bans, the weather rules — never reached it, so its opinions were vibes and
-// it folded the moment she disagreed. Now, from features/stylist/standard.js:
-//   · The cached system block carries THE STANDARD, HER HARD RULES, and HOW TO
-//     HOLD AN OPINION (re-check against the standard and the facts when she
-//     pushes back; hold the line when they still say the same thing; change
-//     your mind only for a reason you can name).
-//   · Every turn carries the occasion brief + bans and the weather brief Style
-//     Me is held to, and LOOK FACTS — the app's own validator run on the
-//     canvas, plus the colour story, formality spread, fabrics, statement
-//     pieces, shoe/bag family, and which of her colour pairings the look
-//     activates. The model argues from computed facts, not guesses.
-//   · Item lines carry the same signals Style Me's inventory does (sleeve,
-//     knit weight, complete-set, season weight, the vision read).
-//   · MODEL_TOP with adaptive thinking at medium effort. The old call was
-//     MODEL_STRONG at effort "low" — tuned for speed on 2026-08-20, and the
-//     shallowest read the API offers. She asked for smart; this is the tier
-//     Style Me leads with, and the closet block is cached so the per-turn cost
-//     is a few cents.
+// pushing back and it's saying I'm right … I do not trust it." and, the same
+// day: "I want to be challenged. I want thoughtful advice … speaking to me as
+// if it isn't me, which I do not like … hard rules should not be set — only
+// preferences … The app should learn from all discussions within the app").
+// The chat had a persona and no STANDARD: Style Me's whole method never
+// reached it, so its opinions were vibes and it folded the moment she
+// disagreed. Now, from features/stylist/standard.js and learning.js:
+//   · The cached system block carries THE STANDARD, HOW SHE WEARS THINGS
+//     (preferences, never rules), HOW TO HOLD AN OPINION (re-check against
+//     the standard and the facts when she pushes back; hold the line when they
+//     still say the same thing; challenge her), VOICE (second person, always),
+//     and EVERYTHING THE APP HAS LEARNED — standing preferences, chat lessons,
+//     fingerprint, loved and disliked looks, her edits, what she returns to.
+//   · Every turn carries the occasion brief, the weather brief, and LOOK
+//     FACTS — the app's own validator run on the canvas plus the colour story,
+//     formality, fabrics, statement pieces, the open-blazer note, and which of
+//     her colour pairings the look activates.
+//   · The conversation is KEPT (stylist_chats, migration 0035) and every turn
+//     is distilled for a preference she expressed, which becomes a standing
+//     lesson every AI surface reads (learning.js).
+//   · MODEL_TOP with adaptive thinking at medium effort; one fallback to
+//     MODEL_STRONG. The closet block is cached, so a turn costs a few cents.
 //
 // Still true from the 2026-08-20 rework:
 //   · The CURRENT LOOK rides the LAST user message, rebuilt fresh on every
@@ -30,16 +31,19 @@
 //   · The builder's occasion/weather chips are the brief.
 //   · Streaming; light markdown rendered by MarkdownLite.
 //   · The persona + standard + closet reference live in a CACHED system block
-//     (byte-stable within a session). Per-turn state stays OUT of it.
+//     (byte-stable within a session). Per-turn state stays OUT of it. The
+//     evaluator sends the SAME block, so the two surfaces share one cache.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
 import { CATEGORY_ORDER } from "../../constants/taxonomy.js";
 import { readSSEText } from "../../lib/ai/sse.js";
+import { sb } from "../../lib/supabase.js";
 import {
-  STYLIST_PERSONA, STYLIST_STANDARD, OPINION_RULES,
+  STYLIST_PERSONA, STYLIST_STANDARD, OPINION_RULES, VOICE_RULES,
   describeItem, personalGrounding, readLook, occasionBrief, weatherBrief,
 } from "../stylist/standard.js";
+import { recordChatLessons } from "../stylist/learning.js";
 
 // Grouping follows the FIXED taxonomy order — deliberately NOT the empty-slots
 // order the old code used, because slot state changes every turn and would bust
@@ -81,32 +85,32 @@ export function availableReference(available) {
   return lines.length > 0 ? lines.join("\n") : "(none)";
 }
 
-// The stable system block: persona + standard + opinion rules + personal
-// grounding + full closet. Pure, so scripts/stylist-standard.test.mjs can
-// assert what it carries; kept byte-identical across turns within a session so
-// the prompt cache hits.
+// The stable system block: persona + standard + opinion rules + voice + what
+// the app has learned + full closet. Pure, so scripts/stylist-standard.test.mjs
+// can assert what it carries; kept byte-identical across turns within a
+// session so the prompt cache hits — and shared with Evaluate look, which
+// sends exactly this block, so a chat turn after an evaluation (or the
+// reverse) reads the closet at cache rates.
 export function composeSystemBlock({ personal = [], available = [] } = {}) {
   return `${STYLIST_PERSONA}
 
-She is assembling an outfit from her own wardrobe in the builder and talking to you while she does it.
+She is assembling an outfit from her own wardrobe in the builder. You are either talking with her while she does it, or evaluating the look she tapped Evaluate on — the user message says which.
 
 ${STYLIST_STANDARD}
 
 ${OPINION_RULES}
 
+${VOICE_RULES}
+
 HOW TO WORK:
-- Every user message opens with a [CURRENT LOOK] block — the LIVE state of her canvas, the brief she set (occasion + weather), the occasion and weather rules, and LOOK FACTS. Trust the newest block; she edits between messages, so earlier states are history, not truth. Never ask about anything the block already tells you.
-- Have a real conversation, not a form. Give the verdict and the "why" — proportion, colour, texture, register, the room she's dressing for. A sharp question is allowed only when its answer genuinely changes your advice.
+- Every user message opens with a [CURRENT LOOK] block — the LIVE state of her canvas, the brief she set (occasion + weather), the occasion and weather guidance, and LOOK FACTS. Trust the newest block; she edits between messages, so earlier states are history, not truth. Never ask about anything the block already tells you.
+- Have a real conversation, not a form. Give the verdict and the "why" — proportion, colour, texture, register, the room she's dressing for — and then the move: what to swap, what to wear differently. A sharp question is allowed only when its answer genuinely changes your advice.
 - The one hard line: only suggest pieces from HER CLOSET below — name them specifically. Never invent items, never suggest shopping. If the perfect thing isn't there, say so and offer the closest thing she owns, and say what it costs the look.
 - Length follows the question: a quick question gets a quick, complete answer. Light markdown is welcome — **bold** the pieces you're recommending, use a short dash-list only when comparing 2–3 options — never headers, and never bullet-point a conversation that wants a sentence.
 ${personal.length ? `\n${personal.join("\n\n")}\n` : ""}
 HER CLOSET — everything she owns here (grouped by category; suggest swaps from anywhere in it). Lines may carry her curated formality as f1 (most casual) to f8 (most formal), a sleeve tag [L]/[S]/[3Q]/[N], a knit weight, and a "seen:" read of the garment's photo.
 
 ${availableReference(available)}`;
-}
-
-async function buildSystemBlock(available, personal) {
-  return composeSystemBlock({ personal, available });
 }
 
 // Per-turn state — deliberately OUTSIDE the cached system block. Rebuilt on
@@ -150,8 +154,8 @@ export async function sendBuilderMessage({ messages, assembledItems, available, 
   if (!apiKey) throw new Error("API key required.");
   if (!assembledItems?.length) throw new Error("Assemble at least one item first.");
 
-  const { blocks: personal, pairs } = await personalGrounding({ available, fingerprintMax: 800 });
-  const system = await buildSystemBlock(available, personal);
+  const { blocks: personal, pairs } = await personalGrounding({ available });
+  const system = composeSystemBlock({ personal, available });
   const stateBlock = currentLookBlock({ assembledItems, emptySlots, occasions, weathers, available, colorPairs: pairs });
 
   // Fresh state rides the LAST user message; earlier messages stay raw so the
@@ -201,4 +205,36 @@ export async function sendBuilderMessage({ messages, assembledItems, available, 
   const finalText = text.trim();
   if (!finalText) throw new Error("The stylist didn't answer — try again.");
   return finalText;
+}
+
+/**
+ * Keep the conversation and learn from it. Fire-and-forget by design — the
+ * caller never awaits this on the reply path, and nothing here throws.
+ *
+ * @param {Object}   params
+ * @param {string}   params.chatId         - stable per conversation (upsert key)
+ * @param {Object[]} params.messages       - the full transcript so far
+ * @param {Object[]} params.assembledItems - what was on the canvas at this turn
+ * @param {string[]} params.occasions
+ * @param {string[]} params.weathers
+ * @param {string}   params.apiKey
+ */
+export async function rememberChat({ chatId, messages, assembledItems = [], occasions = [], weathers = [], apiKey }) {
+  if (!chatId || !Array.isArray(messages) || !messages.length) return;
+  try {
+    const lastUserIdx = messages.map(m => m.role).lastIndexOf("user");
+    const userText = lastUserIdx >= 0 ? String(messages[lastUserIdx].content || "") : "";
+    const assistantText = String(messages[messages.length - 1]?.role === "assistant" ? messages[messages.length - 1].content : "");
+    const lessons = await recordChatLessons({ userText, assistantText, apiKey });
+    await sb.saveStylistChat({
+      id: chatId,
+      updated_at: new Date().toISOString(),
+      surface: "builder",
+      occasions: (occasions || []).filter(Boolean),
+      weathers: (weathers || []).filter(Boolean),
+      item_ids: (assembledItems || []).map(it => it.id).filter(Boolean),
+      messages: messages.map(m => ({ role: m.role, content: String(m.content || "").slice(0, 8000) })),
+      lessons: Array.isArray(lessons) ? lessons.slice(-10) : [],
+    });
+  } catch { /* the conversation is the product; the record is a bonus */ }
 }

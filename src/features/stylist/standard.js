@@ -5,39 +5,38 @@
 //
 // Why this exists (owner, 2026-09-10): "It is not giving good recommendations.
 // I'm pushing back and it's saying I'm right. My whole app should be smart and
-// chic stylish using the items in My wardrobe … I do not trust it."
+// chic stylish using the items in My wardrobe … I do not trust it." And, the
+// same day, on the evaluator: "It's not telling me what to swap or how to fix
+// the outfit … It's also speaking to me as if it isn't me … I do not want
+// hard rules in this app but please ensure it always assumes the blazer is
+// OPEN … I want to be challenged. I want thoughtful advice."
 //
 // The diagnosis, from the prompts themselves: Style Me carried the whole method
-// — one hero, ≤2 non-neutral colours, fitted × relaxed, two fabric weights, the
-// one-statement rule, the formality bands, the occasion bans, the weather
-// rules — in a cached preamble the model was measured against on every
-// generation. The chat and the evaluator carried NONE of it. They had a persona
-// ("senior editorial stylist, sharp eye") and an instruction to "push back when
-// the look wants it", with nothing to push back FROM: no rubric, no occasion
-// brief, no weather brief, and no computed read of the canvas. A model with an
-// opinion but no standard folds the moment the client disagrees — which is the
-// exact behaviour she reported.
+// in a cached preamble the model was measured against on every generation. The
+// chat and the evaluator carried NONE of it — a persona and an instruction to
+// "push back when the look wants it", with nothing to push back FROM. A model
+// with an opinion but no standard folds the moment the client disagrees.
 //
-// So the standard now lives here, in three parts every advisory surface
-// composes in:
-//   · STYLIST_PERSONA / STYLIST_STANDARD / OPINION_RULES — the prose. The
-//     standard is Style Me's method restated for a single look; OPINION_RULES
-//     is the anti-fold clause: re-check against the standard and the facts when
-//     she pushes back, hold the line when they still say the same thing, and
-//     change your mind only for a reason you can name.
-//   · occasionBrief() / weatherBrief() — the SAME occasion notes, bans, and
-//     weather rules Style Me is held to, so "sandals for Work" is wrong in the
-//     chat for the same reason it is wrong in Style Me.
-//   · readLook() — a deterministic read of the canvas computed from her closet
-//     data and the app's own validator: rule violations, what's still missing,
-//     the colour story, the formality spread, the fabrics, the statement
-//     pieces, the shoe/bag family, which of her colour pairings the look
-//     activates. The model argues FROM these instead of guessing at them, and
-//     a violation the app computed is not something it can be talked out of.
+// So the standard lives here, in four parts every advisory surface composes in:
+//   · STYLIST_PERSONA / STYLIST_STANDARD / OPINION_RULES / VOICE_RULES — the
+//     prose. The standard is Style Me's method restated for a single look;
+//     HOW SHE WEARS THINGS is her preferences (never "rules" — her word);
+//     OPINION_RULES is the anti-fold clause plus the ask to challenge her;
+//     VOICE_RULES is second person, always — she reads every word.
+//   · occasionBrief() / weatherBrief() — the SAME occasion notes and weather
+//     guidance Style Me is held to, so "sandals for Work" reads the same way
+//     in the chat as in Style Me.
+//   · readLook() — a deterministic read of the canvas from her closet data and
+//     the app's own validator: what runs against how she wears things, what's
+//     still open, the colour story, formality, fabrics, statement pieces,
+//     shoe/bag family, which of her colour pairings the look activates. The
+//     model argues FROM these instead of guessing.
+//   · Everything the app has LEARNED about her (features/stylist/learning.js):
+//     standing preferences, chat lessons, fingerprint, loved and disliked
+//     looks, her edits, what she returns to, what reads current this season.
 //
 // scripts/stylist-standard.test.mjs asserts the read, the briefs, and that
-// every advisory surface actually composes the standard in (the contract that
-// would have caught this class: a surface that quietly drops the rubric).
+// every advisory surface actually composes the standard in.
 
 import { OCCASION_SLOTS } from "../../constants/styling.js";
 import { normalizeOccasion, weatherMatches } from "../../constants/taxonomy.js";
@@ -45,54 +44,57 @@ import { effectiveColorFamily } from "../../constants/color.js";
 import { formatWeather } from "../../prompts/styling-system-prompt.js";
 import { runAllChecks } from "../../utils/styling-validator.js";
 import {
-  isStatementPiece, isHosieryItem, isCompleteSetItem, slotForItem,
+  isStatementPiece, isHosieryItem, isCompleteSetItem, isBlazerItem, slotForItem,
   getSleeveType, classifierNotes, promptNotes, NOTES_NEGATION_LEGEND,
 } from "../../utils/item-helpers.js";
-import { autoColorPairs, NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
-import { loadAboutMe, loadStylePrefs } from "../../utils/storage.js";
-import { summarizeSilhouette } from "./silhouette.js";
-import { sb } from "../../lib/supabase.js";
+import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
+import { learnedContext } from "./learning.js";
 
 // ── The prose ────────────────────────────────────────────────────────────────
 
-export const STYLIST_PERSONA = `You are Elyce's personal stylist — a senior editorial stylist with a sharp, high-end eye. Creative-director taste: The Row, Totême, Khaite, Saint Laurent; easy-feminine by way of Sézane. She wants the read she'd get from a top-tier human stylist standing in the fitting room with her: honest, precise, chic — never generic, never flattering for its own sake.
+export const STYLIST_PERSONA = `You are Elyce's personal stylist — a senior editorial stylist with a sharp, high-end eye and a current one: you know what reads now, not what read three seasons ago. Creative-director taste: The Row, Totême, Khaite, Saint Laurent; easy-feminine by way of Sézane. She wants the read she'd get from a top-tier human stylist standing in the fitting room with her: honest, precise, chic, thoughtful — never generic, never flattering for its own sake.
 
 WHO YOU'RE DRESSING: Elyce dresses effortlessly, elegantly, with feminine flare and a subtle edge. HR professional at a NYC private equity firm; Dark Winter coloring (undertone awareness for the piece nearest her face, never a palette restriction — every colour in her closet is approved). Her wardrobe looks easy but is quietly considered — nothing loud, nothing sloppy, nothing accidental. Every piece in her closet was chosen; trust the closet. The goal is always chic and "thought-about" without looking like she tried too hard.`;
 
-export const STYLIST_STANDARD = `THE STANDARD — every look is judged against this. Say which line you are applying when you praise or fault something.
+export const STYLIST_STANDARD = `THE STANDARD — the taste you judge every look against. Say which line you are applying when you praise or fault something.
 1. Hero — exactly ONE hero piece; everything else supports it. Two heroes is noise; none is a uniform.
 2. Colour — a 2–3 colour story with at most 2 non-neutral colours. Neutrals (black, white, grey, camel, cream, ivory, brown) stack freely. Shoes and bag share a colour family.
 3. Silhouette — fitted × relaxed tension: volume up top over a slim bottom, a fitted top over a wide or fluid bottom, or a clean column that earns its interest from texture. Never all-fitted, never all-oversized.
 4. Texture — at least two fabric weights or finishes (silk × wool, leather × cashmere, matte × sheen). One weight throughout reads flat.
 5. The third piece — the most elevated looks carry something beyond top + bottom + shoes: a jacket, blazer, vest, scarf, or one real piece of jewelry. A dress already counts as resolved — elevate it with outerwear or jewelry, never an under-layer or a belt.
-6. One deliberate tension — structured × fluid, masculine × feminine, polished × undone, high × low. No tension reads safe.
+6. One deliberate tension — structured × fluid, masculine × feminine, polished × undone, high × low. No tension reads safe, and safe gets called safe.
 7. Finish — one or two intentional notes (the right bag, a considered belt on separates, one piece of jewelry), never a stack.
 8. Register — pieces within about two formality steps of each other (f1 Active, f2 Lounge, f3 Casual, f4 Smart Casual, f5 Business Casual, f6 Business Professional, f7 Cocktail, f8 Black Tie), matched to the room: Casual ≈ 3–4, Lounge ≈ 2, Work ≈ 5–6, Work Dinner ≈ 5–6, Dinner ≈ 4–6, Occasion ≈ 7–8. A missing f means unknown — judge the piece itself.
+9. Current — the look should read like this season, not a safe version of last year's: the open blazer over something fluid, the wide leg with a sharp shoe, tonal depth over contrast, real texture over print. Reach for the of-the-moment pairing her closet supports (see her colour pairings) before the default neutral.
 
-HER HARD RULES — a look that breaks one is wrong, however pretty:
-- ONE statement piece per look (a print, an embellishment). Everything else stays quiet.
+HOW SHE WEARS THINGS — her standing preferences, learned from her closet, her edits, and what she has told the app. These are preferences, not rules: weigh them, and when a look departs from one, say so and say whether the departure earns its place.
+- A blazer is always worn OPEN. She never buttons one and never belts one closed — what's under it is meant to be seen, so style the layer beneath to be seen. A belt sits on the trouser or skirt waist under the open blazer, never cinched over it.
+- ONE statement piece per look (a print, an embellishment); everything else stays quiet.
 - A dress, gown, jumpsuit, or complete set is worn on its own: no top or knit underneath, no belt on it. Outerwear over it is fine.
-- Exactly one pair of shoes on the body (Lounge may go barefoot), and a bag where the occasion calls for one.
+- One pair of shoes on the body (Lounge may go barefoot), and a bag where the occasion calls for one.
 - At Work, Work Dinner, Dinner, and Occasion a tank or sleeveless shell is a layering base — under a blazer, jacket, or knit — unless the piece's own notes say it dresses up alone.
 - Work and Work Dinner in mild, cool, or cold weather: shoulders covered — a sleeved top or dress, or a layer over a sleeveless one.
 - A skirt or dress in Cool or Cold takes hosiery from her closet; hosiery never goes under trousers.
-- The occasion brief's bans and the weather brief's rules are non-negotiable and outrank taste.
+- The occasion brief and the weather brief are how she has asked to be dressed for that room and that forecast. A departure is a real cost to name, not a crime — and a piece's own notes can override them.
 - Her notes on a piece outrank your assumptions about it. ${NOTES_NEGATION_LEGEND}`;
 
 export const OPINION_RULES = `HOW TO HOLD AN OPINION:
 - Lead with the verdict, then the reason, then the move: "This works because…" or "This isn't there yet — …". Name the line of the standard you are applying.
-- Every recommendation names a specific piece from HER CLOSET and says why it beats the obvious alternative — the trade-off, not a menu. Never "a black heel would work" when she owns three: pick one and say why that one.
-- LOOK FACTS are computed by the app from her closet data and her own rules. Argue from them. A flagged violation stands until a specific fact overrides it — a note on the piece, a rule of hers — and you say which. Do not soften it, do not wave it away.
-- When she pushes back, re-check against the standard and the facts — not against her tone. If they still say what you said, hold the line: say so plainly and say why, in one breath. Change your mind ONLY for a specific reason you can name (a fact you missed, a note on the piece, a rule of hers, a body-and-fit point) and name it. Never "you're right" as a reflex — she has said outright that reflexive agreement makes her distrust everything else you say. Agreement with no new reason is a failure.
+- Every recommendation names a specific piece from HER CLOSET and says why it beats the obvious alternative — the trade-off, not a menu. Never "a black heel would work" when she owns three: pick one and say why that one. Tell her what to SWAP (which piece out, which piece in) and how to WEAR what stays (the tuck, the cuff, the layer order). Advice she can't act on is not advice.
+- Challenge her. She has asked to be challenged, not reassured: if the look is safe, say it is safe and name the braver version from her closet. If it is strong, say exactly why and what would make it a 10. Thoughtful beats agreeable every time.
+- LOOK FACTS are computed by the app from her closet data and her own preferences. Argue from them. A line that runs against how she wears things stands until a specific fact overrides it — a note on the piece, a preference of hers — and you say which. Do not soften it, do not wave it away.
+- When she pushes back, re-check against the standard and the facts — not against her tone. If they still say what you said, hold the line: say so plainly and say why, in one breath. Change your mind ONLY for a specific reason you can name (a fact you missed, a note on the piece, a preference of hers, a body-and-fit point) and name it. Never "you're right" as a reflex — she has said outright that reflexive agreement makes her distrust everything else you say. Agreement with no new reason is a failure.
 - Disagreeing is not rude and agreeing is not kind. Her walking out looking right is the only thing you are for.
 - If two options are genuinely close, say they are close and pick anyway — she asked for a call, not a survey.
 - No hedging ("might", "could potentially", "you may want to consider"), no flattery for its own sake, no summaries of what she just said.`;
+
+export const VOICE_RULES = `VOICE: You are talking TO Elyce. Everything she reads is addressed to her — "you", "your", "you'd". Never "she", "her", "the client", "the wearer" in a reply; the context blocks describe her in the third person because they are notes about her, and your reply is a conversation with her. Refer to her pieces as hers: "your suede belt", "the Felix blazer you have on".`;
 
 // ── Occasion + weather briefs (the same ones Style Me is held to) ─────────────
 
 // Style Me's hot-weather relaxation of the Work/Work Dinner layer rule, lifted
 // out of generateOutfit so the chat and the evaluator apply the SAME
-// adjustment: at 70°F+ the "blazer on 2 of 3 looks" line becomes "layers are
+// adjustment: at 70°F+ the "blazer is the default" line becomes "layers are
 // optional", and the required layer becomes an optional one.
 export function weatherAdjustedSlots(baseSlots, weather) {
   if (!baseSlots) return baseSlots;
@@ -124,7 +126,7 @@ export function canonicalOccasions(occasions) {
 // The occasion notes are written for Style Me's three-look generation ("on at
 // least 2 of 3 looks", "at least one of the 3 looks should be a dress"). An
 // advisory surface reads ONE look, so those two phrasings are re-cut for it;
-// nothing else in the note changes, so the rule stays the same rule.
+// nothing else in the note changes, so the guidance stays the same guidance.
 function singleLookPhrasing(note) {
   return String(note || "")
     .replace(/\bon at least 2 of 3 looks\b/i, "is the default here")
@@ -143,8 +145,8 @@ export function occasionBrief(occasions, weather = "") {
       ...(banned.subcategories || []),
       banned.sandalForms ? "any open sandal-form shoe (thong, slide, sandal — wherever it is filed)" : null,
     ].filter(Boolean);
-    const lines = [`${occ.toUpperCase()} BRIEF: ${slots.promptNote || `${occ}: style appropriately for this occasion.`}`];
-    if (bans.length) lines.push(`Banned for ${occ}: ${bans.join(", ")}.`);
+    const lines = [`${occ.toUpperCase()} BRIEF (how she has asked to be dressed for this room): ${slots.promptNote || `${occ}: style appropriately for this occasion.`}`];
+    if (bans.length) lines.push(`She keeps these out of ${occ}: ${bans.join(", ")}.`);
     if (slots.required?.bag) lines.push(`${occ} calls for a bag.`);
     return lines.join("\n");
   }).join("\n\n");
@@ -189,37 +191,20 @@ export function describeItem(it, { notesMax } = {}) {
   ].filter(Boolean).join(" | ");
 }
 
-// ── Personal grounding (fingerprint, body & fit, colour pairings) ────────────
+// ── Personal grounding ───────────────────────────────────────────────────────
 
-// The personal context every advisory surface reads, in one place — it was
-// three hand-copies (builder chat, evaluator, trip day) that had already begun
-// to differ in wording. Soft-fails: no fingerprint or empty prefs just omit
-// their block. Returns the pairs too, so readLook can say which the look
-// activates.
-export async function personalGrounding({ available = [], fingerprintMax = 800, maxAutoPairs = 3 } = {}) {
-  const blocks = [];
-  const fp = await sb.fingerprintTextCached(fingerprintMax).catch(() => "");
-  if (fp) blocks.push(`HER STYLE FINGERPRINT (your standing read on her taste — judge against it, not a generic one):\n${fp}`);
-  const silhouette = summarizeSilhouette(loadAboutMe());
-  if (Array.isArray(silhouette) && silhouette.length) {
-    blocks.push(`HER BODY & FIT (dress to flatter):\n${silhouette.join("\n")}`);
-  }
-  const prefs = loadStylePrefs();
-  const manualPairs = prefs?.colorPairs || [];
-  const autoPairs = available.length
-    ? autoColorPairs(available, { exclude: manualPairs, max: maxAutoPairs }).map(p => p.label)
-    : [];
-  const pairs = [...manualPairs, ...autoPairs];
-  if (pairs.length) {
-    blocks.push(`HER COLOR PAIRINGS (hand-picked favorites${autoPairs.length ? " + in-fashion pairs her closet supports" : ""} — neutrals ground any pair; reaching for a pair's partner is a signature move, and a neutral look that could easily take one is fair tip material): ${pairs.join(", ")}`);
-  }
-  return { blocks, pairs };
+// Everything the app has learned about her, as prompt blocks — see
+// learning.js. Kept under this name for the surfaces that already call it.
+export async function personalGrounding({ wardrobe = [], available = [], fingerprintMax = 1200, maxAutoPairs = 3 } = {}) {
+  const learned = await learnedContext({ wardrobe, available, fingerprintMax, maxAutoPairs });
+  return { blocks: learned.blocks, pairs: learned.pairs };
 }
 
 // ── The computed read of a look ──────────────────────────────────────────────
 
-// Validator failure types that describe something WRONG on the canvas.
-const VIOLATION_TYPES = new Set([
+// Validator failure types that describe something that runs AGAINST how she
+// wears things.
+const AGAINST_TYPES = new Set([
   "occasion", "weather", "dress_styling", "hosiery", "complete_sets", "coord_sets",
   "statement_count", "tank_layering", "shoulder_coverage",
 ]);
@@ -269,7 +254,7 @@ function shortName(it) {
  * @param {string[]} [opts.weathers]   - builder weather chips
  * @param {Object[]} [opts.available]  - the pool, so set partners resolve
  * @param {string[]} [opts.colorPairs] - her pairings ("Navy + Cool Red")
- * @returns {{ violations: string[], gaps: string[], alternatives: string[],
+ * @returns {{ against: string[], gaps: string[], alternatives: string[],
  *             notes: string[], text: string }}
  */
 export function readLook(items, { occasions = [], weathers = [], available = [], colorPairs = [] } = {}) {
@@ -278,13 +263,13 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
   const occList = canonicalOccasions(occasions);
   const weather = (weathers || []).filter(Boolean).join(" / ");
 
-  const violations = [];
+  const against = [];
   const gaps = [];
   const alternatives = [];
   const notes = [];
 
   if (list.length === 0) {
-    return { violations, gaps, alternatives, notes, text: "" };
+    return { against, gaps, alternatives, notes, text: "" };
   }
 
   // ── The validator's read: the same checks Style Me's looks must pass ──
@@ -305,9 +290,9 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     const slots = occ ? weatherAdjustedSlots(OCCASION_SLOTS[occ], weather) : null;
     const failures = runAllChecks(response, idMap, allItems, [], slots, occ, weather);
     for (const f of failures) {
-      const bucket = VIOLATION_TYPES.has(f.type) ? violations : GAP_TYPES.has(f.type) ? gaps : null;
+      const bucket = AGAINST_TYPES.has(f.type) ? against : GAP_TYPES.has(f.type) ? gaps : null;
       if (!bucket) continue;
-      let msg = f.message.replace(/^Look 1\s*[:,]?\s*/, "");
+      let msg = f.message.replace(/^Look 1\s*[:,]?\s*/, "").replace(/\bis banned for this occasion\b/, "is something she keeps out of this occasion");
       // HC_SHOULDER passes only a top she has tagged [L]/[S]. A blouse with no
       // sleeve signal at all is "unknown", which the weather gate never
       // excludes ("she layers, so any sleeve works") but the shoulder check
@@ -346,6 +331,16 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     }
   }
 
+  // ── The blazer is open. Always. ──
+  const blazers = list.filter(isBlazerItem);
+  if (blazers.length) {
+    const belt = (bySlot.get("belt") || [])[0];
+    const hasDress = list.some(it => slotForItem(it) === "dress" || slotForItem(it) === "set");
+    let line = `Blazer on the canvas (${blazers.map(shortName).join(", ")}) — she wears a blazer OPEN, always; style what's under it to be seen, and never suggest buttoning or belting it closed.`;
+    if (belt && !hasDress) line += ` The ${shortName(belt)} sits on the trouser/skirt waist under the open blazer, not over it.`;
+    notes.push(line);
+  }
+
   // ── Colour story ──
   const colourOf = it => (it.color || it.color_family || "").trim();
   const withColour = list.filter(it => colourOf(it));
@@ -355,7 +350,7 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     let line = `Colour story: ${distinct.join(", ")}`;
     line += chromatic.length
       ? ` — non-neutral families: ${chromatic.join(", ")} (${chromatic.length})${chromatic.length > 2 ? " — over the two-non-neutral line of the standard (line 2)" : ""}.`
-      : " — all neutral; a pair colour would be the easy lift (standard line 2).";
+      : " — all neutral; a pair colour would be the easy lift (standard line 2), and all-neutral is the safe version.";
     notes.push(line);
   }
   const shoes = bySlot.get("shoes") || [];
@@ -445,13 +440,13 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
 
   // ── Compose ──
   const sections = [];
-  sections.push(`LOOK FACTS — computed by the app from her closet data and her own rules (${list.length} piece${list.length === 1 ? "" : "s"} on the canvas). Argue from these.`);
-  sections.push(violations.length
-    ? `Rule violations:\n${violations.map(v => `✗ ${v}`).join("\n")}`
-    : "Rule violations: none — every piece passes her occasion, weather, and structure rules.");
+  sections.push(`LOOK FACTS — computed by the app from her closet data and her own preferences (${list.length} piece${list.length === 1 ? "" : "s"} on the canvas). Argue from these.`);
+  sections.push(against.length
+    ? `Runs against how she wears things:\n${against.map(v => `✗ ${v}`).join("\n")}`
+    : "Runs against how she wears things: nothing — every piece sits inside her occasion, weather, and structure preferences.");
   if (gaps.length) sections.push(`Still open (not faults — the look is in progress):\n${gaps.map(g => `○ ${g}`).join("\n")}`);
   if (alternatives.length) sections.push(alternatives.map(a => `⇄ ${a}`).join("\n"));
   if (notes.length) sections.push(notes.map(n => `· ${n}`).join("\n"));
 
-  return { violations, gaps, alternatives, notes, text: sections.join("\n") };
+  return { against, gaps, alternatives, notes, text: sections.join("\n") };
 }

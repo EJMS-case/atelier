@@ -7,6 +7,7 @@
 import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
 import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { weatherAdjustedSlots } from "../../features/stylist/standard.js";
+import { standingAndLessons, describeDateContext } from "../../features/stylist/learning.js";
 import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
@@ -208,14 +209,12 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // July and October can share a "Warm" band yet call for different fabrics
   // (linen and raffia vs suede and light wool), so the prompt gets one line of
   // calendar truth to reason with.
-  const now = new Date();
-  const SEASON_BY_MONTH = [
-    "deep winter", "late winter", "early spring", "mid spring", "late spring",
-    "early summer", "high summer", "high summer", "early fall", "mid fall",
-    "late fall", "early winter",
-  ];
-  const monthPhase = now.getDate() <= 10 ? "early" : now.getDate() <= 20 ? "mid" : "late";
-  const dateContext = `${monthPhase} ${now.toLocaleDateString("en-US", { month: "long" })} — ${SEASON_BY_MONTH[now.getMonth()]} in NYC`;
+  const dateContext = describeDateContext(new Date());
+
+  // How she wears things — her standing preferences and what she has told
+  // her stylist in conversation (features/stylist/learning.js). The one
+  // personal signal App did not already hold in state; memoised, soft-fail.
+  const { standing: standingPreferences, lessons: chatLessons } = await standingAndLessons().catch(() => ({ standing: [], lessons: [] }));
 
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
@@ -241,6 +240,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     occasionMemory,
     silhouette: silhouetteLines,
     comfortMode,
+    standingPreferences,
+    chatLessons,
   });
 
   let contactSheets = [];
@@ -378,7 +379,7 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
     const logItems = resolveItemIds(wardrobe?.length ? wardrobe : items, l.garment_ids);
     return `${l.date_worn}: ${logItems.map(it => `${it.category}:${it.name}`).join(", ")} (${l.occasion || "casual"})`;
   }).join("\n");
-  return `Write a 2-3 sentence monthly style profile for this wardrobe user. Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
+  return `Write a 2-3 sentence monthly style profile for this wardrobe's owner, addressed TO her — "you", "your", never "she" or "the user". Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
 }
 
 // Streaming variant: invokes onDelta(textSoFar) as tokens arrive and returns
@@ -502,7 +503,7 @@ Identify the 5-8 HIGHEST-IMPACT gaps, weighing:
 5. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't.
 6. The season ahead (next 3 months from today's date).
 
-For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
+For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Every description and reason is written TO her: "you", "your" — never "she" or "her". Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
 
     return invokeShoppingTool({
       apiKey,
@@ -556,7 +557,7 @@ Analyze what's missing from this outfit to make it complete and elevated, then r
 - Could a specific accessory elevate it?
 - Is there a texture or color gap?
 
-Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific: color, fabric, silhouette. Infer her taste from what she owns — name a brand only when it's genuinely the right make for the piece, never from a default luxury short-list. Keep description and why to one tight sentence each.`;
+Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific: color, fabric, silhouette. Write description and why TO her — "you", "your" — never "she" or "her". Infer her taste from what she owns — name a brand only when it's genuinely the right make for the piece, never from a default luxury short-list. Keep description and why to one tight sentence each.`;
 
   return invokeShoppingTool({
     apiKey,

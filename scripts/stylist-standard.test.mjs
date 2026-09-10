@@ -28,8 +28,13 @@ import { dirname, join } from "node:path";
 
 import {
   readLook, occasionBrief, weatherBrief, weatherAdjustedSlots, canonicalOccasions,
-  describeItem, STYLIST_STANDARD, OPINION_RULES, STYLIST_PERSONA,
+  describeItem, STYLIST_STANDARD, OPINION_RULES, STYLIST_PERSONA, VOICE_RULES,
 } from "../src/features/stylist/standard.js";
+import {
+  composeLearnedBlocks, mergeLessons, describeLookLine, describeDateContext,
+} from "../src/features/stylist/learning.js";
+import { parseEvalResponse } from "../src/features/builder/evalParse.js";
+import { STANDING_PREFERENCES } from "../src/constants/styling.js";
 import { composeSystemBlock, currentLookBlock } from "../src/features/builder/builderChat.js";
 import { composeEvalPrompt } from "../src/features/builder/evaluateLook.js";
 import { OCCASION_SLOTS } from "../src/constants/styling.js";
@@ -59,9 +64,9 @@ const tote     = (o) => pick("Bags", "Tote", { color: "Black", ...o });
 
 test("a clean Work look has no violations and reads its colour story", () => {
   const r = readLook([blouse(), trouser(), pump(), tote()], { occasions: ["Work"], weathers: ["Mild (55-69°F)"] });
-  assert.deepEqual(r.violations, []);
+  assert.deepEqual(r.against, []);
   assert.deepEqual(r.gaps, []);
-  assert.match(r.text, /Rule violations: none/);
+  assert.match(r.text, /Runs against how she wears things: nothing/);
   assert.match(r.text, /non-neutral families: Blue, Red \(2\)/);
   assert.match(r.text, /Shoes and bag share a family \(Black\)/);
   // An untagged sleeve is a check-the-sleeve note, never a violation.
@@ -71,32 +76,32 @@ test("a clean Work look has no violations and reads its colour story", () => {
 test("a tagged sleeveless top at Work in the cold, with no layer, IS a violation", () => {
   const tank = pick("Tops", "Tanks", { color: "Ivory", material: "silk", formality: 5 });
   const r = readLook([tank, trouser(), pump(), tote()], { occasions: ["Work"], weathers: ["Cool (40-54°F)"] });
-  assert.ok(r.violations.some(v => /shoulder coverage/.test(v)), r.violations.join("\n"));
-  assert.ok(r.violations.some(v => /only visible top/.test(v)), r.violations.join("\n"));
+  assert.ok(r.against.some(v => /shoulder coverage/.test(v)), r.against.join("\n"));
+  assert.ok(r.against.some(v => /only visible top/.test(v)), r.against.join("\n"));
   assert.match(r.text, /Sleeveless: .* — no layer over it/);
 });
 
 test("sandals on Work are a violation; the same shoe on Casual is not", () => {
   const sandal = pick("Shoes", "Sandals", { color: "Cognac", formality: 3 });
   const work = readLook([blouse(), trouser(), sandal], { occasions: ["Work"] });
-  assert.ok(work.violations.some(v => /Sandals.*banned/.test(v)), work.violations.join("\n"));
+  assert.ok(work.against.some(v => /Sandals.*keeps out of this occasion/.test(v)), work.against.join("\n"));
   const casual = readLook([blouse(), trouser(), sandal], { occasions: ["Casual"] });
-  assert.deepEqual(casual.violations, []);
+  assert.deepEqual(casual.against, []);
 });
 
 test("weather is the validator's read: a pullover on a Hot day is flagged", () => {
   const knit = pick("Knits", "Pullovers", { color: "Camel", material: "cashmere", formality: 4 });
   const r = readLook([knit, trouser({ material: "cotton" }), pump()], { occasions: ["Casual"], weathers: ["Hot (85°F+)"] });
-  assert.ok(r.violations.some(v => /too warm for Hot/.test(v)), r.violations.join("\n"));
+  assert.ok(r.against.some(v => /too warm for Hot/.test(v)), r.against.join("\n"));
 });
 
 test("two statement pieces are a violation; one is reported, not flagged", () => {
   const printed = blouse({ pattern: "floral" });
   const plaid = trouser({ pattern: "plaid" });
   const two = readLook([printed, plaid, pump()], { occasions: ["Casual"] });
-  assert.ok(two.violations.some(v => /2 statement pieces/.test(v)), two.violations.join("\n"));
+  assert.ok(two.against.some(v => /2 statement pieces/.test(v)), two.against.join("\n"));
   const one = readLook([printed, trouser(), pump()], { occasions: ["Casual"] });
-  assert.deepEqual(one.violations, []);
+  assert.deepEqual(one.against, []);
   assert.match(one.text, /Statement pieces: .*\(1\)/);
 });
 
@@ -104,13 +109,13 @@ test("a top or a belt on a dress breaks her hard rule", () => {
   const dress = pick("Dresses", "Midi", { color: "Black", material: "crepe", formality: 6 });
   const belt = pick("Belts", undefined, { color: "Black" });
   const r = readLook([dress, blouse(), belt, pump()], { occasions: ["Dinner"] });
-  assert.ok(r.violations.some(v => /under a dress/.test(v)), r.violations.join("\n"));
-  assert.ok(r.violations.some(v => /belt/.test(v)), r.violations.join("\n"));
+  assert.ok(r.against.some(v => /under a dress/.test(v)), r.against.join("\n"));
+  assert.ok(r.against.some(v => /belt/.test(v)), r.against.join("\n"));
 });
 
 test("a half-built canvas is 'still open', never a violation", () => {
   const r = readLook([blouse()], { occasions: ["Work"] });
-  assert.deepEqual(r.violations, []);
+  assert.deepEqual(r.against, []);
   assert.ok(r.gaps.some(g => /no bottom or dress/.test(g)), r.gaps.join("\n"));
   assert.ok(r.gaps.some(g => /no shoes/.test(g)), r.gaps.join("\n"));
   assert.match(r.text, /Still open \(not faults/);
@@ -119,7 +124,7 @@ test("a half-built canvas is 'still open', never a violation", () => {
 test("two shoes on the canvas are a choice to make, not a mistake", () => {
   const loafer = pick("Shoes", "Flats", { color: "Cognac", formality: 5 });
   const r = readLook([blouse(), trouser(), pump(), loafer, tote()], { occasions: ["Work"] });
-  assert.deepEqual(r.violations, []);
+  assert.deepEqual(r.against, []);
   assert.equal(r.alternatives.length, 1);
   assert.match(r.alternatives[0], /choosing between/);
   // …and the shoe/bag family is read per shoe, so the model can pick.
@@ -155,8 +160,8 @@ test("fabric read: one weight throughout is called out; matte × sheen is credit
 test("multi-occasion chips: occasion-dependent findings are labelled", () => {
   const sandal = pick("Shoes", "Sandals", { color: "Tan", formality: 3 });
   const r = readLook([blouse(), trouser(), sandal], { occasions: ["Work", "Casual"] });
-  assert.ok(r.violations.some(v => v.startsWith("[Work]")), r.violations.join("\n"));
-  assert.ok(!r.violations.some(v => v.startsWith("[Casual]")), r.violations.join("\n"));
+  assert.ok(r.against.some(v => v.startsWith("[Work]")), r.against.join("\n"));
+  assert.ok(!r.against.some(v => v.startsWith("[Casual]")), r.against.join("\n"));
 });
 
 test("an empty canvas reads as nothing, and duplicates collapse", () => {
@@ -170,8 +175,8 @@ test("an empty canvas reads as nothing, and duplicates collapse", () => {
 
 test("the occasion brief is Style Me's rule, re-cut for one look", () => {
   const work = occasionBrief(["Work"]);
-  assert.match(work, /^WORK BRIEF: WORK: Polished/);
-  assert.match(work, /Banned for Work: .*Sandals.*open sandal-form shoe/);
+  assert.match(work, /^WORK BRIEF \(how she has asked[^)]*\): WORK: Polished/);
+  assert.match(work, /She keeps these out of Work: .*Sandals.*open sandal-form shoe/);
   assert.match(work, /Work calls for a bag/);
   assert.match(work, /is the default here/);
   assert.doesNotMatch(work, /2 of 3 looks/);
@@ -232,7 +237,7 @@ test("the builder chat's per-turn block carries the brief, the rules, and the fa
   assert.match(block, /WORK BRIEF/);
   assert.match(block, /WEATHER: COOL/);
   assert.match(block, /LOOK FACTS/);
-  assert.match(block, /✗ .*Sandals.*banned/);
+  assert.match(block, /✗ .*Sandals.*keeps out/);
   assert.match(block, /Activates her pairing Burgundy \+ Navy/);
 });
 
@@ -244,12 +249,12 @@ test("the evaluator's prompt carries the standard, the brief, and the facts", ()
   });
   assert.ok(prompt.includes(STYLIST_STANDARD));
   assert.ok(prompt.includes(OPINION_RULES));
-  assert.match(prompt, /caps the score at 6/);
+  assert.match(prompt, /counts heavily against the score/);
   assert.match(prompt, /WORK BRIEF/);
   assert.match(prompt, /WEATHER: MILD/);
   assert.match(prompt, /LOOK FACTS/);
   assert.match(prompt, /HER BODY & FIT: test/);
-  assert.match(prompt, /ITEMS ON THE CANVAS/);
+  assert.match(prompt, /On the canvas now:/);
 });
 
 test("every advisory surface imports the standard (source contract)", () => {
@@ -263,7 +268,10 @@ test("every advisory surface imports the standard (source contract)", () => {
   for (const rel of surfaces) {
     const src = readFileSync(join(ROOT, rel), "utf8");
     assert.match(src, /from "\.\.\/stylist\/standard\.js"/, `${rel} does not import the standard`);
-    for (const sym of ["STYLIST_STANDARD", "OPINION_RULES", "readLook", "occasionBrief", "weatherBrief"]) {
+    // The prose can arrive directly or through the chat's composeSystemBlock
+    // (the evaluator shares that block so the two surfaces share one cache).
+    assert.ok(src.includes("STYLIST_STANDARD") || src.includes("composeSystemBlock"), `${rel} does not compose the standard`);
+    for (const sym of ["readLook", "occasionBrief", "weatherBrief", "personalGrounding"]) {
       assert.ok(src.includes(sym), `${rel} does not use ${sym}`);
     }
   }
@@ -272,4 +280,94 @@ test("every advisory surface imports the standard (source contract)", () => {
     const src = readFileSync(join(ROOT, rel), "utf8");
     assert.doesNotMatch(src, /You are Elyce's personal stylist/, `${rel} carries its own persona copy`);
   }
+});
+
+
+// ── 4. Preferences, voice, swaps, learning ──────────────────────────────────
+
+test("the standard speaks in preferences, in the second person, and never buttons a blazer", () => {
+  assert.doesNotMatch(STYLIST_STANDARD, /HARD RULES/);
+  assert.match(STYLIST_STANDARD, /HOW SHE WEARS THINGS — her standing preferences/);
+  assert.match(STYLIST_STANDARD, /blazer is always worn OPEN/);
+  assert.match(OPINION_RULES, /Challenge her/);
+  assert.match(OPINION_RULES, /what to SWAP/);
+  assert.match(VOICE_RULES, /Never "she", "her"/);
+  assert.match(STANDING_PREFERENCES.join("\n"), /blazer open — never buttoned/);
+  for (const line of STANDING_PREFERENCES) assert.doesNotMatch(line, /\bshe\b|\bher\b/i, `seed speaks about her, not to her: ${line}`);
+  assert.ok(composeSystemBlock({ available: [] }).includes(VOICE_RULES));
+  assert.match(composeEvalPrompt({ items: [blouse(), trouser(), pump()] }), /Write every field TO her/);
+});
+
+test("a blazer on the canvas gets the open-blazer note, with the belt placed under it", () => {
+  const blazer = pick("Outerwear", "Blazers", { color: "Tan", material: "wool", pattern: "plaid", formality: 6 });
+  const belt = pick("Belts", undefined, { color: "Brown", material: "suede" });
+  const r = readLook([blouse(), trouser(), blazer, belt, pump()], { occasions: ["Work"], weathers: ["Warm (70-84°F)"] });
+  assert.match(r.text, /she wears a blazer OPEN, always/);
+  assert.match(r.text, /Brown Belts.*sits on the trouser\/skirt waist under the open blazer/);
+  const dress = pick("Dresses", "Midi", { color: "Black", formality: 6 });
+  const noBelt = readLook([dress, blazer, pump()], { occasions: ["Dinner"] });
+  assert.match(noBelt.text, /blazer OPEN/);
+  assert.doesNotMatch(noBelt.text, /under the open blazer/);
+});
+
+test("the evaluator's swaps parse, and are dropped rather than half-shown on a truncated reply", () => {
+  const full = `{"score": 6, "headline": "Safe.", "works": "The column.", "swaps": [{"out": "Black Tote", "in": "Cognac Shoulder Bag", "why": "Pulls the brown shoe into a story."}], "tips": ["Half-tuck the blouse."], "weather": null}`;
+  const { parsed } = parseEvalResponse(full);
+  assert.equal(parsed.swaps.length, 1);
+  assert.deepEqual(parsed.swaps[0], { out: "Black Tote", in: "Cognac Shoulder Bag", why: "Pulls the brown shoe into a story." });
+  const cut = `{"score": 6, "headline": "Safe.", "works": "The column.", "swaps": [{"out": "Black Tote", "in": "Cog`;
+  const salvaged = parseEvalResponse(cut);
+  assert.equal(salvaged.parsed.score, 6);
+  assert.deepEqual(salvaged.parsed.swaps, []);
+});
+
+test("learning: lessons merge without duplicates and cap; blocks compose from every signal", () => {
+  const merged = mergeLessons(["You never button a blazer."], ["you never button a blazer", "You wear a belt over knits."]);
+  assert.deepEqual(merged, ["You never button a blazer.", "You wear a belt over knits."]);
+  assert.equal(mergeLessons([], Array.from({ length: 100 }, (_, i) => `lesson ${i}`), { cap: 10 }).length, 10);
+
+  const { blocks, pairs } = composeLearnedBlocks({
+    fingerprint: "• You anchor Work in one hue.",
+    standing: ["You always wear a blazer open."],
+    lessons: ["You never wear a belt over a knit."],
+    silhouette: ["Long torso — high rise flatters."],
+    manualPairs: ["Burgundy + Navy"],
+    autoPairs: [{ label: "Navy + Black", note: "the modern clash" }],
+    prefs: { direction: "quiet luxury", monochromaticMode: true },
+    lovedLines: ["[Work] navy Blouses + black Trousers"],
+    dislikedLines: ["[Casual] red Tops + green Skirts"],
+    swapLessons: ["Work / Warm: swap black Flats → black Heels (×3)"],
+    occasionMemory: ["Work: the black pump, the navy blazer"],
+    dateContext: "early September — early fall in NYC",
+  });
+  const text = blocks.join("\n\n");
+  for (const needle of [
+    "HER STYLE FINGERPRINT", "HOW SHE WEARS THINGS", "TOLD HER STYLIST IN CONVERSATION", "HER BODY & FIT",
+    "HER COLOR PAIRINGS", "the modern clash", "HER STYLE MODES", "LOOKS SHE LOVED", "RATED DOWN",
+    "HER EDITS", "RETURNS TO", "TODAY: early September",
+  ]) assert.ok(text.includes(needle), `missing ${needle}`);
+  assert.deepEqual(pairs, ["Burgundy + Navy", "Navy + Black"]);
+  assert.doesNotMatch(text, /\brule\b/i);
+  assert.deepEqual(composeLearnedBlocks({}).blocks, []);
+});
+
+test("learning: look lines resolve against the wardrobe; the date line names the season", () => {
+  const w = [blouse(), trouser()];
+  assert.equal(describeLookLine(w, w.map(it => it.id), "Work"), "[Work] Navy Blouses + Burgundy Trousers");
+  assert.equal(describeLookLine(w, [w[0].id], "Work"), null);
+  assert.match(describeDateContext(new Date("2026-09-10T12:00:00")), /^early September — early fall in NYC$/);
+  assert.match(describeDateContext(new Date("2026-01-25T12:00:00")), /^late January — deep winter in NYC$/);
+});
+
+test("Style Me carries her standing preferences and chat lessons", async () => {
+  const { buildStylingPrompt } = await import("../src/prompts/styling-system-prompt.js");
+  const { dynamicBody, staticPreamble } = buildStylingPrompt({
+    occasion: "Work", weather: "Mild (55-69°F)", inventoryBlock: "W001 [Navy] Tops>Blouses | Silk Blouse", closetCount: 1,
+    standingPreferences: ["You always wear a blazer open."], chatLessons: ["You never wear a belt over a knit."],
+  });
+  assert.match(dynamicBody, /HOW SHE WEARS THINGS/);
+  assert.match(dynamicBody, /You always wear a blazer open/);
+  assert.match(dynamicBody, /Told to her stylist in conversation/);
+  assert.match(staticPreamble, /BLAZERS ARE WORN OPEN/);
+  assert.match(staticPreamble, /written TO her: "you", "your"/);
 });

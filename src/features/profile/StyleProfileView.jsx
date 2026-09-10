@@ -12,11 +12,14 @@
 // here. All persistence is unchanged: prefs/About Me in localStorage via
 // storage.js (per-device, same as before), fingerprint in user_settings.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { s } from "../../ui/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { loadStylePrefs, saveStylePrefs, loadAboutMe, saveAboutMe } from "../../utils/storage.js";
 import { generateStyleFingerprint } from "../stylist/styleFingerprint.js";
+import {
+  loadStandingPreferences, saveStandingPreferences, loadChatLessons, saveChatLessons,
+} from "../stylist/learning.js";
 import { fetchAllPlans } from "../planner/plannerApi.js";
 import { familyForColorString } from "../../constants/color.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
@@ -69,6 +72,27 @@ export default function StyleProfileView({
   const [fpError, setFpError] = useState("");
 
   const updatePrefs = (updated) => { setPrefs(updated); saveStylePrefs(updated); };
+
+  // How I wear things (standing preferences) + what she has told her stylist
+  // in conversation (chat lessons). Both cross-device (user_settings) and both
+  // read by EVERY AI surface as preferences, never rules (owner, 2026-09-10).
+  const [standing, setStanding] = useState([]);
+  const [lessons, setLessons] = useState([]);
+  const [newStanding, setNewStanding] = useState("");
+  useEffect(() => {
+    let alive = true;
+    loadStandingPreferences().then(list => { if (alive) setStanding(list); }).catch(() => {});
+    loadChatLessons().then(list => { if (alive) setLessons(list); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const updateStanding = (list) => { setStanding(list); saveStandingPreferences(list).catch(() => {}); };
+  const addStanding = () => {
+    const v = newStanding.trim();
+    if (!v) return;
+    updateStanding([...standing, v]);
+    setNewStanding("");
+  };
+  const updateLessons = (list) => { setLessons(list); saveChatLessons(list).catch(() => {}); };
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
   const removePair = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
   const addPair = (pair) => {
@@ -112,7 +136,7 @@ export default function StyleProfileView({
         fetchAllPlans().catch(() => []),
         sb.fetchLookEdits().catch(() => []),
       ]);
-      const fp = await generateStyleFingerprint({ items, logs, plans, edits, apiKey });
+      const fp = await generateStyleFingerprint({ items, logs, plans, edits, lessons, apiKey });
       await sb.saveStyleFingerprint(fp);
       setStyleFingerprint?.(fp);
     } catch (e) {
@@ -174,6 +198,47 @@ export default function StyleProfileView({
         {fpError && (
           <div style={{ fontSize: 11, color: "var(--color-danger)", marginTop: 6 }}>{fpError}</div>
         )}
+      </div>
+
+      {/* ── How I wear things — her standing preferences, in her words ── */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>✦ How I Wear Things</div>
+        <p style={s.settingsSub}>
+          Your standing preferences, in your own words. Every stylist surface — Style Me, the builder chat, Evaluate look, trips — reads these as preferences, never rules: a look that departs from one has to earn it. Synced across your devices.
+        </p>
+        {standing.map((line, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+            <span style={{ flex: 1, fontSize: 12, color: "var(--color-text)", lineHeight: 1.45 }}>{line}</span>
+            <button onClick={() => updateStanding(standing.filter((_, idx) => idx !== i))}
+              style={{ background: "none", border: "none", color: "var(--color-border-muted)", cursor: "pointer", fontSize: 13 }}>✕</button>
+          </div>
+        ))}
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <input style={{ ...s.input, flex: 1, fontSize: 12 }} placeholder="e.g. I never wear a belt over a knit"
+            value={newStanding} onChange={e => setNewStanding(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addStanding()}/>
+          <button style={s.btnPrimary} onClick={addStanding}>Add</button>
+        </div>
+      </div>
+
+      {/* ── Learned from your chats ── */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>✦ Learned From Our Chats</div>
+        <p style={s.settingsSub}>
+          Preferences the app picked up from what you told your stylist in the builder. They shape every look from then on. Remove anything it got wrong.
+        </p>
+        {lessons.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Nothing yet — say what you like and don't like in the builder chat, and it lands here.</div>
+        ) : lessons.slice().reverse().map((line, ri) => {
+          const i = lessons.length - 1 - ri;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+              <span style={{ flex: 1, fontSize: 12, color: "var(--color-text)", lineHeight: 1.45 }}>{line}</span>
+              <button onClick={() => updateLessons(lessons.filter((_, idx) => idx !== i))}
+                style={{ background: "none", border: "none", color: "var(--color-border-muted)", cursor: "pointer", fontSize: 13 }}>✕</button>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Color pairings ── */}

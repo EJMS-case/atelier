@@ -8,6 +8,28 @@ it through.
 
 ## Session log
 
+### 2026-09-10 · the learning PR — preferences not rules, swaps not tips, "you" not "her"
+
+**Owner, same day as #228, on an Evaluate-look screenshot** (taken on the pre-#228 build — the old prompt chips prove it — but every point applied to #228 as well): *"It's not telling me what to swap or how to fix the outfit … speaking to me as if it isn't me … I do not want hard rules in this app but please ensure it always assumes the blazer is OPEN … The app should learn from all discussions within the app, all saves, all outfits, all items in my closet, and all conversations in Claude, but hard rules should not be set — only preferences. I want to be challenged."*
+
+**Four root causes, all fixed** (CHANGELOG has the detail): the evaluator never saw her closet so it could not name a swap; every prompt wrote about her in the third person; #228 had called her preferences "HARD RULES"; the advisory surfaces read three of her signals while Style Me read nine, and nothing she said in a chat was kept.
+
+**What to carry forward:**
+- **`src/features/stylist/learning.js` is the one place the app's knowledge of her is gathered** — standing preferences, chat lessons, fingerprint, loved/disliked, edits, occasion memory, date. Any new AI surface calls `personalGrounding()` (standard.js) or `learnedContext()` and gets all of it. Do not add a fourth hand-copy of the fingerprint block.
+- **Her word is "preferences".** Nothing she reads may call anything a rule or a violation. The validator's structural checks stay (a look needs a lower half and shoes — that is what a look is), and she never sees them as rules. If a new check is taste-level, it is soft, and the prose says "she keeps X out of Work", never "banned".
+- **The blazer is always open.** Standing preference #1, in Style Me's preamble, and a LOOK FACT. If a rationale or tip ever suggests buttoning or belting a blazer closed, that is a bug.
+- **Voice is second person on every surface.** The stored fingerprint is still third-person until she taps Refresh in Style Profile (or ten new logs trigger the auto-refresh); the regeneration prompt now writes to her.
+- **`stylist_chats` (migration 0035) is live.** One row per builder conversation, upserted each turn, with the lessons distilled from it. `sb.fetchStylistChats()` reads them — "review my chat" is now answerable. Lessons live in `user_settings.chat_lessons`; standing preferences in `user_settings.style_notes`; both editable in Style Profile.
+- **Cost shape**: the evaluator now sends the chat's full cached system block (~17k tokens). First call in a session writes the cache; every chat turn or evaluation after reads it. Plus one Haiku call per chat turn for lesson extraction.
+
+**Watch-items for her next report:**
+- Do the swaps name real closet pieces, and do the tips say how to wear what stays? If swaps come back empty on a look that clearly wants one, tighten the "swaps" instruction in `EVAL_TASK` before touching anything else.
+- Does any surface still say "her"? The fingerprint is the known holdout until refreshed.
+- Are the chat lessons accurate? She can ✕ a wrong one in Style Profile; if wrong ones keep landing, the extractor prompt in `recordChatLessons` is the lever (it is told most turns have none).
+- Latency: the evaluator now carries the closet + adaptive thinking; if a tap feels slow, drop effort to `low` on the evaluator only.
+
+**Verified before push:** `npm test` (36 suites), `npm run build`, `npm run smoke` all green; migration 0035 applied and the table confirmed present.
+
 ### 2026-09-10 · PR #228 — the chat had a persona and no standard
 
 **Owner report, verbatim:** *"Review my recent chat with my stylist … It is not giving good recommendations. I'm pushing back and it's saying I'm right. My whole app should be smart and chic stylish using the items in My wardrobe. Think bigger picture … I do not trust it."*

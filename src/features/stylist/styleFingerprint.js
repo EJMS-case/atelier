@@ -50,7 +50,7 @@ function compactOutfit({ date, occasionLabel, weatherLabel, garment_ids = [] }, 
  * @param {string}   params.apiKey  - Anthropic key
  * @returns {Promise<{ text: string, source_count: number, generated_at: string }>}
  */
-export async function generateStyleFingerprint({ items, logs = [], plans = [], edits = [], apiKey }) {
+export async function generateStyleFingerprint({ items, logs = [], plans = [], edits = [], lessons = [], apiKey }) {
   if (!apiKey) throw new Error("Anthropic API key required");
 
   const itemMap = {};
@@ -94,7 +94,15 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], e
     ? `\n\nHer direct corrections to suggested looks (swap = what she took out → what she chose instead; ×N = same correction N times):\n${editLines.join("\n")}`
     : "";
 
-  const prompt = `You are summarizing this client's personal style patterns from her actual outfit history. Output 4-8 short observations as plain prose — one per line, prefixed with "•". Each observation should be one sentence, ≤22 words. Focus on:
+  // What she has told her stylist in conversation (learning.js chat lessons):
+  // her own words, so they outrank inference. Shown so the read can confirm
+  // or qualify a habit against what she has actually said.
+  const lessonLines = (Array.isArray(lessons) ? lessons : []).filter(Boolean).slice(-15);
+  const lessonsSection = lessonLines.length > 0
+    ? `\n\nWhat she has told her stylist in conversation (her own words, distilled — these outrank inference from history):\n${lessonLines.map(l => `• ${l}`).join("\n")}`
+    : "";
+
+  const prompt = `You are summarizing this client's personal style patterns from her actual outfit history. She will READ this — write every line TO her, in the second person ("You anchor Work looks in one hue…"), never "she" or "her". Output 4-8 short observations as plain prose — one per line, prefixed with "•". Each observation should be one sentence, ≤22 words. Focus on:
 
 - Color TECHNIQUE she defaults to (tonal layering, monochrome, complementary, color-blocking, neutral-plus-one-pop) — describe the METHOD, not just the pair. Every color in her closet is approved; the signal is HOW she combines them.
 - Silhouette / proportion habits per occasion (e.g. "leans column for Work, volume below for Date Night")
@@ -109,9 +117,10 @@ Do NOT:
 - List occasions/weathers without a pattern attached
 - Pad with generic styling advice
 - Use bullets beyond "•" or any numbered list
+- Write about her in the third person — every line says "you"
 
 Outfits (${lines.length} total — date | occasion | weather — pieces):
-${lines.join("\n")}${editsSection}`;
+${lines.join("\n")}${editsSection}${lessonsSection}`;
 
   const res = await anthropicFetch({
     model: MODEL_STANDARD,
