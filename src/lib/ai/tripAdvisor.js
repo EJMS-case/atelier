@@ -343,7 +343,7 @@ ${inventory}
 
 Build exactly 1 polished, complete outfit appropriate for ${occasion} in ${weather} weather.
 The look must include at minimum: a top or dress, bottoms (unless dress), and shoes.
-Add a bag and layer/outerwear if appropriate for the weather and occasion.
+Add a bag where the occasion calls for one. A layer follows the OCCASION brief above first and the weather second — a Work day takes a knit or blazer over a short-sleeve or sleeveless top in every weather (the lightest one when it's hot); elsewhere add outerwear only when the weather wants it.
 
 Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:xxxx format stripped to just the UUID).`;
 

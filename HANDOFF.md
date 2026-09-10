@@ -8,6 +8,16 @@ it through.
 
 ## Session log
 
+### 2026-09-10 · the completion PR — the downstream sweep of #230
+
+**Owner:** *"Are you thinking big picture too? Stale code, downward impact, etc.?"* Five things #230 left behind, one a real regression — CHANGELOG has the list. The one to remember: **a soft validator check on its own changes nothing at generation time.** Soft failures only reach the model inside a retry prompt, and a retry only happens for a hard failure. So "make it soft" without a completion step = "delete it". The office preference is now honored by **`completeOfficeCoverage`** — the layer is added to every look that ships (streamed, final, salvaged), never demanded. That is the pattern for any future preference she wants held without a rule: soft check + completion, like `salvageByAddingShoes` and `salvageByAddingIncludes`.
+
+**Also swept:** the WARM block's "when in doubt, skip the layer"; the Work brief's "2 of 3 looks"; the trip prompt's weather-first layer line; the stale `required.layer` comment; the streaming gate's direct call to the shoulder check (it was a hard gate in disguise). AI Readiness now flags tops with no sleeve signal and cardigans with no knit weight — the two fields her dress code turns on. A light long sleeve (silk/linen/chiffon) now survives a Hot trip pool.
+
+**Found, not fixed — her call:** `trip-packer.test.mjs` "dinner day gets an evening bag" flakes about 1 run in 8, on `main` too. `tripPacker.js` `pick()` adds `Math.random() * 0.6` to every score, and the capsule-ceiling margin (−3.5 on a fresh piece when a reused one scores within 1.5) can drop the Evening Clutch below a reused crossbody on a Dinner day — then the jitter decides. Proposed fix: exempt a candidate that matches the occasion's `preferBagName`/`preferShoeSub` from the ceiling margin when the best reused piece does not (the escape hatch already exists for shoes, per the test's own name), and shrink the jitter to a near-tie breaker (≤ 0.25). It changes packing behaviour she has tuned by hand, so it was left for her.
+
+**Verified before push:** `npm test` green (the packer flake excepted, reproduced 1/8 on `main`), `npm run build`, `npm run smoke` green.
+
 ### 2026-09-10 · PR #230 — her dress code held in every weather, and no hard rule
 
 **Owner:** *"Do I need to add a hard rule that my shoulders need to be covered at work? My office is business professional. Long sleeves, or if short sleeves or tank, I need a knit or blazer … Why is it not obvious? … avoid setting hard rules … it still doesn't know my appropriate work dress."*

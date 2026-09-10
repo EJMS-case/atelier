@@ -12,7 +12,7 @@
 
 import { TAXONOMY, getSubcatL2 } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
-import { CURATED_NOTES_MAX } from "../../utils/item-helpers.js";
+import { CURATED_NOTES_MAX, getSleeveType } from "../../utils/item-helpers.js";
 
 // Categories where a missing material genuinely blinds texture reasoning.
 // Shoes/Bags/Accessories often carry material in the name ("Leather Tote"),
@@ -32,6 +32,13 @@ export const ISSUE_LABELS = {
   material_missing:    "no material — invisible to texture intelligence",
   formality_missing:   "no formality tag",
   notes_too_long:      `notes over ${CURATED_NOTES_MAX} chars with no stylist line — excluded from classifiers`,
+  // The two fields her office dress code turns on (2026-09-10): a top with
+  // no sleeve signal can't be told to stand alone (long) or take a layer
+  // (short/sleeveless); a cardigan with no knit weight can't be recognised
+  // as the summer office layer. Enhancers, not critical — the stylist still
+  // reads the piece, it just can't apply her rule to it with confidence.
+  sleeve_unknown:      "no sleeve length the AI can read — add 'long sleeve' / 'short sleeve' / 'sleeveless' to the name or notes",
+  knit_weight_missing: "cardigan with no knit weight — can't be recognised as the summer office layer",
 };
 
 export function auditItem(it) {
@@ -47,6 +54,8 @@ export function auditItem(it) {
 
   if (!it.image) issues.push("no_image");
   if (MATERIAL_CATS.has(it.category) && !String(it.material || "").trim()) issues.push("material_missing");
+  if (it.category === "Tops" && getSleeveType(it) === "unknown") issues.push("sleeve_unknown");
+  if (it.category === "Knits" && it.subcategory === "Cardigans" && !it.knit_weight) issues.push("knit_weight_missing");
   const formality = it.formality === "" || it.formality == null ? NaN : Number(it.formality);
   if (!Number.isFinite(formality)) issues.push("formality_missing");
   // A stylist_line resolves long notes: classifiers and prompts read the

@@ -454,7 +454,10 @@ export function filterByWeather(items, weather) {
       // evening, or an indoor lunch when it's 90° outside. Heavy layers still go.
       if (it.category === "Outerwear" && !isLightOuter) return false;
       if (it.subcategory === "Jackets" && isHeavyFabric) return false;
-      if (it.category === "Tops" && sleeve === "long") return false;
+      // A long sleeve in a genuinely light weave (silk, linen, chiffon, gauze)
+      // stays — it is the office top that needs no layer at 90° (her rule: a
+      // long sleeve stands alone). A cotton or ponte long sleeve still goes.
+      if (it.category === "Tops" && sleeve === "long" && !/\b(silk|linen|chiffon|gauze|sheer|voile|lightweight)\b/i.test(nameNotes)) return false;
       // A cape/poncho is a layering FORM, not a fabric — her knitted cape top
       // is category Tops (so the Knits ban misses it), sleeveless (so the long-
       // sleeve rule misses it) and tagged Light (so the season tag misses it),

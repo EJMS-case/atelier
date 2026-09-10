@@ -2,6 +2,74 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The office layer is ADDED, never demanded: the downstream sweep of #230 — 2026-09-10
+
+### Why
+Owner, after #230: *"Are you thinking big picture too? Stale code, downward
+impact, etc.?"* The audit found five things #230 left behind, one of them a
+real regression:
+
+1. **Making HC_SHOULDER soft meant a bare-shouldered Work look now SHIPPED in
+   cool weather**, where before it was retried. A soft failure only reaches
+   the model when a hard failure forces a retry, so on its own the preference
+   changed nothing at generation time — the same "the app doesn't know my
+   work dress" in October instead of July. And the streaming gate still
+   called the check directly and treated any finding as blocking, so in heat
+   it was holding back every Work look whose top wasn't tagged long-sleeve —
+   a hard rule in disguise.
+2. The WARM weather block still said *"when in doubt, skip the layer."*
+3. The Work brief still said *"blazer or structured layer on at least 2 of 3
+   looks"* — a quantity from before the dress code was stated.
+4. The trip-day prompt said *"add a layer/outerwear if appropriate for the
+   weather"* — the weather-first framing the whole PR was removing.
+5. Nothing told her which tops the app cannot read a sleeve length from, and
+   her rule turns entirely on that field.
+
+### Added
+- **`completeOfficeCoverage` (styling-validator.js) — the preference honored
+  by completion, not refusal.** When a Work / Work Dinner look has a
+  short-sleeve, tank, or sleeveless top and no layer, the generator ADDS the
+  best eligible Knits / Outerwear piece from the pool — a blazer first (the
+  office default), then a cardigan, then a jacket — that survives the
+  weather, occasion, and exclusion checks for that look, isn't used elsewhere
+  in the response, and clears the finding. Runs on every look that ships:
+  each streamed look *before* she sees it, the final pass, and every salvage
+  return. A long-sleeve look is untouched; a pool with no viable layer ships
+  the look as-is (soft). Logged as `stylist_outfit:office_layer`.
+- **AI Readiness** flags the two fields the dress code turns on: a Top with
+  no sleeve signal (`sleeve_unknown`) and a cardigan with no knit weight
+  (`knit_weight_missing`). Enhancers, not critical.
+
+### Changed
+- The streaming gate no longer calls the shoulder check (soft failures never
+  gate); it completes the look instead.
+- WARM weather block carries the office exception; the Work brief says *"a
+  blazer or structured layer is the office default; a long sleeve alone is
+  the one look that doesn't need it"*; the trip-day prompt defers the layer
+  to the occasion brief first, weather second; the stale `required.layer`
+  comment in styling.js describes what reads it now.
+- `filterByWeather` keeps a **light long sleeve** (silk, linen, chiffon,
+  gauze, sheer, voile) in Hot — the office top that needs no layer at 90°.
+  Cotton and ponte long sleeves still go. Affects trip days and the packer;
+  Style Me's sampler never used this gate.
+
+### Tests
+- `test:standard` → 32: completion adds a blazer in Cool and a linen blazer
+  or fine cardigan in Hot (never the chunky knit, never the wool blazer);
+  leaves a long sleeve alone; returns null for Casual, for a pool with no
+  viable layer, and when every layer is spoken for by another look; a light
+  long sleeve survives Hot.
+- `test:audit` covers the two new enhancer issues.
+
+### Found, not fixed (pre-existing)
+- `scripts/trip-packer.test.mjs` "dinner day gets an evening bag" fails
+  intermittently (1 in ~8 runs, on `main` too): the packer's `pick()` adds
+  `Math.random() * 0.6` to scores, and the capsule-ceiling margin can push the
+  Evening Clutch below a reused crossbody on a Dinner day, so the jitter
+  decides. A packer wobble, not a test problem — flagged in HANDOFF with the
+  proposed fix; it touches packing behaviour she has tuned by hand, so it is
+  her call.
+
 ## [Unreleased] — Her office is business professional, in every weather (#230) — 2026-09-10
 
 ### Why

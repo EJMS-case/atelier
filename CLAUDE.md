@@ -102,6 +102,13 @@ Conventions worth knowing:
   or blazer over them, the lightest she owns when it's hot. A weather branch
   must never delete an occasion preference — heat changes *which* layer,
   never *whether* (that exact bug survived a year, 2026-09-10).
+- **A soft validator check on its own changes nothing at generation time.**
+  Soft failures only reach the model inside a retry prompt, and retries only
+  happen for hard failures. To hold a preference without a rule, pair the
+  soft check with a **completion** step that fixes the look before it ships
+  (`completeOfficeCoverage`, `salvageByAddingShoes`,
+  `salvageByAddingIncludes`) — and run it on streamed looks too, since a
+  streamed look survives to the screen.
 - **Everything the app knows about her comes from
   `src/features/stylist/learning.js`** — standing preferences (Style Profile
   → How I Wear Things), lessons distilled from her chats, fingerprint, loved

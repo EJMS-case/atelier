@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { auditItem, auditCloset, CRITICAL_ISSUES, ISSUE_LABELS } from "../src/features/profile/dataAudit.js";
 
 const clean = {
-  id: "ok1", category: "Tops", subcategory: "Blouses", name: "Silk blouse",
+  id: "ok1", category: "Tops", subcategory: "Blouses", name: "Long-sleeve silk blouse",
   color: "Navy", material: "Silk", formality: 6, image: "https://x/img.png", notes: "good for work",
 };
 
@@ -31,6 +31,17 @@ test("subcategory rules respect the taxonomy, including L3 children and empty-su
   assert.ok(!auditItem(l3).includes("subcategory_unknown"), "L3 children are valid");
   const belt = { ...clean, category: "Belts", subcategory: "" };
   assert.ok(!auditItem(belt).some(i => i.startsWith("subcategory")), "Belts has no subcategories — empty is fine");
+});
+
+test("the office dress code's two fields are audited as enhancers", () => {
+  const untagged = auditItem({ ...clean, name: "Silk blouse" });
+  assert.ok(untagged.includes("sleeve_unknown"), "a top with no sleeve signal is flagged");
+  assert.ok(!CRITICAL_ISSUES.has("sleeve_unknown"), "…but it is an enhancer, not critical");
+  assert.ok(!auditItem({ ...clean, subcategory: "Tanks", name: "Silk tank" }).includes("sleeve_unknown"), "the subcategory is a sleeve signal");
+  const cardigan = { ...clean, category: "Knits", subcategory: "Cardigans", name: "Alpaca cardigan" };
+  assert.ok(auditItem(cardigan).includes("knit_weight_missing"));
+  assert.ok(!auditItem({ ...cardigan, knit_weight: "Fine/Summer" }).includes("knit_weight_missing"));
+  assert.ok(!auditItem({ ...cardigan, subcategory: "Pullovers" }).includes("knit_weight_missing"), "only cardigans are the office layer");
 });
 
 test("material is only required where it does unique work", () => {
