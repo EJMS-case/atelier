@@ -130,6 +130,78 @@ Conventions worth knowing:
 - New feature work should land in `src/features/<area>/` with its own
   `scripts/<area>.test.mjs`, rather than growing `App.jsx`.
 
+## How to think about every change (owner, 2026-09-10)
+
+Her standing instruction, in her words, for every Atelier session and for
+every way she and Atelier interact:
+
+> *"Consider any downstream implications in the code — specifically as it
+> relates to efficiency, effectiveness, speed, and overall education of
+> Atelier, on every turn. Remember this and save it. Make it commonplace for
+> any and all changes moving forward."*
+>
+> *"Atelier should learn from all discussions within the app, all saves, all
+> outfits, all items in my closet, and all conversations, but hard rules
+> should not be set — as often as possible, avoid hard rules because that is
+> where the app sucks. Be smart about the 'rules' put in place. That is when
+> Atelier breaks."*
+>
+> *"I need you to be an exceptional stylist AI, not only in the app but in
+> everything the app does, how you code it, how it thinks, what it gives me,
+> how you dispose of bad code … I want to be challenged in my style. I want
+> thoughtful advice. I want you to be more innovative and smart about how
+> Atelier is written."*
+>
+> *"If the AI notes are missing, take it upon yourself during a full audit or
+> sweep to summarize my existing notes and move them to the AI notes in the
+> way Claude can best understand them. You have all the information and
+> details — make sure they all work for you. Do not guess or make things up,
+> use what I have already given you. If knit weight is unclear, check my
+> notes. Be SMART. Think BIG PICTURE."*
+
+What that means in practice — run this list on every change, not just the
+ones that feel big:
+
+1. **Downstream, four ways, every turn.** Before the diff is done, answer for
+   it: *Efficiency* — tokens (is the cached preamble still byte-stable? does a
+   new block ride the uncached body?), bundle (does a static import undo the
+   code split?), round-trips. *Effectiveness* — does the preference actually
+   reach generation (a soft check alone changes nothing; pair it with a
+   completion step), and does it reach EVERY surface that builds or judges a
+   look (Style Me, builder chat, Evaluate, trip days, the packer)? *Speed* —
+   latency she feels on the phone: thinking effort, model tier, an extra call
+   per tap. *Education* — does Atelier learn something from this, and does
+   that learning flow through `learning.js` so every surface gets it? Write
+   the answers into the CHANGELOG entry.
+2. **Preferences, not rules — and be smart about the ones that must exist.**
+   The structural checks (a look has a lower half and shoes) stay hard. A
+   taste-level check is soft, phrased as what she keeps out of a room, and
+   held by completion, never refusal. Before adding any gate ask: what does
+   this do to a Hot Work pool, to a small trip pool, to a look she built by
+   hand? A rule that can empty a pool or wall her with errors is a bug.
+3. **Learn from everything.** Chats (`stylist_chats` + `chat_lessons`),
+   saves, wears, loved/disliked, edits, her closet notes — all of it flows
+   through `personalGrounding()`. A new signal is added there, once, and
+   every surface inherits it. A surface with a hand-copied fingerprint is a
+   regression.
+4. **An exceptional stylist, in the code too.** The persona challenges her
+   (`OPINION_RULES`); the code should be held to the same bar: name the
+   trade-off, pick, delete what is dead, and never leave a stale comment or
+   a second copy of a predicate behind. "Right the first time" means
+   sweeping the family, not the screenshot.
+5. **Her data is the ground truth; derive, never invent.** When a field the
+   stylist depends on is empty, read what she already gave — name, material,
+   notes, stylist line — with ONE reader that every site uses (pattern:
+   `readKnitWeight`, `getSleeveType`, `classifierNotes`). Surface the
+   evidence to her (the Edit screen quotes the phrase it read). Write a
+   derived value back to a row only when her words state it outright, and
+   list every row + evidence in the PR. Never fill a field from a guess, a
+   default, or a fibre that merely suggests it.
+6. **Audits are sweeps, not reports.** A readiness flag she cannot act on
+   (the audit said "add a knit weight" and the Edit screen had no field for
+   it) is a bug in the app, not a data problem. Fix the field, the reader,
+   and the flag together.
+
 ## Working with the owner
 
 Her standing instructions, in her words. These are decisions already made —

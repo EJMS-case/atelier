@@ -2,6 +2,88 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — How to think about every change, and the knit weight her notes already stated (#233) — 2026-09-10
+
+### Why
+Owner, standing instruction: *"Consider any downstream implications in the
+code — efficiency, effectiveness, speed, and overall education of Atelier, on
+every turn. Remember this and save it … Atelier should learn from all
+discussions, saves, outfits, items, and conversations, but hard rules should
+not be set … be an exceptional stylist AI, not only in the app but in
+everything the app does, how you code it … If the AI notes are missing, take
+it upon yourself during a full audit or sweep to summarize my existing notes
+and move them to the AI notes … Do not guess or make things up, use what I
+have already given you. If knit weight is unclear, check my notes."*
+
+The instruction is now the **"How to think about every change"** section of
+`CLAUDE.md`, in her words plus the six-point checklist every future change
+runs against. The example she gave was then checked against the live rows:
+
+- "AI notes" is the `stylist_line` column. Every long-notes row already has
+  one (185 lines, 0 missing) — nothing to backfill there.
+- **Knit weight was the real gap.** 33 knits had no `knit_weight`; 11 of them
+  state it in her own name / material / notes ("light knit cardigan", "summer
+  weight", "heavy knitted pullover", "for winter", "cable knit"). Nothing in
+  the app read those words as a weight: `isLightCardigan` had its own word
+  list, the validator and the sampler compared the raw tag, the AI Readiness
+  audit flagged the raw tag — and then sent her to the Edit screen, **which
+  had no knit weight field** (only Bulk Add did). An audit flag she could not
+  act on.
+- Found on the way: the old `LIGHT_KNIT_RE` matched bare "light", so "Light
+  tan pullover" and "Light blue cardigan" read as fine knits — a wool
+  cardigan could enter a Hot pool on the strength of its colour.
+
+### Added
+- **`readKnitWeight(item)`** (item-helpers) — the ONE reader for knit
+  weight: her tag wins; otherwise her own words decide, and only explicit
+  weight / season / construction words count (light knit, lightweight, fine
+  knit, summer, open knit, crochet, sheer, linen, silk → Fine/Summer; chunky,
+  heavy, thick, cable knit, winter, cold weather → Chunky/Winter). Colour
+  phrases ("light blue", "dark brown") are stripped first; a warm fibre
+  (cashmere, wool) is not a weight; the `season_weight` tag is never used on
+  its own (Knits imported as Heavy by default; one row says Heavy in the
+  notes and Light in the tag). Conflicting words resolve to unknown with the
+  evidence quoted. When her words say nothing, the photo read
+  (`vision_data.fabric`, e.g. "chunky cable knit") is the last resort — the
+  same fallback #232 gave `getSleeveType`. Returns `{ weight, source,
+  evidence }` so a surface can show her the phrase it read and where.
+- **Edit screen: Knit weight + Knit fit** for any Knits row. When the tag is
+  empty the hint says what the app read from her notes and quotes it
+  ("Read from your notes as Fine/Summer ('light knit')"), or that the notes
+  point both ways, or that nothing says the weight.
+- `KNIT_WEIGHTS` constant — Bulk Add and Edit share the vocabulary.
+
+### Changed
+- `isLightCardigan`, `filterByWeather`, the sampler's Hot/Warm pool gate,
+  `checkWeatherCompliance`, the closet sort order, and the AI Readiness
+  audit all read `readKnitWeight`. The audit's `knit_weight_missing` now
+  fires only when neither the tag nor her words say the weight, and the
+  label says so.
+- **Live data (her rows, from her words, listed for her veto):** nine knits
+  tagged from their own notes — Fine/Summer: Audri Crochet Cardigan
+  ("crochet"), Meet the Parents Cardigan ("light knit"), Adrianna Open Knit
+  Sweater ("open knit … summer weight"), Open Knit Cardigan ("open knit");
+  Chunky/Winter: Eden set ("Heavy"), both Cable Knit Cropped Pullovers
+  ("cable knit"), Folded Sleeve Sweater burgundy ("heavy"), Folded Sleeve
+  Sweater tan ("for winter"). The other 24 say nothing about weight and were
+  left alone; "Francis Cropped Pullover" reads both ways and stays hers.
+
+### Downstream (the four questions, answered)
+- **Efficiency:** no prompt change, the cached preamble is byte-identical; no
+  new API call; item-helpers was already in the main chunk, so the Edit
+  screen's import adds nothing to the bundle.
+- **Effectiveness:** four more cardigans can now reach a Hot Work look as
+  the office layer, on every surface that gates by heat, because the three
+  gates and the audit read one predicate.
+- **Speed:** none — pure functions on fields already loaded.
+- **Education:** the app now reads a weight she wrote once, everywhere, and
+  tells her what it read so she can confirm it in one tap.
+
+### Tests
+- `test:audit` → 14: the reader on her live rows (tag wins; words decide;
+  colours, fibres, and season tags are not weights; conflicts say so),
+  `isLightCardigan` agreeing with the audit, and the audit resolving on
+  notes that state the weight.
 ## [Unreleased] — The whole-app sweep: photos read sleeves, a researched trend brief, swaps you can tap, and every save teaches (#232) — 2026-09-10
 
 ### Why

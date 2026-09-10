@@ -3,6 +3,7 @@ import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
+import { readKnitWeight, KNIT_WEIGHTS } from "../utils/item-helpers.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
@@ -16,6 +17,8 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
     closet_id: item.closet_id || DEFAULT_CLOSET_ID,
     material: item.material || "",
     pattern: item.pattern || "",
+    knit_weight: item.knit_weight || "",
+    knit_fit: item.knit_fit || "",
     price_paid: item.price_paid ?? null,
     has_bg: item.has_bg,
     is_trimmed: item.is_trimmed,
@@ -280,6 +283,44 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
                 </div>
               )}
             </>
+          );
+        })()}
+        {/* Knit weight + fit — the two fields Bulk Add sets and this screen
+            never offered (the AI Readiness audit sent her here to add a
+            knit weight, and there was nothing to tap). Weight is what the
+            heat gates and the office-layer preference turn on; when the tag
+            is empty the hint shows what the app already reads from her own
+            words (readKnitWeight), so she can confirm it or leave it. */}
+        {form.category === "Knits" && (() => {
+          const read = form.knit_weight ? null : readKnitWeight({ ...form, category: "Knits" });
+          return (
+            <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={s.fieldLabel}>Knit weight</div>
+                <select style={{...s.select,width:"100%"}} value={form.knit_weight}
+                  onChange={e=>setForm(f=>({...f,knit_weight:e.target.value}))}>
+                  <option value="">—</option>
+                  {KNIT_WEIGHTS.map(v=><option key={v}>{v}</option>)}
+                </select>
+                {read && (
+                  <div style={{fontSize:10,color:"var(--color-text-muted)",marginTop:4}}>
+                    {read.weight
+                      ? `Read from your ${read.source === "photo" ? "photo" : "notes"} as ${read.weight} ("${read.evidence}") — set it here to confirm.`
+                      : read.evidence
+                        ? `Your notes point both ways (${read.evidence}) — pick one here.`
+                        : "Nothing in the name, material, or notes says the weight — add \"light knit\" or \"heavy\" to the notes, or set it here."}
+                  </div>
+                )}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={s.fieldLabel}>Knit fit</div>
+                <select style={{...s.select,width:"100%"}} value={form.knit_fit}
+                  onChange={e=>setForm(f=>({...f,knit_fit:e.target.value}))}>
+                  <option value="">—</option>
+                  {["Cropped","Oversized"].map(v=><option key={v}>{v}</option>)}
+                </select>
+              </div>
+            </div>
           );
         })()}
       </div>

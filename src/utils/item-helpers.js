@@ -381,22 +381,78 @@ export const LIGHT_OUTER_RE = /linen|cotton|silk|seersucker|unstructured|unlined
 export const HEAVY_OUTER_RE = /parka|puffer|sherpa|shearling|fleece|down|quilted|overcoat|peacoat|long\s*wool|heavy/i;
 export const HEAVY_COAT_RE = /wool|cashmere|shearling|sherpa|puffer|parka|down|quilted|long|heavy/i;
 
+// ── KNIT WEIGHT: HER TAG, THEN HER OWN WORDS ─────────────────────────────────
+// knit_weight is the field her office dress code turns on in heat (a fine
+// cardigan is the layer; a chunky one is not) and the field the heat gates
+// read to drop a winter knit. 33 of her knits carried no tag on 2026-09-10 —
+// and 11 of them SAID their weight in the name, material, or notes: "light
+// knit cardigan", "summer weight", "heavy knitted pullover", "for winter".
+// Owner: "If knit weight is unclear, check my notes. Do not guess or make
+// things up, use what I have already given you."
+//
+// readKnitWeight is the ONE reader. The tag wins; then her words decide; then
+// the photo (vision_data.fabric, the same fallback getSleeveType uses) —
+// and only explicit weight/season/construction words count. A warm fibre is
+// not a weight (a fine-gauge cashmere exists, so "cashmere" says nothing);
+// a summer fibre is (a linen or silk knit is light by definition). Never the
+// season_weight tag on its own (Knits imported as Heavy by default; "Eden set"
+// says Heavy in the notes and Light in the tag). Colour phrases are removed
+// first: "Light blue open knit cardigan" and "Light tan pullover" are colours,
+// not weights — the old LIGHT_KNIT_RE read both as fine knits.
+// Conflicting words ("heavy knit … summer casual") resolve to unknown — the
+// audit shows her the piece instead of the app picking a side.
+//
+// Read by: isLightCardigan (below), filterByWeather, the sampler's pool gate,
+// checkWeatherCompliance, the sort order, the AI Readiness audit, and the Edit
+// screen (which shows her what the app read when the tag is empty).
+export const KNIT_WEIGHTS = ["Chunky/Winter", "Fine/Summer"];
+const COLOUR_MODIFIER_RE = /\b(light|pale|dark|deep)\s+(blue|tan|pink|gr[ae]y|green|brown|purple|yellow|beige|camel|navy|wash|denim|olive|cream|lilac|lavender|coral|peach|mint|sage|rose|red|orange|teal|aqua|mauve|taupe|khaki|gold|silver|ivory|white|black)\b/gi;
+const FINE_KNIT_RE   = /\b(light[-\s]?knit|lightweight|light[-\s]weight|fine[-\s]?(?:knit|gauge)|summer(?:[-\s]weight)?|open[-\s]?(?:knit|stitch|weave|work)|crochet|gauze|sheer|tissue|linen|silk)\b/i;
+const CHUNKY_KNIT_RE = /\b(chunky|heavy(?:weight)?|thick|cable[-\s]?knit|winter|cold(?:er)?\s+weather|for\s+cold)\b/i;
+export function stripColourPhrases(text) {
+  return String(text || "").replace(COLOUR_MODIFIER_RE, " ");
+}
+/**
+ * @returns {{ weight: ""|"Chunky/Winter"|"Fine/Summer", source: ""|"tag"|"notes"|"photo", evidence: string }}
+ */
+export function readKnitWeight(item) {
+  if (!item) return { weight: "", source: "", evidence: "" };
+  if (KNIT_WEIGHTS.includes(item.knit_weight)) return { weight: item.knit_weight, source: "tag", evidence: item.knit_weight };
+  const text = stripColourPhrases((item.name || "") + " " + classifierNotes(item) + " " + (item.material || ""));
+  const fine = text.match(FINE_KNIT_RE);
+  const chunky = text.match(CHUNKY_KNIT_RE);
+  if (fine && chunky) return { weight: "", source: "", evidence: `conflicting: "${fine[0]}" and "${chunky[0]}"` };
+  if (fine)   return { weight: "Fine/Summer",   source: "notes", evidence: fine[0] };
+  if (chunky) return { weight: "Chunky/Winter", source: "notes", evidence: chunky[0] };
+  // Nothing in her words — read the photo, the way getSleeveType does (#232).
+  // The vision pass records its read of fabric + drape ("chunky cable knit",
+  // "fine merino") as vision_data.fabric. Her words always come first.
+  const seen = stripColourPhrases(item.vision_data?.fabric || "");
+  const seenFine = seen.match(FINE_KNIT_RE);
+  const seenChunky = seen.match(CHUNKY_KNIT_RE);
+  if (seenFine && !seenChunky)   return { weight: "Fine/Summer",   source: "photo", evidence: seenFine[0] };
+  if (seenChunky && !seenFine)   return { weight: "Chunky/Winter", source: "photo", evidence: seenChunky[0] };
+  return { weight: "", source: "", evidence: "" };
+}
+
 // ── THE OFFICE LAYER IN HEAT ────────────────────────────────────────────────
 // A fine-gauge cardigan is the one knit that survives a Hot day: it is the
 // layer her business-professional office needs over a short-sleeve or
-// sleeveless top when it is 90° outside (owner, 2026-09-10). Her knit_weight
-// tag wins when present; otherwise the piece has to say it is light in its
-// own name/notes/material and not read heavy. ONE predicate, read by
-// filterByWeather, the sampler's pool gate, and checkWeatherCompliance, so the
-// three can never disagree about which cardigan is allowed in the heat.
-const LIGHT_KNIT_RE = /\b(fine|light|lightweight|summer|linen|cotton|silk|gauze|sheer|unlined|tissue)\b/i;
+// sleeveless top when it is 90° outside (owner, 2026-09-10). readKnitWeight
+// decides (her tag, then her words); a cardigan that says nothing about its
+// weight still passes on a light fibre (cotton, linen, silk) as long as it
+// doesn't read heavy. ONE predicate, read by filterByWeather, the sampler's
+// pool gate, and checkWeatherCompliance, so the three can never disagree
+// about which cardigan is allowed in the heat.
+const LIGHT_FIBRE_RE = /\b(cotton|linen|silk|unlined)\b/i;
 export function isLightCardigan(item) {
   if (!item || item.category !== "Knits" || item.subcategory !== "Cardigans") return false;
-  if (item.knit_weight === "Fine/Summer") return true;
-  if (item.knit_weight === "Chunky/Winter") return false;
-  const text = ((item.name || "") + " " + classifierNotes(item) + " " + (item.material || "")).toLowerCase();
+  const { weight } = readKnitWeight(item);
+  if (weight === "Fine/Summer") return true;
+  if (weight === "Chunky/Winter") return false;
   if ((item.season_weight || "").toLowerCase() === "winter") return false;
-  return LIGHT_KNIT_RE.test(text) && !WEATHER_HEAVY_RE.test(text);
+  const text = stripColourPhrases((item.name || "") + " " + classifierNotes(item) + " " + (item.material || "")).toLowerCase();
+  return LIGHT_FIBRE_RE.test(text) && !WEATHER_HEAVY_RE.test(text);
 }
 
 // ── WEATHER FILTER ──────────────────────────────────────────────────────────
@@ -582,7 +638,7 @@ export function defaultSortComparator(a, b) {
     if (la !== lb) return la - lb;
   }
 
-  const wa = WEIGHT_SORT[a.knit_weight] ?? 50, wb = WEIGHT_SORT[b.knit_weight] ?? 50;
+  const wa = WEIGHT_SORT[readKnitWeight(a).weight] ?? 50, wb = WEIGHT_SORT[readKnitWeight(b).weight] ?? 50;
   if (wa !== wb) return wa - wb;
 
   return 0;
