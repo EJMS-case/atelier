@@ -20,6 +20,8 @@ import { generateStyleFingerprint } from "../stylist/styleFingerprint.js";
 import {
   loadStandingPreferences, saveStandingPreferences, loadChatLessons, saveChatLessons,
 } from "../stylist/learning.js";
+import { loadTrendBrief, generateTrendBrief, trendBriefIsStale } from "../stylist/trendBrief.js";
+import { getSleeveType } from "../../utils/item-helpers.js";
 import { fetchAllPlans } from "../planner/plannerApi.js";
 import { familyForColorString } from "../../constants/color.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
@@ -63,7 +65,7 @@ function suggestPairsFromLoved(lovedLooks, wardrobe, existingPairs) {
 
 export default function StyleProfileView({
   items = [], wardrobe = [], apiKey, styleFingerprint, setStyleFingerprint,
-  lovedLooks = [], logCount = null, onBack, onEditItem,
+  lovedLooks = [], logCount = null, onBack, onEditItem, onNavigate,
 }) {
   const [prefs, setPrefs] = useState(() => loadStylePrefs());
   const [newPair, setNewPair] = useState("");
@@ -93,6 +95,32 @@ export default function StyleProfileView({
     setNewStanding("");
   };
   const updateLessons = (list) => { setLessons(list); saveChatLessons(list).catch(() => {}); };
+
+  // What reads current this season — the researched trend brief
+  // (features/stylist/trendBrief.js). Refreshes itself on app load when the
+  // season turns; the button here is for "refresh it now".
+  const [trend, setTrend] = useState(null);
+  const [trendRunning, setTrendRunning] = useState(false);
+  const [trendError, setTrendError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    loadTrendBrief().then(b => { if (alive) setTrend(b); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const handleRefreshTrend = async () => {
+    if (!apiKey) { setTrendError("Add your Anthropic API key in Settings first."); return; }
+    setTrendRunning(true); setTrendError("");
+    try { setTrend(await generateTrendBrief({ apiKey })); }
+    catch (e) { setTrendError(e.message || "Couldn't research the brief."); }
+    finally { setTrendRunning(false); }
+  };
+
+  // The two photo-readable fields her office dress code turns on. Visual AI
+  // fills vision_data.sleeve for every photographed top it reads.
+  const unreadTops = useMemo(
+    () => items.filter(it => it.category === "Tops" && getSleeveType(it) === "unknown" && it.image && !it.vision_data).length,
+    [items],
+  );
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
   const removePair = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
   const addPair = (pair) => {
@@ -198,6 +226,38 @@ export default function StyleProfileView({
         {fpError && (
           <div style={{ fontSize: 11, color: "var(--color-danger)", marginTop: 6 }}>{fpError}</div>
         )}
+      </div>
+
+      {/* ── What reads current — the researched seasonal brief ── */}
+      <div style={s.settingsCard}>
+        <div style={s.settingsTitle}>✦ What Reads Current</div>
+        <p style={s.settingsSub}>
+          Researched with web search once a season and read by every stylist surface as taste guidance — your closet and your preferences always win over a trend.
+        </p>
+        {trend?.text ? (
+          <div style={{
+            background: "var(--color-bg)", border: "1px solid var(--color-border)",
+            borderRadius: 6, padding: 12, fontSize: 12, color: "var(--color-text)",
+            lineHeight: 1.55, whiteSpace: "pre-wrap", marginBottom: 8,
+          }}>
+            {trend.text}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 8 }}>
+            No brief yet — it researches itself the next time the app opens with your key, or tap below.
+          </div>
+        )}
+        {trend?.generated_at && (
+          <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
+            {trend.season} · researched {new Date(trend.generated_at).toLocaleDateString()}
+            {trend.web === false ? " · without web search" : ""}
+            {trendBriefIsStale(trend) ? " · due for a refresh" : ""}
+          </div>
+        )}
+        <button style={{ ...s.btnSecondary, width: "100%" }} onClick={handleRefreshTrend} disabled={trendRunning || !apiKey}>
+          {trendRunning ? "Researching this season…" : !apiKey ? "Add Anthropic key in Settings first" : trend ? "Refresh the brief" : "Research this season"}
+        </button>
+        {trendError && <div style={{ fontSize: 11, color: "var(--color-danger)", marginTop: 6 }}>{trendError}</div>}
       </div>
 
       {/* ── How I wear things — her standing preferences, in her words ── */}
@@ -330,6 +390,16 @@ export default function StyleProfileView({
                   {CRITICAL_ISSUES.has(issue) ? "● " : "○ "}{n} × {ISSUE_LABELS[issue] || issue}
                 </div>
               ))}
+          </div>
+        )}
+        {unreadTops > 0 && onNavigate && (
+          <div style={{ marginBottom: 10 }}>
+            <p style={{ fontSize: 11, color: "var(--color-text-2)", margin: "0 0 6px", lineHeight: 1.45 }}>
+              {unreadTops} top{unreadTops === 1 ? "" : "s"} carry no sleeve length your stylist can read — and your office dress code turns on that. Visual AI reads it off the photo, no typing.
+            </p>
+            <button style={{ ...s.btnSecondary, width: "100%", fontSize: 12 }} onClick={() => onNavigate("visionpilot")}>
+              ✦ Read sleeves &amp; fabrics from photos
+            </button>
           </div>
         )}
         {audit.flagged.length > 0 && (

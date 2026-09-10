@@ -115,6 +115,11 @@ Conventions worth knowing:
   and disliked looks, her edits, what she returns to. New AI surfaces call
   `personalGrounding()` and get all of it; don't hand-copy a fingerprint
   block. Every word she reads is written to her: "you", never "she".
+  **Every save teaches**: a builder save over a saved look, an applied
+  evaluator swap, and a chat turn all record lessons — a new surface that
+  lets her change a look should too. What reads current comes from the
+  researched trend brief (`features/stylist/trendBrief.js`), never from a
+  trend list typed into a prompt.
 - **Supabase data access is a hand-rolled REST client** (`src/lib/supabase.js`).
   Every table and storage operation hangs off the `sb` object.
   `@supabase/supabase-js` is a dependency but is used **only** in `lib/auth.js`,

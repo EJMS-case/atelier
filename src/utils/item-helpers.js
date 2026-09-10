@@ -175,6 +175,15 @@ export function getSleeveType(item) {
   if (/\b(short.?sleeve|cap.?sleeve)\b/.test(text)) return "short";
   if (/\b(3\/4|three.?quarter)\b/.test(text)) return "threeQuarter";
   if (/\blong.?sleeve\b/.test(text)) return "long";
+  // Nothing in her words — read the photo. Visual AI (features/vision)
+  // records what it SEES on the item as vision_data.sleeve; against her live
+  // closet (2026-09-10) 27 tops carry no sleeve word at all, and her office
+  // dress code turns on exactly this field. Her words still come first.
+  const seen = String(item.vision_data?.sleeve || "").toLowerCase().trim();
+  if (seen === "sleeveless") return "sleeveless";
+  if (seen === "short") return "short";
+  if (seen === "3/4" || seen === "three-quarter") return "threeQuarter";
+  if (seen === "long") return "long";
   return "unknown";
 }
 

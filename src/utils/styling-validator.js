@@ -1358,6 +1358,17 @@ export function completeOfficeCoverage(parsed, idMap, allItems, ctx = {}) {
   looks.forEach((look, idx) => {
     if (!Array.isArray(look.items)) return;
     if (checkShoulderCoverage({ looks: [look] }, idMap, allItems, occasion).length === 0) return;
+    // Complete only when the top is KNOWN to need it. An untagged blouse
+    // reads "unknown" — it may well be long-sleeved — and forcing a cardigan
+    // over it would be the app over-ruling her closet. The soft finding
+    // still steers a retry; the chat says "check the sleeve".
+    const resolved = resolveLookItems(look, idMap, allItems);
+    const knownBare = resolved.some(it => {
+      if (it.category !== "Tops" && it.category !== "Dresses" && it.category !== "Jumpsuits") return false;
+      const sleeve = getSleeveType(it);
+      return sleeve === "short" || sleeve === "sleeveless";
+    });
+    if (!knownBare) return;
     for (const { shortId } of candidates) {
       if (usedShortIds.has(shortId)) continue;
       const candidateLook = { ...look, items: [...look.items, { id: shortId, role: "supporting" }] };

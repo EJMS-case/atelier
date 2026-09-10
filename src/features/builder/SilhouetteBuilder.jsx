@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { sendBuilderMessage, rememberChat } from "./builderChat.js";
+import { sb } from "../../lib/supabase.js";
 import MarkdownLite from "../../components/MarkdownLite.jsx";
 import { OCCASIONS, WEATHER_SHORTS, getL3Options, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
 import { slotForItem, itemIdIndex } from "../../utils/item-helpers.js";
@@ -620,7 +621,15 @@ export default function SilhouetteBuilder({
         // When set, the parent's onSave updates the existing log instead of
         // inserting a new one. Lets users edit a saved look in place.
         editing_log_id: initialLook?.id || null,
+        // Provenance (migration 0036): she built this one herself, piece by
+        // piece — the clearest statement of her taste the app can learn from.
+        source: "builder",
       };
+      // Learn from an edit to a saved look (2026-09-10: "learn from all
+      // saves"): what she took out and what she put in its place are the same
+      // signal as a Style Me editor swap. Fire-and-forget, never on the save
+      // path's critical line.
+      if (initialLook?.id) recordSavedLookEdits(initialLook.garment_ids || [], garmentIds, primaryOccasion, primaryWeather);
       const savedLog = await onSave(log);
 
       if (saveMode === "favorite") {
@@ -714,10 +723,66 @@ export default function SilhouetteBuilder({
     }
   }
 
+  // Diff a saved look's pieces against what she saved over them and record
+  // each change as a look_edit (swap when a piece left and one of the same
+  // slot arrived; otherwise remove / add). Resolves against the builder pool.
+  function recordSavedLookEdits(beforeIds, afterIds, occasion, weather) {
+    try {
+      const byId = itemIdIndex(builderPool || []);
+      const before = new Set(beforeIds), after = new Set(afterIds);
+      const removed = beforeIds.filter(id => !after.has(id)).map(id => byId.get(String(id))).filter(Boolean);
+      const added = afterIds.filter(id => !before.has(id)).map(id => byId.get(String(id))).filter(Boolean);
+      const used = new Set();
+      for (const out of removed) {
+        const partner = added.find(it => !used.has(it.id) && slotForItem(it) === slotForItem(out));
+        if (partner) { used.add(partner.id); sb.saveLookEdit({ action: "swap", occasion, weather, outItemId: out.id, inItemId: partner.id }); }
+        else sb.saveLookEdit({ action: "remove", occasion, weather, outItemId: out.id });
+      }
+      for (const it of added) if (!used.has(it.id)) sb.saveLookEdit({ action: "add", occasion, weather, inItemId: it.id });
+    } catch { /* a missed lesson costs nothing */ }
+  }
+
+  // Apply one of the evaluator's swaps to the canvas (2026-09-10: "It's not
+  // telling me what to swap" — now it does, and one tap does it). The swap
+  // names pieces by their closet names; the OUT piece is matched among what
+  // is on the canvas, the IN piece among everything she may pick from.
+  const [appliedSwaps, setAppliedSwaps] = useState(new Set());
+  const normName = (n) => String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const nameMatches = (item, name) => {
+    const a = normName(item?.name), b = normName(name);
+    return !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+  };
+  function applySwap(sw, idx) {
+    const outEntry = sw.out ? pickedItems.find(p => nameMatches(p.item, sw.out)) : null;
+    const inItem = sw.in ? (builderPool || []).find(it => nameMatches(it, sw.in)) : null;
+    if (!inItem) { setEvalErr(`Couldn't find "${sw.in}" in your closet — pick it from the slot instead.`); return; }
+    const inSlot = inItem.category === "Belts" ? "belt" : slotForItem(inItem);
+    setSelections(prev => {
+      const next = { ...prev };
+      if (outEntry) {
+        const cur = asArray(next[outEntry.slot]).filter(id => id !== outEntry.item.id);
+        if (cur.length) next[outEntry.slot] = cur; else delete next[outEntry.slot];
+      }
+      const cur = asArray(next[inSlot]);
+      if (!cur.includes(inItem.id)) next[inSlot] = MULTI_SLOTS.has(inSlot) ? [...cur, inItem.id] : [inItem.id];
+      return next;
+    });
+    setAppliedSwaps(prev => new Set([...prev, idx]));
+    setEvalErr("");
+    // An applied swap is the strongest lesson the evaluator can produce.
+    sb.saveLookEdit({
+      action: outEntry ? "swap" : "add",
+      occasion: asArray(occasions)[0] || null,
+      weather: asArray(weathers)[0] || null,
+      outItemId: outEntry?.item.id || null,
+      inItemId: inItem.id,
+    });
+  }
+
   async function handleEvaluate() {
     if (pickedItems.length < 2) { setEvalErr("Pick at least 2 items first."); return; }
     if (!apiKey) { setEvalErr("Add your Anthropic API key in Settings."); return; }
-    setEvaluating(true); setEvalErr(""); setEvaluation(null);
+    setEvaluating(true); setEvalErr(""); setEvaluation(null); setAppliedSwaps(new Set());
     try {
       // The occasion/weather chips she's tagged the look with double as the
       // evaluation brief — the stylist judges fitness-for-purpose, not just
@@ -1167,10 +1232,16 @@ export default function SilhouetteBuilder({
           {(evaluation.swaps || []).length > 0 && (
             <div style={{ marginBottom: 8 }}>
               {evaluation.swaps.map((sw, i) => (
-                <div key={i} style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 6, lineHeight: 1.5 }}>
-                  <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>SWAP</span>
-                  <strong>{sw.out || "—"}</strong> → <strong>{sw.in || "—"}</strong>
-                  {sw.why && <span style={{ color: PALETTE.soft }}> — {sw.why}</span>}
+                <div key={i} style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 6, lineHeight: 1.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>SWAP</span>
+                    <strong>{sw.out || "—"}</strong> → <strong>{sw.in || "—"}</strong>
+                    {sw.why && <span style={{ color: PALETTE.soft }}> — {sw.why}</span>}
+                  </div>
+                  <button onClick={() => applySwap(sw, i)} disabled={appliedSwaps.has(i)}
+                    style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 12, border: `1px solid ${PALETTE.line}`, background: appliedSwaps.has(i) ? PALETTE.line : "transparent", color: PALETTE.ink, fontSize: 11, cursor: appliedSwaps.has(i) ? "default" : "pointer" }}>
+                    {appliedSwaps.has(i) ? "✓ Applied" : "Apply"}
+                  </button>
                 </div>
               ))}
             </div>
@@ -1256,7 +1327,7 @@ export default function SilhouetteBuilder({
                 <input
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
-                  placeholder="Ask about shoes, outerwear, accessories…"
+                  placeholder="Ask for a verdict, a swap, or the braver version…"
                   disabled={chatLoading}
                   style={{ flex: 1, padding: "9px 11px", border: `1px solid ${PALETTE.line}`, borderRadius: 20, fontSize: 12, background: "#fff", outline: "none" }}
                 />

@@ -6,7 +6,12 @@
 // analyzeColorAI's WARM EXCEPTION RULE (stylist.js): warm browns (chocolate,
 // espresso, caramel, cognac, tan, taupe, mocha) and warm reds (brick, rust,
 // terracotta, tomato) are fully approved, not flagged.
-const PALETTE_LINE = `PALETTE: navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white. Warm browns (chocolate, espresso, caramel, cognac, tan) and warm reds (brick, rust, terracotta, tomato) are fully approved warm exceptions. No yellow, no other warm/muted tones.`;
+// A PREFERENCE, not a palette restriction (owner, 2026-09-10: "hard rules
+// should not be set — only preferences"; and on colour, 2026-08-20: only the
+// garment nearest the face needs to flatter her colouring). The old line
+// banned "yellow and other warm/muted tones" outright — a rule the closet
+// itself contradicts.
+const PALETTE_LINE = `COLOUR (a preference, never a restriction): Dark Winter colouring — the piece nearest her face flatters in cool, deep, or icy tones (navy, black, cool reds, burgundy, deep teal, cobalt, icy pastels, crisp white); warm browns (chocolate, espresso, caramel, cognac, tan) and warm reds (brick, rust, terracotta, tomato) suit her fully. Away from the face any chic colour goes — grey trousers under a burgundy top is exactly right. Every colour in her closet is approved; steer, don't ban.`;
 
 // Shopping-safe variant: same client, palette, and taste register — WITHOUT
 // the "inventory only / never invent items" rule and without the look-building

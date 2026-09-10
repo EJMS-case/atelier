@@ -7,7 +7,7 @@
 import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
 import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { weatherAdjustedSlots } from "../../features/stylist/standard.js";
-import { standingAndLessons, describeDateContext } from "../../features/stylist/learning.js";
+import { learnedForStyleMe, describeDateContext } from "../../features/stylist/learning.js";
 import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
@@ -214,7 +214,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // How she wears things — her standing preferences and what she has told
   // her stylist in conversation (features/stylist/learning.js). The one
   // personal signal App did not already hold in state; memoised, soft-fail.
-  const { standing: standingPreferences, lessons: chatLessons } = await standingAndLessons().catch(() => ({ standing: [], lessons: [] }));
+  const { standing: standingPreferences, lessons: chatLessons, trendBrief, builtLines: builtLooks } =
+    await learnedForStyleMe({ wardrobe }).catch(() => ({ standing: [], lessons: [], trendBrief: null, builtLines: [] }));
 
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
@@ -242,6 +243,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     comfortMode,
     standingPreferences,
     chatLessons,
+    trendBrief,
+    builtLooks,
   });
 
   let contactSheets = [];
