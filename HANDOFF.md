@@ -1,12 +1,27 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #231. The session log below
+Refreshed **2026-09-10**, after PR #232. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-10 · PR #232 — how to think about every change, and the knit weight her notes already stated
+
+**Owner, standing instruction (now the "How to think about every change" section of CLAUDE.md — read it first):** *"Consider any downstream implications in the code — efficiency, effectiveness, speed, and overall education of Atelier, on every turn … Atelier should learn from all discussions, saves, outfits, items, conversations, but hard rules should not be set … be an exceptional stylist AI, not only in the app but in everything the app does, how you code it … If the AI notes are missing, take it upon yourself during a full audit or sweep to summarize my existing notes and move them to the AI notes … Do not guess or make things up, use what I have already given you. If knit weight is unclear, check my notes."*
+
+**Checked against the live rows first.** "AI notes" is the `stylist_line` column, and every one of her long-notes rows already has one (185 lines; 0 long-notes rows without). The real gap was the field she named: **33 knits carried no `knit_weight`, and 11 of them said their weight in her own words** — "light knit cardigan", "summer weight", "heavy knitted pullover", "for winter", "cable knit". The app read none of it: `isLightCardigan` had a word list, the validator and sampler compared the raw tag, and the audit flagged the raw tag. Worse, the audit sent her to Edit to add a knit weight and **the Edit screen had no knit weight field** (only Bulk Add did).
+
+**What shipped:** `readKnitWeight(item)` in item-helpers — her tag, then her own words (weight/season/construction words only; a colour phrase like "light blue" is stripped first; a warm fibre is not a weight; conflicting words resolve to unknown and say so). Read by `isLightCardigan`, `filterByWeather`, the sampler's pool gate, `checkWeatherCompliance`, the sort order, the AI Readiness audit, and the Edit screen, which now has Knit weight + Knit fit selects and quotes the phrase the app read when the tag is empty. **Nine live rows were tagged from their own notes** (list in the CHANGELOG); the other 24 say nothing about weight and stay hers to set. One found bug fixed on the way: "Light tan"/"Light blue" was letting a wool cardigan into Hot pools as a "light" knit.
+
+**Watch-items:**
+- Style Me on Work + Hot now has four more cardigans it can reach for (the crochet, the light-knit navy, the open-knit blue, plus anything she tags). If a Hot Work look still ships a bare tank, the sampler's light-layer rescue is the next lever, per #231.
+- "Francis Cropped Pullover" reads both ways (open stitch + heavy knit); the Edit hint tells her so. Her call.
+- The 22 untagged pullovers are dropped in Hot regardless (Pullovers never survive a Hot gate), so their missing weight costs nothing at generation time; in Warm they are already treated as warm knits.
+
+**Verified before push:** `npm test` (36 suites), `npm run build`, `npm run smoke` green.
 
 ### 2026-09-10 · PR #231 — the downstream sweep of #230
 

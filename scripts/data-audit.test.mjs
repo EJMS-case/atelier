@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { auditItem, auditCloset, CRITICAL_ISSUES, ISSUE_LABELS } from "../src/features/profile/dataAudit.js";
+import { readKnitWeight, isLightCardigan, stripColourPhrases, KNIT_WEIGHTS } from "../src/utils/item-helpers.js";
 
 const clean = {
   id: "ok1", category: "Tops", subcategory: "Blouses", name: "Long-sleeve silk blouse",
@@ -38,10 +39,61 @@ test("the office dress code's two fields are audited as enhancers", () => {
   assert.ok(untagged.includes("sleeve_unknown"), "a top with no sleeve signal is flagged");
   assert.ok(!CRITICAL_ISSUES.has("sleeve_unknown"), "…but it is an enhancer, not critical");
   assert.ok(!auditItem({ ...clean, subcategory: "Tanks", name: "Silk tank" }).includes("sleeve_unknown"), "the subcategory is a sleeve signal");
-  const cardigan = { ...clean, category: "Knits", subcategory: "Cardigans", name: "Alpaca cardigan" };
+  const cardigan = { ...clean, category: "Knits", subcategory: "Cardigans", name: "Alpaca cardigan", material: "Alpaca", notes: "" };
   assert.ok(auditItem(cardigan).includes("knit_weight_missing"));
   assert.ok(!auditItem({ ...cardigan, knit_weight: "Fine/Summer" }).includes("knit_weight_missing"));
   assert.ok(!auditItem({ ...cardigan, subcategory: "Pullovers" }).includes("knit_weight_missing"), "only cardigans are the office layer");
+  // Her own words count as the tag (owner, 2026-09-10: "If knit weight is
+  // unclear, check my notes").
+  assert.ok(!auditItem({ ...cardigan, notes: "Navy button-front light knit cardigan" }).includes("knit_weight_missing"), "notes that say the weight resolve the flag");
+  assert.ok(auditItem({ ...cardigan, notes: "Light blue open-front cardigan" }).includes("knit_weight_missing"), "a colour word is not a weight");
+});
+
+// ── readKnitWeight — her tag, then her own words, never a guess ─────────────
+// Fixtures are her live rows on 2026-09-10 (33 knits carried no tag).
+const knit = (over) => ({ category: "Knits", subcategory: "Cardigans", material: "Knit", ...over });
+
+test("readKnitWeight: the tag wins over every word", () => {
+  const r = readKnitWeight(knit({ knit_weight: "Chunky/Winter", notes: "light knit cardigan" }));
+  assert.deepEqual(r, { weight: "Chunky/Winter", source: "tag", evidence: "Chunky/Winter" });
+  assert.deepEqual(KNIT_WEIGHTS, ["Chunky/Winter", "Fine/Summer"]);
+});
+
+test("readKnitWeight: her words decide when the tag is empty", () => {
+  assert.equal(readKnitWeight(knit({ name: "Meet the Parents Cardigan", material: "Light Knit", notes: "Navy button-front light knit cardigan with ruffle collar" })).weight, "Fine/Summer");
+  assert.equal(readKnitWeight(knit({ name: "Adrianna Open Knit Sweater", subcategory: "Pullovers", notes: "Black and white striped open knit pullover, summer weight" })).weight, "Fine/Summer");
+  assert.equal(readKnitWeight(knit({ name: "Audri Crochet Cardigan", material: "Crochet Knit", notes: "Cream/white crochet cardigan" })).weight, "Fine/Summer");
+  assert.equal(readKnitWeight(knit({ name: "Folded Sleeve Sweater", subcategory: "Pullovers", notes: "Tan/beige folded sleeve knitted pullover for winter" })).weight, "Chunky/Winter");
+  assert.equal(readKnitWeight(knit({ name: "Eden set", subcategory: "Pullovers", season_weight: "Light", notes: "Heavy black mock turtle neck long sleeve pullover sweater; best for colder weather" })).weight, "Chunky/Winter", "her words beat a season tag that contradicts them");
+  assert.equal(readKnitWeight(knit({ name: "Cable Knit Cropped Pullover", subcategory: "Pullovers", notes: "Royal Blue cable knit cropped pullover" })).weight, "Chunky/Winter");
+  const r = readKnitWeight(knit({ notes: "Navy button-front light knit cardigan" }));
+  assert.equal(r.source, "notes");
+  assert.match(r.evidence, /light knit/i, "the evidence is her phrase, so the Edit screen can quote it");
+});
+
+test("readKnitWeight: colours, fibres, and season tags are not weights", () => {
+  assert.equal(readKnitWeight(knit({ name: "Open-Front Cardigan", notes: "Light blue open-front cardigan" })).weight, "", "'light blue' is a colour");
+  assert.equal(readKnitWeight(knit({ name: "Ava Sweater", subcategory: "Pullovers", material: "Wool", notes: "Light tan pullover sweater" })).weight, "", "'light tan' is a colour");
+  assert.equal(readKnitWeight(knit({ name: "100 Cashmere Crewneck Cardigan", material: "Cashmere", season_weight: "Heavy", notes: "Navy 100% cashmere crewneck cardigan" })).weight, "", "cashmere is a fibre; Heavy is the import default");
+  assert.equal(readKnitWeight(knit({ name: "Bailey Cardigan", notes: "White/cream button-front cardigan with gold buttons" })).weight, "");
+  assert.equal(readKnitWeight(knit({ notes: "works fine for the office" })).weight, "", "'fine' alone is not 'fine knit'");
+  assert.equal(readKnitWeight(null).weight, "");
+  assert.equal(stripColourPhrases("Light blue open knit"), "  open knit");
+});
+
+test("readKnitWeight: conflicting words resolve to unknown, and say so", () => {
+  const r = readKnitWeight(knit({ name: "Francis Cropped Pullover", subcategory: "Pullovers", notes: "Open stitch cream crop top pullover heavy knit; good for vacation, summer casual — NOT GOOD FOR WORK" }));
+  assert.equal(r.weight, "");
+  assert.match(r.evidence, /conflicting/);
+});
+
+test("isLightCardigan reads the same reader, so the heat gates agree with the audit", () => {
+  assert.ok(isLightCardigan(knit({ notes: "Navy button-front light knit cardigan" })));
+  assert.ok(isLightCardigan(knit({ name: "Open Knit Cardigan", notes: "Light blue open knit cropped cardigan" })), "open knit is the signal, not 'light blue'");
+  assert.ok(!isLightCardigan(knit({ name: "Ava Cardigan", material: "Wool", notes: "Light tan cardigan" })), "a colour word no longer lets a wool cardigan into a Hot pool");
+  assert.ok(isLightCardigan(knit({ material: "Cotton", notes: "Blush pink button-front cardigan" })), "a light fibre still passes when nothing reads heavy");
+  assert.ok(!isLightCardigan(knit({ knit_weight: "Chunky/Winter", material: "Cotton" })), "her tag wins over the fibre");
+  assert.ok(!isLightCardigan(knit({ subcategory: "Pullovers", notes: "light knit" })), "only a cardigan is the office layer");
 });
 
 test("material is only required where it does unique work", () => {

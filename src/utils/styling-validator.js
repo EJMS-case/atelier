@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -490,7 +490,7 @@ function checkWeatherCompliance(response, idMap, allItems, weather, forceInclude
           // sampler's pool gate and filterByWeather read the same predicate).
           const knitTooWarm = isHot
             ? !isLightCardigan(resolved)
-            : (resolved.knit_weight === "Chunky/Winter" || heavy || resolved.subcategory === "Pullovers" || sw === "winter");
+            : (readKnitWeight(resolved).weight === "Chunky/Winter" || heavy || resolved.subcategory === "Pullovers" || sw === "winter");
           if (knitTooWarm) {
             failures.push(`Look ${i + 1}: "${resolved.name}" is a knit — too warm for ${weather}.`);
           }
