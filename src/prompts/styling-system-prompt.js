@@ -361,7 +361,11 @@ When a look anchors on a color from one of these pairs, reaching for its partner
 // inline /hot|85/-style predicates out of the rest of the stylist pipeline and
 // this file kept its own set. Each bucket is tested independently, so a
 // combined label ("Hot days, cool nights") still picks up both briefs.
-function formatWeather(weather) {
+//
+// Exported for features/stylist/standard.js: the builder chat and Evaluate look
+// hand the model the SAME weather brief Style Me is held to, rather than a
+// paraphrase that can drift from it.
+export function formatWeather(weather) {
   if (!weather) return "";
   const w = weather.toLowerCase();
   const parts = [];

@@ -1177,10 +1177,10 @@ export default function SilhouetteBuilder({
               {chatMessages.length === 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
                   {[
+                    "Is this working? Be honest.",
+                    "What's the weakest piece here?",
                     "What shoes work with this?",
-                    "What outerwear fits this look?",
-                    "What bag should I use?",
-                    "How can I make this more polished?",
+                    "What would you change?",
                   ].map(prompt => (
                     <button key={prompt}
                       onClick={() => { setChatInput(prompt); }}

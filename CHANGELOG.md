@@ -2,6 +2,94 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The stylist chat had a persona and no standard — 2026-09-10
+
+### Why
+Owner, from her phone: *"It is not giving good recommendations. I'm pushing
+back and it's saying I'm right. My whole app should be smart and chic stylish
+using the items in My wardrobe. Think bigger picture. I do not trust it."*
+
+The chat is not persisted anywhere, so the transcript itself could not be
+reviewed; the prompts could, and they explain the behaviour. **Style Me** is
+measured against a cached preamble carrying the whole method — one hero, ≤2
+non-neutral colours, fitted × relaxed, two fabric weights, the one-statement
+rule, no top under a dress, the formality bands, the occasion bans, the weather
+rules. **The builder chat carried none of it**, and neither did Evaluate look.
+Each had a persona ("senior editorial stylist, sharp eye"), an instruction to
+"push back when the look wants it" with nothing to push back *from*, no
+occasion brief (so sandals for Work were fine), no weather brief, no computed
+read of the canvas, and — for the chat — `effort: "low"`, the shallowest read
+the API offers, tuned for speed on 2026-08-20. A model with an opinion but no
+standard folds the moment the client disagrees. That is the reported bug, and
+it was the same bug on both advisory surfaces.
+
+### Added
+- **`src/features/stylist/standard.js` — the stylist standard, shared by every
+  surface that gives her an opinion.** Three parts:
+  - **The prose**: `STYLIST_PERSONA`, `STYLIST_STANDARD` (Style Me's method
+    restated for a single look, plus HER HARD RULES), and `OPINION_RULES` —
+    the anti-fold clause. Lead with the verdict and name the line of the
+    standard; every recommendation names a specific piece from her closet and
+    the trade-off; when she pushes back, re-check against the standard and
+    the facts, hold the line when they still say the same thing, and change
+    your mind only for a reason you can name. *"Never 'you're right' as a
+    reflex — she has said outright that reflexive agreement makes her distrust
+    everything else you say."*
+  - **The briefs**: `occasionBrief()` / `weatherBrief()` hand the chat and the
+    evaluator the SAME occasion note, bans, and weather block Style Me is held
+    to (`formatWeather` is now exported for it; the two three-look phrasings
+    are re-cut for one look). `weatherAdjustedSlots()` is Style Me's
+    hot-weather layer relaxation lifted out of `generateOutfit` so all three
+    surfaces apply one adjustment.
+  - **`readLook()` — the app's own read of the canvas**, computed, not guessed:
+    the validator's checks run on the pieces (occasion bans, weather, a top or
+    belt on a dress, two statement pieces, a bare tank at Work, shoulder
+    coverage, hosiery under trousers, split sets), the colour story and
+    non-neutral count, shoes-vs-bag family, which of her colour pairings the
+    look activates or is one piece away from, the formality spread and the
+    occasion band, the fabrics and whether matte × sheen is in play, the
+    statement pieces, sleeveless pieces and whether they're layered. A
+    half-built canvas reads as *"still open"*, never as faults; two shoes
+    staged side by side read as *"she is choosing between"*, never as a
+    mistake; an untagged sleeve is a check-the-sleeve note, not an HC_SHOULDER
+    violation. The model argues FROM this block, and a violation the app
+    computed is not something it can be talked out of.
+  - `describeItem()` — one item line carrying the signals Style Me's inventory
+    carries (sleeve tag, knit weight, complete-set, season weight, the vision
+    `seen:` read); `personalGrounding()` — the fingerprint / body & fit /
+    colour-pair blocks, previously three hand-copies (chat, evaluator, trip
+    day) already drifting in wording.
+- **`npm run test:standard`** (in `npm test`): 21 assertions over the read, the
+  briefs, both composers, and a **source contract** — every advisory surface
+  must import the standard and use `readLook` / the briefs, and none may keep
+  a private persona copy. A surface that carries the persona but drops the
+  rubric fails here. That is the check that would have caught this class.
+
+### Changed
+- **Builder chat** (`builderChat.js`): the cached system block now carries the
+  persona, THE STANDARD, HER HARD RULES, and HOW TO HOLD AN OPINION ahead of
+  the (still uncapped) closet; every turn's `[CURRENT LOOK]` block carries the
+  occasion brief + bans, the weather brief, and LOOK FACTS. Model
+  `MODEL_STRONG` @ effort low → **`MODEL_TOP` with adaptive thinking at medium
+  effort**, `max_tokens` 4000 → 8000 so the thinking can't starve the visible
+  reply; one fallback to `MODEL_STRONG` if the top model itself errors (the
+  same primary/fallback pair Style Me uses). The closet block is cached, so the
+  per-turn cost stays a few cents. The empty-chat suggested prompts now ask for
+  a verdict ("Is this working? Be honest.", "What's the weakest piece here?").
+- **Evaluate look** (`evaluateLook.js`): scores against the standard with the
+  same briefs and LOOK FACTS in context; a listed violation caps the score at
+  6 unless a named fact overrides it, and the tip that fixes it comes first.
+  `MODEL_TOP` with adaptive thinking, same fallback. The JSON contract and the
+  weather-aside / Work-bag rules are unchanged.
+- `stylist.js` reads `weatherAdjustedSlots` instead of its inline copy;
+  `tripAdvisor.js` reads `personalGrounding` instead of its inline copy.
+  Behaviour unchanged on both.
+
+### Not done, deliberately
+- The chat still is not persisted. Logging it to Supabase would let a report
+  like this one be reviewed against the actual transcript, but a chat is hers
+  and a table for it is her call — flagged in HANDOFF, not actioned.
+
 ## [Unreleased] — The other two surfaces that assemble outfits were capping her closet — 2026-09-07
 
 ### Why

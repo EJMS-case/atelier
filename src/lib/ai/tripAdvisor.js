@@ -12,10 +12,7 @@ import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
 import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
-import { loadStylePrefs, loadAboutMe } from "../../utils/storage.js";
-import { summarizeSilhouette } from "../../features/stylist/silhouette.js";
-import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
-import { sb } from "../supabase.js";
+import { personalGrounding } from "../../features/stylist/standard.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
 
@@ -300,20 +297,10 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // no color pairs, no About Me. Same soft-bias framing as Style Me, kept
   // compact for this single fast call. All soft-fail: a missing fingerprint
   // or empty prefs just omit their lines.
-  const personalBits = [];
-  const fp = await sb.fingerprintTextCached(800);
-  if (fp) personalBits.push(`HER STYLE (distilled from her worn-outfit history — soft bias, never a hard rule):\n${fp}`);
-  const prefs = loadStylePrefs();
-  const tripManualPairs = prefs?.colorPairs || [];
-  const tripAutoPairs = autoColorPairs(items, { exclude: tripManualPairs, max: 2 }).map(p => p.label);
-  const tripAllPairs = [...tripManualPairs, ...tripAutoPairs];
-  if (tripAllPairs.length) {
-    personalBits.push(`HER COLOR PAIRINGS (hand-picked favorites${tripAutoPairs.length ? " + in-fashion pairs her closet supports" : ""} — neutrals ground any pair; reaching for a pair's partner is a signature move): ${tripAllPairs.join(", ")}`);
-  }
-  const silhouette = summarizeSilhouette(loadAboutMe());
-  if (Array.isArray(silhouette) && silhouette.length) {
-    personalBits.push(`DRESS TO FLATTER:\n${silhouette.join("\n")}`);
-  }
+  // The blocks come from features/stylist/standard.js so every AI surface
+  // grounds in the same fingerprint / body & fit / colour-pair wording. Soft
+  // bias by design: a missing fingerprint or empty prefs just omit their block.
+  const { blocks: personalBits } = await personalGrounding({ available: items, fingerprintMax: 800, maxAutoPairs: 2 });
   const personalBlock = personalBits.length ? `\n${personalBits.join("\n\n")}\n` : "";
 
   // Strong preference with a stated exception — NOT an absolute rule. The old

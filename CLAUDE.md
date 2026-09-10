@@ -84,6 +84,13 @@ Conventions worth knowing:
   into a check that runs in tests and against live data (`npm run doctor`).
 - **Structured AI output goes through tool-use + Zod**, not JSON parsing — see
   `src/lib/ai/schemas.js` and `src/lib/ai/toolUse.js`.
+- **Every surface that gives her an OPINION on a look composes in
+  `src/features/stylist/standard.js`** — the persona, THE STANDARD, the
+  opinion rules, the occasion + weather briefs, and `readLook()` (the app's
+  computed read of the canvas). Don't write a new advisory prompt with a
+  pasted persona and no rubric: that is exactly how the builder chat ended up
+  agreeing with everything (2026-09-10). Add the new file to the source
+  contract in `scripts/stylist-standard.test.mjs`.
 - **Supabase data access is a hand-rolled REST client** (`src/lib/supabase.js`).
   Every table and storage operation hangs off the `sb` object.
   `@supabase/supabase-js` is a dependency but is used **only** in `lib/auth.js`,

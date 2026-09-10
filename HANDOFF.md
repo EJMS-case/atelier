@@ -1,11 +1,32 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-07**, after PR #227. The session log below is in merge
-order, newest first, and every entry names its PR — `CHANGELOG.md` carries the
-per-PR detail, `CLAUDE.md` the standing conventions. Everything from "Owner
-preferences" down is older standing context: search it, don't read it through.
+Refreshed **2026-09-10**, after the stylist-standard PR. The session log below
+is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
+carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
+from "Owner preferences" down is older standing context: search it, don't read
+it through.
 
 ## Session log
+
+### 2026-09-10 · stylist-standard PR — the chat had a persona and no standard
+
+**Owner report, verbatim:** *"Review my recent chat with my stylist … It is not giving good recommendations. I'm pushing back and it's saying I'm right. My whole app should be smart and chic stylish using the items in My wardrobe. Think bigger picture … I do not trust it."*
+
+**The chat is not persisted** (React state in `SilhouetteBuilder`; nothing in Supabase, nothing in `ai_errors` — the only rows there are Style Me shape-recoveries), so the transcript could not be read. The prompts could. **Style Me carries the whole method in its cached preamble and is validated against it; the builder chat and Evaluate look carried NONE of it** — a persona, "push back when the look wants it" with nothing to push back from, no occasion bans, no weather rules, no computed read of the canvas, and the chat ran at `effort: "low"`. A model with an opinion but no standard folds on the first pushback. Same bug on both advisory surfaces.
+
+**The fix is one module, `src/features/stylist/standard.js`, that every advisory surface composes in** — see the CHANGELOG entry for the parts. The two things worth carrying forward:
+
+- **`readLook()` is the app's own read of a canvas** — the validator's checks plus colour / formality / fabric / statement / pairing facts — handed to the model as LOOK FACTS with the instruction to argue FROM them. It is the reason the chat can now hold a position: a violation the app computed is a fact, not an opinion. It reports a half-built canvas as *still open* and two staged shoes as *a choice*, never as faults; an untagged sleeve is a note, not an HC_SHOULDER violation. If a new advisory surface lands (a Home-screen "ask", a planner-day opinion), it reads the same block.
+- **The source contract in `npm run test:standard`** asserts every advisory surface imports the standard and uses the read and the briefs, and keeps no private persona copy. **Add the file to that list when a new one lands.** That is the check that would have caught this class of bug — the persona was copy-pasted to three files and the rubric to none.
+
+**Model tiers**: chat and evaluator moved to `MODEL_TOP` with `thinking: {type:"adaptive"}` at `effort: "medium"` (Opus runs WITHOUT thinking when the parameter is omitted — which, noted in passing, is how Style Me's `MODEL_TOP` call currently runs; not touched here). Both fall back to `MODEL_STRONG` once if the top model itself errors.
+
+**Watch-items for her next report:**
+- Does the chat now name a line of the standard and hold it when she pushes back? If it still folds, the next lever is the OPINION_RULES wording, then effort `high`.
+- Latency: adaptive thinking at medium adds a beat before the first token. She flagged "slow" once (2026-08-20). If it bites, drop to `low` on the chat only — but not below the standard.
+- **Persisting the chat** (a `stylist_chats` table, one row per turn) would make "review my chat" answerable next time. It is her data; offer it, don't ship it unasked.
+
+**Verified before push:** `npm test` (36 suites), `npm run build`, `npm run smoke` (blank-screen + 13-screen render walk) all green.
 
 ### 2026-09-07 · PR #227 — the other two surfaces that assemble outfits were capping her closet
 
