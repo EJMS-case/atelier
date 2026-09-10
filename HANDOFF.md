@@ -1,12 +1,32 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #235. The session log below
+Refreshed **2026-09-10**, after PR #236. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-10 · PR #236 — every deploy was stranding her open app, and Style Me is where it showed
+
+**Owner, minutes after #235 deployed:** *"Now it completely errors out."* Not the #235 code — the DEPLOY. Deploys are atomic: the new one stops serving the previous build's hashed chunks. The app is a PWA she keeps open on her phone, Style Me is the code-split surface (`await import("./lib/ai/stylist.js")` on tap), so the first tap after a deploy requested a chunk that no longer existed — and the old service worker then CACHED that 404/HTML under the chunk's URL (its asset handler cached any response), wedging the failure until a full reload. Three merges in one day made the window easy to hit; every earlier "worked after I reopened it" report probably brushed this.
+
+**Three-part fix (all in `public/sw.js`, `scripts/stamp-sw.mjs`, `src/main.jsx`):**
+1. **Each build precaches its own js/css chunks at install** (~29 files, ~1.3 MB raw / ~0.4 MB wire; the ort/wasm ML runtimes — 24 MB, only local bg removal — stay excluded). The stamper injects the list as `__ASSET_LIST__` and validates both placeholders.
+2. **The previous build's cache is RETAINED** (an install-time registry cache holds name→time; activate keeps the newest two, deletes the rest — pre-registry caches, poisoned entries included, die on first activate). Asset lookup uses bare `caches.match(req)`, which searches every cache — so a page open across a deploy loads its own chunks from the retained cache and keeps working.
+3. **`vite:preloadError` → one reload** (main.jsx, 2-minute guard against loops) — the floor for the cases precache can't cover: two deploys while open, install races, and clients still on today's pre-fix worker.
+4. Both fetch handlers now cache **only `res.ok`** — a failed navigation or asset response can never be stored again.
+
+**For her, right now:** clients on the pre-fix worker have to fully close and reopen the app once; from the next deploy on, the strand can't recur.
+
+**Also this session:** the `send_later` trigger meant to backdate the trend brief used `jsonb_set` on `user_settings.value`, which is TEXT — it would have failed. Deleted; the backdate was run directly with a `::jsonb` cast after #235's parser fix deployed, so the next app open regenerates the (previously mangled) brief properly.
+
+**Watch-items:**
+- After her next TWO deploysworth of app opens, Cache Storage should hold exactly two `atelier-*` build caches plus `atelier-cache-index`. If storage complaints ever surface, the retained-previous-cache count (2) is the dial.
+- The precache adds ~0.4 MB wire per deploy at SW install (background). If that ever matters, exclude the biggest lazy view chunks and rely on the reload floor for them.
+
+**Verified before push:** `npm test` (37 suites), `npm run build` + stamped `dist/sw.js` inspected (29 chunks, no ML runtime, no surviving placeholder), `npm run smoke` green.
 
 ### 2026-09-10 · PR #235 — Style Me was slow because every log fetch shipped 2.2 MB of dead collages
 
