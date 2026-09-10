@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #229. The session log below
+Refreshed **2026-09-10**, after PR #230. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-10 · the office-dress PR — her dress code held in every weather, and no hard rule
+### 2026-09-10 · PR #230 — her dress code held in every weather, and no hard rule
 
 **Owner:** *"Do I need to add a hard rule that my shoulders need to be covered at work? My office is business professional. Long sleeves, or if short sleeves or tank, I need a knit or blazer … Why is it not obvious? … avoid setting hard rules … it still doesn't know my appropriate work dress."*
 

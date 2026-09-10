@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — Her office is business professional, in every weather — 2026-09-10
+## [Unreleased] — Her office is business professional, in every weather (#230) — 2026-09-10
 
 ### Why
 Owner, on a Work + Hot/Warm chat where she had to type "I need to cover my
