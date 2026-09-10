@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #228. The session log below
+Refreshed **2026-09-10**, after PR #229. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-10 · the learning PR — preferences not rules, swaps not tips, "you" not "her"
+### 2026-09-10 · PR #229 — preferences not rules, swaps not tips, "you" not "her"
 
 **Owner, same day as #228, on an Evaluate-look screenshot** (taken on the pre-#228 build — the old prompt chips prove it — but every point applied to #228 as well): *"It's not telling me what to swap or how to fix the outfit … speaking to me as if it isn't me … I do not want hard rules in this app but please ensure it always assumes the blazer is OPEN … The app should learn from all discussions within the app, all saves, all outfits, all items in my closet, and all conversations in Claude, but hard rules should not be set — only preferences. I want to be challenged."*
 

@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — Preferences, not rules; swaps, not tips; "you", not "her"; and the app learns from every chat — 2026-09-10
+## [Unreleased] — Preferences, not rules; swaps, not tips; "you", not "her"; and the app learns from every chat (#229) — 2026-09-10
 
 ### Why
 Owner, same day as #228, with an Evaluate-look screenshot (from the build
