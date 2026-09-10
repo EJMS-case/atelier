@@ -43,8 +43,10 @@ runs against. The example she gave was then checked against the live rows:
   (cashmere, wool) is not a weight; the `season_weight` tag is never used on
   its own (Knits imported as Heavy by default; one row says Heavy in the
   notes and Light in the tag). Conflicting words resolve to unknown with the
-  evidence quoted. Returns `{ weight, source, evidence }` so a surface can
-  show her the phrase it read.
+  evidence quoted. When her words say nothing, the photo read
+  (`vision_data.fabric`, e.g. "chunky cable knit") is the last resort — the
+  same fallback #232 gave `getSleeveType`. Returns `{ weight, source,
+  evidence }` so a surface can show her the phrase it read and where.
 - **Edit screen: Knit weight + Knit fit** for any Knits row. When the tag is
   empty the hint says what the app read from her notes and quotes it
   ("Read from your notes as Fine/Summer ('light knit')"), or that the notes

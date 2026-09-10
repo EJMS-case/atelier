@@ -305,7 +305,7 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
                 {read && (
                   <div style={{fontSize:10,color:"var(--color-text-muted)",marginTop:4}}>
                     {read.weight
-                      ? `Read from your notes as ${read.weight} ("${read.evidence}") — set it here to confirm.`
+                      ? `Read from your ${read.source === "photo" ? "photo" : "notes"} as ${read.weight} ("${read.evidence}") — set it here to confirm.`
                       : read.evidence
                         ? `Your notes point both ways (${read.evidence}) — pick one here.`
                         : "Nothing in the name, material, or notes says the weight — add \"light knit\" or \"heavy\" to the notes, or set it here."}

@@ -390,7 +390,8 @@ export const HEAVY_COAT_RE = /wool|cashmere|shearling|sherpa|puffer|parka|down|q
 // Owner: "If knit weight is unclear, check my notes. Do not guess or make
 // things up, use what I have already given you."
 //
-// readKnitWeight is the ONE reader. The tag wins; otherwise her words decide,
+// readKnitWeight is the ONE reader. The tag wins; then her words decide; then
+// the photo (vision_data.fabric, the same fallback getSleeveType uses) —
 // and only explicit weight/season/construction words count. A warm fibre is
 // not a weight (a fine-gauge cashmere exists, so "cashmere" says nothing);
 // a summer fibre is (a linen or silk knit is light by definition). Never the
@@ -412,7 +413,7 @@ export function stripColourPhrases(text) {
   return String(text || "").replace(COLOUR_MODIFIER_RE, " ");
 }
 /**
- * @returns {{ weight: ""|"Chunky/Winter"|"Fine/Summer", source: ""|"tag"|"notes", evidence: string }}
+ * @returns {{ weight: ""|"Chunky/Winter"|"Fine/Summer", source: ""|"tag"|"notes"|"photo", evidence: string }}
  */
 export function readKnitWeight(item) {
   if (!item) return { weight: "", source: "", evidence: "" };
@@ -423,6 +424,14 @@ export function readKnitWeight(item) {
   if (fine && chunky) return { weight: "", source: "", evidence: `conflicting: "${fine[0]}" and "${chunky[0]}"` };
   if (fine)   return { weight: "Fine/Summer",   source: "notes", evidence: fine[0] };
   if (chunky) return { weight: "Chunky/Winter", source: "notes", evidence: chunky[0] };
+  // Nothing in her words — read the photo, the way getSleeveType does (#232).
+  // The vision pass records its read of fabric + drape ("chunky cable knit",
+  // "fine merino") as vision_data.fabric. Her words always come first.
+  const seen = stripColourPhrases(item.vision_data?.fabric || "");
+  const seenFine = seen.match(FINE_KNIT_RE);
+  const seenChunky = seen.match(CHUNKY_KNIT_RE);
+  if (seenFine && !seenChunky)   return { weight: "Fine/Summer",   source: "photo", evidence: seenFine[0] };
+  if (seenChunky && !seenFine)   return { weight: "Chunky/Winter", source: "photo", evidence: seenChunky[0] };
   return { weight: "", source: "", evidence: "" };
 }
 

@@ -81,6 +81,13 @@ test("readKnitWeight: colours, fibres, and season tags are not weights", () => {
   assert.equal(stripColourPhrases("Light blue open knit"), "  open knit");
 });
 
+test("readKnitWeight: the photo read is the last resort, after her words", () => {
+  const seen = readKnitWeight(knit({ notes: "Burgundy pullover sweater", vision_data: { fabric: "chunky cable knit" } }));
+  assert.deepEqual(seen, { weight: "Chunky/Winter", source: "photo", evidence: "chunky" });
+  assert.equal(readKnitWeight(knit({ notes: "light knit cardigan", vision_data: { fabric: "chunky cable knit" } })).source, "notes", "her words beat the photo");
+  assert.equal(readKnitWeight(knit({ notes: "Burgundy cardigan", vision_data: { fabric: "structured wool" } })).weight, "", "a fibre in the photo read is not a weight either");
+});
+
 test("readKnitWeight: conflicting words resolve to unknown, and say so", () => {
   const r = readKnitWeight(knit({ name: "Francis Cropped Pullover", subcategory: "Pullovers", notes: "Open stitch cream crop top pullover heavy knit; good for vacation, summer casual — NOT GOOD FOR WORK" }));
   assert.equal(r.weight, "");
