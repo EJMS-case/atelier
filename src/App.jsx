@@ -571,7 +571,11 @@ export default function App() {
         if (fp && count - have < 10) return;   // still fresh enough
         const { generateStyleFingerprint } = await import("./features/stylist/styleFingerprint.js");
         const edits = await sb.fetchLookEdits().catch(() => []);
-        const fresh = await generateStyleFingerprint({ items: wardrobe, logs, plans, edits, apiKey });
+        // What she has told her stylist in conversation — her own words, so
+        // the read can confirm or qualify a habit against them.
+        const { loadChatLessons } = await import("./features/stylist/learning.js");
+        const lessons = await loadChatLessons().catch(() => []);
+        const fresh = await generateStyleFingerprint({ items: wardrobe, logs, plans, edits, lessons, apiKey });
         if (fresh?.text) { setStyleFingerprint(fresh); sb.saveStyleFingerprint(fresh).catch(() => {}); }
       } catch { /* non-fatal — regenerate next session */ }
     };

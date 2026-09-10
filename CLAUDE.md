@@ -91,6 +91,19 @@ Conventions worth knowing:
   pasted persona and no rubric: that is exactly how the builder chat ended up
   agreeing with everything (2026-09-10). Add the new file to the source
   contract in `scripts/stylist-standard.test.mjs`.
+- **Her word is "preferences", never "rules."** *"I do not want hard rules in
+  this app … only preferences."* Nothing she reads — a rationale, a tip, a
+  chat reply, a Style Profile label — may call anything a rule or a
+  violation. The validator's structural checks stay (they are what makes a
+  look a look); taste-level checks are soft and phrased as what she keeps out
+  of a room. **A blazer is always worn open** — never suggest buttoning or
+  belting one closed.
+- **Everything the app knows about her comes from
+  `src/features/stylist/learning.js`** — standing preferences (Style Profile
+  → How I Wear Things), lessons distilled from her chats, fingerprint, loved
+  and disliked looks, her edits, what she returns to. New AI surfaces call
+  `personalGrounding()` and get all of it; don't hand-copy a fingerprint
+  block. Every word she reads is written to her: "you", never "she".
 - **Supabase data access is a hand-rolled REST client** (`src/lib/supabase.js`).
   Every table and storage operation hangs off the `sb` object.
   `@supabase/supabase-js` is a dependency but is used **only** in `lib/auth.js`,

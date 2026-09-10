@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
-import { sendBuilderMessage } from "./builderChat.js";
+import { sendBuilderMessage, rememberChat } from "./builderChat.js";
 import MarkdownLite from "../../components/MarkdownLite.jsx";
 import { OCCASIONS, WEATHER_SHORTS, getL3Options, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
 import { slotForItem, itemIdIndex } from "../../utils/item-helpers.js";
@@ -230,6 +230,9 @@ export default function SilhouetteBuilder({
   const [chatLoading, setChatLoading] = useState(false);
   const [chatErr, setChatErr] = useState("");
   const chatEndRef = useRef(null);
+  // One id per conversation — the stored transcript row is upserted on every
+  // turn. Minted lazily on the first reply.
+  const chatIdRef = useRef(null);
   // Canvas positions { x, y, w, h } as % of canvas dimensions, keyed per
   // (slot, itemId) so multi-slot items each have their own placement.
   const [positions, setPositions] = useState(() => restoredLayout?.positions || {});
@@ -683,6 +686,21 @@ export default function SilhouetteBuilder({
       });
       setLastAssistant(reply);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      // The app learns from the conversation (owner, 2026-09-10): the
+      // transcript is kept, and any preference she expressed this turn is
+      // distilled into a standing lesson every AI surface reads. Fire-and-
+      // forget — never on the reply's critical path.
+      chatIdRef.current ||= (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      rememberChat({
+        chatId: chatIdRef.current,
+        messages: [...next, { role: "assistant", content: reply }],
+        assembledItems: pickedItems.map(p => p.item),
+        occasions: asArray(occasions),
+        weathers: asArray(weathers),
+        apiKey,
+      });
     } catch (err) {
       // Drop the empty placeholder so a failed turn doesn't leave a blank bubble.
       setChatMessages(prev =>
@@ -1142,6 +1160,19 @@ export default function SilhouetteBuilder({
             <div style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 8 }}>
               <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>WORKING</span>
               {evaluation.works}
+            </div>
+          )}
+          {/* Swaps — the "what to change" she asked for (2026-09-10): a piece on
+              the canvas → the closet piece that replaces it, and why. */}
+          {(evaluation.swaps || []).length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              {evaluation.swaps.map((sw, i) => (
+                <div key={i} style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 6, lineHeight: 1.5 }}>
+                  <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>SWAP</span>
+                  <strong>{sw.out || "—"}</strong> → <strong>{sw.in || "—"}</strong>
+                  {sw.why && <span style={{ color: PALETTE.soft }}> — {sw.why}</span>}
+                </div>
+              ))}
             </div>
           )}
           {evaluation.tips.length > 0 && (

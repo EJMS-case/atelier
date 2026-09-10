@@ -89,11 +89,27 @@ export function parseEvalResponse(text) {
     salvaged = true;
   }
 
+  // Swaps (2026-09-10, owner: "It's not telling me what to swap"): up to three
+  // {out, in, why} objects naming a piece on the canvas and the closet piece
+  // that replaces it. Only the structured path carries them — a truncated
+  // response loses its swaps rather than showing half of one.
+  const swaps = Array.isArray(obj.swaps)
+    ? obj.swaps
+        .filter(sw => sw && typeof sw === "object" && (sw.in || sw.out))
+        .slice(0, 3)
+        .map(sw => ({
+          out: String(sw.out || "").trim().slice(0, 200),
+          in: String(sw.in || "").trim().slice(0, 200),
+          why: String(sw.why || "").trim().slice(0, 400),
+        }))
+    : [];
+
   return {
     parsed: {
       score: typeof obj.score === "number" && Number.isFinite(obj.score)
         ? Math.max(1, Math.min(10, Math.round(obj.score)))
         : null,
+      swaps,
       // Caps are generous safety rails against runaway output, NOT formatting —
       // the old 120/160-char slices were truncating her evaluations
       // mid-sentence (owner report 2026-08-19).

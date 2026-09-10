@@ -1,60 +1,63 @@
 // ── F4 — AI LOOK EVALUATION ──────────────────────────────────────────────────
 // Sends the manually-built look to Claude for a stylist's read: a 1-10 score,
-// what's working, and ≤3 concrete adjustments to elevate what's already on the
-// canvas (never purchases).
+// what's working, what to SWAP (piece out → closet piece in, and why), and ≤3
+// adjustments to how she wears what stays.
 //
-// Reworked 2026-09-10 with the builder chat (owner: the app's stylist "is not
-// giving good recommendations … I do not trust it"): the evaluator had four
-// rubric bullets and no standard. It now scores against THE STANDARD and HER
-// HARD RULES from features/stylist/standard.js — the same method Style Me
-// builds to — with the occasion brief + bans, the weather brief, and LOOK
-// FACTS (the app's own validator run on the canvas, colour story, formality
-// spread, fabrics, statement pieces, shoe/bag family, activated colour
-// pairings) in context. A violation the app computed caps the score; the tip
-// that fixes it comes first. MODEL_TOP with adaptive thinking, same as the
-// chat.
-//
-// Still true from earlier reworks (2026-08-12/19):
-//   · WEATHER IS NOT A RATING FACTOR — the score judges styling merit and
-//     occasion-fitness only. Weather comes back as a separate `weather` aside.
-//   · WORK LOOKS: the bag is a commute piece she parks at her desk, so it's
-//     excluded from the score and the tips.
-// Still one on-demand call per explicit tap.
+// Reworked 2026-09-10 with the builder chat (owner: "It's not telling me what
+// to swap or how to fix the outfit. The evaluator should be very chic and
+// stylish given current trends and my general preferences. It's also speaking
+// to me as if it isn't me … I want to be challenged."). Three root causes:
+//   · The evaluator never saw her closet — only the canvas — so it literally
+//     could not name a swap. It now sends the SAME cached system block as the
+//     chat (persona, standard, preferences, everything the app has learned,
+//     the whole closet), so swaps come from what she owns and the two surfaces
+//     share one prompt cache.
+//   · It had four rubric bullets and no standard. It now scores against THE
+//     STANDARD with the occasion and weather briefs and LOOK FACTS in context.
+//   · It wrote about her in the third person. VOICE_RULES: second person.
+// The JSON contract gains `swaps`; the weather-aside and Work-bag rules stay.
+// MODEL_TOP with adaptive thinking, same fallback as the chat.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
 import { parseEvalResponse } from "./evalParse.js";
 import { logAiError } from "../../lib/ai/logError.js";
 import {
-  STYLIST_PERSONA, STYLIST_STANDARD, OPINION_RULES,
   describeItem, personalGrounding, readLook, occasionBrief, weatherBrief,
 } from "../stylist/standard.js";
+import { composeSystemBlock } from "./builderChat.js";
 
-const EVAL_TASK = `She built this outfit herself from her own wardrobe and tapped Evaluate. SCORE the look 1-10 on styling merit against THE STANDARD above — hero, colour, silhouette, texture, the third piece, tension, finish, register — and, when an occasion is given, fitness for that room: a beautiful look that's wrong for the room is not a 9.
+const EVAL_TASK = `She built this outfit herself from her own wardrobe and tapped Evaluate. SCORE the look 1-10 on styling merit against THE STANDARD — hero, colour, silhouette, texture, the third piece, tension, finish, register, current — and, when an occasion is given, fitness for that room: a beautiful look that's wrong for the room is not a 9. A safe look is not an 8: say it is safe and show her the braver version from her closet.
 
-LOOK FACTS below are computed by the app from her closet data and her own rules. A listed rule violation caps the score at 6 unless a specific fact overrides it (a note on the piece, a rule of hers) — say which — and the tip that fixes it comes FIRST. "Still open" items are a work in progress, not faults: score what is on the canvas and let a tip name the missing piece if it matters.
+LOOK FACTS below are computed by the app from her closet data and her own preferences. Anything listed under "runs against how she wears things" counts heavily against the score unless the departure earns its place — say which, and name the preference. "Still open" items are a work in progress, not faults: score what is on the canvas and let a swap or a tip name the missing piece if it matters.
 
 WEATHER IS NOT A RATING FACTOR. Never move the score for the forecast. If the look reads seasonally off for the stated weather, say so ONLY in the separate "weather" field — one light, knowing aside ("the suede and the dark palette read a little wintery for this heat"). If the look sits fine in the weather, set "weather" to null.
 
-WORK RULE: when the occasion is Work, the bag is a commute piece — she carries it to the office and parks it at her desk. Leave the bag OUT of the score entirely and don't spend a tip on it. Only if it genuinely clashes may you give it one light passing mention, and it still never moves the score.
+WORK NOTE: when the occasion is Work, the bag is a commute piece — she carries it to the office and parks it at her desk. Leave the bag OUT of the score entirely and don't spend a swap or a tip on it. Only if it genuinely clashes may you give it one light passing mention, and it still never moves the score.
 
 Then give:
 - "works": one specific line on the strongest thing the look is already doing — name the actual pieces and the move (and the line of the standard it satisfies), not a compliment.
-- "tips": up to 3 adjustments to elevate it, each one concrete and chic — the kind a stylist makes on a client in the fitting room: a half-tuck, a cuff or sleeve push, a different layer order, letting a different piece lead, dropping something so one gesture reads, adding hosiery, belting separates, swapping in a NAMED piece from her closet. Adjust what's on the canvas or in her closet — never invent items, never suggest purchases. Each tip is one complete, specific sentence that says why. If the look is genuinely strong, one sharp tip (or none) beats three reaches.
+- "swaps": 0–3 swaps that would lift the look — each names a piece ON THE CANVAS to take out ("out"), the piece from HER CLOSET to put in its place ("in" — the exact name from the closet list), and "why" in one sentence that says what it fixes and what it costs. A swap is the strongest thing you can give her; if none would help, return an empty array and say so in a tip. Never invent a piece, never suggest a purchase.
+- "tips": up to 3 adjustments to how she wears what stays — concrete and chic, the kind a stylist makes on a client in the fitting room: a half-tuck, a cuff or sleeve push, a different layer order, letting a different piece lead, dropping something so one gesture reads, adding hosiery, belting the trouser under the open blazer. Each tip is one complete, specific sentence that says why. One sharp tip beats three reaches.
+
+Write every field TO her — "you", "your" — never "she" or "her".
 
 Respond in strict JSON, no prose, no code fences:
 {
   "score": 7,
-  "headline": "one-line read on the look, a stylist's card voice — complete the thought, don't trail off",
+  "headline": "one-line read on the look, a stylist's card voice, addressed to her — complete the thought, don't trail off",
   "works": "the one thing it's doing best",
+  "swaps": [
+    { "out": "piece on the canvas", "in": "exact closet piece", "why": "what it fixes and what it costs" }
+  ],
   "tips": [
     "one complete, specific styling adjustment"
   ],
   "weather": null
 }`;
 
-// Pure prompt composer, exported for scripts/stylist-standard.test.mjs.
-export function composeEvalPrompt({ items = [], occasions = [], weathers = [], available = [], personal = [], colorPairs = [] } = {}) {
+// Pure composers, exported for scripts/stylist-standard.test.mjs.
+export function composeEvalMessages({ items = [], occasions = [], weathers = [], available = [], personal = [], colorPairs = [] } = {}) {
   const occ = (occasions || []).filter(Boolean);
   const wx = (weathers || []).filter(Boolean);
   const context = [];
@@ -65,37 +68,42 @@ export function composeEvalPrompt({ items = [], occasions = [], weathers = [], a
   if (occasionText) context.push(occasionText);
   const weatherText = weatherBrief(wx);
   if (weatherText) context.push(weatherText);
-  context.push(...personal);
   const facts = readLook(items, { occasions: occ, weathers: wx, available, colorPairs });
   if (facts.text) context.push(facts.text);
 
-  return [
-    STYLIST_PERSONA,
-    STYLIST_STANDARD,
-    OPINION_RULES,
-    EVAL_TASK,
+  const system = composeSystemBlock({ personal, available });
+  const user = [
+    `[CURRENT LOOK — what she tapped Evaluate on]`,
+    `On the canvas now:\n${items.map(it => describeItem(it, { notesMax: 200 })).join("\n")}`,
     context.join("\n\n"),
-    `ITEMS ON THE CANVAS (lines may carry her curated formality f1–f8, a sleeve tag [L]/[S]/[3Q]/[N], a knit weight, and a "seen:" read of the photo):\n${items.map(it => describeItem(it, { notesMax: 200 })).join("\n")}`,
+    `---`,
+    EVAL_TASK,
   ].join("\n\n");
+  return { system, user };
+}
+export function composeEvalPrompt(args) {
+  const { system, user } = composeEvalMessages(args);
+  return `${system}\n\n${user}`;
 }
 
 /**
  * @param {Array}  items  - resolved wardrobe items on the canvas
  * @param {string} apiKey
  * @param {Object} opts   - { occasions?: string[], weathers?: string[],
- *                           available? (the builder pool, for auto color
- *                           pairs + set partners), model?, signal? }
+ *                           available? (the builder pool — the closet the
+ *                           swaps come from), model?, signal? }
  */
 export async function evaluateLook(items, apiKey, opts = {}) {
   if (!apiKey) throw new Error("API key required");
   if (!items?.length) throw new Error("No items to evaluate");
 
-  const { blocks: personal, pairs } = await personalGrounding({ available: opts.available || [], fingerprintMax: 1200 });
-  const prompt = composeEvalPrompt({
+  const available = opts.available || [];
+  const { blocks: personal, pairs } = await personalGrounding({ available });
+  const { system, user } = composeEvalMessages({
     items,
     occasions: opts.occasions,
     weathers: opts.weathers,
-    available: opts.available || [],
+    available,
     personal,
     colorPairs: pairs,
   });
@@ -103,14 +111,16 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   // Adaptive thinking (Opus runs without it when the parameter is omitted) at
   // medium effort. Thinking tokens count against max_tokens even though they
   // never render — the 900→1400 truncation saga (2026-08-19) was that in
-  // disguise — so the cap leaves headroom for the ~700-token JSON. No sampling
-  // params: `temperature` is a hard 400 on these models.
+  // disguise — so the cap leaves headroom for the ~900-token JSON. No sampling
+  // params: `temperature` is a hard 400 on these models. The system block is
+  // the chat's, cache_control and all, so the two surfaces share one cache.
   const request = (model) => anthropicFetch({
     model,
     max_tokens: 6000,
     thinking: { type: "adaptive" },
     output_config: { effort: "medium" },
-    messages: [{ role: "user", content: prompt }],
+    system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: user }],
   }, { apiKey, signal: opts.signal });
 
   let res;

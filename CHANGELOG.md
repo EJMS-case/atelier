@@ -2,6 +2,100 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Preferences, not rules; swaps, not tips; "you", not "her"; and the app learns from every chat (#229) — 2026-09-10
+
+### Why
+Owner, same day as #228, with an Evaluate-look screenshot (from the build
+before #228 deployed — the old prompt chips prove it — but every point stands
+against #228 too): *"This is also not good feedback. It's not telling me what
+to swap or how to fix the outfit. The evaluator should be very chic and
+stylish given current trends and my general preferences. It's also speaking
+to me as if it isn't me, which I do not like. I do not want hard rules in this
+app but please ensure it always assumes the blazer is OPEN. I would never
+button a blazer … The app should learn from all discussions within the app,
+all saves, all outfits, all items in my closet, and all conversations in
+Claude, but hard rules should not be set — only preferences. I want to be
+challenged. I want thoughtful advice."*
+
+Four root causes, each of which had a code shape:
+1. **The evaluator never saw her closet** — only the canvas — so it literally
+   could not name a swap. It advised in the abstract ("a different layer
+   order") because that was all it could do.
+2. **Every prompt wrote about her in the third person** ("her long torso",
+   "plays her Black + Brown pairing"), and the outputs followed.
+3. **#228 called her preferences "HER HARD RULES"** and told the evaluator to
+   cap the score on a "violation". She had already told the app, in
+   different words, that she wants preferences it weighs, not rules it
+   enforces — and the blazer-open preference was encoded nowhere.
+4. **The chat and the evaluator read three of her signals; Style Me read
+   nine.** Nothing she said in a chat was kept or learned from; standing
+   preferences she had stated in sessions lived only in rule prose.
+
+### Added
+- **`src/features/stylist/learning.js` — everything the app has learned about
+  her, composed the same way for every surface.** Standing preferences ("How
+  I wear things", cross-device in `user_settings.style_notes`, seeded from
+  what she has told the app — the open blazer first), **chat lessons**
+  (`user_settings.chat_lessons`), fingerprint, About Me, colour pairs with
+  the *why* of the in-fashion ones, loved and disliked looks, her editor
+  swaps, what she returns to per occasion, and a date/season line. The chat,
+  the evaluator, and the trip-day generator read all of it; Style Me gains
+  the two it lacked (standing preferences + chat lessons) in a new
+  🧭 HOW SHE WEARS THINGS block.
+- **The app learns from every chat.** After each builder-chat turn, a fast
+  model distils any preference she expressed ("I would never button a
+  blazer") into a one-line lesson written to her, merged without duplicates,
+  capped, and read by every AI surface from the next turn on. The fingerprint
+  reads them too (her words outrank inference). The transcript itself is kept
+  in a new **`stylist_chats`** table (migration 0035, **applied live
+  2026-09-10**, owner-pinned RLS like 0030) so "review my chat" is answerable
+  next time.
+- **Style Profile → "How I Wear Things" and "Learned From Our Chats"**: both
+  lists editable (add / ✕), both synced across devices, both labelled as
+  preferences every stylist surface reads.
+- **Evaluate look returns `swaps`**: up to three `{out, in, why}` — a piece on
+  the canvas, the exact closet piece that replaces it, what it fixes and what
+  it costs. Rendered as SWAP rows above the tips. The parser drops swaps on a
+  truncated reply rather than showing half of one.
+
+### Changed
+- **Preferences, not rules.** `STYLIST_STANDARD`'s "HER HARD RULES — a look
+  that breaks one is wrong" is now "HOW SHE WEARS THINGS — her standing
+  preferences … weigh them, and when a look departs from one, say so and say
+  whether the departure earns its place." LOOK FACTS report "runs against how
+  she wears things", not "rule violations"; the occasion brief says "she
+  keeps these out of Work", not "banned"; the evaluator weighs a departure
+  heavily instead of capping the score. The validator's structural checks
+  (a look needs shoes) are untouched — those are what makes a look a look,
+  and she never sees them as rules.
+- **The blazer is open. Always.** In the standard, in Style Me's cached
+  preamble ("never write a gesture that closes a blazer"), as the first
+  standing preference, and as a computed LOOK FACT whenever a blazer is on
+  the canvas — with the belt placed on the trouser waist *under* it when one
+  is staged.
+- **Second person everywhere she reads.** `VOICE_RULES` in the chat and the
+  evaluator; the Style Me rationale, trip-day rationale, recap reasons,
+  shopping gap/completion copy, brand-discovery "why", the monthly profile,
+  and the **fingerprint** (regenerated ones read "You anchor Work in one
+  hue…" — the stored one stays third-person until her next refresh).
+- **Challenge her.** `OPINION_RULES`: "if the look is safe, say it is safe and
+  name the braver version from her closet"; every recommendation says what to
+  SWAP and how to WEAR what stays. A ninth line of the standard, *Current*,
+  asks for what reads like this season, not last year's safe version.
+- **The evaluator sends the chat's cached system block** (persona, standard,
+  everything learned, the whole closet) — so it can name swaps, and the two
+  surfaces share one prompt cache.
+- `stylist.js` reads `describeDateContext` and `standingAndLessons` from
+  learning.js; `tripAdvisor.js` reads `personalGrounding`.
+
+### Tests
+- `npm run test:standard` grows to 27: the standard speaks in preferences and
+  in the second person and never buttons a blazer; the open-blazer LOOK FACT
+  (with and without a belt); swaps parse and drop cleanly when truncated;
+  lesson merge/dedupe/cap; every learned block composes; look lines resolve
+  against the wardrobe; Style Me carries the standing block; the source
+  contract accepts the shared system block.
+
 ## [Unreleased] — The stylist chat had a persona and no standard (#228) — 2026-09-10
 
 ### Why

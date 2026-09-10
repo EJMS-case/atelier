@@ -87,7 +87,7 @@ ${profileLines.join("\n")}
 ${fingerprint ? `\nHER STYLE FINGERPRINT (distilled from what she actually wears):\n${fingerprint}\n` : ""}
 Use web search to verify each brand is real, currently active, and purchasable (find its official site). Favor international finds — Scandinavian, Korean, French, Australian, anywhere — over US mall brands. NEVER include: brands she already owns, the big luxury houses, or anything mass-market (${excludeBrands.slice(0, 40).join(", ") || "none listed"}).
 
-Return 6-8 brands. For each, tie the "why" to HER closet — name the pieces or palette of hers it rhymes with. "startWith" is the ONE piece to order first. "priceBand" is $, $$, or $$$ with a rough range (e.g. "$$ · tops $120-250").
+Return 6-8 brands. For each, tie the "why" to HER closet — name the pieces or palette of hers it rhymes with — and write it TO her ("your navy column", never "her"). "startWith" is the ONE piece to order first. "priceBand" is $, $$, or $$$ with a rough range (e.g. "$$ · tops $120-250").
 
 After any searching, end your reply with ONLY this JSON array (no prose after it):
 [{"name":"...","origin":"city/country","why":"...","priceBand":"...","startWith":"...","url":"https://..."}]`;

@@ -66,6 +66,8 @@ STYLING METHOD (every look):
 5. Focal point — one clear point of interest.
 6. Finishing — one or two intentional notes (jewelry, the right bag, an architectural belt on separates), never a stack. Pick the actual piece from the inventory — a specific chain, cuff, or bag line — not a generic "add jewelry". Belt rule per HC9.
 
+BLAZERS ARE WORN OPEN: she never buttons a blazer and never belts one closed. Style what's under it to be seen; a belt on separates sits on the trouser or skirt waist beneath the open blazer. Never write a gesture that closes a blazer.
+
 HOSIERY: Accessories>Hosiery items are legwear layered under skirts/dresses — never the look's statement, never a shoe substitute; pair color/opacity deliberately (tonal with the shoe or hem lengthens the leg, opaque black grounds a winter mini, sheer reads evening polish). When a skirt or dress look runs Cool or Cold, include ONE hosiery item and name it in the rationale.
 
 VIBE: pick ONE per look from this list, matching what the look actually feels like — ${VIBE_VOCABULARY.join(" | ")}.
@@ -90,7 +92,7 @@ Notes do TWO jobs and you must read them for both:
 Notes tell you WHAT each piece is; combine them with the restraint of the brand register above. The PERSONAL PATTERNS block (when present) shows what she actually reaches for — lean into those proportions, color stories, and finishing choices; they're already proven on her. When notes and personal patterns both point at a combination, that's the elevated move. When they conflict, personal patterns win for COMPOSITION; notes win for INDIVIDUAL PIECE SELECTION.
 
 ★ RATIONALE WRITING STYLE ★
-\`rationale\` is the caption shown to the client — a stylist's card, not a debug log. MAX 2 sentences of plain prose carrying three things: (1) what the look is DOING — the proportion play, color story, or texture tension; (2) exactly ONE wearable styling gesture that's physically possible with these pieces (a cuff, a half-tuck, a knot at the waist, sleeves pushed up, a shirt worn open); (3) why it suits HER — when PERSONAL PATTERNS or her About Me give you a hook, echo it ("your tonal-navy habit", "the column line you keep reaching for"); otherwise her standing register (effortless, feminine, a subtle edge). Taste, not essay. NO all-caps labels (no "TEXTURE HERO:", "TONAL", "LOOK 1", etc.), NO "Look N:" prefix, NO bullet/numbered lists, NO W-IDs in the prose, NO meta-narration ("respects warm weather"). Refer to pieces by what they are ("the sapphire skort"). Put the analytical breakdown in \`silhouette\` / \`focal_point\` / \`color_strategy\` / \`texture_story\`.
+\`rationale\` is the caption shown to the client — a stylist's card, not a debug log. It is written TO her: "you", "your" — never "she", "her", "the client". MAX 2 sentences of plain prose carrying three things: (1) what the look is DOING — the proportion play, color story, or texture tension; (2) exactly ONE wearable styling gesture that's physically possible with these pieces (a cuff, a half-tuck, a knot at the waist, sleeves pushed up, a shirt worn open); (3) why it suits HER — when PERSONAL PATTERNS or her About Me give you a hook, echo it ("your tonal-navy habit", "the column line you keep reaching for"); otherwise her standing register (effortless, feminine, a subtle edge). Taste, not essay. NO all-caps labels (no "TEXTURE HERO:", "TONAL", "LOOK 1", etc.), NO "Look N:" prefix, NO bullet/numbered lists, NO W-IDs in the prose, NO meta-narration ("respects warm weather"). Refer to pieces by what they are ("the sapphire skort"). Put the analytical breakdown in \`silhouette\` / \`focal_point\` / \`color_strategy\` / \`texture_story\`.
 
 ★ GROUND EVERY PIECE — ZERO INVENTION ★
 The rationale may name ONLY the pieces you actually placed in THIS look, and every colour, material, and shoe/bag TYPE must match that exact item from the inventory line you chose. NEVER invent, guess, or "upgrade" an attribute. If your shoe pick is a brown suede ballet flat, write "the brown suede flat" — NEVER "a navy pump". If your bag is a fringed suede bucket bag, call it that — not "a sleek clutch". Before finalizing, re-read your own item list and confirm every noun in the rationale maps to one of those exact pieces with its REAL colour and type. A caption that describes pieces the look doesn't contain is a hard failure — rewrite it.
@@ -131,8 +133,19 @@ export function buildStylingPrompt({
   occasionMemory = [],
   silhouette = [],
   comfortMode = false,
+  standingPreferences = [],
+  chatLessons = [],
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
+
+  // How she wears things — the preferences she set by hand in Style Profile
+  // and the lessons distilled from her stylist chats (features/stylist/
+  // learning.js). Her own words, so they sit at the top of the personal
+  // cluster. Preferences, never rules: a look that departs from one should
+  // have a reason, not a retry.
+  const standingBlock = (standingPreferences.length || chatLessons.length)
+    ? `\n🧭 HOW SHE WEARS THINGS — her standing preferences, in her own words (written to her, so "you" means Elyce). Honor them the way you'd honor a client's own instructions; a look that departs from one needs a reason:\n${standingPreferences.map(l => `• ${l}`).join("\n")}${chatLessons.length ? `\nTold to her stylist in conversation (newest last):\n${chatLessons.slice(-12).map(l => `• ${l}`).join("\n")}` : ""}\n`
+    : "";
 
   const exclusionBlock = activeExclusions.length > 0
     ? `\n⛔ ACTIVE FILTERS — ABSOLUTE HARD RULE:\n${activeExclusions.map(e => `• ${e}`).join("\n")}\n"No X" means NO item of that type appears anywhere in ANY look — not as a hero, not as supporting, not as finishing. If an item is a jean and "No Jeans" is active, that item DOES NOT EXIST for you.\n"X ONLY" means EVERY look must be built that way: if the lower half must be jeans, a look with trousers, a skirt, or a dress is wrong. Any look violating a No/Only filter is an AUTOMATIC FAILURE and must be rebuilt from scratch.\nAn "INCLUDE X" line is different — a positive ask, not a ban: feature the piece where weather and occasion allow, keep normal layering around it, and never fail a look over it.\n`
@@ -295,7 +308,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${fingerprintBlock}${stylePrefsBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${recentCombosBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${standingBlock}${fingerprintBlock}${stylePrefsBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${recentCombosBlock}${honestyBlock}
 ${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}

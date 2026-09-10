@@ -392,7 +392,7 @@ export const sb = {
     if (!this._settingsBatch) {
       this._settingsBatch = (async () => {
         try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(style_fingerprint,rotation_state,brand_discovery)&select=key,value`, {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(style_fingerprint,rotation_state,brand_discovery,style_notes,chat_lessons)&select=key,value`, {
             headers: sbHeaders(),
           });
           if (!res.ok) return null;
@@ -454,6 +454,62 @@ export const sb = {
       });
       if (!res.ok) console.warn("[sb] saveStyleFingerprint failed:", res.status);
     } catch { /* swallow — non-fatal, regenerate on demand */ }
+  },
+
+  // ── Generic JSON settings (key='style_notes' | 'chat_lessons') ──
+  // Her standing preferences ("How I wear things") and the lessons distilled
+  // from her stylist chats. Cross-device on purpose: a preference typed on
+  // the phone must shape the desktop's stylist too (localStorage prefs never
+  // did, and she noticed). Mount reads ride the settings batch above; both
+  // soft-fail to null so the caller can fall back to seeds / an empty list.
+  async getSettingJson(key) {
+    try {
+      const hit = await this._settingsRow(key);
+      if (hit) return hit.raw ? JSON.parse(hit.raw) : null;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.${encodeURIComponent(key)}&select=value`, {
+        headers: sbHeaders(),
+      });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows?.[0]?.value ? JSON.parse(rows[0].value) : null;
+    } catch { return null; }
+  },
+  async saveSettingJson(key, value) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key, value: JSON.stringify(value) }),
+      });
+      if (!res.ok) console.warn(`[sb] saveSettingJson(${key}) failed:`, res.status);
+      return res.ok;
+    } catch { return false; }
+  },
+
+  // ── Stylist chats (migration 0035) ──
+  // One row per builder conversation, PATCHed on every turn so the transcript
+  // is reviewable later ("review my recent chat" was unanswerable on
+  // 2026-09-10 because nothing kept it). Fire-and-forget on both paths: a
+  // missing table (migration not yet applied) or a network blip costs the
+  // record, never the conversation.
+  async saveStylistChat(row) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/stylist_chats`, {
+        method: "POST",
+        headers: { ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(row),
+      });
+    } catch { /* best-effort */ }
+  },
+  async fetchStylistChats(limit = 20) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/stylist_chats?select=*&order=updated_at.desc&limit=${limit}`,
+        { headers: sbHeaders() },
+      );
+      if (!res.ok) return [];
+      return (await res.json().catch(() => [])) || [];
+    } catch { return []; }
   },
 
   // ── Brand discovery (key='brand_discovery') ──

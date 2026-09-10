@@ -32,6 +32,25 @@ BELT: Only when it improves the silhouette. Never on fitted/structured dresses.
 LAYERING: blazer over blouse, cardigan over tee, coat over knit.
 `;
 
+// ── STANDING PREFERENCES — how she wears things ─────────────────────────────
+// Seed list for the "How I wear things" card in Style Profile. Every line is
+// something she has SAID — to the app, in a report, or in a session — not an
+// inference from history (the fingerprint carries those). Stored cross-device
+// in user_settings once she edits the list; this array is only the first
+// fill. Read by every AI surface as PREFERENCES, never as rules (owner,
+// 2026-09-10: "I do not want hard rules in this app … only preferences").
+// Written to her, in the second person, because she reads them.
+export const STANDING_PREFERENCES = [
+  "You always wear a blazer open — never buttoned, never belted closed. What's under it is meant to be seen.",
+  "Tanks and sleeveless shells are layering bases under a blazer, jacket, or knit for anything dressier than Casual — unless a piece's own notes say it dresses up alone.",
+  "Clean, dark, well-fit jeans are fine for Work; ripped, distressed, or shorts are not.",
+  "In cool and cold weather a blazer under a coat or jacket is a move you wear — one blazer, one coat.",
+  "Skirts and dresses are winter-viable with tights: opaque for daytime cold, sheer for evening.",
+  "No heels on a Travel Day — Lounge and Athleisure lead there.",
+  "A color story carries real color; an all-neutral pairing isn't a story.",
+  "You'd rather be challenged than flattered: a safe look should be called safe, and the braver version named.",
+];
+
 export const STYLE_PREFS = {
   colorPairs: [
     "Navy + Cool Pink",
