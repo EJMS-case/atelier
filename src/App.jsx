@@ -568,7 +568,11 @@ export default function App() {
       try {
         const fp = await sb.getStyleFingerprint().catch(() => null);
         const have = fp?.source_count || 0;
-        if (fp && count - have < 10) return;   // still fresh enough
+        // A read still written ABOUT her ("she pairs…") regenerates once into
+        // the second person (2026-09-10: "speaking to me as if it isn't me").
+        // Every read generated since then says "you", so this fires one time.
+        const thirdPerson = !!fp?.text && /\b(she|her)\b/i.test(fp.text) && !/\byou\b/i.test(fp.text);
+        if (fp && count - have < 10 && !thirdPerson) return;   // still fresh enough
         const { generateStyleFingerprint } = await import("./features/stylist/styleFingerprint.js");
         const edits = await sb.fetchLookEdits().catch(() => []);
         // What she has told her stylist in conversation — her own words, so
@@ -617,6 +621,15 @@ export default function App() {
       sb.fetchLovedLooks().then(rows => setLovedFeedback(rows || [])).catch(() => {});
 
       maybeRefreshFingerprint(logs || [], plans || []);
+
+      // What reads current this season — researched with web search once per
+      // season (or ~5 weeks), cached cross-device, read by every AI surface.
+      // Best-effort: no key or a failed search just leaves the last brief.
+      if (apiKey) {
+        import("./features/stylist/trendBrief.js")
+          .then(({ maybeRefreshTrendBrief }) => maybeRefreshTrendBrief({ apiKey }))
+          .catch(() => {});
+      }
     }).catch(() => {});
 
     // Load sets metadata from Supabase and backfill any local-only sets.
@@ -2194,7 +2207,9 @@ export default function App() {
                 }
               }}
               onSaveLook={async (log) => {
-                await sb.saveOutfitLog(log);
+                // Provenance (migration 0036): a look Style Me generated,
+                // as opposed to one she built herself in the builder.
+                await sb.saveOutfitLog({ source: "style_me", ...log });
                 const dateWorn = log.date_worn;
                 const ids = log.garment_ids || [];
                 if (dateWorn) {
@@ -2355,6 +2370,8 @@ export default function App() {
               occasion: log.occasion,
               notes: null,
               collage_url: log.collage_url,
+              // A re-wear keeps the original's provenance.
+              source: log.source || null,
             };
             await sb.saveOutfitLog(newLog);
             const ids = log.garment_ids || [];
@@ -2474,6 +2491,7 @@ export default function App() {
           logCount={wearData.logs ? wearData.logs.length : null}
           onBack={() => setView("settings")}
           onEditItem={(item) => { setEditItem(item); setEditReturnView("profile"); setView("edit"); }}
+          onNavigate={setView}
         />
       )}
 

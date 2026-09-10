@@ -22,7 +22,7 @@ import { summarizeLookEdits } from "./lookEdits.js";
 // Multi-tagged outfits surface every tag joined with "+", giving the AI
 // signal about patterns that span contexts (e.g. "navy column outfit for
 // Work + Work Dinner" is one entry, not two).
-function compactOutfit({ date, occasionLabel, weatherLabel, garment_ids = [] }, itemMap) {
+function compactOutfit({ date, occasionLabel, weatherLabel, garment_ids = [], built = false }, itemMap) {
   const pieces = garment_ids
     .map(id => itemMap[id])
     .filter(Boolean)
@@ -33,7 +33,7 @@ function compactOutfit({ date, occasionLabel, weatherLabel, garment_ids = [] }, 
       return `${color ? color + " " : ""}${sub}${brand}`.trim();
     });
   if (pieces.length === 0) return null;
-  const meta = [date || "?", occasionLabel || "?", weatherLabel || ""].filter(Boolean).join(" | ");
+  const meta = [date || "?", occasionLabel || "?", weatherLabel || "", built ? "[built by you]" : ""].filter(Boolean).join(" | ");
   return `${meta} — ${pieces.join(", ")}`;
 }
 
@@ -75,6 +75,8 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], e
         occasionLabel: occList.join("+"),
         weatherLabel:  wxList.join("+"),
         garment_ids:   r.garment_ids || r.items || [],
+        // A look she assembled by hand outranks a generated one as taste.
+        built: r.source === "builder",
       });
     }
   };
@@ -119,7 +121,7 @@ Do NOT:
 - Use bullets beyond "•" or any numbered list
 - Write about her in the third person — every line says "you"
 
-Outfits (${lines.length} total — date | occasion | weather — pieces):
+Outfits (${lines.length} total — date | occasion | weather — pieces; a line tagged [built by you] is one she assembled herself, piece by piece — weight those most):
 ${lines.join("\n")}${editsSection}${lessonsSection}`;
 
   const res = await anthropicFetch({

@@ -31,8 +31,10 @@ import {
   describeItem, STYLIST_STANDARD, OPINION_RULES, STYLIST_PERSONA, VOICE_RULES,
 } from "../src/features/stylist/standard.js";
 import {
-  composeLearnedBlocks, mergeLessons, describeLookLine, describeDateContext,
+  composeLearnedBlocks, mergeLessons, describeLookLine, describeDateContext, mergeNewSeeds, builtLookLines,
 } from "../src/features/stylist/learning.js";
+import { parseTrendReply, trendBriefIsStale, composeTrendBlock, briefSeasonLabel } from "../src/features/stylist/trendBrief.js";
+import { inspirationBrief } from "../src/features/stylist/standard.js";
 import { parseEvalResponse } from "../src/features/builder/evalParse.js";
 import { STANDING_PREFERENCES } from "../src/constants/styling.js";
 import { composeSystemBlock, currentLookBlock } from "../src/features/builder/builderChat.js";
@@ -499,4 +501,106 @@ test("a light long sleeve survives a Hot pool — it is the office top that need
   const cotton = pick("Tops", "Blouses", { color: "White", material: "cotton", name: "Long-sleeve cotton shirt" });
   const ponte = pick("Tops", "Tops", { color: "Black", material: "ponte", name: "Long sleeve ponte top" });
   assert.deepEqual(filterByWeather([silk, cotton, ponte], "Hot (85°F+)").map(it => it.id), [silk.id]);
+});
+
+
+// ── 6. The whole-app sweep (2026-09-10, "think big picture") ────────────────
+
+test("completion never forces a layer over a top whose sleeve is unknown", async () => {
+  const { completeOfficeCoverage } = await import("../src/utils/styling-validator.js");
+  const untagged = pick("Tops", "Blouses", { color: "Navy", material: "silk", formality: 5, name: "Silk blouse" });
+  const blazer = pick("Outerwear", "Blazers", { color: "Navy", material: "wool", formality: 6 });
+  const pool = [untagged, blazer, trouser(), pump(), tote()];
+  const idMap = Object.fromEntries(pool.map(it => [it.id, it.id]));
+  const look = { looks: [{ items: pool.slice(0, 1).concat(pool.slice(2)).map(it => ({ id: it.id })), vibe: "", silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "" }] };
+  assert.equal(completeOfficeCoverage(look, idMap, pool, { occasionSlots: OCCASION_SLOTS.Work, occasion: "Work", weather: "Cool (40-54°F)" }), null,
+    "an untagged blouse may well be long-sleeved — the app must not over-rule her closet");
+});
+
+test("the photo read is a sleeve signal: vision_data.sleeve fills in when her words don't", async () => {
+  const { getSleeveType } = await import("../src/utils/item-helpers.js");
+  const base = pick("Tops", "Blouses", { color: "Navy", name: "Silk blouse" });
+  assert.equal(getSleeveType(base), "unknown");
+  assert.equal(getSleeveType({ ...base, vision_data: { sleeve: "long" } }), "long");
+  assert.equal(getSleeveType({ ...base, vision_data: { sleeve: "short" } }), "short");
+  assert.equal(getSleeveType({ ...base, vision_data: { sleeve: "sleeveless" } }), "sleeveless");
+  assert.equal(getSleeveType({ ...base, vision_data: { sleeve: "3/4" } }), "threeQuarter");
+  assert.equal(getSleeveType({ ...base, vision_data: { sleeve: "n/a" } }), "unknown");
+  // Her words still come first.
+  assert.equal(getSleeveType({ ...base, name: "Sleeveless silk blouse", vision_data: { sleeve: "long" } }), "sleeveless");
+});
+
+test("new standing-preference seeds reach a stored list without resurrecting deletions", () => {
+  const stored = ["You always wear a blazer open — never buttoned."];
+  const seeds = ["You always wear a blazer open — never buttoned.", "Old seed she deleted.", "Brand-new seed from a Claude session."];
+  const seen = ["You always wear a blazer open — never buttoned.", "Old seed she deleted."];
+  const { list, added } = mergeNewSeeds(stored, seeds, seen);
+  assert.deepEqual(added, ["Brand-new seed from a Claude session."]);
+  assert.deepEqual(list, [...stored, "Brand-new seed from a Claude session."]);
+  assert.deepEqual(mergeNewSeeds(stored, seeds, seeds).added, [], "nothing new once every seed has been offered");
+});
+
+test("looks she built herself are read from outfit_logs.source, newest first", () => {
+  const w = [blouse(), trouser(), pump()];
+  const ids = w.map(it => it.id);
+  const logs = [
+    { source: "builder", garment_ids: ids, occasion: "Work" },
+    { source: "style_me", garment_ids: ids, occasion: "Work" },
+    { source: null, garment_ids: ids, occasion: "Dinner" },
+    { source: "builder", garment_ids: [ids[0]], occasion: "Work" },
+  ];
+  const lines = builtLookLines(logs, w);
+  assert.equal(lines.length, 1, "generated looks and one-piece rows are not her builds");
+  assert.match(lines[0], /^\[Work\] Navy Blouses \+ Burgundy Trousers \+ Black Heels$/);
+  const { blocks } = composeLearnedBlocks({ builtLines: lines });
+  assert.match(blocks.join("\n"), /LOOKS SHE BUILT HERSELF/);
+});
+
+test("her saved inspiration reaches the chat and the evaluator, filtered to the brief", () => {
+  const rows = [
+    { occasion: "Work", weather: "Warm (70-84°F)", vibe_text: "Column of navy, one satin gesture." },
+    { occasion: "Dinner", weather: "", vibe_text: "Slip dress under a sharp blazer." },
+    { occasion: "", weather: "", vibe_text: "Tonal camel, matte against sheen." },
+    { occasion: "Work", weather: "Cold (below 40°F)", vibe_text: "Long coat over everything." },
+  ];
+  const brief = inspirationBrief(rows, ["Work"], ["Warm (70-84°F)"]);
+  assert.match(brief, /Column of navy/);
+  assert.match(brief, /Tonal camel/);
+  assert.doesNotMatch(brief, /Slip dress/);
+  assert.doesNotMatch(brief, /Long coat/);
+  assert.match(brief, /never pieces to find/);
+  assert.equal(inspirationBrief([], ["Work"], []), "");
+  const block = currentLookBlock({ assembledItems: [blouse(), trouser(), pump()], occasions: ["Work"], weathers: ["Warm (70-84°F)"], inspirations: rows });
+  assert.match(block, /HER SAVED INSPIRATION/);
+  const prompt = composeEvalPrompt({ items: [blouse(), trouser(), pump()], occasions: ["Work"], weathers: ["Warm (70-84°F)"], inspirations: rows });
+  assert.match(prompt, /Column of navy/);
+});
+
+test("the trend brief: parsed from bullets, stale by season or age, composed as guidance for every surface", async () => {
+  const reply = "Here is the brief.\n• The open blazer over a fluid trouser is the shape of the season.\n- Chocolate and burgundy over black; navy as the neutral.\n* Skinny jeans read dated.\nSources: vogue.com, businessoffashion.com";
+  const parsed = parseTrendReply(reply);
+  assert.equal(parsed.text.split("\n").length, 3);
+  assert.ok(parsed.text.split("\n").every(l => l.startsWith("• ")));
+  assert.deepEqual(parsed.sources, ["vogue.com", "businessoffashion.com"]);
+  const now = new Date("2026-09-10T12:00:00");
+  const fresh = { text: parsed.text, season: briefSeasonLabel(now), generated_at: "2026-09-01T00:00:00Z" };
+  assert.equal(trendBriefIsStale(fresh, now), false);
+  assert.equal(trendBriefIsStale({ ...fresh, season: "summer 2026" }, now), true, "the season turned");
+  assert.equal(trendBriefIsStale({ ...fresh, generated_at: "2026-07-20T00:00:00Z" }, now), true, "older than five weeks");
+  assert.equal(trendBriefIsStale(null, now), true);
+  const block = composeTrendBlock(fresh);
+  assert.match(block, /WHAT READS CURRENT/);
+  assert.match(block, /her closet and her own preferences always win/);
+  assert.match(composeLearnedBlocks({ trendBrief: fresh }).blocks.join("\n"), /open blazer over a fluid trouser/);
+  const { buildStylingPrompt } = await import("../src/prompts/styling-system-prompt.js");
+  const { dynamicBody } = buildStylingPrompt({ occasion: "Work", weather: "Mild (55-69°F)", inventoryBlock: "", closetCount: 0, trendBrief: fresh, builtLooks: ["[Work] navy Blouses + black Trousers"] });
+  assert.match(dynamicBody, /WHAT READS CURRENT/);
+  assert.match(dynamicBody, /LOOKS SHE BUILT HERSELF/);
+});
+
+test("the shopping palette is a preference, not a ban", async () => {
+  const { SHOPPING_STYLE_PROFILE } = await import("../src/constants/styling.js");
+  assert.doesNotMatch(SHOPPING_STYLE_PROFILE, /No yellow/);
+  assert.match(SHOPPING_STYLE_PROFILE, /a preference, never a restriction/);
+  assert.match(SHOPPING_STYLE_PROFILE, /Every colour in her closet is approved/);
 });
