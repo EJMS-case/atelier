@@ -8,6 +8,21 @@ it through.
 
 ## Session log
 
+### 2026-09-10 · the whole-app sweep — her goals, applied everywhere
+
+**Owner:** *"Still think big picture … Focus on the full app, not just this fix. Be very creative and smart about my goals."* CHANGELOG has the full list. The live-data facts that shaped it: **`vision_data` is null on every row** (Visual AI was never run), **27 tops carry no sleeve word**, and nothing distinguished a look she built from one Style Me generated.
+
+**What to carry forward:**
+- **Visual AI is the lever for the office preference.** `getSleeveType` reads `vision_data.sleeve` when her words say nothing. She has to run Visual AI once (Style Profile → AI Readiness → "Read sleeves & fabrics from photos", or Settings → Visual AI). Until she does, untagged tops stay "unknown": the chat says "check the sleeve", the completion leaves them alone, Style Me's soft nudge fires on retries only. **After she runs it, re-check the audit count** — it should fall to near zero.
+- **The trend brief (`trendBrief.js`) is the app's only researched, time-aware taste signal.** It refreshes on app load when stale (needs her key on that device). If it ever reads generic or wrong, the prompt in `generateTrendBrief` is the lever; if the web tool is unavailable the brief is marked `web: false` and Style Profile says so.
+- **`outfit_logs.source` is live (0036).** Older rows are null and read as generated. LOOKS SHE BUILT HERSELF will be empty until she saves from the builder again.
+- **Every save now teaches**: builder saves over a saved look → look_edits; applied evaluator swaps → look_edits; chat turns → chat lessons. The Style Me editor was the only teacher before today.
+- **Seeds-seen**: to give her a new standing preference from a session, add a line to `STANDING_PREFERENCES`; it lands on her list at next load without touching what she deleted.
+
+**Watch-items:** the first trend brief (does it read like her stylist or like a magazine?); the first applied swap (does the IN piece resolve by name — the match is on normalised names, exact first, then containment); the fingerprint regenerating itself into "you" voice on her next load with a key.
+
+**Verified before push:** `npm test` (36 suites incl. props), `npm run build`, `npm run smoke` green; migration 0036 applied and confirmed.
+
 ### 2026-09-10 · PR #231 — the downstream sweep of #230
 
 **Owner:** *"Are you thinking big picture too? Stale code, downward impact, etc.?"* Five things #230 left behind, one a real regression — CHANGELOG has the list. The one to remember: **a soft validator check on its own changes nothing at generation time.** Soft failures only reach the model inside a retry prompt, and a retry only happens for a hard failure. So "make it soft" without a completion step = "delete it". The office preference is now honored by **`completeOfficeCoverage`** — the layer is added to every look that ships (streamed, final, salvaged), never demanded. That is the pattern for any future preference she wants held without a rule: soft check + completion, like `salvageByAddingShoes` and `salvageByAddingIncludes`.

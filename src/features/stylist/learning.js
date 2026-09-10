@@ -39,8 +39,10 @@ import { autoColorPairs } from "../../utils/wardrobe-coverage.js";
 import { summarizeSilhouette } from "./silhouette.js";
 import { summarizeLookEdits } from "./lookEdits.js";
 import { summarizeOccasionMemory } from "./occasionMemory.js";
+import { loadTrendBrief, composeTrendBlock } from "./trendBrief.js";
 
 export const STYLE_NOTES_KEY = "style_notes";
+export const STYLE_NOTES_SEEN_KEY = "style_notes_seen";
 export const CHAT_LESSONS_KEY = "chat_lessons";
 const LESSONS_CAP = 80;
 const LOCAL_NOTES_KEY = "atelier:style-notes:v1";
@@ -89,9 +91,32 @@ const cleanList = (list) => (Array.isArray(list) ? list : [])
 
 // Supabase first (the truth), the device cache second, the seeds last. A
 // stored EMPTY list is respected — she may have deleted every seed.
+//
+// New seeds reach her too. The seeds are how what she tells Claude in a
+// session becomes something the app holds (2026-09-10: "learn from … all
+// conversations in Claude"), so a seed added AFTER she first saved the list
+// must still land — without resurrecting a seed she deleted. `style_notes_seen`
+// records every seed ever offered; only never-offered seeds are appended.
+// Pure merge in mergeNewSeeds() so the test can hold the contract.
+export function mergeNewSeeds(stored, seeds, seen) {
+  const seenSet = new Set(cleanList(seen));
+  const fresh = cleanList(seeds).filter(sd => !seenSet.has(sd));
+  if (!fresh.length) return { list: cleanList(stored), added: [] };
+  const merged = mergeLessons(stored, fresh, { cap: 200 });
+  return { list: merged, added: fresh };
+}
 export async function loadStandingPreferences() {
   const remote = await sb.getSettingJson(STYLE_NOTES_KEY).catch(() => null);
-  if (Array.isArray(remote)) { writeLocal(LOCAL_NOTES_KEY, remote); return cleanList(remote); }
+  if (Array.isArray(remote)) {
+    const seen = await sb.getSettingJson(STYLE_NOTES_SEEN_KEY).catch(() => null);
+    const { list, added } = mergeNewSeeds(remote, STANDING_PREFERENCES, Array.isArray(seen) ? seen : []);
+    if (added.length) {
+      sb.saveSettingJson(STYLE_NOTES_KEY, list).catch(() => {});
+      sb.saveSettingJson(STYLE_NOTES_SEEN_KEY, STANDING_PREFERENCES).catch(() => {});
+    }
+    writeLocal(LOCAL_NOTES_KEY, list);
+    return list;
+  }
   const local = readLocal(LOCAL_NOTES_KEY);
   return cleanList(local || STANDING_PREFERENCES);
 }
@@ -99,6 +124,9 @@ export async function saveStandingPreferences(list) {
   const clean = cleanList(list);
   writeLocal(LOCAL_NOTES_KEY, clean);
   invalidateLearning();
+  // Every seed counts as offered once she has edited the list, so a seed she
+  // deletes stays deleted.
+  sb.saveSettingJson(STYLE_NOTES_SEEN_KEY, STANDING_PREFERENCES).catch(() => {});
   return sb.saveSettingJson(STYLE_NOTES_KEY, clean);
 }
 export async function loadChatLessons() {
@@ -182,6 +210,7 @@ export function composeLearnedBlocks({
   fingerprint = "", standing = [], lessons = [], silhouette = [],
   manualPairs = [], autoPairs = [], prefs = {},
   lovedLines = [], dislikedLines = [], swapLessons = [], occasionMemory = [],
+  builtLines = [], trendBrief = null,
   dateContext = "", maxLessons = 20,
 } = {}) {
   const blocks = [];
@@ -208,6 +237,9 @@ export function composeLearnedBlocks({
   if (prefs?.monochromaticMode) modes.push("She reaches for monochrome — head-to-toe in one family with texture doing the work.");
   if (prefs?.tonalPairing) modes.push("She reaches for tonal layering — shades within one family (navy + powder blue, burgundy + blush).");
   if (modes.length) blocks.push(`HER STYLE MODES (set by her in Style Profile):\n${modes.join("\n")}`);
+  if (builtLines.length) {
+    blocks.push(`LOOKS SHE BUILT HERSELF (newest first — the clearest statement of her taste: she chose every piece; read them for her proportions, colour stories, and finishing, and hold new advice to that bar):\n${builtLines.map((l, i) => `${i + 1}. ${l}`).join("\n")}`);
+  }
   if (lovedLines.length) {
     blocks.push(`LOOKS SHE LOVED (newest first — the bar for polish and finish; don't copy them, match their ambition):\n${lovedLines.map((l, i) => `${i + 1}. ${l}`).join("\n")}`);
   }
@@ -223,6 +255,8 @@ export function composeLearnedBlocks({
   if (dateContext) {
     blocks.push(`TODAY: ${dateContext}. Beyond the temperature band, what reads current is what reads right for this moment of the year — fabrics, colour depth, the weight of the shoe.`);
   }
+  const trend = composeTrendBlock(trendBrief);
+  if (trend) blocks.push(trend);
   return { blocks, pairs: pairLabels };
 }
 
@@ -249,7 +283,7 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
   if (cache && cache.key === key && Date.now() - cache.at < TTL_MS) return cache.value;
 
   const safe = (p) => p.catch(() => null);
-  const [fp, standing, lessons, favs, logs, lovedFb, disliked, edits] = await Promise.all([
+  const [fp, standing, lessons, favs, logs, lovedFb, disliked, edits, inspirations, trendBrief] = await Promise.all([
     safe(sb.fingerprintTextCached(fingerprintMax)),
     safe(loadStandingPreferences()),
     safe(loadChatLessons()),
@@ -258,6 +292,8 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
     safe(sb.fetchLovedLooks()),
     safe(sb.fetchDislikedLooks()),
     safe(sb.fetchLookEdits()),
+    safe(sb.fetchInspirations()),
+    safe(loadTrendBrief()),
   ]);
   const resolveAgainst = (wardrobe && wardrobe.length) ? wardrobe : available;
 
@@ -274,6 +310,10 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
     .filter(Boolean);
   const swapLessons = summarizeLookEdits(edits || [], resolveAgainst);
   const occasionMemory = summarizeOccasionMemory({ logs: logs || [], lovedLooks: lovedFb || [], items: resolveAgainst });
+  // Looks she assembled by hand in the builder (outfit_logs.source = 'builder',
+  // migration 0036) — she chose every piece, so these outrank anything the
+  // app generated as a statement of her taste.
+  const builtLines = builtLookLines(logs || [], resolveAgainst);
 
   const prefs = loadStylePrefs();
   const manualPairs = prefs?.colorPairs || [];
@@ -288,26 +328,48 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
     silhouette: summarizeSilhouette(loadAboutMe()),
     manualPairs, autoPairs, prefs,
     lovedLines, dislikedLines, swapLessons, occasionMemory,
+    builtLines, trendBrief,
     dateContext: describeDateContext(),
   });
   value.standing = standing || [];
   value.lessons = lessons || [];
+  value.inspirations = Array.isArray(inspirations) ? inspirations : [];
+  value.trendBrief = trendBrief || null;
   cache = { at: Date.now(), key, value };
   return value;
 }
 
-// The two signals Style Me did NOT already receive from App. Memoised on the
-// same cache-invalidation as above.
+// "[Work] navy Blouses + burgundy Trousers + black Heels" for the looks she
+// built herself, newest first. Pure; exported for the test.
+export function builtLookLines(logs, wardrobe, { max = 6 } = {}) {
+  return (Array.isArray(logs) ? logs : [])
+    .filter(l => l && l.source === "builder" && (l.garment_ids || []).length >= 2)
+    .slice(0, max)
+    .map(l => describeLookLine(wardrobe, l.garment_ids, l.occasion || (Array.isArray(l.occasions) ? l.occasions[0] : "")))
+    .filter(Boolean);
+}
+
+// The signals Style Me did NOT already receive from App: standing
+// preferences, chat lessons, the trend brief, and the looks she built herself.
+// Memoised on the same cache-invalidation as above.
 let standingCache = null;
-export async function standingAndLessons() {
-  if (standingCache && Date.now() - standingCache.at < TTL_MS) return standingCache.value;
-  const [standing, lessons] = await Promise.all([
+export async function learnedForStyleMe({ wardrobe = [] } = {}) {
+  const key = (wardrobe || []).length;
+  if (standingCache && standingCache.key === key && Date.now() - standingCache.at < TTL_MS) return standingCache.value;
+  const [standing, lessons, trendBrief, logs] = await Promise.all([
     loadStandingPreferences().catch(() => []),
     loadChatLessons().catch(() => []),
+    loadTrendBrief().catch(() => null),
+    sb.fetchOutfitLogs().catch(() => []),
   ]);
-  const value = { standing, lessons };
-  standingCache = { at: Date.now(), value };
+  const value = { standing, lessons, trendBrief, builtLines: builtLookLines(logs || [], wardrobe) };
+  standingCache = { at: Date.now(), key, value };
   return value;
+}
+// Kept for callers that only need the first two.
+export async function standingAndLessons() {
+  const { standing, lessons } = await learnedForStyleMe();
+  return { standing, lessons };
 }
 const _invalidate = invalidateLearning;
 export function invalidateAllLearning() { _invalidate(); standingCache = null; }

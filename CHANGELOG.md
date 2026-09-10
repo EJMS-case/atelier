@@ -2,6 +2,79 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The whole-app sweep: photos read sleeves, a researched trend brief, swaps you can tap, and every save teaches — 2026-09-10
+
+### Why
+Owner, re-sending the evaluator report: *"Still think big picture. Assess
+and address downstream impact. Focus on the full app, not just this fix. Be
+very creative and smart about my goals and achieving them on this, and all,
+fixes from today."* Her goals, in her words across the day: smart and chic
+given current trends and her preferences; spoken to as herself; no hard
+rules, only preferences; learn from every discussion, save, outfit, item, and
+Claude conversation; be challenged.
+
+The sweep checked the live rows before anything else. **No item in her
+closet has a Visual AI read** (`vision_data` is null on all 541 rows), and
+**27 tops carry no sleeve word at all** — the exact field her office dress
+code turns on. The trend "knowledge" every prompt carried was whatever month
+it was written. Nothing distinguished a look she assembled by hand from one
+Style Me generated. And #230's completion would have put a cardigan over any
+untagged blouse in cool weather.
+
+### Added
+- **Sleeves from photos.** `getSleeveType` now falls back to
+  `vision_data.sleeve` — Visual AI already records it, nothing had ever read
+  it. Style Profile → AI Readiness counts the tops it can't read a sleeve
+  from and links to Visual AI ("Read sleeves & fabrics from photos"). One
+  run over her tops makes the office preference work across the closet
+  without typing a word.
+- **What Reads Current — a researched seasonal trend brief**
+  (`features/stylist/trendBrief.js`). One web-search call per season (or ~5
+  weeks), the same server tool Brand Atlas uses; written to her in her
+  register; cached cross-device (`user_settings.trend_brief`); refreshes
+  itself on app load when stale; a card in Style Profile with a refresh
+  button. Read by the chat, the evaluator, trip days, and Style Me
+  (🧵 block) as taste guidance — her closet and preferences always win.
+  Line 9 of the standard now points at it instead of a hard-coded list.
+- **Looks she built herself** — `outfit_logs.source` (migration 0036,
+  **applied live**): `'builder'` from the builder, `'style_me'` from Style
+  Me saves, carried on re-wear. `learning.js` composes LOOKS SHE BUILT
+  HERSELF for every advisory surface and Style Me; the fingerprint tags
+  those rows `[built by you]` and weights them most.
+- **Her saved inspiration reaches the chat and the evaluator**, filtered to
+  the occasion and weather she is dressing for (`inspirationBrief`). Style
+  Me had read it since August; the advisory surfaces never had.
+- **Tap-to-apply swaps.** Each evaluator swap has an Apply button: the OUT
+  piece is matched on the canvas, the IN piece in her closet, the slot is
+  swapped — and the applied swap is recorded as a look edit, so it becomes a
+  lesson.
+- **Editing a saved look teaches.** Saving over a look she opened from Saved
+  diffs the pieces and records swap / remove / add look edits — the same
+  signal as the Style Me editor, which was the only place that learned.
+- **New standing-preference seeds reach a stored list** without resurrecting
+  ones she deleted (`style_notes_seen`). This is the channel by which what
+  she tells Claude in a session becomes something the app holds.
+- **The fingerprint regenerates itself once** when the stored read is still
+  written about her rather than to her.
+
+### Changed
+- `completeOfficeCoverage` adds a layer only over a top KNOWN to be short or
+  sleeveless; an untagged blouse is left alone (the soft finding still
+  steers a retry, the chat says "check the sleeve").
+- The shopping palette line is a preference: the old text banned "yellow and
+  other warm/muted tones" outright.
+- The chat input reads "Ask for a verdict, a swap, or the braver version…".
+- `standingAndLessons` → `learnedForStyleMe` (standing, lessons, trend
+  brief, built looks); the old name stays as a thin alias.
+
+### Tests
+- `test:standard` → 39: completion skips unknown sleeves; vision fills the
+  sleeve and her words win; seeds merge without resurrecting deletions;
+  built looks read from `source`; inspiration filters to the brief and
+  reaches both surfaces; the trend brief parses, goes stale by season or
+  age, and composes into Style Me; the shopping palette is a preference.
+  `test:props` covers the new `onNavigate` prop.
+
 ## [Unreleased] — The office layer is ADDED, never demanded: the downstream sweep of #230 (#231) — 2026-09-10
 
 ### Why

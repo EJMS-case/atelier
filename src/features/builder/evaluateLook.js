@@ -23,7 +23,7 @@ import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
 import { parseEvalResponse } from "./evalParse.js";
 import { logAiError } from "../../lib/ai/logError.js";
 import {
-  describeItem, personalGrounding, readLook, occasionBrief, weatherBrief,
+  describeItem, personalGrounding, readLook, occasionBrief, weatherBrief, inspirationBrief,
 } from "../stylist/standard.js";
 import { composeSystemBlock } from "./builderChat.js";
 
@@ -57,7 +57,7 @@ Respond in strict JSON, no prose, no code fences:
 }`;
 
 // Pure composers, exported for scripts/stylist-standard.test.mjs.
-export function composeEvalMessages({ items = [], occasions = [], weathers = [], available = [], personal = [], colorPairs = [] } = {}) {
+export function composeEvalMessages({ items = [], occasions = [], weathers = [], available = [], personal = [], colorPairs = [], inspirations = [] } = {}) {
   const occ = (occasions || []).filter(Boolean);
   const wx = (weathers || []).filter(Boolean);
   const context = [];
@@ -68,6 +68,8 @@ export function composeEvalMessages({ items = [], occasions = [], weathers = [],
   if (occasionText) context.push(occasionText);
   const weatherText = weatherBrief(wx);
   if (weatherText) context.push(weatherText);
+  const inspoText = inspirationBrief(inspirations, occ, wx);
+  if (inspoText) context.push(inspoText);
   const facts = readLook(items, { occasions: occ, weathers: wx, available, colorPairs });
   if (facts.text) context.push(facts.text);
 
@@ -98,7 +100,7 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   if (!items?.length) throw new Error("No items to evaluate");
 
   const available = opts.available || [];
-  const { blocks: personal, pairs } = await personalGrounding({ available });
+  const { blocks: personal, pairs, inspirations } = await personalGrounding({ available });
   const { system, user } = composeEvalMessages({
     items,
     occasions: opts.occasions,
@@ -106,6 +108,7 @@ export async function evaluateLook(items, apiKey, opts = {}) {
     available,
     personal,
     colorPairs: pairs,
+    inspirations,
   });
 
   // Adaptive thinking (Opus runs without it when the parameter is omitted) at

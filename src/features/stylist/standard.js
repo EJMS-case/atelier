@@ -65,7 +65,7 @@ export const STYLIST_STANDARD = `THE STANDARD — the taste you judge every look
 6. One deliberate tension — structured × fluid, masculine × feminine, polished × undone, high × low. No tension reads safe, and safe gets called safe.
 7. Finish — one or two intentional notes (the right bag, a considered belt on separates, one piece of jewelry), never a stack.
 8. Register — pieces within about two formality steps of each other (f1 Active, f2 Lounge, f3 Casual, f4 Smart Casual, f5 Business Casual, f6 Business Professional, f7 Cocktail, f8 Black Tie), matched to the room: Casual ≈ 3–4, Lounge ≈ 2, Work ≈ 5–6, Work Dinner ≈ 5–6, Dinner ≈ 4–6, Occasion ≈ 7–8. A missing f means unknown — judge the piece itself.
-9. Current — the look should read like this season, not a safe version of last year's: the open blazer over something fluid, the wide leg with a sharp shoe, tonal depth over contrast, real texture over print. Reach for the of-the-moment pairing her closet supports (see her colour pairings) before the default neutral.
+9. Current — the look should read like this season, not a safe version of last year's. WHAT READS CURRENT (the researched brief, when present) and her in-fashion colour pairings say what that means right now; reach for the of-the-moment version her closet supports before the default neutral — and say when a piece reads dated.
 
 HOW SHE WEARS THINGS — her standing preferences, learned from her closet, her edits, and what she has told the app. These are preferences, not rules: weigh them, and when a look departs from one, say so and say whether the departure earns its place.
 - A blazer is always worn OPEN. She never buttons one and never belts one closed — what's under it is meant to be seen, so style the layer beneath to be seen. A belt sits on the trouser or skirt waist under the open blazer, never cinched over it.
@@ -153,6 +153,25 @@ export function weatherBrief(weathers) {
   return label ? formatWeather(label) : "";
 }
 
+// ── Her saved inspiration, for this brief ────────────────────────────────────
+// The mood notes she saved with inspiration photos, filtered to the occasion
+// and weather she is dressing for — Style Me has read these since 2026-08; the
+// chat and the evaluator never did. Mood only, never pieces: the note says so.
+export function inspirationBrief(inspirations, occasions = [], weathers = [], { max = 4 } = {}) {
+  const rows = Array.isArray(inspirations) ? inspirations : [];
+  const occs = canonicalOccasions(occasions);
+  const wxShorts = (weathers || []).filter(Boolean).map(w => String(w).split(" ")[0]);
+  const hits = rows.filter(r => {
+    if (!r?.vibe_text) return false;
+    const occOk = !occs.length || !r.occasion || occs.includes(normalizeOccasion(r.occasion));
+    const wxOk = !wxShorts.length || !r.weather || wxShorts.some(w => String(r.weather).startsWith(w));
+    return occOk && wxOk;
+  }).slice(0, max);
+  if (!hits.length) return "";
+  return `HER SAVED INSPIRATION for this brief (mood, silhouette, colour story — a direction to lean toward, never pieces to find; nothing described here is in her closet unless the closet list says so):
+${hits.map(r => `• ${String(r.vibe_text).trim()}`).join("\n")}`;
+}
+
 // ── Item lines (the signals Style Me sends, for a single look) ───────────────
 
 const SLEEVE_SHORT = { long: "L", short: "S", sleeveless: "N", threeQuarter: "3Q" };
@@ -193,7 +212,7 @@ export function describeItem(it, { notesMax } = {}) {
 // learning.js. Kept under this name for the surfaces that already call it.
 export async function personalGrounding({ wardrobe = [], available = [], fingerprintMax = 1200, maxAutoPairs = 3 } = {}) {
   const learned = await learnedContext({ wardrobe, available, fingerprintMax, maxAutoPairs });
-  return { blocks: learned.blocks, pairs: learned.pairs };
+  return { blocks: learned.blocks, pairs: learned.pairs, inspirations: learned.inspirations || [] };
 }
 
 // ── The computed read of a look ──────────────────────────────────────────────

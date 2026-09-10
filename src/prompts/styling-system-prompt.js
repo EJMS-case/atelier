@@ -135,6 +135,8 @@ export function buildStylingPrompt({
   comfortMode = false,
   standingPreferences = [],
   chatLessons = [],
+  trendBrief = null,
+  builtLooks = [],
 }) {
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
@@ -143,6 +145,19 @@ export function buildStylingPrompt({
   // learning.js). Her own words, so they sit at the top of the personal
   // cluster. Preferences, never rules: a look that departs from one should
   // have a reason, not a retry.
+  // What reads current this season — the researched brief (features/stylist/
+  // trendBrief.js). Taste guidance only: her closet, her preferences, the
+  // occasion and the weather all outrank it.
+  const trendBlock = trendBrief?.text
+    ? `\n🧵 WHAT READS CURRENT — ${trendBrief.season || "this season"} (researched; taste guidance written to her — her closet and her preferences always win over a trend, and it is never a reason to buy):\n${trendBrief.text}\n`
+    : "";
+
+  // Looks she assembled by hand in the builder — the clearest statement of
+  // her taste, above anything the app generated. Text-only, like loved looks.
+  const builtBlock = (builtLooks && builtLooks.length > 0)
+    ? `\n🧷 LOOKS SHE BUILT HERSELF (newest first — she chose every piece; hold new looks to this bar for proportion, colour story, and finish; don't copy them):\n${builtLooks.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n`
+    : "";
+
   const standingBlock = (standingPreferences.length || chatLessons.length)
     ? `\n🧭 HOW SHE WEARS THINGS — her standing preferences, in her own words (written to her, so "you" means Elyce). Honor them the way you'd honor a client's own instructions; a look that departs from one needs a reason:\n${standingPreferences.map(l => `• ${l}`).join("\n")}${chatLessons.length ? `\nTold to her stylist in conversation (newest last):\n${chatLessons.slice(-12).map(l => `• ${l}`).join("\n")}` : ""}\n`
     : "";
@@ -308,7 +323,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${standingBlock}${fingerprintBlock}${stylePrefsBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${recentCombosBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${standingBlock}${fingerprintBlock}${stylePrefsBlock}${builtBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${trendBlock}${recentCombosBlock}${honestyBlock}
 ${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}
