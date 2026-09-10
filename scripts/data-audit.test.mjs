@@ -12,6 +12,7 @@ import { readKnitWeight, isLightCardigan, stripColourPhrases, KNIT_WEIGHTS } fro
 const clean = {
   id: "ok1", category: "Tops", subcategory: "Blouses", name: "Long-sleeve silk blouse",
   color: "Navy", material: "Silk", formality: 6, image: "https://x/img.png", notes: "good for work",
+  stylist_line: "navy silk blouse, fluid, for work",
 };
 
 test("a fully-tagged item reports zero issues", () => {
@@ -39,7 +40,7 @@ test("the office dress code's two fields are audited as enhancers", () => {
   assert.ok(untagged.includes("sleeve_unknown"), "a top with no sleeve signal is flagged");
   assert.ok(!CRITICAL_ISSUES.has("sleeve_unknown"), "…but it is an enhancer, not critical");
   assert.ok(!auditItem({ ...clean, subcategory: "Tanks", name: "Silk tank" }).includes("sleeve_unknown"), "the subcategory is a sleeve signal");
-  const cardigan = { ...clean, category: "Knits", subcategory: "Cardigans", name: "Alpaca cardigan", material: "Alpaca", notes: "" };
+  const cardigan = { ...clean, category: "Knits", subcategory: "Cardigans", name: "Alpaca cardigan", material: "Alpaca", notes: "", stylist_line: "" };
   assert.ok(auditItem(cardigan).includes("knit_weight_missing"));
   assert.ok(!auditItem({ ...cardigan, knit_weight: "Fine/Summer" }).includes("knit_weight_missing"));
   assert.ok(!auditItem({ ...cardigan, subcategory: "Pullovers" }).includes("knit_weight_missing"), "only cardigans are the office layer");
@@ -112,7 +113,7 @@ test("material is only required where it does unique work", () => {
 test("formality, notes length, and image checks", () => {
   assert.ok(auditItem({ ...clean, formality: null }).includes("formality_missing"));
   assert.ok(auditItem({ ...clean, formality: "6" }).every(i => i !== "formality_missing"), "numeric strings count");
-  assert.ok(auditItem({ ...clean, notes: "x".repeat(300) }).includes("notes_too_long"));
+  assert.ok(auditItem({ ...clean, notes: "x".repeat(300), stylist_line: "" }).includes("notes_too_long"));
   assert.ok(auditItem({ ...clean, image: null }).includes("no_image"));
 });
 
@@ -142,7 +143,7 @@ test("every issue key has a label and a criticality decision", () => {
 });
 
 test("a stylist_line resolves the long-notes flag", () => {
-  const longNotes = { ...clean, notes: "x".repeat(300) };
+  const longNotes = { ...clean, notes: "x".repeat(300), stylist_line: "" };
   assert.ok(auditItem(longNotes).includes("notes_too_long"));
   assert.ok(!auditItem({ ...longNotes, stylist_line: "silk cami, bias cut" }).includes("notes_too_long"));
   assert.ok(auditItem({ ...longNotes, stylist_line: "   " }).includes("notes_too_long"), "blank line doesn't count");

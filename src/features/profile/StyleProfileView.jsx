@@ -65,7 +65,7 @@ function suggestPairsFromLoved(lovedLooks, wardrobe, existingPairs) {
 
 export default function StyleProfileView({
   items = [], wardrobe = [], apiKey, styleFingerprint, setStyleFingerprint,
-  lovedLooks = [], logCount = null, onBack, onEditItem, onNavigate,
+  lovedLooks = [], logCount = null, onBack, onEditItem, onNavigate, onLineWritten,
 }) {
   const [prefs, setPrefs] = useState(() => loadStylePrefs());
   const [newPair, setNewPair] = useState("");
@@ -147,6 +147,42 @@ export default function StyleProfileView({
   // AI readiness — which rows the stylist can't fully read, and why.
   const audit = useMemo(() => auditCloset(items), [items]);
   const [auditOpen, setAuditOpen] = useState(false);
+
+  // "Write stylist lines" — fills the line the stylist reads for every piece
+  // that has none, from her fields, her notes, and the photo (features/
+  // profile/stylistLines.js). Resumable: only pieces without a line are
+  // written, and a line she wrote herself is never touched. The module is
+  // imported on tap so the stylist/zod bundle stays off this screen's chunk.
+  const linesMissing = useMemo(() => items.filter(it => it.category !== "Misc" && !String(it.stylist_line || "").trim()), [items]);
+  const [linesRun, setLinesRun] = useState({ running: false, done: 0, total: 0, errors: 0, msg: "" });
+  const handleWriteLines = async () => {
+    if (!apiKey) { setLinesRun(r => ({ ...r, msg: "Add your Anthropic API key in Settings first." })); return; }
+    const queue = linesMissing.slice();
+    if (!queue.length) { setLinesRun(r => ({ ...r, msg: "Every piece already has a stylist line. ✦" })); return; }
+    setLinesRun({ running: true, done: 0, total: queue.length, errors: 0, msg: "" });
+    const { writeAndPersistStylistLine } = await import("./stylistLines.js");
+    let completed = 0, failed = 0;
+    const worker = async () => {
+      while (queue.length) {
+        const item = queue.shift();
+        try {
+          const line = await writeAndPersistStylistLine({ item, apiKey });
+          onLineWritten?.(item.id, line);
+        } catch {
+          failed += 1;
+        }
+        completed += 1;
+        setLinesRun(r => ({ ...r, done: completed, errors: failed }));
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    setLinesRun(r => ({
+      ...r, running: false,
+      msg: failed === 0
+        ? `Wrote ${completed} stylist lines. Every piece now reads through its own line.`
+        : `Wrote ${completed - failed} lines; ${failed} didn't come back — tap again to retry just those.`,
+    }));
+  };
 
   // "What changed since the last read": outfits logged beyond the count the
   // fingerprint was generated from. The auto-refresh on app load fires at
@@ -400,6 +436,18 @@ export default function StyleProfileView({
             <button style={{ ...s.btnSecondary, width: "100%", fontSize: 12 }} onClick={() => onNavigate("visionpilot")}>
               ✦ Read sleeves &amp; fabrics from photos
             </button>
+          </div>
+        )}
+        {(linesMissing.length > 0 || linesRun.msg) && (
+          <div style={{ marginBottom: 8 }}>
+            <button style={{ ...s.btnPrimary, width: "100%", fontSize: 12 }} disabled={linesRun.running || linesMissing.length === 0} onClick={handleWriteLines}>
+              {linesRun.running
+                ? `Writing stylist lines… ${linesRun.done} / ${linesRun.total}${linesRun.errors ? ` (${linesRun.errors} failed)` : ""}`
+                : `Write stylist lines for ${linesMissing.length} piece${linesMissing.length === 1 ? "" : "s"}`}
+            </button>
+            <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 4, lineHeight: 1.5 }}>
+              {linesRun.msg || "The stylist line is what the app reads for a piece. Each one is written only from your fields, your notes (carried word for word), and the photo — never a guess. Lines you wrote yourself are left alone."}
+            </div>
           </div>
         )}
         {audit.flagged.length > 0 && (

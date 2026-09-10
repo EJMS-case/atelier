@@ -1,12 +1,29 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #233. The session log below
+Refreshed **2026-09-10**, after PR #234. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-10 · PR #234 — the stylist line is written for every piece, not left to a fallback
+
+**Owner, on #233:** *"When I say think big, I also mean that if notes aren't long, but the stylist line doesn't exist, why would you not update the stylist line anyway? Isn't that what the code reads? I need you to be more resourceful and innovative and smarter across the board. That should be common sense at this point."* She was right: #233 checked the live rows, found every long-notes piece had a line, and stopped at "nothing to backfill" — because the short-notes fallback worked. The designed field sat empty on 356 of 541 pieces. Now CLAUDE.md point 7.
+
+**What shipped:** `features/profile/stylistLines.js` — the line writer. Written from three sources and nothing else: her fields (with the derived knit weight and its evidence), her notes verbatim, and the photo plus the vision read the app already made. `finishStylistLine` enforces what can be enforced: every occasion clause in her notes ("NOT GOOD FOR WORK", "good for cold weather") is carried into the line word for word (`carryGuidance`), and if the cap has to give, the line gives, never her guidance. A line she wrote herself is never touched (`needsStylistLine`). Written in the vocabulary the readers key on (sleeve words, knit weight words, light/heavy cloth words). **Style Profile → AI Readiness → "Write stylist lines for N pieces"**, three workers, resumable, module imported on tap so the profile chunk stays small. The audit flags `stylist_line_missing` as an enhancer.
+
+**Readers changed with it:** classifiers now read the line PLUS her short notes (a keyword she typed keeps firing beside a written line); prompts read the line alone; the inventory drops its `seen:` vision segment when a line exists, because the line was written from that read — so the closet-wide sweep is roughly token-neutral on the uncached body instead of +8k tokens per tap.
+
+**She has to tap it once** (it needs her key, per device). Until then the fallback still works exactly as before. The lines land in Edit → "Stylist line" where she can rewrite any of them.
+
+**Watch-items:**
+- Spot-check a dozen written lines against their photos and notes. If one states an occasion she never gave, the prompt's three-source clause is the lever, then `MODEL_STRONG` for the writer.
+- If Style Me's inventory feels longer after the sweep, `STYLIST_LINE_TARGET` (140) is the dial; the cap is 200.
+- The `seen:` drop assumes the line carries the read. If a piece's line predates its vision read (she wrote it by hand), the read is not in the prompt for that piece — acceptable, since her line outranks the app's read anyway.
+
+**Verified before push:** `npm test` (37 suites, `test:lines` new), `npm run build`, `npm run smoke` green.
 
 ### 2026-09-10 · PR #233 — how to think about every change, and the knit weight her notes already stated
 

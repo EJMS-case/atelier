@@ -2492,6 +2492,7 @@ export default function App() {
           onBack={() => setView("settings")}
           onEditItem={(item) => { setEditItem(item); setEditReturnView("profile"); setView("edit"); }}
           onNavigate={setView}
+          onLineWritten={(id, line) => setItems(prev => prev.map(it => it.id === id ? { ...it, stylist_line: line } : it))}
         />
       )}
 

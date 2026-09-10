@@ -1076,8 +1076,11 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
     // drape / formality / vibe signal the model reads straight off the garment's
     // photo. Supplements her notes — never overrides her colour. Kept short so
     // it doesn't balloon the per-item token cost across a full closet.
+    // A stylist line was written FROM this read (features/profile/
+    // stylistLines.js), so when the piece has one the "seen:" segment would
+    // say it twice on the uncached body — the line carries it.
     const vd = it.vision_data;
-    if (vd && (vd.fabric || vd.formality || vd.vibe)) {
+    if (!it.stylist_line && vd && (vd.fabric || vd.formality || vd.vibe)) {
       const seen = [vd.fabric, vd.formality, vd.vibe].map(x => (x || "").trim()).filter(Boolean).join("; ");
       if (seen) parts.push(`seen: ${seen}`);
     }

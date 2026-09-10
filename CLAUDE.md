@@ -201,6 +201,16 @@ ones that feel big:
    (the audit said "add a knit weight" and the Edit screen had no field for
    it) is a bug in the app, not a data problem. Fix the field, the reader,
    and the flag together.
+7. **A field the app designed to be read gets filled, not bypassed.** The
+   stylist line is "what the AI reads"; it sat empty on two thirds of the
+   closet because the notes fallback happened to work, and the first pass
+   at her instruction stopped at "nothing to backfill" for that reason.
+   Owner: *"why would you not update the stylist line anyway? Isn't that
+   what the code reads? … That should be common sense at this point."* When
+   a fallback is doing a designed field's job, that is the gap — fill the
+   field from what she already gave (her fields, her notes verbatim, the
+   photo) and make the fallback the exception. Ask this of every
+   `x || fallback` in the AI path.
 
 ## Working with the owner
 

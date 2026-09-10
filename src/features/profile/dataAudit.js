@@ -10,7 +10,7 @@
 // intelligence on the table. The readiness score counts critical-clean rows.
 // Surfaced in Style Profile → AI Readiness. Node-tested: npm run test:audit.
 
-import { TAXONOMY, getSubcatL2 } from "../../constants/taxonomy.js";
+import { TAXONOMY, MISC_CATEGORY, getSubcatL2 } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
 import { CURATED_NOTES_MAX, getSleeveType, readKnitWeight } from "../../utils/item-helpers.js";
 
@@ -39,6 +39,11 @@ export const ISSUE_LABELS = {
   // reads the piece, it just can't apply her rule to it with confidence.
   sleeve_unknown:      "no sleeve length the AI can read — add 'long sleeve' / 'short sleeve' / 'sleeveless' to the name or notes",
   knit_weight_missing: "cardigan with no knit weight in its tag, name, or notes — can't be recognised as the summer office layer",
+  // The line the stylist reads for the piece. Without it the app reads the
+  // notes through a fallback (or nothing, for long copy); "Write stylist
+  // lines" below the audit fills every empty one from her fields, her notes,
+  // and the photo.
+  stylist_line_missing: "no stylist line — the app reads the piece through a fallback instead of the line written for it",
 };
 
 export function auditItem(it) {
@@ -62,9 +67,11 @@ export function auditItem(it) {
   if (!Number.isFinite(formality)) issues.push("formality_missing");
   // A stylist_line resolves long notes: classifiers and prompts read the
   // line, the copy stays for display/search/vision (migration 0018).
-  if (String(it.notes || "").length > CURATED_NOTES_MAX && !String(it.stylist_line || "").trim()) {
+  const hasLine = !!String(it.stylist_line || "").trim();
+  if (String(it.notes || "").length > CURATED_NOTES_MAX && !hasLine) {
     issues.push("notes_too_long");
   }
+  if (!hasLine && it.category !== MISC_CATEGORY) issues.push("stylist_line_missing");
   return issues;
 }
 
