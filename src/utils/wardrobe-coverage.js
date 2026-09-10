@@ -217,7 +217,10 @@ function textCoversCombo(text, combo) {
  * outranks a chromatic one (owner: "color stories are lame").
  * Returns [{ label, sides, note, aItems, bItems }].
  */
-const NEUTRAL_PAIR_FAMILIES = new Set(["Black", "Gray", "Brown", "Neutrals", "White"]);
+// Exported for features/stylist/standard.js, whose colour-story read counts
+// non-neutral families with the SAME definition of "neutral" the pair ranking
+// uses — a second list would be a second opinion on what a neutral is.
+export const NEUTRAL_PAIR_FAMILIES = new Set(["Black", "Gray", "Brown", "Neutrals", "White"]);
 
 export function autoColorPairs(items, { date = new Date(), exclude = [], max = 4 } = {}) {
   const season = seasonForDate(date);

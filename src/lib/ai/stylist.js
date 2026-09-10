@@ -5,7 +5,8 @@
 // Callers are responsible for UI state.
 
 import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
-import { STYLING_TAXONOMY, normalizeOccasion, weatherMatches } from "../../constants/taxonomy.js";
+import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
+import { weatherAdjustedSlots } from "../../features/stylist/standard.js";
 import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
@@ -65,22 +66,10 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // is shared with the closet-sampler so the two can never drift apart.
   const comfortMode = COMFORT_OCCASIONS.has(occasion);
   const baseSlots = OCCASION_SLOTS[occasion] || OCCASION_SLOTS.Casual;
-  const w = (weather || "").toLowerCase();
-  // weatherMatches, not an inline regex: WEATHER_BUCKETS is the one definition
-  // of these ranges, and a private copy here is one that can drift from it.
-  const isHotOrWarm = weatherMatches(w, "Hot", "Warm");
-  const slots = (() => {
-    if (!isHotOrWarm || !baseSlots.required?.layer) return baseSlots;
-    const { layer, ...restRequired } = baseSlots.required;
-    const newOptional = { ...baseSlots.optional, layer: Array.isArray(layer) ? layer : true };
-    const newPromptNote = baseSlots.promptNote
-      ? baseSlots.promptNote.replace(
-          /Blazer.*?(on|required|mandatory).*?\./i,
-          "Layers are OPTIONAL in this heat — skip blazers/coats unless the piece is truly lightweight and unlined."
-        )
-      : baseSlots.promptNote;
-    return { ...baseSlots, required: restRequired, optional: newOptional, promptNote: newPromptNote || baseSlots.promptNote };
-  })();
+  // The hot-weather relaxation of the Work layer rule lives in
+  // features/stylist/standard.js now, so the builder chat and Evaluate look
+  // apply the SAME adjustment Style Me does instead of a copy of it.
+  const slots = weatherAdjustedSlots(baseSlots, weather);
 
 
   // Prompt gets human-readable lines ("No Jeans — none, anywhere…", "Jeans
