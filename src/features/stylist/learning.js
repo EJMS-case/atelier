@@ -352,17 +352,22 @@ export function builtLookLines(logs, wardrobe, { max = 6 } = {}) {
 // The signals Style Me did NOT already receive from App: standing
 // preferences, chat lessons, the trend brief, and the looks she built herself.
 // Memoised on the same cache-invalidation as above.
+// `logs` should be the rows the caller already holds (App fetches them on
+// load and hands them to Style Me as extras.outfitLogs) — passing them keeps
+// the TAP free of any log fetch. Only when absent does this fetch, and
+// fetchOutfitLogs is slim now (2026-09-10: this call sat on the Style Me tap
+// re-downloading 2.2 MB of legacy base64 collages she was waiting on).
 let standingCache = null;
-export async function learnedForStyleMe({ wardrobe = [] } = {}) {
-  const key = (wardrobe || []).length;
+export async function learnedForStyleMe({ wardrobe = [], logs = null } = {}) {
+  const key = `${(wardrobe || []).length}|${Array.isArray(logs) ? logs.length : "fetch"}`;
   if (standingCache && standingCache.key === key && Date.now() - standingCache.at < TTL_MS) return standingCache.value;
-  const [standing, lessons, trendBrief, logs] = await Promise.all([
+  const [standing, lessons, trendBrief, logRows] = await Promise.all([
     loadStandingPreferences().catch(() => []),
     loadChatLessons().catch(() => []),
     loadTrendBrief().catch(() => null),
-    sb.fetchOutfitLogs().catch(() => []),
+    Array.isArray(logs) ? Promise.resolve(logs) : sb.fetchOutfitLogs().catch(() => []),
   ]);
-  const value = { standing, lessons, trendBrief, builtLines: builtLookLines(logs || [], wardrobe) };
+  const value = { standing, lessons, trendBrief, builtLines: builtLookLines(logRows || [], wardrobe) };
   standingCache = { at: Date.now(), key, value };
   return value;
 }

@@ -2,6 +2,60 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Me was slow because every log fetch shipped 2.2 MB of dead collages (#235) — 2026-09-10
+
+### Why
+Owner: *"It's taking a really really long time to load in style me now."*
+Verified live: #232 put `fetchOutfitLogs()` on the Style Me tap
+(`learnedForStyleMe`), the fetch was `select=*`, and `outfit_logs` is 2.2 MB —
+2.1 MB of it is 21 legacy rows whose `collage_url` still holds a full base64
+collage that nothing renders (SavedLookCard rebuilds collages from
+`garment_ids` + `layout_data`; the only `collage_url` readers want the small
+`{mood, styling}` JSON of newer saves). Ten call sites fetch the table, so the
+phone paid 2.2 MB at app load and again on the tap, serially, before the
+model call began.
+
+### Fixed
+- **`fetchOutfitLogs` is slim + sidecar.** One request for every column
+  except `collage_url` (~48 kB), one for `id→collage_url` pairs where the
+  value is not a `data:` URL (~23 kB), merged by `mergeOutfitLogMeta` (pure,
+  tested). Legacy base64 rows read `collage_url: null` — exactly what their
+  readers effectively saw. If the slim select ever hits schema drift it
+  falls back to the old full fetch: slow beats broken. Every caller — App
+  load, Favorites, Planner, Insights, Style Profile, History, Looks — is
+  cured at once.
+- **The Style Me tap fetches no logs at all.** `learnedForStyleMe` takes the
+  rows App already holds (`extras.outfitLogs`) and fetches only when a
+  caller has none.
+- **The trend brief parser was mangling every brief.** A web-search reply
+  arrives as text blocks split around citations; joining them with `\n` and
+  keeping only bullet-initial lines cut every bullet at its first fragment —
+  the stored brief read "• Layer" and "• Go deeper this year:" as complete
+  guidance on every AI surface. Blocks now join with nothing;
+  `parseTrendReply` rejoins continuation lines to their bullet. The stored
+  brief was marked stale so the next app open regenerates it properly.
+
+### Downstream
+- **Efficiency:** 2.2 MB × 2 per session → ~71 kB × 1; cold start sheds
+  2.1 MB too. No prompt or bundle change.
+- **Effectiveness:** the trend guidance every surface reads is whole
+  sentences again.
+- **Speed:** the tap's serial pre-model network work is gone.
+- **Education:** unchanged — same signals, same blocks, now readable.
+
+### Her call, surfaced
+The 21 base64 rows (2.1 MB) are unreachable dead weight server-side.
+Nulling that column in those rows would shrink storage and backups; it
+touches her rows, so it waits for her word.
+
+### Tests
+- `test:selfheal` +14: the merge (null sidecar degrades to null collages,
+  never an empty table; inputs unmutated; the slim column list excludes the
+  heavy column and carries what SavedLookCard / wear stats / builtLookLines
+  read).
+- `test:standard` +4 assertions: citation-split fragments rejoin to their
+  bullet, never become bullets, never vanish.
+
 ## [Unreleased] — The stylist line is written for every piece, not left to a fallback (#234) — 2026-09-10
 
 ### Why
