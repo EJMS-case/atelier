@@ -178,7 +178,7 @@ test("the occasion brief is Style Me's rule, re-cut for one look", () => {
   assert.match(work, /^WORK BRIEF \(how she has asked[^)]*\): WORK: Business professional/);
   assert.match(work, /She keeps these out of Work: .*Sandals.*open sandal-form shoe/);
   assert.match(work, /Work calls for a bag/);
-  assert.match(work, /is the default here/);
+  assert.match(work, /is the office default/);
   assert.doesNotMatch(work, /2 of 3 looks/);
   const dinner = occasionBrief(["Dinner"]);
   assert.match(dinner, /A dress is a strong option/);
@@ -445,4 +445,58 @@ test("Style Me carries her standing preferences and chat lessons", async () => {
   assert.match(dynamicBody, /Told to her stylist in conversation/);
   assert.match(staticPreamble, /BLAZERS ARE WORN OPEN/);
   assert.match(staticPreamble, /written TO her: "you", "your"/);
+});
+
+
+test("office-coverage completion: the layer is ADDED, never demanded — and it picks the right one for the weather", async () => {
+  const { completeOfficeCoverage, runAllChecks } = await import("../src/utils/styling-validator.js");
+  const tank = pick("Tops", "Tanks", { color: "Burgundy", material: "silk", formality: 5 });
+  const longSleeve = pick("Tops", "Blouses", { color: "Navy", material: "silk", formality: 5, name: "Long-sleeve silk blouse" });
+  const woolBlazer = pick("Outerwear", "Blazers", { color: "Navy", material: "wool", formality: 6 });
+  const linenBlazer = pick("Outerwear", "Blazers", { color: "Ivory", material: "linen", formality: 5, name: "Unlined linen blazer" });
+  const fineCardigan = pick("Knits", "Cardigans", { color: "Blush", knit_weight: "Fine/Summer", material: "alpaca" });
+  const chunky = pick("Knits", "Cardigans", { color: "Camel", knit_weight: "Chunky/Winter", material: "wool" });
+  const bottoms = trouser({ material: "cotton" });
+  const pool = [tank, longSleeve, woolBlazer, linenBlazer, fineCardigan, chunky, bottoms, pump(), tote()];
+  const idMap = Object.fromEntries(pool.map(it => [it.id, it.id]));
+  const look = (ids) => ({ looks: [{ items: ids.map(id => ({ id })), vibe: "", silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "" }] });
+  const shoes = pool[7].id, bag = pool[8].id;
+  const ctx = (weather) => ({ occasionSlots: weatherAdjustedSlots(OCCASION_SLOTS.Work, weather), occasion: "Work", weather });
+
+  // Cool: the wool blazer is the office default and it is eligible → added.
+  const cool = completeOfficeCoverage(look([tank.id, bottoms.id, shoes, bag]), idMap, pool, ctx("Cool (40-54°F)"));
+  assert.ok(cool, "a layer must be added");
+  const coolAdded = cool.looks[0].items.map(i => i.id).find(id => ![tank.id, bottoms.id, shoes, bag].includes(id));
+  assert.ok([woolBlazer.id, linenBlazer.id].includes(coolAdded), `a blazer first at the office, got ${coolAdded}`);
+  assert.deepEqual(runAllChecks(cool, idMap, pool, [], OCCASION_SLOTS.Work, "Work", "Cool (40-54°F)").filter(f => f.hard || f.type === "shoulder_coverage"), []);
+
+  // Hot: the wool blazer is out; the linen blazer or fine cardigan goes on; never the chunky knit.
+  const hot = completeOfficeCoverage(look([tank.id, bottoms.id, shoes, bag]), idMap, pool, ctx("Hot (85°F+)"));
+  assert.ok(hot, "a light layer must be added in the heat");
+  const hotAdded = hot.looks[0].items.map(i => i.id).find(id => ![tank.id, bottoms.id, shoes, bag].includes(id));
+  assert.ok([linenBlazer.id, fineCardigan.id].includes(hotAdded), `the lightest layer she owns, got ${hotAdded}`);
+  assert.notEqual(hotAdded, chunky.id);
+  assert.notEqual(hotAdded, woolBlazer.id);
+
+  // A long sleeve stands alone — nothing added. Casual — nothing added.
+  assert.equal(completeOfficeCoverage(look([longSleeve.id, bottoms.id, shoes, bag]), idMap, pool, ctx("Cool (40-54°F)")), null);
+  assert.equal(completeOfficeCoverage(look([tank.id, bottoms.id, shoes, bag]), idMap, pool, { ...ctx("Cool (40-54°F)"), occasion: "Casual", occasionSlots: OCCASION_SLOTS.Casual }), null);
+
+  // A layer used by another look in the response is not reused (HC4).
+  const two = completeOfficeCoverage(
+    { looks: [look([tank.id, bottoms.id, shoes, bag]).looks[0], { items: [{ id: longSleeve.id }, { id: woolBlazer.id }, { id: linenBlazer.id }, { id: fineCardigan.id }, { id: chunky.id }], vibe: "", silhouette: "", focal_point: "", color_strategy: "", texture_story: "", rationale: "" }] },
+    idMap, pool, ctx("Cool (40-54°F)"));
+  assert.equal(two, null, "every eligible layer is spoken for → ships as-is, soft");
+
+  // Nothing eligible in the pool → null, the look ships as-is (soft, not a wall).
+  const bare = [tank, bottoms, pool[7], pool[8]];
+  assert.equal(completeOfficeCoverage(look([tank.id, bottoms.id, shoes, bag]), Object.fromEntries(bare.map(it => [it.id, it.id])), bare, ctx("Cool (40-54°F)")), null);
+});
+
+test("a light long sleeve survives a Hot pool — it is the office top that needs no layer", async () => {
+  const { filterByWeather } = await import("../src/utils/item-helpers.js");
+  const silk = pick("Tops", "Blouses", { color: "Navy", material: "silk", name: "Long-sleeve silk blouse" });
+  const cotton = pick("Tops", "Blouses", { color: "White", material: "cotton", name: "Long-sleeve cotton shirt" });
+  const ponte = pick("Tops", "Tops", { color: "Black", material: "ponte", name: "Long sleeve ponte top" });
+  assert.deepEqual(filterByWeather([silk, cotton, ponte], "Hot (85°F+)").map(it => it.id), [silk.id]);
 });

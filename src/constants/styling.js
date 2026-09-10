@@ -75,8 +75,12 @@ export const STYLE_PREFS = {
 //     sandals "for dinners in warm weather").
 //   · promptNote — injected into the styling prompt's REQUEST block.
 //   · required.bag — read by the validator's (soft) checkBag.
-//   · required.layer — read by stylist.js + the matrix scripts, which demote
-//     the layer to optional on hot/warm days.
+//   · required.layer — marks the occasions whose brief carries the office
+//     layer. Read by weatherAdjustedSlots (features/stylist/standard.js),
+//     which in Hot/Warm appends the "lightest layer she owns" note — it no
+//     longer demotes the layer (2026-09-10: her dress code holds in every
+//     weather) — and by completeOfficeCoverage via the Work / Work Dinner
+//     occasion names.
 // The old required.top/bottom/shoes/dress arrays and optional.* maps were
 // never read by any code — slot COMPOSITION is enforced by the validator's
 // structural checks (lower/upper half, shoes) and described by promptNote.
@@ -95,7 +99,7 @@ export const OCCASION_SLOTS = {
     // down in Hot/Warm — a 2026-08 workaround for retry walls that quietly
     // deleted her dress code every summer. The office is air-conditioned; heat
     // changes WHICH layer, never whether.
-    promptNote: "WORK: Business professional office — polished and current, never stiff or corporate; everyday office through executive meetings and interviews. She should read powerful and effortless: sharp tailoring, considered layering, one quiet point of interest. HOW SHE DRESSES FOR THE OFFICE, in every weather: a long-sleeve top or a long-sleeved dress stands on its own; a short-sleeve top, a tank, or anything sleeveless takes a knit or a blazer over it — worn open, always — and in heat that means the lightest layer she owns (a fine cardigan, an unlined or linen blazer), never no layer. Blazer or structured layer on at least 2 of 3 looks. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind. Check each piece's own notes for how she wears it.",
+    promptNote: "WORK: Business professional office — polished and current, never stiff or corporate; everyday office through executive meetings and interviews. She should read powerful and effortless: sharp tailoring, considered layering, one quiet point of interest. HOW SHE DRESSES FOR THE OFFICE, in every weather: a long-sleeve top or a long-sleeved dress stands on its own; a short-sleeve top, a tank, or anything sleeveless takes a knit or a blazer over it — worn open, always — and in heat that means the lightest layer she owns (a fine cardigan, an unlined or linen blazer), never no layer. A blazer or structured layer is the office default; a long sleeve alone is the one look that doesn't need it. Tailored trousers, pencil/midi skirts, ponte pants. Clean, dark, well-fit jeans ARE allowed (NOT ripped, distressed, or shorts). NO evening or cocktail dresses, NO gowns, NO formal-separates. No casual fabrics, no sneakers, no shorts of any kind. Check each piece's own notes for how she wears it.",
   },
   "Work Dinner": {
     // No Occasionwear pulled here per the user — Work Dinner stays this side

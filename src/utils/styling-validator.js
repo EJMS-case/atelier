@@ -1308,6 +1308,71 @@ export function salvageByAddingIncludes(parsed, failures, idMap, allItems, ctx =
   return addedAny ? { ...parsed, looks } : null;
 }
 
+// ── Office-coverage completion ───────────────────────────────────────────────
+// Her office is business professional, in every weather, and the check for
+// it is SOFT (her instruction: no hard rules). A soft failure never reaches
+// the model unless a hard failure forces a retry — so on its own it would let
+// a bare-shouldered Work look ship in October exactly as it did in July. The
+// answer is not a rule; it is the same move a stylist makes in the fitting
+// room: add the layer. When a Work / Work Dinner look has a short-sleeve,
+// tank, or sleeveless top and no layer, add the best eligible Knits /
+// Outerwear piece from the pool — a blazer first (the office default), then a
+// cardigan, then a jacket — that survives the weather, occasion, and exclusion
+// checks for that look, isn't used elsewhere in the response, and clears the
+// finding. Runs on every look the generator is about to ship (streamed or
+// final) and returns null when nothing changed, so a long-sleeve look is
+// untouched and a pool with no viable layer ships the look as-is (soft).
+const LAYER_RANK = (item) =>
+  isBlazerItem(item) ? 0
+  : item.category === "Knits" && item.subcategory === "Cardigans" ? 1
+  : item.subcategory === "Jackets" ? 2
+  : item.category === "Outerwear" ? 3
+  : 4;
+
+export function completeOfficeCoverage(parsed, idMap, allItems, ctx = {}) {
+  const { activeExclusions = [], occasionSlots = {}, occasion = "Work", weather = "", forceIncludeIds = [], onlyRescueIds = [], usedShortIds: externalUsed = null } = ctx;
+  if (!parsed?.looks?.length) return null;
+  if (!["Work", "Work Dinner"].includes(occasion)) return null;
+
+  const usedShortIds = new Set(externalUsed ? [...externalUsed] : []);
+  parsed.looks.forEach(l => (l.items || []).forEach(item => usedShortIds.add(cleanLookItemId(item))));
+
+  // Candidate layers, best first, each already vetted per-item against the
+  // weather / exclusion / occasion rules (a wool blazer never reaches a Hot
+  // look; a fine cardigan does — see isLightCardigan).
+  const byId = itemIdIndex(allItems);
+  const candidates = [];
+  for (const [shortId, realId] of Object.entries(idMap)) {
+    const item = byId.get(String(realId));
+    if (!item) continue;
+    if (item.category !== "Outerwear" && item.category !== "Knits") continue;
+    if (item.category === "Knits" && item.subcategory !== "Cardigans") continue; // a pullover is a top, not a layer over one
+    if (itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions, occasionSlots, forceIncludeIds })) continue;
+    candidates.push({ shortId, rank: LAYER_RANK(item) });
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.rank - b.rank);
+
+  const looks = parsed.looks.map(l => ({ ...l, items: Array.isArray(l.items) ? [...l.items] : l.items }));
+  let addedAny = false;
+  looks.forEach((look, idx) => {
+    if (!Array.isArray(look.items)) return;
+    if (checkShoulderCoverage({ looks: [look] }, idMap, allItems, occasion).length === 0) return;
+    for (const { shortId } of candidates) {
+      if (usedShortIds.has(shortId)) continue;
+      const candidateLook = { ...look, items: [...look.items, { id: shortId, role: "supporting" }] };
+      const check = runAllChecks({ looks: [candidateLook] }, idMap, allItems, activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds);
+      if (check.some(f => f.hard)) continue;
+      if (check.some(f => f.type === "shoulder_coverage")) continue;
+      looks[idx] = candidateLook;
+      usedShortIds.add(shortId);
+      addedAny = true;
+      break;
+    }
+  });
+  return addedAny ? { ...parsed, looks } : null;
+}
+
 // ── Normalize response ───────────────────────────────────────────────────────
 // Handle both old format (items as string[]) and new format (items as {id, role}[])
 
@@ -1511,6 +1576,19 @@ export async function generateValidatedLooks({
   let lastParsed = null;
   let lastStrippedCount = 0;
 
+  // Every look that ships passes through the office-coverage completion
+  // (see completeOfficeCoverage): the preference is soft, so this is where it
+  // gets honored — by adding the layer, never by refusing the look.
+  const completionCtx = { activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds };
+  const finish = (p) => {
+    const completed = completeOfficeCoverage(p, idMap, allItems, completionCtx);
+    if (completed) {
+      console.warn("[Atelier Validator] Office-coverage completion — added a layer over a short-sleeve/sleeveless top at the office.");
+      logAiError("stylist_outfit:office_layer", { occasion, weather }, "added the office layer to a look that lacked it");
+    }
+    return finish(completed || p, idMap, occasion);
+  };
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     // Append retry failures to the dynamic body — never to the cached preamble.
     let dynamicText = dynamicBody;
@@ -1644,14 +1722,20 @@ export async function generateValidatedLooks({
                 ...checkCoordSets(candidate, idMap, allItems),
                 ...checkCompleteSets(candidate, idMap, allItems),
                 ...checkHosieryPairing(candidate, idMap, allItems),
-                ...checkShoulderCoverage(candidate, idMap, allItems, occasion, weather),
+                // Office coverage is SOFT and is honored by COMPLETION below,
+                // not by holding the look back.
                 ...checkItemCount(candidate, idMap, allItems).filter(f => f.includes("minimum")),
               ];
               // Also guard against duplicating items already shown.
-              const newIds = (candidate.looks[0]?.items || []).map(cleanLookItemId);
-              const hasDupe = newIds.some(id => streamedIds.has(id) && !forcedShortIds.has(id));
+              const rawIds = (candidate.looks[0]?.items || []).map(cleanLookItemId);
+              const hasDupe = rawIds.some(id => streamedIds.has(id) && !forcedShortIds.has(id));
               if (cFailures.length === 0 && !hasDupe) {
-                const resolved = resolveIds(candidate, idMap, occasion);
+                // A streamed look survives to the screen, so the office layer
+                // has to be added HERE, before she sees it — the final pass
+                // makes the same deterministic choice, so the two agree.
+                const toShow = completeOfficeCoverage(candidate, idMap, allItems, { ...completionCtx, usedShortIds: streamedIds }) || candidate;
+                const newIds = (toShow.looks[0]?.items || []).map(cleanLookItemId);
+                const resolved = resolveIds(toShow, idMap, occasion);
                 newIds.forEach(id => streamedIds.add(id)); // short IDs for cross-look dupe check
                 onLook(resolved.looks[0]);
               }
@@ -1732,7 +1816,7 @@ export async function generateValidatedLooks({
 
     if (hardFailures.length === 0) {
       // Passed all hard checks — resolve IDs and return
-      return resolveIds(parsed, idMap, occasion);
+      return finish(parsed, idMap, occasion);
     }
 
     lastFailures = failures;
@@ -1806,7 +1890,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:item_swap",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by swapping offending items for eligible ones");
-        return resolveIds(swapped, idMap, occasion);
+        return finish(swapped, idMap, occasion);
       }
       // Swapping helped but didn't fully clear the board — carry the swapped
       // looks + fresh failures into the drop salvage below.
@@ -1830,7 +1914,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:item_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by dropping offending items");
-        return resolveIds(trimmed, idMap, occasion);
+        return finish(trimmed, idMap, occasion);
       }
       // Item-dropping helped but didn't fully clear the board — hand the
       // trimmed looks + fresh failure list to the salvage steps below.
@@ -1854,7 +1938,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:include_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by adding the include-toggle layer to a look that lacked it");
-        return resolveIds(completed, idMap, occasion);
+        return finish(completed, idMap, occasion);
       }
       // The layer was added but other hard failures remain — hand the
       // completed looks + fresh failure list to the shoe salvage below.
@@ -1880,7 +1964,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:shoe_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by adding an eligible shoe to a shoe-less look");
-        return resolveIds(completed, idMap, occasion);
+        return finish(completed, idMap, occasion);
       }
       // Shoes were added but other hard failures remain — hand the completed
       // looks + fresh failure list to the look-drop salvage below.
@@ -1914,7 +1998,7 @@ export async function generateValidatedLooks({
         const salvaged = { ...lastParsed, looks: surviving };
         delete salvaged.notes;
         console.warn(`[Atelier Validator] Salvaging response — dropped ${dropped} look(s):`, dropReasons);
-        return resolveIds(salvaged, idMap, occasion);
+        return finish(salvaged, idMap, occasion);
       }
     }
   }
