@@ -17,7 +17,7 @@
 // have shipped.
 //
 // ── How the gate is opened ───────────────────────────────────────────────────
-// lib/auth.js hands @supabase/supabase-js `storageKey: "atelier:auth"`, so a
+// lib/auth.js hands @supabase/auth-js `storageKey: "atelier:auth"`, so a
 // session seeded into localStorage under that key is restored on boot exactly
 // as a real one would be. `expires_at` is set far in the future so the client
 // never tries to refresh. Nothing here touches the real project: every

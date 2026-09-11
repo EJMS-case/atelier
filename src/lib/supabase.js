@@ -1,6 +1,6 @@
 // ── SUPABASE CLIENT ──────────────────────────────────────────────────────────
-// Hand-rolled REST client for data (no @supabase/supabase-js here — that is
-// used in auth.js for the token lifecycle only). One public `sb` object
+// Hand-rolled REST client for data (no Supabase SDK here — @supabase/auth-js
+// is used in auth.js for the token lifecycle only). One public `sb` object
 // centralizes every table + storage operation.
 //
 // Headers are built PER REQUEST, not once at module load. A module-level

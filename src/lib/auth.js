@@ -1,9 +1,18 @@
 // ── AUTH ─────────────────────────────────────────────────────────────────────
 // The data layer stays hand-rolled (see supabase.js), but the token lifecycle
 // does NOT: refresh-token handling is where home-grown auth produces
-// "logged out for no reason at 2am" bugs. @supabase/supabase-js is used here
-// for `auth` only — sign-in, session persistence, silent refresh, cross-tab
+// "logged out for no reason at 2am" bugs. @supabase/auth-js (GoTrueClient) is
+// used here for sign-in, session persistence, silent refresh and cross-tab
 // sync — and nowhere else.
+//
+// It is auth-js DIRECTLY, not @supabase/supabase-js: createClient() also
+// instantiates the PostgREST, Realtime (+ Phoenix), Storage and Functions
+// clients, ~110 kB of JavaScript in the boot chunk that nothing here calls —
+// data goes through the REST client in supabase.js. supabase-js's own auth
+// client is `class SupabaseAuthClient extends AuthClient` with the options
+// below passed straight through, so the session it stores (localStorage,
+// `atelier:auth`) is byte-identical: an existing session on her phone is
+// restored, not re-asked for.
 //
 // getAccessToken() is synchronous on purpose: supabase.js calls it inside
 // header construction on every request, and the client keeps the current
@@ -11,19 +20,20 @@
 // the anon key so a signed-out client still behaves exactly as it did before
 // login existed.
 
-import { createClient } from "@supabase/supabase-js";
+import { GoTrueClient } from "@supabase/auth-js";
 import { SUPABASE_URL, SUPABASE_KEY } from "./supabaseConfig.js";
 
-const client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    // The app never receives auth callbacks in the URL (no magic link, no
-    // OAuth), and leaving this on makes the client parse every page load.
-    detectSessionInUrl: false,
-    storageKey: "atelier:auth",
-  },
+const auth = new GoTrueClient({
+  url: `${SUPABASE_URL}/auth/v1`,
+  headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  persistSession: true,
+  autoRefreshToken: true,
+  // The app never receives auth callbacks in the URL (no magic link, no
+  // OAuth), and leaving this on makes the client parse every page load.
+  detectSessionInUrl: false,
+  storageKey: "atelier:auth",
 });
+const client = { auth };
 
 // Mirror of the current session, kept in sync by onAuthStateChange below.
 // Read synchronously by getAccessToken().
