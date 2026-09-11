@@ -56,7 +56,7 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
     // is hidden: worn/scheduled looks are badged instead (the old behavior of
     // filtering them out made saved outfits look lost). The planner signatures
     // below drive the "Scheduled" badge and the "Ready to wear" filter chip.
-    sb.fetchOutfitLogs()
+    sb.fetchOutfitLogs({ withCollageMeta: true })
       .then(data => { setLogs(data); setLoading(false); })
       .catch(() => setLoading(false));
     fetchAllPlans()

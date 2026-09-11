@@ -2,6 +2,124 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The app-open path, measured: a research call fired on every cold open, 118 kB of unused SDK in the boot chunk, and the sweep that stopped at one closet (#239) — 2026-09-11
+
+### Why
+Owner, standing: *"Don't stop until the app runs quickly and smoothly."*
+The timing rows #238 added are the ground truth for a slow tap, and there
+are none yet — she has not tapped Style Me since #238 deployed — so this
+session measured the other half of "slow": everything between opening the
+app and the first tap. Read off the built bundle (source-map attribution),
+the live rows, the edge logs, and the code path; nothing here is a guess.
+
+1. **A web-search research call fired on every cold open that had a key.**
+   `sb._settingsRow` answers the mount-time settings batch, and it answered
+   ANY key from the batch map with `map[key] ?? null` — but the
+   `key=in.(…)` list never contained `trend_brief`. So the first
+   `loadTrendBrief()` of every page load returned null with no request
+   made, `trendBriefIsStale(null)` is true, and `maybeRefreshTrendBrief`
+   launched `generateTrendBrief` — Sonnet, up to four web searches, up to
+   three `pause_turn` rounds, 30–60 s — at boot, alongside the wardrobe
+   fetch, the grid's images and her first tap. On the phone it usually died
+   when she left the screen (iOS kills in-flight fetches on background),
+   which is the "auto-refresh did not land" #237 attributed to the phone
+   alone; the call should never have been firing. The same hole hit
+   `style_notes_seen`: its miss re-offered every seed each session (two
+   spurious settings writes on the first Style Me tap).
+2. **The boot chunk carried all of `@supabase/supabase-js` for auth alone.**
+   `lib/auth.js` called `createClient()` for the token lifecycle; that also
+   instantiates the PostgREST, Realtime (+ Phoenix), Storage and Functions
+   clients — ~110 kB of JavaScript nothing calls, because data goes through
+   the hand-rolled REST client. Source-map attribution of the 602 kB main
+   chunk: react-dom 131 kB, auth-js 103 kB, realtime 33 kB, phoenix 26 kB,
+   storage 22 kB, postgrest 16 kB, supabase-js 11 kB.
+3. **The stylist-line sweep stopped at the closet she was standing in.**
+   #234's writer and the AI Readiness audit iterated `items` (the active
+   closet); the 21 Arizona pieces without a line were never queued and the
+   audit could not show them. NYC: 460 pieces, 0 without a line. Arizona:
+   81 pieces, 21 without.
+
+### Fixed
+- **`lib/supabase.js` — `SETTINGS_BATCH_KEYS`.** One exported list of every
+  key the app reads at mount (`style_fingerprint`, `rotation_state`,
+  `brand_discovery`, `style_notes`, `style_notes_seen`, `chat_lessons`,
+  `trend_brief`) drives both the `key=in.(…)` request and `_settingsRow`'s
+  eligibility: a key outside the list falls through to its own GET at once;
+  a key inside it is served from the batch exactly once, then hits the
+  network as before. `npm run test:selfheal` pins all four paths (batched
+  hit, batched miss, out-of-list key, second read).
+- **`features/stylist/trendBrief.js` + `App.jsx` + `utils/idle.js` (new).**
+  The mount refresh is deferred off the boot path (`runWhenIdle`, ≥ 20 s
+  after load, then the browser's idle callback where it exists), attempts
+  at most once per device per half-day (`shouldAttemptTrendRefresh`, stamp
+  in localStorage — a call that died on the phone is not re-fired on the
+  next open, and the next), and uses two web searches instead of four (the
+  prompt asks for two sources). The Style Profile button is unchanged and
+  still refreshes on demand.
+- **`lib/auth.js` — `@supabase/auth-js` directly.** `new GoTrueClient(...)`
+  with the exact options supabase-js passed through (same `storageKey`, so
+  the session on her phone is restored, not re-asked). `@supabase/supabase-js`
+  is no longer a dependency. Boot chunk 601.76 kB → 484.11 kB (gzip 176.31
+  → 143.13 kB). The signed-in render walk, which seeds a session under
+  `atelier:auth`, is the proof it still restores.
+- **`features/profile/StyleProfileView.jsx`.** AI Readiness and "Write
+  stylist lines" read the wardrobe (both rooms); the card says so. The 21
+  Arizona pieces are now on her button.
+- **`lib/supabase.js` — `fetchOutfitLogs({ withCollageMeta })`.** The
+  collage-meta sidecar (the unindexed `collage_url=not.like.data:*` scan)
+  is opt-in; only Saved, History and Favorites — the three screens whose
+  `parseMeta` reads it — ask for it. App's mount, the planner, Insights,
+  Style Profile and the learning path make one request instead of two.
+  Rows without the sidecar read `collage_url: null`, the shape a failed
+  sidecar already produced, so no reader changes.
+- **`App.jsx` — `sb.ensureBucket()` once per device** (localStorage flag),
+  not a discarded POST on every cold open.
+- **`constants/color.js` — `familyForColorString` memoised**, shade
+  regexes compiled once. It is the inner loop of Home's colour stories
+  (`autoColorPairs` → `comboOwnership`), the closet sort comparator and
+  every colour chip, and it built ~54 `new RegExp` per call, tens of
+  thousands of times per Home render. Exact same answers (`test:colors`
+  asserts the cached path against the first resolution across every branch).
+
+### Measured, decided, not changed — the next levers, in order
+- **Style Me's tap itself.** The request has no `system` field (the
+  comment claiming the browser-direct header forbids one is stale — the
+  builder chat and Evaluate both send `system` with `cache_control`); one
+  cache breakpoint, on the preamble; the ~12k-token inventory sits at the
+  END of the uncached block, after recent-combos, the shuffled briefs and
+  the `Seed:` line; the sheets follow it. A cross-tap cache would need the
+  order `tools → preamble → inventory → sheets → volatile tail` AND a
+  stable sample order — and `closet-sampler.js` reshuffles per tap on
+  purpose (`hashString(userId + Date.now())`, "total determinism would
+  freeze the inventory order between taps"), with the rotation memory
+  changing membership after every tap. It would pay only on an identical
+  second tap inside five minutes, at the cost of the variety she asked
+  for. Left until her `stylist_outfit:timing` rows say where the seconds
+  go; `usage.output_tokens` and `firstTokenMs` decide between a shorter
+  output contract and the cache.
+- **The `wardrobe_items` load** is `select=*` over both closets (689 kB of
+  JSON before gzip). Thinning it is the biggest remaining byte win on
+  cold open, but `mergeItems` + `saveLocalItems` would cache partial rows
+  and `sb.upsert` round-trips state, so a thinned row could blank real
+  columns on her next edit. Needs a PATCH-only write path first.
+- Home's per-mount wear refresh (3 GETs per return to Home, now 2) is the
+  documented way a just-logged outfit appears; a TTL needs invalidation at
+  every write site. Not touched.
+
+### Downstream
+- **Efficiency:** one fewer Anthropic call (and up to four web searches)
+  per cold open; `outfit_logs` GETs halved on five of eight surfaces; one
+  fewer POST per open; 33 kB less gzip on the boot chunk. Tokens on the
+  Style Me path: unchanged (the cached preamble is byte-stable).
+- **Effectiveness:** the stylist reads the Arizona pieces on every trip
+  day — they can now get their lines. The trend brief still refreshes
+  itself when stale, just not at the moment she is waiting for the grid.
+- **Speed:** the boot path no longer carries a 30–60 s research call or
+  118 kB of SDK; Home's colour stories stop recompiling regexes per item;
+  the planner, Insights and Style Profile fetch one log request, not two.
+- **Education:** nothing learned is lost — `style_notes_seen` now reads
+  correctly, so seeds are offered once and a deleted seed stays deleted.
+
 ## [Unreleased] — Style Me could hang forever, every passing generation threw, and each tap re-pulled the closet's photos (#238) — 2026-09-11
 
 ### Why

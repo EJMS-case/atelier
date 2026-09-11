@@ -129,6 +129,17 @@ const SHADE_TO_FAMILY = (() => {
 // filter as Red. Insertion order can't be relied on for that, so sort here.
 const SHADE_ENTRIES_BY_LENGTH = Object.entries(SHADE_TO_FAMILY)
   .sort((a, b) => b[0].length - a[0].length);
+// Compiled once. This resolver is the inner loop of the Home screen's colour
+// stories, the closet sort comparator and every colour-filter chip — it ran
+// ~54 `new RegExp` per call, tens of thousands of times per Home render.
+const SHADE_MATCHERS = SHADE_ENTRIES_BY_LENGTH.map(([shade, family]) => [
+  new RegExp(`\\b${shade.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`), family,
+]);
+// Memo keyed on the raw string: a closet has a few hundred distinct colour
+// strings, and the same ones are resolved over and over. Bounded so a
+// pathological caller can't grow it without end.
+const FAMILY_CACHE = new Map();
+const FAMILY_CACHE_MAX = 4000;
 
 // Free-form color string → family. Hits the SHADE_TO_FAMILY table first,
 // then falls back to keyword regex for items whose `color` is something
@@ -139,6 +150,15 @@ const ACHROMATIC = new Set(["Black", "Gray", "White", "Neutrals"]);
 
 export function familyForColorString(color) {
   if (!color) return "";
+  const hit = FAMILY_CACHE.get(color);
+  if (hit !== undefined) return hit;
+  const out = resolveFamily(color);
+  if (FAMILY_CACHE.size >= FAMILY_CACHE_MAX) FAMILY_CACHE.clear();
+  FAMILY_CACHE.set(color, out);
+  return out;
+}
+
+function resolveFamily(color) {
   // Hyphens/underscores normalize to spaces so a compound shade matches in
   // every spelling ("black-cherry" → "black cherry"); without this the shade
   // loop below finds only the bare "cherry" inside it and returns Red.
@@ -148,8 +168,8 @@ export function familyForColorString(color) {
   // Word-boundary shade lookup. A chromatic hit wins immediately; achromatic
   // hits are only used if NO chromatic colour appears anywhere in the string.
   let achro = "";
-  for (const [shade, family] of SHADE_ENTRIES_BY_LENGTH) {
-    if (new RegExp(`\\b${shade.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(c)) {
+  for (const [matcher, family] of SHADE_MATCHERS) {
+    if (matcher.test(c)) {
       if (!ACHROMATIC.has(family)) return family;
       if (!achro) achro = family;
     }

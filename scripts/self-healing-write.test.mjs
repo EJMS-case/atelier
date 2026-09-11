@@ -9,7 +9,7 @@
 // Run: npm run test:selfheal
 
 import { selfHealingWrite, MAX_STRIP_ATTEMPTS } from "../src/lib/selfHealingWrite.js";
-import { mergeOutfitLogMeta, OUTFIT_LOG_COLUMNS } from "../src/lib/supabase.js";
+import { sb, mergeOutfitLogMeta, OUTFIT_LOG_COLUMNS, SETTINGS_BATCH_KEYS } from "../src/lib/supabase.js";
 
 let passed = 0, failed = 0;
 function assert(cond, label) {
@@ -177,6 +177,60 @@ section("mergeOutfitLogMeta");
   for (const c of ["id", "garment_ids", "date_worn", "occasion", "layout_data", "source"]) {
     assert(cols.includes(c), `slim list carries ${c} — SavedLookCard, wear stats, and builtLookLines read it`);
   }
+}
+
+// ── The user_settings mount batch (2026-09-11) ───────────────────────────────
+// `_settingsRow` answered ANY key from the batch map with `map[key] ?? null`,
+// so the first read of a key outside the key=in.(…) list — the trend brief —
+// returned null with no request made. loadTrendBrief() read null at every app
+// open, and a web-search research call fired on every cold open with a key.
+// A GET-capable stub: the one above JSON.parses a body every request has.
+function stubGet(responses) {
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method || "GET" });
+    const r = responses[calls.length - 1];
+    if (!r) throw new Error(`unscripted call #${calls.length}: ${url}`);
+    return { ok: r.status === undefined || r.status < 400, status: r.status ?? 200, json: async () => r.json };
+  };
+  return calls;
+}
+section("settings batch");
+{
+  assert(SETTINGS_BATCH_KEYS.includes("trend_brief"), "the trend brief rides the mount batch");
+  assert(SETTINGS_BATCH_KEYS.includes("style_notes_seen"), "style_notes_seen rides the mount batch (its miss re-offered every seed each session)");
+  const brief = { text: "• Open blazer.", season: "fall 2026", generated_at: "2026-09-11T00:00:00Z" };
+  const calls = stubGet([
+    { json: [{ key: "trend_brief", value: JSON.stringify(brief) }, { key: "rotation_state", value: "{\"looks\":[]}" }] },
+    { json: [{ value: "[\"x\"]" }] },
+    { json: [{ value: JSON.stringify(brief) }] },
+  ]);
+  const got = await sb.getSettingJson("trend_brief");
+  assert(calls.length === 1 && /key=in\.\(/.test(calls[0].url), "the first read issues the one batch GET");
+  for (const k of SETTINGS_BATCH_KEYS) assert(calls[0].url.includes(k), `the batch asks for ${k}`);
+  assert(got && got.text === brief.text, "a batched key is served from the batch — not null");
+  const other = await sb.getSettingJson("not_a_mount_key");
+  assert(calls.length === 2 && /key=eq\.not_a_mount_key/.test(calls[1].url), "a key outside the batch takes its own GET at once");
+  assert(JSON.stringify(other) === '["x"]', "…and returns the row");
+  const again = await sb.getSettingJson("trend_brief");
+  assert(calls.length === 3 && /key=eq\.trend_brief/.test(calls[2].url), "the second read of a batched key hits the network (refresh flows stay live)");
+  assert(again && again.season === "fall 2026", "…and returns the row");
+  const missing = await sb.getSettingJson("chat_lessons");
+  assert(calls.length === 3 && missing === null, "a batched key with no row reads null from the batch, no extra request");
+}
+
+// ── The collage sidecar is opt-in (2026-09-11) ───────────────────────────────
+section("fetchOutfitLogs sidecar");
+{
+  const rows = [{ id: "a", garment_ids: ["1"], date_worn: "2026-09-01" }];
+  let calls = stubGet([{ json: rows }]);
+  const slim = await sb.fetchOutfitLogs();
+  assert(calls.length === 1, "by default only the slim request is made");
+  assert(slim.length === 1 && slim[0].collage_url === null, "rows still carry collage_url (null) so every reader keeps its shape");
+  calls = stubGet([{ json: rows }, { json: [{ id: "a", collage_url: "{\"mood\":\"x\"}" }] }]);
+  const full = await sb.fetchOutfitLogs({ withCollageMeta: true });
+  assert(calls.length === 2 && /collage_url=not\.like\.data/.test(calls[1].url), "withCollageMeta adds the sidecar");
+  assert(full[0].collage_url === "{\"mood\":\"x\"}", "…and merges it in");
 }
 
 console.log(`\nselfheal: ${passed} passed, ${failed} failed`);

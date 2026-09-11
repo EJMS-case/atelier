@@ -22,6 +22,17 @@ import { seasonForDate } from "../../utils/wardrobe-coverage.js";
 
 export const TREND_BRIEF_KEY = "trend_brief";
 const MAX_AGE_DAYS = 35;
+// The mount-time refresh attempts at most once per device per half-day. A
+// research call that dies on the phone (iOS kills in-flight fetches when the
+// app backgrounds) must not be re-fired on the next open, and the next, each
+// costing the searches again; one attempt, then the Style Profile button or
+// the next half-day. Per device in localStorage — a failure here is local.
+export const REFRESH_ATTEMPT_KEY = "atelier_trend_brief_attempt_at";
+export const REFRESH_RETRY_MS = 12 * 60 * 60 * 1000;
+export function shouldAttemptTrendRefresh(lastAttemptMs, nowMs) {
+  const last = Number(lastAttemptMs);
+  return !Number.isFinite(last) || last <= 0 || nowMs - last >= REFRESH_RETRY_MS;
+}
 
 export function briefSeasonLabel(date = new Date()) {
   return `${seasonForDate(date)} ${date.getFullYear()}`;
@@ -82,7 +93,9 @@ export async function generateTrendBrief({ apiKey, now = new Date() } = {}) {
 
 Use web search to verify against at least two current, credible fashion sources (runway reviews, editors' season guides). Then write the brief TO her — "you", "your" — as 6 to 9 lines, each starting with "•", each ≤ 24 words, covering: silhouette and proportion, how layers are worn (she always wears a blazer open), colour depth and pairings, shoes, bags, textures and fabrics, and one or two things that now read dated. Concrete and wearable, never a shopping list, no brand-dropping beyond the register above. No headers, no prose outside the bullets. End with one line "Sources: " followed by the source domains only.`;
 
-  const TOOLS = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
+  // Two searches satisfy the "at least two sources" the prompt asks for; four
+  // made the call long enough to die on a phone before the brief was written.
+  const TOOLS = [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }];
   const baseBody = { model: MODEL_STRONG, max_tokens: 8000 };
   let messages = [{ role: "user", content: prompt }];
   let body = null;
@@ -123,12 +136,17 @@ Use web search to verify against at least two current, credible fashion sources 
   return brief;
 }
 
-// Mount-time refresh: best-effort, one call per season (or ~5 weeks). Returns
-// the brief in force (fresh or existing) and never throws.
+// Mount-time refresh: best-effort, one call per season (or ~5 weeks), one
+// attempt per device per half-day. Returns the brief in force (fresh or
+// existing) and never throws.
 export async function maybeRefreshTrendBrief({ apiKey, now = new Date() } = {}) {
   const existing = await loadTrendBrief();
   if (!trendBriefIsStale(existing, now)) return existing;
   if (!apiKey) return existing;
+  let last = null;
+  try { last = localStorage.getItem(REFRESH_ATTEMPT_KEY); } catch { /* no storage */ }
+  if (!shouldAttemptTrendRefresh(last, now.getTime())) return existing;
+  try { localStorage.setItem(REFRESH_ATTEMPT_KEY, String(now.getTime())); } catch { /* private mode */ }
   try { return await generateTrendBrief({ apiKey, now }); }
   catch { return existing; }
 }

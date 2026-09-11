@@ -56,3 +56,16 @@ test("separator normalization doesn't disturb other colours", () => {
   assert.equal(familyForColorString("Sage"), "Green");
   assert.equal(familyForColorString(""), "");
 });
+
+test("the resolver is memoised per raw string and stays exact", () => {
+  // Same answer on the cached path as on the first resolution, for the
+  // spellings that exercise every branch: exact shade, compound shade, keyword
+  // bucket, achromatic modifier, and nothing.
+  for (const c of ["Black", "Black Cherry", "Dark Navy Wash", "navy floral", "Light tan", "zzz"]) {
+    const first = familyForColorString(c);
+    assert.equal(familyForColorString(c), first, `${c} resolves the same twice`);
+  }
+  assert.equal(familyForColorString("navy floral"), "Blue");
+  assert.equal(familyForColorString("Light tan"), "Neutrals");
+  assert.equal(familyForColorString("zzz"), "");
+});

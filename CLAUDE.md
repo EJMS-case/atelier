@@ -121,9 +121,11 @@ Conventions worth knowing:
   researched trend brief (`features/stylist/trendBrief.js`), never from a
   trend list typed into a prompt.
 - **Supabase data access is a hand-rolled REST client** (`src/lib/supabase.js`).
-  Every table and storage operation hangs off the `sb` object.
-  `@supabase/supabase-js` is a dependency but is used **only** in `lib/auth.js`,
-  for the token lifecycle. Don't route data through it.
+  Every table and storage operation hangs off the `sb` object. The only
+  Supabase SDK dependency is `@supabase/auth-js` (the `GoTrueClient`), used
+  **only** in `lib/auth.js` for the token lifecycle. Don't add
+  `@supabase/supabase-js` back: `createClient()` drags the PostgREST, Realtime,
+  Storage and Functions clients (~110 kB) into the boot chunk for nothing.
 - **Migrations are numbered and applied manually** to the live Supabase project.
   Adding a file under `supabase/migrations/` does not apply it; say so in the PR
   when a change needs one run.
@@ -268,7 +270,7 @@ reintroduce a `USING (true)` policy.
   writes it. Keys are per-device in `localStorage`. Don't "restore cross-device
   key sync" — that is the bug.
 - **Auth is live.** `lib/auth.js` owns the token lifecycle via
-  `@supabase/supabase-js` (auth only; data stays on the hand-rolled REST
+  `@supabase/auth-js` (auth only; data stays on the hand-rolled REST
   client). `lib/supabaseConfig.js` exists solely to keep `auth.js` and
   `supabase.js` from importing each other.
 - **Headers are built per request** — `sbHeaders()` / `storageHeaders()`, at all
