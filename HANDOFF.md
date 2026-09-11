@@ -1,12 +1,40 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-10**, after PR #236. The session log below
+Refreshed **2026-09-11**, after PR #238. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-11 · PR #238 — Style Me could hang forever, every passing generation threw since #231, and each tap re-pulled the closet's photos
+
+**Owner, from her phone at ~03:45 UTC:** *"It is not styling and VERY very very slow."* Diagnosed against the live rows and the Supabase edge logs before touching code (CHANGELOG has the full account). The shape that settled it: a look at 03:15, the stylist-line sweep at 03:30 (335 PATCH rows), then three or four taps with **no look in the rotation state and zero `ai_errors` rows** — the signature of a streamed call that never finished and never failed.
+
+**Three things shipped, in order of how much they explain:**
+1. **The validator's `finish` helper called itself** (#231, `const finish = (p) => { …; return finish(…) }`). Every generation that PASSED validation has thrown a stack overflow after its look streamed, since 2026-09-10. Streamed looks survived (App keeps shown looks), but the final set, `allLooks` and the recent-combos memory never landed; when the streaming gate held a look back, she saw "Maximum call stack size exceeded". No test called `generateValidatedLooks` end to end; now one does (`test:watchdog`).
+2. **A stream watchdog** (`IDLE_MS` 45 s / `TOTAL_MS` 180 s on the wire) in `lib/ai/toolUse.js`. A stall falls through to the Sonnet retry (now at `effort: medium`) instead of freezing the button until a reload. Every tap writes one **`stylist_outfit:timing`** row: sheets ms, per-attempt first-token / total ms, usage, outcome.
+3. **A persistent 90 px thumbnail cache** (`utils/thumbnail-cache.js`) sourced from the 256 px grid thumbs the bucket already holds for 535/541 pieces. The contact-sheet step no longer pulls 52–88 MB of full photos per tap or holds hundreds of MB of decoded pixels; the first tap after a reload draws from IndexedDB. App pre-warms it after the grid settles and shows a stage line with elapsed seconds while styling.
+
+**Read this first next session — the timing rows are the ground truth for "slow" now:**
+```sql
+select created_at, payload->>'occasion' occ, payload->>'weather' wx, payload->>'sampled' n, payload->>'sheets' sheets,
+       payload->>'sheetMs' sheet_ms, payload->>'totalMs' total_ms, payload->>'outcome' outcome,
+       jsonb_pretty(payload->'attempts') attempts
+from ai_errors where kind = 'stylist_outfit:timing' order by created_at desc limit 20;
+```
+`attempts[].firstTokenMs` is Opus's time to first byte on ~15k tokens + 2–3 sheets; `sheetMs` is the phone; `usage.cache_read_input_tokens` should be ~3.7k (the static preamble) on every tap. Whichever is largest is the next lever — do not guess.
+
+**Watch-items:**
+- **First tap on her phone after this deploys:** the stage line should walk "Reading your closet… → Laying out N pieces… → Asking the stylist… → The stylist is composing…". If it sits on "Laying out" for long, the thumb cache is cold (first session only) — the second tap is the real number.
+- If a timing row shows `outcome: stalled` with `firstTokenMs: null` and `totalMs ≈ 45000`, Opus took longer than 45 s to send its first byte with no ping in between; raise `IDLE_MS` before anything else.
+- `stylist_outfit:stalled` rows on the non-streaming (Sonnet) attempt mean the 180 s ceiling is too tight for a 3-sheet retry — unlikely, but the row will say.
+- Six pieces have no server thumb; they fall back to the full photo once, then are cached at 90 px like the rest.
+- 42 stylist lines carry a sentence of her notes twice (the writer's `carryGuidance` matched a clause the line already stated in other words). Tokens only; the clause matcher in `features/profile/stylistLines.js` is the lever if it ever matters.
+- The measured prompt for Work + Hot is ~15k uncached input tokens on a 198-piece sample. If the timing rows show first-token dominating, the next efficiency lever is a stable inventory order so the inventory block can be cached across back-to-back taps — a sampler change, not a prompt change.
+
+**Verified before push:** `npm test` (39 suites, `test:watchdog` and `test:thumbs` new), `npm run build`, `npm run smoke` green (13 screens). Live storage sizes, prompt sizes, and the recursion on `main` verified by query and by `git show`; the contact-sheet memory and timing numbers measured in headless Chromium against a synthetic corpus matching the bucket's two size cohorts (the proxy denies direct image fetches from this session).
 
 ### 2026-09-10 · PR #236 — every deploy was stranding her open app, and Style Me is where it showed
 

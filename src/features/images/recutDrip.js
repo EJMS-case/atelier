@@ -11,6 +11,7 @@
 
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../../utils/images.js";
 import { sb } from "../../lib/supabase.js";
+import { invalidateThumbnail } from "../../utils/thumbnail-cache.js";
 
 /**
  * @param {Object}   p
@@ -39,6 +40,9 @@ export async function runRecutDrip({ items, updateItem, limit = 12, concurrency 
           const compressed = await compressImage(trimmed, PHOTO_MAX_DIM, 0.9, true);
           const url = await sb.uploadImage(it.id, compressed);
           await updateItem(it.id, { image: url, is_recut: true, is_trimmed: true });
+          // The new ?v= URL is a new contact-sheet cache key; the old key's
+          // 90px record is now dead weight in IndexedDB. Reclaim it.
+          invalidateThumbnail(it);
         } else {
           // Already tight (or unreadable) — just mark it so we don't re-check.
           await updateItem(it.id, { is_recut: true });

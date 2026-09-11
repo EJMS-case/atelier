@@ -22,7 +22,8 @@ import {
   loadActiveClosetId, saveActiveClosetId, loadClosets, saveClosets,
   migrateLocalStorage,
 } from "./utils/storage.js";
-import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
+import { DEFAULT_CLOSET_ID, SEED_CLOSETS, closetOf } from "./features/closet/closets.js";
+import { warmThumbnails, pruneThumbnails } from "./utils/thumbnail-cache.js";
 import { compareSetsByName, compareSetsByType, setMembers } from "./features/closet/setType.js";
 import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem, poolIncluding } from "./features/closet/useVisibleWardrobe.js";
 import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
@@ -293,6 +294,21 @@ export default function App() {
   const wearFetchRef = useRef(null);
   // True while a Style Me generation is in flight — see generateAndAppendLooks.
   const generationBusyRef = useRef(false);
+  // What the generation is doing right now, for the waiting screen. A tap on
+  // the 460-piece closet is 20–60 s of real work (sheets, an Opus call, a
+  // validation pass, sometimes a second pass) and a bare spinner for a minute
+  // reads as "not styling" — which is exactly what she reported. The stage
+  // comes from generateOutfit's onProgress; the clock is kept here so the
+  // text can show honest elapsed seconds without the stylist module knowing
+  // about React.
+  const [stylingStage, setStylingStage] = useState(null); // { step, detail } | null
+  const [stylingStartedAt, setStylingStartedAt] = useState(0);
+  const [stylingTick, setStylingTick] = useState(0);
+  useEffect(() => {
+    if (!stylingStartedAt) return undefined;
+    const t = setInterval(() => setStylingTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [stylingStartedAt]);
   const refreshWearData = useCallback(() => {
     if (wearFetchRef.current) return wearFetchRef.current;
     const p = Promise.all([
@@ -821,6 +837,30 @@ export default function App() {
     return () => clearTimeout(t);
   }, [items, updateItem]);
 
+  // Background thumbnail pre-warm: the Style Me contact sheets draw every
+  // sampled piece as a 90 px thumb (utils/contact-sheet.js). Those thumbs now
+  // persist per photo URL (utils/thumbnail-cache.js), so the sheet step costs
+  // network only for photos this device has never thumbed. Warming the closet
+  // she is standing in first, then the other room, a few seconds after the
+  // grid has settled, means even the FIRST tap after a reload draws sheets
+  // from disk instead of pulling 200–336 photos on the tap. Once per mount;
+  // low concurrency so it never competes with the grid's own images.
+  const thumbWarmRan = useRef(false);
+  useEffect(() => {
+    if (thumbWarmRan.current || !wardrobe.length) return undefined;
+    thumbWarmRan.current = true;
+    const activeId = activeCloset.id;
+    const ordered = [...wardrobe].sort((a, b) => (closetOf(a) === activeId ? 0 : 1) - (closetOf(b) === activeId ? 0 : 1));
+    let handle = null;
+    const t = setTimeout(() => {
+      handle = warmThumbnails(ordered, { concurrency: 3 });
+      // Once warm, drop records for photos that no longer exist (replaced or
+      // deleted pieces leave a ~4 kB orphan each). Same idle slot, no UI cost.
+      handle.done?.then(() => pruneThumbnails(ordered)).catch(() => {});
+    }, 4000);
+    return () => { clearTimeout(t); handle?.cancel?.(); };
+  }, [wardrobe, activeCloset.id]);
+
   // Force-sync ALL items currently in React state to Supabase — used after bulk upload failures
   // Reads from live state (has base64 images), uploads them, saves URLs back
   const forceSyncAll = useCallback(async (onProgress) => {
@@ -1101,10 +1141,14 @@ export default function App() {
     generationBusyRef.current = true;
     let streamedAny = false;
     let streamedCount = 0; // looks streamed in THIS batch — the final splice below trims exactly these
+    setStylingStage({ step: "sampling" });
+    setStylingStartedAt(Date.now());
     try {
+      const onProgress = (stage) => setStylingStage(stage || null);
       const onLook = (look) => {
         const normalized = normalizeLooks([look], occasion);
         streamedCount += normalized.length;
+        setStylingStage(null); // a look is on screen — the stage line has done its job
         // Both modes append here: "fresh" starts from a nulled outfits state
         // (handleStyle clears it), so appending builds the new set in order.
         setOutfits(prev => [...(prev || []), ...normalized]);
@@ -1134,7 +1178,7 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         stylePrefsWithAuto, loadAboutMe(), styleExcludes,
-        { wardrobe, feedbackScores, recentlyWornItems, onLook, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
+        { wardrobe, feedbackScores, recentlyWornItems, onLook, onProgress, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
           // Occasion memory inputs (roadmap A4) — raw rows already in state,
           // summarized to text lines inside generateOutfit (occasionMemory.js).
           outfitLogs: wearData.logs || [], lovedFeedback,
@@ -1198,6 +1242,8 @@ export default function App() {
       }
     } finally {
       generationBusyRef.current = false;
+      setStylingStage(null);
+      setStylingStartedAt(0);
       // Fire-and-forget: mirror this device's updated anti-repeat memory to
       // user_settings so her other devices rotate around these looks too.
       // Merge the remote copy first — a blind push was last-writer-wins, so
@@ -1215,10 +1261,39 @@ export default function App() {
   const handleStyle = async () => {
     if (!apiKey) { setStyleErr("Add your Anthropic API key in Settings first."); return; }
     if (available.length < 3) { setStyleErr(`Add at least 3 items to this closet first (you have ${available.length}).`); return; }
+    // A tap that lands while the previous generation is still running must
+    // not wipe the screen and drop the spinner (which is what `setOutfits(null)`
+    // + the early return inside generateAndAppendLooks did — the running
+    // generation then finished into a screen that said nothing was happening).
+    if (generationBusyRef.current) { setStyleErr("Still styling your last tap — give it a moment."); return; }
     setStyling(true); setStyleErr(""); setOutfits(null);
     await generateAndAppendLooks(1, "fresh");
     setStyling(false);
   };
+
+  // The waiting line under the spinner: what the generation is doing, and for
+  // how long. Written to her, no rule/violation words (a retry is "one more
+  // pass"). Elapsed seconds are shown from 8 s on — a fast tap never sees them.
+  const stylingStatusText = (() => {
+    const st = stylingStage;
+    const d = st?.detail || {};
+    let text;
+    switch (st?.step) {
+      case "sampling":    text = "Reading your closet…"; break;
+      case "sheets":      text = `Laying out ${d.items || "your"} pieces for the stylist…`; break;
+      case "stylist":     text = d.attempt > 0 ? "One more pass with the stylist…" : "Asking the stylist…"; break;
+      case "first-token": text = "The stylist is composing…"; break;
+      case "validating":  text = "Checking the look…"; break;
+      case "retry":       text = "Almost — refining the look…"; break;
+      case "stalled":     text = "The connection stalled — trying again…"; break;
+      default:            text = "Styling your wardrobe…";
+    }
+    const secs = stylingStartedAt ? Math.floor((Date.now() - stylingStartedAt) / 1000) : 0;
+    void stylingTick; // re-renders once a second while a generation runs
+    if (secs >= 8) text += ` ${secs}s`;
+    if (secs >= 45) text += " — a big closet takes the stylist a little longer.";
+    return text;
+  })();
 
   // "Style 2 more" — appends two additional looks to the existing set without
   // clearing what's already there. Runs after the first look has arrived.
@@ -2164,7 +2239,7 @@ export default function App() {
           {styling === true && (
             <div style={s.empty}>
               <span style={s.spinner}/>
-              <p style={s.emptyText}>Styling your wardrobe…</p>
+              <p style={s.emptyText}>{stylingStatusText}</p>
             </div>
           )}
           {styling === "partial" && (

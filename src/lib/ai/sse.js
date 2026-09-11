@@ -25,15 +25,23 @@
  *
  * @param {ReadableStream} body    - res.body from a streaming fetch
  * @param {(evt: Object) => void} onEvent
+ * @param {Object}   [opts]
+ * @param {Function} [opts.onChunk] - called once per chunk read, BEFORE the
+ *   frames in it are parsed. This is the liveness signal for toolUse's stream
+ *   watchdog: a ping frame, a keep-alive comment, and a half-frame all count
+ *   as "the connection is alive", which is exactly what an idle timer needs
+ *   and exactly what `onEvent` cannot tell it (it only sees complete events).
+ *   The other two callers leave it unset and see no change.
  * @returns {Promise<void>} resolves when the stream ends
  */
-export async function readSSEEvents(body, onEvent) {
+export async function readSSEEvents(body, onEvent, { onChunk } = {}) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
+    onChunk?.();
     buffer += decoder.decode(value, { stream: true });
     let idx;
     while ((idx = buffer.indexOf("\n")) !== -1) {

@@ -53,7 +53,12 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // her history, her loved looks — which can name pieces from the other room.
   // See features/closet/useVisibleWardrobe.js for the vocabulary.
   const wardrobe = (extras.wardrobe && extras.wardrobe.length) ? extras.wardrobe : items;
-  const { feedbackScores = {}, recentlyWornItems = [], onLook, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], outfitLogs = [], lovedFeedback = [], favoriteItemIds = [], count = 3 } = extras;
+  const { feedbackScores = {}, recentlyWornItems = [], onLook, onProgress, inspirationVibes = [], styleFingerprint = "", lovedLooks = [], dislikedLooks = [], lookEdits = [], outfitLogs = [], lovedFeedback = [], favoriteItemIds = [], count = 3 } = extras;
+  // Stage reporting for the waiting screen — { step, detail }. The steps, in
+  // the order a tap passes through them: "sampling" → "sheets" → "stylist" →
+  // "first-token" → "validating" (→ "retry" / "stalled" on a second pass).
+  // The validator emits the last five; this function owns the first two.
+  onProgress?.({ step: "sampling" });
   // Clamp to a sane range. 1 unlocks the "fast first look" flow; 3 is the
   // classic 3-up generation. Values outside this range fall back to 3.
   const lookCount = (count >= 1 && count <= 3) ? count : 3;
@@ -247,12 +252,18 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     builtLooks,
   });
 
+  // Timed, because until 2026-09-11 nobody could say how much of a slow tap
+  // was the sheets (canvas work on the phone, before a byte is sent) versus
+  // the model. sheetMs rides into the stylist_outfit:timing row.
   let contactSheets = [];
+  onProgress?.({ step: "sheets", detail: { items: sampled.length } });
+  const sheetsStarted = Date.now();
   try {
     contactSheets = await generateContactSheets(sampled, reverseMap);
   } catch (e) {
     console.warn("[Atelier] Contact sheet generation failed, falling back to text-only:", e.message);
   }
+  const sheetMs = Date.now() - sheetsStarted;
 
   // Rotation memory must reflect what the user actually SAW — and reflect it
   // the moment she saw it. Streamed looks stay on screen even when the final
@@ -294,6 +305,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
       // the category ban, so the occasion check must not fail them back out.
       onlyRescueIds: [...onlyRescueIds, ...occasionNoteIds],
       onLook: wrappedOnLook,
+      onProgress,
+      sheetMs,
     });
   } catch (e) {
     // Streamed looks were already recorded live at stream time — nothing

@@ -27,51 +27,25 @@
 //
 // Note: JPEG quality affects request BYTES only, not tokens — tokens are a
 // pure function of pixel dimensions, so quality stays at 0.82 for legibility.
-const THUMB_SIZE = 90;
+//
+// ── IMAGE SOURCING ───────────────────────────────────────────────────────────
+// Every thumbnail comes from utils/thumbnail-cache.js, which owns the whole
+// decode-once / bounded-pool / IndexedDB story (its header has the measured
+// numbers). This file used to load the FULL photo for every sampled item,
+// per sheet, 120 at a time with a timeout that started at queue time, and
+// keep 600 decoded full-size images in a module Map; on the phone that was
+// ~9 s of placeholder cells per sheet and hundreds of MB of pixels. Now:
+// ONE pool over ALL sampled items (so the second sheet's images are already
+// loading while the first draws nothing yet — the pool is the only thing
+// that touches the network), then a purely synchronous draw. THUMB_SIZE is
+// imported, not redeclared, so the persisted thumbnail and the cell can
+// never disagree.
+import { THUMB_SIZE, loadThumbnails } from "./thumbnail-cache.js";
+
 const LABEL_HEIGHT = 12;
 const CELL_HEIGHT = THUMB_SIZE + LABEL_HEIGHT;
 const COLS = 10;
 const MAX_PER_SHEET = 120; // 10 cols × 12 rows — 900×1224 ≈ 1.10 MP, under the 1.15 MP cap
-
-// Module-level cache of decoded wardrobe images keyed by URL. Wardrobe photos
-// are immutable per URL (Supabase storage), so once an item's image is decoded
-// we can redraw it into every later contact sheet without re-fetching or
-// re-decoding it. This removes the dominant per-generation cost: back-to-back
-// "Style Me" re-rolls used to reload every eligible image (up to the full
-// closet) on the main thread before the API call could even start. Only
-// successful loads are cached — a transient timeout/error must not poison the
-// URL permanently.
-const imageCache = new Map(); // src -> HTMLImageElement
-const MAX_CACHED_IMAGES = 600;
-
-function cacheImage(src, img) {
-  // FIFO bound so a very large closet browsed over a long session can't grow
-  // the cache without limit.
-  if (imageCache.size >= MAX_CACHED_IMAGES) {
-    const oldest = imageCache.keys().next().value;
-    if (oldest !== undefined) imageCache.delete(oldest);
-  }
-  imageCache.set(src, img);
-}
-
-function loadImage(src, timeoutMs = 9000) {
-  return new Promise((resolve) => {
-    if (!src) { resolve(null); return; }
-    const cached = imageCache.get(src);
-    if (cached) { resolve(cached); return; }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    // Background tabs have image loads deprioritized by Chrome. Without a
-    // timeout the Promise.all in generateContactSheets can stall indefinitely,
-    // blocking the entire Anthropic API call. Resolve with null on timeout so
-    // generation continues with text-only inventory for that item. A late
-    // onload after a timeout still populates the cache for the next roll.
-    const timer = setTimeout(() => resolve(null), timeoutMs);
-    img.onload  = () => { clearTimeout(timer); cacheImage(src, img); resolve(img); };
-    img.onerror = () => { clearTimeout(timer); resolve(null); };
-    img.src = src;
-  });
-}
 
 /**
  * Generate contact sheet images from sampled wardrobe items.
@@ -83,6 +57,12 @@ function loadImage(src, timeoutMs = 9000) {
  */
 export async function generateContactSheets(sampledItems, reverseMap) {
   const sheets = [];
+  if (!sampledItems?.length) return sheets;
+
+  // All thumbnails first, through one bounded pool. A missing or timed-out
+  // thumbnail is null and gets the placeholder cell below — never a thrown
+  // error, so the API call is never blocked by one bad photo.
+  const thumbs = await loadThumbnails(sampledItems);
 
   for (let start = 0; start < sampledItems.length; start += MAX_PER_SHEET) {
     const batch = sampledItems.slice(start, start + MAX_PER_SHEET);
@@ -96,22 +76,30 @@ export async function generateContactSheets(sampledItems, reverseMap) {
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const images = await Promise.all(batch.map(it => loadImage(it.image)));
-
     batch.forEach((item, i) => {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
       const x = col * THUMB_SIZE;
       const y = row * CELL_HEIGHT;
       const shortId = reverseMap[item.id] || `W${String(start + i + 1).padStart(3, "0")}`;
-      const img = images[i];
+      const img = thumbs.get(item) || null;
 
-      if (img) {
-        const scale = Math.min(THUMB_SIZE / img.width, THUMB_SIZE / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        ctx.drawImage(img, x + (THUMB_SIZE - w) / 2, y + (THUMB_SIZE - h) / 2, w, h);
-      } else {
+      // The thumbnail is already fitted to THUMB_SIZE, so `scale` is ~1 here;
+      // the formula stays so any drawable of any size lands centred and
+      // aspect-correct, exactly as the full photo used to. drawImage can
+      // still throw for a drawable the engine has released (a closed
+      // ImageBitmap) — that becomes a placeholder, not a failed tap.
+      let drawn = false;
+      if (img && img.width && img.height) {
+        try {
+          const scale = Math.min(THUMB_SIZE / img.width, THUMB_SIZE / img.height);
+          const w = img.width * scale;
+          const h = img.height * scale;
+          ctx.drawImage(img, x + (THUMB_SIZE - w) / 2, y + (THUMB_SIZE - h) / 2, w, h);
+          drawn = true;
+        } catch { drawn = false; }
+      }
+      if (!drawn) {
         ctx.fillStyle = "#F5F1EC";
         ctx.fillRect(x, y, THUMB_SIZE, THUMB_SIZE);
         ctx.fillStyle = "#C8BFB4";
