@@ -40,7 +40,7 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
   const [filterScope, setFilterScope] = useState(null);
 
   const loadLogs = () => {
-    sb.fetchOutfitLogs()
+    sb.fetchOutfitLogs({ withCollageMeta: true })
       .then(data => { setLogs(data.filter(l => l.date_worn)); setLoading(false); })
       .catch(() => setLoading(false));
     // Also pull the planner: most looks get worn by pinning them to a calendar
@@ -118,7 +118,7 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
   };
   const handleWearAgain = async (log) => {
     setWearingId(log.id);
-    try { await onWearAgain(log); const fresh = await sb.fetchOutfitLogs(); setLogs(fresh); }
+    try { await onWearAgain(log); const fresh = await sb.fetchOutfitLogs({ withCollageMeta: true }); setLogs(fresh); }
     catch (e) { console.error(e); }
     finally { setWearingId(null); }
   };

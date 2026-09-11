@@ -70,6 +70,16 @@ function dataUrlToBlob(base64DataUrl, fallbackMime) {
   return { blob: new Blob([bytes], { type: mime }), mime };
 }
 
+// Every user_settings key the app reads at mount (App's load effect, the
+// learning path's first pass, the trend brief). Served by ONE key=in.(…) GET
+// per page load — see _settingsRow. A key read at mount that is missing from
+// this list costs its own request; a key that is NOT read at mount does not
+// belong here (it would ride every page load for nothing).
+export const SETTINGS_BATCH_KEYS = [
+  "style_fingerprint", "rotation_state", "brand_discovery",
+  "style_notes", "style_notes_seen", "chat_lessons", "trend_brief",
+];
+
 // Every outfit_logs column except collage_url (see fetchOutfitLogs).
 export const OUTFIT_LOG_COLUMNS = "id,garment_ids,date_worn,occasion,notes,is_favorite,spend_actual,spend_estimated,created_at,weather,occasions,weathers,layout_data,source";
 
@@ -304,11 +314,21 @@ export const sb = {
   // old full fetch: slow beats broken.
   // Keep OUTFIT_LOG_COLUMNS in sync with the table (migration 0036 is the
   // newest column); a new column that readers need must be added here.
-  async fetchOutfitLogs() {
+  //
+  // The collage-meta sidecar is OPT-IN (`withCollageMeta`): only the three
+  // screens whose parseMeta reads it (Saved, History, Favorites) ask for it.
+  // App's mount, the planner, Insights, Style Profile and the learning path
+  // never read collage_url, and were paying the second request — the
+  // unindexed `not.like.data:*` scan — on every one of their fetches. Without
+  // the sidecar every row reads `collage_url: null`, the same shape a failed
+  // sidecar already produced.
+  async fetchOutfitLogs({ withCollageMeta = false } = {}) {
     const order = "order=date_worn.desc,created_at.desc";
     const [slimRes, metaRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=${OUTFIT_LOG_COLUMNS}&${order}`, { headers: sbHeaders() }),
-      fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=id,collage_url&collage_url=not.like.data:*`, { headers: sbHeaders() }).catch(() => null),
+      withCollageMeta
+        ? fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=id,collage_url&collage_url=not.like.data:*`, { headers: sbHeaders() }).catch(() => null)
+        : Promise.resolve(null),
     ]);
     if (!slimRes.ok) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?select=*&${order}`, { headers: sbHeaders() });
@@ -426,20 +446,31 @@ export const sb = {
   // 0026 enforces this server-side by hiding the `api_keys` row from the
   // `public` role.
   //
-  // Mount-time batch: App reads style_fingerprint and
-  // rotation_state at startup — separate GETs against the same table.
-  // The first getter call kicks off ONE key=in.(…) fetch; each key is served
-  // from it exactly once, then falls back to its per-key fetch so refresh
-  // flows (Settings button, post-save re-reads) always hit the network.
+  // Mount-time batch: App reads several settings rows at startup — separate
+  // GETs against the same table. The first getter call kicks off ONE
+  // key=in.(…) fetch over SETTINGS_BATCH_KEYS; each key is served from it
+  // exactly once, then falls back to its per-key fetch so refresh flows
+  // (Settings button, post-save re-reads) always hit the network.
+  //
+  // A key that is NOT in the batch list falls through to its own GET at once.
+  // Until 2026-09-11 it did not: the batch answered ANY key with
+  // `map[key] ?? null`, so the first read of a key outside the list — the
+  // trend brief, `style_notes_seen` — came back null with no request made.
+  // `loadTrendBrief()` therefore read null at every app open, the brief was
+  // "stale", and a 30–60 s web-search research call fired on every cold open
+  // that had a key (and on a phone usually died when she left the screen —
+  // the HANDOFF's "auto-refresh did not land" was this). Every key the app
+  // reads at mount belongs in the list; anything else must take its own GET.
   _settingsBatch: null,
   _batchServed: new Set(),
   _settingsRow(key) {
+    if (!SETTINGS_BATCH_KEYS.includes(key)) return null;
     if (this._batchServed.has(key)) return null;
     this._batchServed.add(key);
     if (!this._settingsBatch) {
       this._settingsBatch = (async () => {
         try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(style_fingerprint,rotation_state,brand_discovery,style_notes,chat_lessons)&select=key,value`, {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=in.(${SETTINGS_BATCH_KEYS.join(",")})&select=key,value`, {
             headers: sbHeaders(),
           });
           if (!res.ok) return null;

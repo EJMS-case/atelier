@@ -24,6 +24,7 @@ import {
 } from "./utils/storage.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS, closetOf } from "./features/closet/closets.js";
 import { warmThumbnails, pruneThumbnails } from "./utils/thumbnail-cache.js";
+import { runWhenIdle } from "./utils/idle.js";
 import { compareSetsByName, compareSetsByType, setMembers } from "./features/closet/setType.js";
 import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem, poolIncluding } from "./features/closet/useVisibleWardrobe.js";
 import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
@@ -72,6 +73,10 @@ import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
 migrateLocalStorage();
+// Set once the storage bucket probe has answered on this device (see the mount
+// effect). The bucket has existed since the first upload; the probe is a
+// formality that used to ride every cold open.
+const BUCKET_READY_KEY = "atelier_bucket_ready";
 
 
 
@@ -569,7 +574,11 @@ export default function App() {
   // ── On mount: ensure Storage bucket exists, pull from Supabase, merge with local
   // (initial items came from the lazy useState init above, no need to re-read).
   useEffect(() => {
-    sb.ensureBucket().catch(() => {});
+    // The bucket exists since 2026-03; this POST answered "already exists" on
+    // every cold open and the reply was discarded. Once per device is plenty.
+    if (!localStorage.getItem(BUCKET_READY_KEY)) {
+      sb.ensureBucket().then(() => localStorage.setItem(BUCKET_READY_KEY, "1")).catch(() => {});
+    }
     // F2 — load aggregate feedback scores so sampler can weight future picks
     fetchItemFeedbackScores().then(setFeedbackScores).catch(() => {});
 
@@ -641,10 +650,17 @@ export default function App() {
       // What reads current this season — researched with web search once per
       // season (or ~5 weeks), cached cross-device, read by every AI surface.
       // Best-effort: no key or a failed search just leaves the last brief.
+      // Deferred off the boot path: when it does run it is a 30–60 s call
+      // with web searches, and at mount it competed with the wardrobe fetch,
+      // the grid's images and her first tap. It now waits for the app to go
+      // idle (≥ 20 s after load), and trendBrief.js attempts at most once per
+      // device per half-day, so a stale brief never costs every cold open.
       if (apiKey) {
-        import("./features/stylist/trendBrief.js")
-          .then(({ maybeRefreshTrendBrief }) => maybeRefreshTrendBrief({ apiKey }))
-          .catch(() => {});
+        runWhenIdle(() => {
+          import("./features/stylist/trendBrief.js")
+            .then(({ maybeRefreshTrendBrief }) => maybeRefreshTrendBrief({ apiKey }))
+            .catch(() => {});
+        }, { afterMs: 20000 });
       }
     }).catch(() => {});
 

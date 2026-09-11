@@ -29,7 +29,7 @@ export default function FavoritesView({ wardrobe, available, favorites, toggleFa
 
   useEffect(() => {
     Promise.all([
-      sb.fetchOutfitLogs().catch(() => []),
+      sb.fetchOutfitLogs({ withCollageMeta: true }).catch(() => []),
       sb.fetchLovedLooks().catch(() => []),
     ]).then(([logData, lovedData]) => {
       setLogs(logData);

@@ -33,7 +33,7 @@ import {
 import {
   composeLearnedBlocks, mergeLessons, describeLookLine, describeDateContext, mergeNewSeeds, builtLookLines,
 } from "../src/features/stylist/learning.js";
-import { parseTrendReply, trendBriefIsStale, composeTrendBlock, briefSeasonLabel } from "../src/features/stylist/trendBrief.js";
+import { parseTrendReply, trendBriefIsStale, composeTrendBlock, briefSeasonLabel, shouldAttemptTrendRefresh, REFRESH_RETRY_MS } from "../src/features/stylist/trendBrief.js";
 import { inspirationBrief } from "../src/features/stylist/standard.js";
 import { parseEvalResponse } from "../src/features/builder/evalParse.js";
 import { STANDING_PREFERENCES } from "../src/constants/styling.js";
@@ -599,6 +599,13 @@ test("the trend brief: parsed from bullets, stale by season or age, composed as 
   assert.equal(trendBriefIsStale({ ...fresh, season: "summer 2026" }, now), true, "the season turned");
   assert.equal(trendBriefIsStale({ ...fresh, generated_at: "2026-07-20T00:00:00Z" }, now), true, "older than five weeks");
   assert.equal(trendBriefIsStale(null, now), true);
+  // The mount refresh attempts once per device per half-day: a research call
+  // that died on the phone is not re-fired on the next open, and the next.
+  const t = now.getTime();
+  assert.equal(shouldAttemptTrendRefresh(null, t), true, "never attempted → attempt");
+  assert.equal(shouldAttemptTrendRefresh("garbage", t), true, "unreadable stamp → attempt");
+  assert.equal(shouldAttemptTrendRefresh(String(t - 60_000), t), false, "attempted a minute ago → wait");
+  assert.equal(shouldAttemptTrendRefresh(t - REFRESH_RETRY_MS, t), true, "half a day later → attempt again");
   const block = composeTrendBlock(fresh);
   assert.match(block, /WHAT READS CURRENT/);
   assert.match(block, /her closet and her own preferences always win/);

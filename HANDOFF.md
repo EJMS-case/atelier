@@ -1,12 +1,30 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-11**, after PR #238. The session log below
+Refreshed **2026-09-11**, after PR #239. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-11 · PR #239 — the app-open path, measured: a research call on every cold open, 118 kB of unused SDK at boot, the one-closet sweep
+
+**No timing rows yet** — she has not tapped Style Me since #238 deployed, so the tap could not be split into sheets / first token / output. This session measured everything BEFORE the tap instead. CHANGELOG has the detail; the three things to carry:
+
+1. **`sb._settingsRow` answered any key outside its `key=in.(…)` list with null on the first read per page load.** `trend_brief` was outside it, so `loadTrendBrief()` read null at every app open and `maybeRefreshTrendBrief` launched a Sonnet + web-search research call (30–60 s) at boot, every cold open with a key. #237's "the auto-refresh did not land, iOS probably killed it" was true but not the cause: the call should not have been firing. Now `SETTINGS_BATCH_KEYS` (every mount-read key) gates the batch; the refresh is deferred to idle (≥ 20 s), attempts once per device per half-day, and uses two searches. **Rule for the next key:** a key read at mount goes in `SETTINGS_BATCH_KEYS`; `test:selfheal` fails if the list and the request drift.
+2. **Boot chunk 602 → 484 kB (gzip 176 → 143).** `lib/auth.js` now imports `GoTrueClient` from `@supabase/auth-js` instead of `createClient` from `@supabase/supabase-js` (which dragged Realtime, Phoenix, PostgREST, Storage and Functions along). Same options, same `atelier:auth` storage key — verified by the render walk's seeded session. Attribute the bundle with source maps before guessing: `npx vite build --sourcemap --outDir <scratch>` and sum the mappings per source.
+3. **The stylist-line sweep and AI Readiness read `items` (the active closet), not the wardrobe.** 21 Arizona pieces had no line and no flag she could see. Both read the wardrobe now; **she has to tap "Write stylist lines for 21 pieces" once** in Style Profile.
+
+**Watch-items:**
+- **The first `stylist_outfit:timing` rows** (query in the #238 entry below) are still the ground truth for the tap. Read `attempts[0].usage.output_tokens` and `firstTokenMs` before touching the prompt: if output dominates, the lever is a tighter output contract (five prose fields × 3 looks); if first-token dominates, it is the request reorder + stable sample order described in the CHANGELOG's "Measured, decided, not changed" — the sampler's per-tap reshuffle is deliberate, so that change trades variety for cache and needs her word.
+- The trend brief's next natural refresh is ~mid-October. With the batch fixed it will read the stored brief, see it fresh, and do nothing until then — so a research call in the logs before October is a bug. When it does go stale: one attempt per device per half-day; if she opens the app and leaves within a minute the attempt dies and the next one is 12 h out. Acceptable by design; the Style Profile button is the manual path.
+- After she runs the 21-piece sweep, `select count(*) from wardrobe_items where stylist_line is null or stylist_line = ''` should be 0.
+- Home's colour stories are memoised per colour string now; if a colour ever resolves differently on Home than in the closet filter, the memo (`FAMILY_CACHE`) is the suspect — it is keyed on the raw string, so that would mean the resolver itself changed.
+
+**Surfaced, not actioned — her call:** `user_settings` still holds the legacy `api_keys` row (an Anthropic key and a Remove.bg key). The `owner only, non-secret` policy hides it from every API role (verified by reading `pg_policies`), so the app cannot read it, but the key was world-readable before 2026-08-28. Deleting the row and rotating that key is a five-minute job; it is her key and her row.
+
+**Verified before push:** `npm test` (39 suites; `test:selfheal` +12, `test:standard` +4, `test:colors` +1), `npm run build`, `npm run smoke` green (13 screens). Live counts by SQL; bundle by source-map attribution; policy by `pg_policies`.
 
 ### 2026-09-11 · PR #238 — Style Me could hang forever, every passing generation threw since #231, and each tap re-pulled the closet's photos
 
