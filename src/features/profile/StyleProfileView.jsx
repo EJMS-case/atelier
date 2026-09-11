@@ -118,8 +118,8 @@ export default function StyleProfileView({
   // The two photo-readable fields her office dress code turns on. Visual AI
   // fills vision_data.sleeve for every photographed top it reads.
   const unreadTops = useMemo(
-    () => items.filter(it => it.category === "Tops" && getSleeveType(it) === "unknown" && it.image && !it.vision_data).length,
-    [items],
+    () => readable.filter(it => it.category === "Tops" && getSleeveType(it) === "unknown" && it.image && !it.vision_data).length,
+    [readable],
   );
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
   const removePair = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
@@ -144,8 +144,13 @@ export default function StyleProfileView({
     [items, prefs.colorPairs],
   );
 
-  // AI readiness — which rows the stylist can't fully read, and why.
-  const audit = useMemo(() => auditCloset(items), [items]);
+  // AI readiness — which rows the stylist can't fully read, and why. Read
+  // over the WARDROBE (everything she owns, both rooms), not the closet she
+  // is standing in: the stylist reads the Arizona pieces on every trip day,
+  // and a flag she cannot see is a flag she cannot act on. (The first sweep
+  // ran on `items` and left the 21 Arizona pieces without a line, 2026-09-11.)
+  const readable = wardrobe.length ? wardrobe : items;
+  const audit = useMemo(() => auditCloset(readable), [readable]);
   const [auditOpen, setAuditOpen] = useState(false);
 
   // "Write stylist lines" — fills the line the stylist reads for every piece
@@ -153,7 +158,7 @@ export default function StyleProfileView({
   // profile/stylistLines.js). Resumable: only pieces without a line are
   // written, and a line she wrote herself is never touched. The module is
   // imported on tap so the stylist/zod bundle stays off this screen's chunk.
-  const linesMissing = useMemo(() => items.filter(it => it.category !== "Misc" && !String(it.stylist_line || "").trim()), [items]);
+  const linesMissing = useMemo(() => readable.filter(it => it.category !== "Misc" && !String(it.stylist_line || "").trim()), [readable]);
   const [linesRun, setLinesRun] = useState({ running: false, done: 0, total: 0, errors: 0, msg: "" });
   const handleWriteLines = async () => {
     if (!apiKey) { setLinesRun(r => ({ ...r, msg: "Add your Anthropic API key in Settings first." })); return; }
@@ -407,7 +412,7 @@ export default function StyleProfileView({
       <div style={s.settingsCard}>
         <div style={s.settingsTitle}>✦ AI Readiness</div>
         <p style={s.settingsSub}>
-          How much of your closet the stylist can fully read. A piece with an unreadable color or an off-taxonomy subcategory gets styled generically — fix the flagged fields and every AI surface gets sharper.
+          How much of your wardrobe — both closets — the stylist can fully read. A piece with an unreadable color or an off-taxonomy subcategory gets styled generically — fix the flagged fields and every AI surface gets sharper.
         </p>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
           <div style={{ fontSize: 26, fontFamily: "'DM Serif Display',Georgia,serif", color: "var(--color-text)" }}>
