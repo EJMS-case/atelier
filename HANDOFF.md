@@ -22,8 +22,12 @@ it through.
 
 **Also this session:** the `send_later` trigger meant to backdate the trend brief used `jsonb_set` on `user_settings.value`, which is TEXT — it would have failed. Deleted; the backdate was run directly with a `::jsonb` cast after #235's parser fix deployed, so the next app open regenerates the (previously mangled) brief properly.
 
+**Verified live, next day (2026-09-11):** she generated a Work + Hot look at 19:50 UTC on the #236 build — office layer completed, zero error rows. The latency and stranding fixes held in her hands.
+
+**One thing did NOT complete on its own: the trend-brief auto-refresh.** The brief was stale (backdated), she opened the app with her key, and no new brief stored — no `trend_brief:parse` row either, so `generateTrendBrief` died before parsing. Most likely cause: it is a 30-60 s call (up to 4 web searches) fired at app open on a phone, and iOS kills in-flight fetches when the app backgrounds — she taps into Style Me and the research call dies silently (`maybeRefreshTrendBrief` swallows everything). **The brief was therefore researched and written by hand this session** (Who What Wear / FASHION Magazine / PORTER fashion-month coverage, cross-checked; written in the app's exact contract and register, stored with a fresh `generated_at`), so every surface reads whole guidance now. Watch: when it next goes stale (~mid-October), does the auto-refresh land a brief on its own? If not, the fix is making the refresh survivable on mobile — fewer searches (`max_uses: 2`), lower `max_tokens`, or moving the refresh behind the Style Profile button only — not more retries.
+
 **Watch-items:**
-- After her next TWO deploysworth of app opens, Cache Storage should hold exactly two `atelier-*` build caches plus `atelier-cache-index`. If storage complaints ever surface, the retained-previous-cache count (2) is the dial.
+- After her next TWO deploys' worth of app opens, Cache Storage should hold exactly two `atelier-*` build caches plus `atelier-cache-index`. If storage complaints ever surface, the retained-previous-cache count (2) is the dial.
 - The precache adds ~0.4 MB wire per deploy at SW install (background). If that ever matters, exclude the biggest lazy view chunks and rely on the reload floor for them.
 
 **Verified before push:** `npm test` (37 suites), `npm run build` + stamped `dist/sw.js` inspected (29 chunks, no ML runtime, no surviving placeholder), `npm run smoke` green.
