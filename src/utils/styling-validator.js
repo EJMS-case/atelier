@@ -1566,9 +1566,56 @@ function coerceLooksShapeLogged(input) {
  * @param {Object}    params.occasionSlots
  * @param {string}    params.occasion
  * @param {string[]}  [params.onlyRescueIds] - items an "Only" toggle rescued past occasion bans
+ * @param {Function}  [params.onLook]      - streamed-look callback (attempt 0 streams when set)
+ * @param {Function}  [params.onProgress]  - ({ step, detail }) stage reporting for the waiting
+ *   screen. Steps this function emits: "stylist" { attempt, model } as a request
+ *   goes out, "first-token" when the first streamed delta lands, "validating"
+ *   when a response is complete, "retry" { attempt, reason } at the top of a
+ *   second pass, "stalled" { attempt, model, stalled } when the watchdog gave up.
+ * @param {number}    [params.sheetMs]     - how long the contact sheets took (for the timing row)
+ * @param {Object}    [params.watchdog]    - { idleMs, totalMs } overrides for the request watchdog
+ *   (toolUse.js IDLE_MS / TOTAL_MS). Tests use it to prove the stall path in
+ *   milliseconds; production leaves it unset.
  * @returns {Promise<Object>} - validated response with resolved item IDs
  */
-export async function generateValidatedLooks({
+export async function generateValidatedLooks(params) {
+  // One `stylist_outfit:timing` row per generation, whatever the outcome.
+  // Until 2026-09-11 the app recorded no token usage and no timing anywhere,
+  // so "Style Me is very slow" could not be broken down into sheets / first
+  // token / model / validation — and a tap that never finished left no row at
+  // all. The row is deliberately small: counts and milliseconds, never a
+  // prompt or a look (those already have their own :validation / :schema rows).
+  const { occasion = "Work", weather = "", idMap = {}, contactSheets = [], sheetMs = null } = params;
+  const started = Date.now();
+  const trace = { attempts: [], outcome: "threw" };
+  try {
+    return await runValidatedLooks(params, trace);
+  } catch (e) {
+    if (trace.outcome === "threw") {
+      trace.outcome = e?.name === "ValidationError" ? "validation_failed"
+        : e?.stalled ? "stalled"
+        : e?.status ? "http"
+        : "error";
+    }
+    throw e;
+  } finally {
+    logAiError("stylist_outfit:timing", {
+      occasion,
+      weather,
+      sampled: Object.keys(idMap).length,
+      sheets: contactSheets.length,
+      sheetMs,
+      attempts: trace.attempts,
+      totalMs: Date.now() - started,
+      outcome: trace.outcome,
+    }, "timing");
+  }
+}
+
+// The generation itself. `trace` is the timing row under construction: one
+// entry per model attempt ({ attempt, model, streamed, firstTokenMs, totalMs,
+// usage, stopReason, outcome }) and the overall outcome, set at every exit.
+async function runValidatedLooks({
   apiKey,
   staticPreamble,
   dynamicBody,
@@ -1582,25 +1629,38 @@ export async function generateValidatedLooks({
   forceIncludeIds = [],
   onlyRescueIds = [],
   onLook,
-}) {
+  onProgress,
+  watchdog = {},
+}, trace) {
   let lastFailures = [];
   let lastParsed = null;
   let lastStrippedCount = 0;
+  // What a retry is correcting, for the "retry" progress step: the first
+  // failure message, or the transient/stall reason when the last attempt
+  // never produced looks to correct.
+  let retryReason = null;
 
   // Every look that ships passes through the office-coverage completion
   // (see completeOfficeCoverage): the preference is soft, so this is where it
   // gets honored — by adding the layer, never by refusing the look.
+  // `how` names the exit for the timing row: "ok" for a clean pass, or the
+  // salvage step that made the looks shippable.
   const completionCtx = { activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds };
-  const finish = (p) => {
+  const ship = (p, how = "ok") => {
+    trace.outcome = how;
     const completed = completeOfficeCoverage(p, idMap, allItems, completionCtx);
     if (completed) {
       console.warn("[Atelier Validator] Office-coverage completion — added a layer over a short-sleeve/sleeveless top at the office.");
       logAiError("stylist_outfit:office_layer", { occasion, weather }, "added the office layer to a look that lacked it");
     }
-    return finish(completed || p, idMap, occasion);
+    // #231 shipped this line as `finish(...)` — the helper calling itself —
+    // so every generation that PASSED validation died in a stack overflow
+    // after its looks had streamed. resolveIds is what it always meant.
+    return resolveIds(completed || p, idMap, occasion);
   };
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) onProgress?.({ step: "retry", detail: { attempt, reason: retryReason } });
     // Append retry failures to the dynamic body — never to the cached preamble.
     let dynamicText = dynamicBody;
     if (attempt > 0 && lastFailures.length > 0) {
@@ -1671,10 +1731,17 @@ export async function generateValidatedLooks({
     // as a single tool_use content block with `input` matching the schema.
     // Attempt 0 streams so looks can surface one by one; retries use the
     // non-streaming path (simpler, and streaming isn't needed on a correction).
-    let toolBlock, raw;
+    const streamed = attempt === 0 && !!onLook;
+    const model = attempt === 0 ? PRIMARY_MODEL : FALLBACK_MODEL;
+    const rec = { attempt, model, streamed, firstTokenMs: null, totalMs: null, usage: null, stopReason: null, outcome: null };
+    trace.attempts.push(rec);
+    const attemptStarted = Date.now();
+    onProgress?.({ step: "stylist", detail: { attempt, model } });
+    let toolBlock, raw, stalled;
     try {
-      if (attempt === 0 && onLook) {
+      if (streamed) {
         let streamedCount = 0;
+        let firstToken = false;
         const streamedIds = new Set(); // track IDs already surfaced to caller
         // Short IDs of force-included pieces — exempt from the cross-look
         // duplicate hold below, matching checkNoDuplicates' exemption (a
@@ -1683,19 +1750,29 @@ export async function generateValidatedLooks({
         const forcedShortIds = new Set(
           Object.keys(idMap).filter(shortId => forcedRealIds.has(idMap[shortId]))
         );
-        ({ toolBlock, raw } = await invokeToolStream(
+        let streamResult;
+        ({ toolBlock, raw, stalled, ...streamResult } = await invokeToolStream(
           {
             apiKey,
             // Opus 4.8 for stronger outfit judgment. (Opus 4.8 removed the
             // sampling params — passing `temperature` now 400s. Look-to-look
             // variety comes from the per-look creative briefs and the random
-            // Seed line in the dynamic body.)
-            model: PRIMARY_MODEL,
+            // Seed line in the dynamic body.) No `thinking` here on purpose:
+            // on Opus 4.8 omitting it means no thinking, and this is the call
+            // she is waiting on — first token in seconds, not after a think.
+            model,
             maxTokens: 5000,
             content: messageContent,
             tool: LooksTool,
+            kind: "stylist_outfit",
+            idleMs: watchdog.idleMs,
+            totalMs: watchdog.totalMs,
           },
           (partial) => {
+            if (!firstToken) {
+              firstToken = true;
+              onProgress?.({ step: "first-token", detail: { attempt, model } });
+            }
             const found = extractCompleteLooks(partial);
             for (let idx = streamedCount; idx < found.length; idx++) {
               const rawLook = found[idx];
@@ -1754,22 +1831,41 @@ export async function generateValidatedLooks({
             streamedCount = found.length;
           }
         ));
+        Object.assign(rec, { usage: streamResult.usage, stopReason: streamResult.stopReason, ...(streamResult.timing || {}) });
       } else {
         // Retries appended a failure list to the dynamic body, so they need
         // at least as much budget as attempt 0 — not less. Previously 3500,
         // which caused retries to truncate mid-response.
-        ({ toolBlock, raw } = await invokeToolRaw({
+        const rawResult = await invokeToolRaw({
           apiKey,
           // Attempt 0 (single-look, no streaming) stays on Opus; any RETRY runs
           // on the fallback model, which also covers the "Opus overloaded" case.
-          model: attempt === 0 ? PRIMARY_MODEL : FALLBACK_MODEL,
+          model,
           maxTokens: 5000,
           content: messageContent,
           tool: LooksTool,
-        }));
+          kind: "stylist_outfit",
+          totalMs: watchdog.totalMs,
+          // Sonnet 5 thinks adaptively by default at effort `high`, which is
+          // why the retry used to be the SLOW half of a slow tap. Adaptive is
+          // its only on-mode (budget_tokens is a 400 there), so the lever is
+          // effort: `medium` keeps enough reasoning to act on a failure list
+          // without the long pause. Left off attempt 0 on Opus 4.8 on purpose
+          // — see the streaming call above. Caches are model-scoped, so the
+          // extra body keys cost nothing the model switch hadn't already.
+          ...(model === FALLBACK_MODEL
+            ? { thinking: { type: "adaptive" }, outputConfig: { effort: "medium" } }
+            : {}),
+        });
+        ({ toolBlock, raw } = rawResult);
+        Object.assign(rec, { usage: rawResult.usage, stopReason: rawResult.stopReason, ...(rawResult.timing || {}) });
       }
     } catch (e) {
-      logAiError("stylist_outfit:http", { attempt, status: e.status }, e);
+      rec.totalMs = rec.totalMs ?? (Date.now() - attemptStarted);
+      rec.outcome = e.stalled ? "stalled" : "http";
+      // A stalled non-streaming call already wrote its :stalled row in toolUse.
+      if (!e.stalled) logAiError("stylist_outfit:http", { attempt, status: e.status }, e);
+      if (e.stalled) onProgress?.({ step: "stalled", detail: { attempt, model, stalled: e.stalled } });
       // A transient/overload failure (or a network blip) shouldn't kill the whole
       // generation: fall through to the next attempt, which runs on the fallback
       // model. Only a non-retryable error (bad key, 400) or the final attempt
@@ -1779,25 +1875,40 @@ export async function generateValidatedLooks({
         // Clean re-request on the next attempt (fallback model) — this wasn't a
         // bad look to correct, so don't append it to the retry prompt.
         lastFailures = [];
+        retryReason = e.stalled ? "the stylist stalled" : e.message;
         continue;
       }
       throw e;
     }
+    rec.totalMs = rec.totalMs ?? (Date.now() - attemptStarted);
 
     if (!toolBlock) {
       // tool_choice is already forced — no need to echo an error on retry.
       // Clean attempt on the next round avoids confusing the model with a
       // "you didn't call the tool" message when it already has to call it.
       lastFailures = [];
-      logAiError("stylist_outfit:no_tool_use", raw, "missing tool_use block");
+      if (stalled) {
+        // The stream watchdog gave up (idle or total) and toolUse already
+        // wrote the :stalled row. Next attempt: non-streaming, fallback model.
+        rec.outcome = "stalled";
+        retryReason = "the stylist stalled";
+        onProgress?.({ step: "stalled", detail: { attempt, model, stalled } });
+      } else {
+        rec.outcome = "no_tool_use";
+        retryReason = "no looks came back";
+        logAiError("stylist_outfit:no_tool_use", raw, "missing tool_use block");
+      }
       continue;
     }
+    onProgress?.({ step: "validating", detail: { attempt, model } });
 
     const coerced = coerceLooksShapeLogged(toolBlock.input);
 
     // Stylist honesty clause: if the model genuinely can't build a look,
     // surface the explanation rather than retrying into something forced.
     if (coerced?.no_viable_looks === true) {
+      rec.outcome = "no_viable_looks";
+      trace.outcome = "no_viable_looks";
       return {
         looks: [],
         no_viable_looks: true,
@@ -1811,6 +1922,8 @@ export async function generateValidatedLooks({
         `${i.path.join(".") || "(root)"}: ${i.message}`
       ).join("; ");
       lastFailures = [{ type: "parse", message: `Schema validation failed: ${issueList}`, hard: true }];
+      rec.outcome = "schema";
+      retryReason = lastFailures[0].message;
       logAiError("stylist_outfit:schema", { input: toolBlock.input, issues: shapeCheck.error.issues }, issueList);
       continue;
     }
@@ -1827,9 +1940,12 @@ export async function generateValidatedLooks({
 
     if (hardFailures.length === 0) {
       // Passed all hard checks — resolve IDs and return
-      return finish(parsed, idMap, occasion);
+      rec.outcome = "ok";
+      return ship(parsed);
     }
 
+    rec.outcome = "hard_fail";
+    retryReason = hardFailures[0].message;
     lastFailures = failures;
     lastParsed = parsed;
     console.warn(`[Atelier Validator] Attempt ${attempt + 1} failed with ${failures.length} issues (stripped ${lastStrippedCount} invalid IDs):`,
@@ -1901,7 +2017,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:item_swap",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by swapping offending items for eligible ones");
-        return finish(swapped, idMap, occasion);
+        return ship(swapped, "salvage:item_swap");
       }
       // Swapping helped but didn't fully clear the board — carry the swapped
       // looks + fresh failures into the drop salvage below.
@@ -1925,7 +2041,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:item_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by dropping offending items");
-        return finish(trimmed, idMap, occasion);
+        return ship(trimmed, "salvage:item_drop");
       }
       // Item-dropping helped but didn't fully clear the board — hand the
       // trimmed looks + fresh failure list to the salvage steps below.
@@ -1949,7 +2065,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:include_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by adding the include-toggle layer to a look that lacked it");
-        return finish(completed, idMap, occasion);
+        return ship(completed, "salvage:include_add");
       }
       // The layer was added but other hard failures remain — hand the
       // completed looks + fresh failure list to the shoe salvage below.
@@ -1975,7 +2091,7 @@ export async function generateValidatedLooks({
         logAiError("stylist_outfit:shoe_salvage",
           { failures: lastFailures.filter(f => f.hard).map(f => ({ type: f.type, message: f.message })) },
           "salvaged by adding an eligible shoe to a shoe-less look");
-        return finish(completed, idMap, occasion);
+        return ship(completed, "salvage:shoe_add");
       }
       // Shoes were added but other hard failures remain — hand the completed
       // looks + fresh failure list to the look-drop salvage below.
@@ -2009,7 +2125,7 @@ export async function generateValidatedLooks({
         const salvaged = { ...lastParsed, looks: surviving };
         delete salvaged.notes;
         console.warn(`[Atelier Validator] Salvaging response — dropped ${dropped} look(s):`, dropReasons);
-        return finish(salvaged, idMap, occasion);
+        return ship(salvaged, "salvage:look_drop");
       }
     }
   }

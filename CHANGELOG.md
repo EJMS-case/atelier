@@ -2,6 +2,145 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Style Me could hang forever, every passing generation threw, and each tap re-pulled the closet's photos (#238) — 2026-09-11
+
+### Why
+Owner: *"It is not styling and VERY very very slow."* Read off the live
+rows and the edge logs, not guessed. A look landed at 03:15 UTC; she then
+ran the stylist-line writer (335 rows, ~03:30); every Style Me tap after
+it (~03:45, three or four) produced nothing — no look in the rotation
+state, and **zero rows in `ai_errors`**. Two things behind that, one of
+them older than tonight:
+
+1. **Nothing on the Style Me path had a timeout.** `anthropicFetch` got no
+   signal, `invokeToolStream` read the SSE body until the server closed it,
+   and iOS stalls or kills an in-flight fetch when the app backgrounds. A
+   stalled stream never rejected, `generationBusyRef` stayed true, every
+   later tap was a silent no-op, and the button sat on "Styling…" until a
+   full reload. That is "not styling", and it leaves no row by design.
+2. **Every generation that PASSED validation has thrown since #231.** The
+   validator's finishing helper shipped as `const finish = (p) => { …;
+   return finish(completed || p, idMap, occasion); }` — calling itself
+   where `resolveIds` was meant — so a clean or salvaged pass died in a
+   stack overflow after its look had streamed. App swallowed it whenever a
+   look had already streamed (never replace a shown look with an error
+   wall), so the streamed look survived but the final set, `allLooks`, and
+   the recent-combos memory never landed; when the streaming gate held the
+   look back and the final pass then passed, she saw the raw "Maximum call
+   stack size exceeded". Not an HTTP or schema path, so nothing logged it,
+   and no test called `generateValidatedLooks` end to end. Found by the new
+   watchdog suite on its first run.
+
+"Very slow" is the tap itself on the uncapped closet (#227). The sampler
+keeps ~200 (Work + Hot) to ~336 (Dinner, Casual) of her 460 NYC pieces, and
+`generateContactSheets` loaded every one of those photos full size, on the
+phone, on every tap: 120 at a time behind a 9 s timeout that started at
+QUEUE time (a phone's six connections per host means most of a batch timed
+out before its request began — placeholder cells and ~9 s burned per
+sheet); a module cache holding up to 600 decoded full-size images (headless
+Chromium: +0.55–0.66 GB of renderer memory after one cold 200–336-item run,
+and at 336 items even the warm path re-decoded every PNG, 5.6 s at 4× CPU
+throttle); and a cache that started empty on every reload of the PWA. The
+full photos average 262 kB (p90 569 kB, max 2.2 MB): a cold tap pulled
+52–88 MB to produce 240–400 kB of sheets. The edge logs show the same photo
+URLs fetched 5–9× within one hour. Measured on the live closet, the PROMPT
+is moderate — ~15k input tokens for Work + Hot (2 sheets), ~19k for Dinner
+(3 sheets); the stylist-line sweep added ~1.6–3k of that. The minutes were
+in the photos and the retries, not the words.
+
+### Fixed
+- **`utils/styling-validator.js` — the recursion.** `ship()` resolves ids
+  through `resolveIds` (what `finish` always meant) and names the exit for
+  the timing row. A sweep for the same shape (an arrow-function const that
+  calls its own name inside its body) found no other instance in `src/`.
+- **`lib/ai/toolUse.js` — stream watchdog.** `invokeToolStream` runs under
+  an idle clock (`IDLE_MS` 45 s with no bytes; the API pings every few
+  seconds while it works) and a total clock (`TOTAL_MS` 180 s), measured on
+  the wire via a new `onChunk` hook in `lib/ai/sse.js`. A stall never
+  throws: it returns `{ toolBlock: null, stalled: "idle"|"total" }` so the
+  validator's existing "no tool block → next attempt" branch runs, and the
+  next attempt is non-streaming on the fallback model. A caller abort and a
+  real HTTP error propagate exactly as before; `anthropicFetch`'s backoff
+  is abort-aware so a watchdog abort is thrown once, not slept on and
+  re-sent. Non-streaming calls (`invokeTool`, `invokeToolRaw`) share
+  `fetchToolJson`, one `TOTAL_MS` clock across both the POST and
+  `res.json()`; a stall throws a 408 (transient to every caller). Every
+  variant now returns `usage` (input / cache read / cache creation /
+  output tokens) and `timing` (first token, total).
+- **`utils/styling-validator.js` — retries think less.** Sonnet 5 retries
+  run adaptively at default `high` effort, which is why the retry used to be
+  the slow half of a slow tap. Adaptive is its only on-mode, so the lever
+  is `output_config.effort: "medium"` — enough to act on a failure list
+  without the long pause. Attempt 0 on Opus 4.8 sends no `thinking` on
+  purpose (omitting it there means none): that is the call she is waiting
+  on. `onProgress({ step, detail })` reports "stylist" → "first-token" →
+  "validating" (→ "retry" / "stalled").
+- **One `stylist_outfit:timing` row per tap** — occasion, weather, sampled
+  count, sheets and `sheetMs`, per-attempt `{ model, streamed,
+  firstTokenMs, totalMs, usage, stopReason, outcome }`, total ms, outcome
+  (`ok`, `salvage:*`, `validation_failed`, `stalled`, `http`…). Counts and
+  milliseconds only, never a prompt or a look. Until today the app recorded
+  no usage or timing anywhere; "slow" could not be split into sheets /
+  first token / model / validation, and a tap that never finished left no
+  row at all.
+- **`utils/thumbnail-cache.js` (new) + `utils/contact-sheet.js`.** One
+  90 px thumbnail per photo, decoded once, held small, persisted. Source is
+  the 256 px grid thumb the bucket already holds for 535 of 541 pieces
+  (`thumbs/<id>`, avg 54 kB), fetched first; the full photo only on error.
+  Downscaled to fit 90×90, JPEG-encoded, released — nothing larger than
+  90 px is retained (bounded memory Map: ≤ ~19 MB worst case, was
+  +0.55–0.66 GB). Persisted in IndexedDB (`atelier-thumbs`, keyed by the
+  thumb URL, which already changes with the photo) so the first tap after a
+  reload draws every sheet with zero network. Loads run through a 6-wide
+  pool with a per-image timeout that starts when THAT request starts; a
+  timed-out slot is released but the load lands in the cache for the next
+  roll. Everything degrades (no IndexedDB, quota, corrupt record, CORS):
+  memory-only → re-fetch → full photo → placeholder cell, never a failed
+  tap. `Thumb.jsx` and `recutDrip.js` invalidate the record when a photo is
+  replaced. Sheet geometry, token math, and the label band are unchanged.
+- **`App.jsx` — the waiting screen.** The spinner says what the generation
+  is doing ("Laying out 198 pieces for the stylist…", "Asking the
+  stylist…", "The stylist is composing…", "One more pass…", "The
+  connection stalled — trying again…") with elapsed seconds from 8 s on. A
+  tap that lands while a generation is still running no longer wipes the
+  screen and drops the spinner. Thumbnails pre-warm in the background a few
+  seconds after the grid settles, active closet first, three at a time,
+  then orphaned records are pruned.
+
+### Downstream
+- **Efficiency:** bytes per tap 52–88 MB cold → ≤ ~11–18 MB the first time
+  a device sees a closet (thumbs, usually already in the HTTP cache from the
+  grid) → 0 once warm; IndexedDB ~2.2 MB for the whole wardrobe. Tokens:
+  unchanged — the model sees the same 90 px cells, and the cached preamble
+  is byte-stable (the new body keys ride only the retry request, whose
+  model switch already forfeited the cache). Retries spend fewer thinking
+  tokens at `medium`. The timing row is ~1 kB per tap.
+- **Effectiveness:** the final validated set, `allLooks`, and the
+  recent-combos memory land again for the first time since #231 — every
+  surface that reads `allLooks` was starved. A stalled Opus call now falls
+  to Sonnet instead of freezing the button. Sheets no longer ship
+  placeholder cells for pieces whose request never started.
+- **Speed:** the 9 s-per-sheet stall and 200–336 full-size decodes per tap
+  are gone; a stalled tap resolves in ≤ 45 s idle / 180 s total instead of
+  never; the Sonnet pass is shorter. What the phone actually spends is now
+  in `ai_errors` — read it before touching anything else (HANDOFF has the
+  query).
+- **Education:** `allLooks` feeds the recent-combos block; with the
+  recursion gone Style Me stops re-proposing tonight's recipes. The timing
+  rows teach US: first-token vs sheet vs validation, per model, per closet
+  size.
+
+### Notes
+- No migration. `ai_errors` already accepts arbitrary kinds; the new ones
+  are `stylist_outfit:timing` and `stylist_outfit:stalled`.
+- `pruneThumbnails` runs after the warm pass; the six pieces without a
+  server thumb fall back to the full photo once and are then cached at 90 px
+  like everything else.
+- Found, not fixed — her data: 42 stylist lines carry a sentence of her
+  notes twice (`carryGuidance` appended a "for vacation, dinner" clause the
+  line already stated in other words). Harmless, a few tokens each; the
+  writer's clause matcher is the lever if it ever matters.
+
 ## [Unreleased] — Every deploy was stranding her open app, and Style Me is where it showed (#236) — 2026-09-10
 
 ### Why

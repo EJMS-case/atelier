@@ -17,6 +17,7 @@
 import { useEffect, useState } from "react";
 import { sb, thumbUrl } from "../lib/supabase.js";
 import { imageToBase64, compressImage } from "../utils/images.js";
+import { invalidateThumbnail } from "../utils/thumbnail-cache.js";
 
 const KEY = "atelier_thumb_ids";
 
@@ -66,6 +67,12 @@ function ensureThumb(item) {
       await sb.uploadThumb(id, thumb);
       known.add(id);
       persist();
+      // The contact-sheet cache keys its 90px copy by this item's thumb URL.
+      // If the server DELETE in App.updateItem failed (see forgetThumb), a
+      // Style Me tap between the photo swap and this upload cached the OLD
+      // garment under the NEW ?v= key; drop it so the next tap rebuilds
+      // from the thumb that now matches the photo.
+      invalidateThumbnail(item);
     } catch { /* keep the full image as the fallback; retry next session */ }
   });
   pump();
