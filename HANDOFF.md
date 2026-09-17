@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-17**, after the shopping rework (second session of the day). The session log below
+Refreshed **2026-09-17**, after PR #241. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-17 · the gap analysis shops at her price, from her wardrobe, and checks every pick against her closet
+### 2026-09-17 · PR #241 — the gap analysis shops at her price, from her wardrobe, and checks every pick against her closet
 
 **Owner, after her first run on #240:** a blue tote she owns, prices "way high", suggestions she didn't love, a menswear piece, and "can I add my own brand finds that map to a category?" Verified against the rows before touching code: the navy Quince tote is in NYC and reads as Blue, so the coverage math was right and the model invented the pick with nothing checking it; the persona was "styling director at Khaite" with no price data; the analysis read the active closet, not the wardrobe. CHANGELOG has the detail. To carry:
 

@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — The gap analysis shops at her price, from her wardrobe, and checks every pick against her closet before she sees it — 2026-09-17
+## [Unreleased] — The gap analysis shops at her price, from her wardrobe, and checks every pick against her closet before she sees it (#241) — 2026-09-17
 
 ### Why
 Owner, after one run: *"the gap analysis was wrong. It suggested a blue tote
