@@ -6,6 +6,7 @@ import { streamStyleProfile, colorHex } from "../lib/ai/stylist.js";
 // items are stripped upstream, so the row would always read zero anyway).
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { loadInsightsDismissed, saveInsightsDismissed } from "../utils/storage.js";
+import { useRun, startRun, RUN_KEYS } from "../lib/backgroundRun.js";
 
 // ── STYLE INSIGHTS ANALYSIS ──────────────────────────────────────────────────
 function analyzeWardrobe(items, outfitLogs) {
@@ -54,9 +55,13 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState(null);
   const [outfitLogs, setOutfitLogs] = useState([]);
-  const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileErr, setProfileErr] = useState("");
+  // The written profile streams inside lib/backgroundRun.js so leaving the
+  // screen mid-write never loses it; the last one is kept for the month.
+  const profileRun = useRun(RUN_KEYS.insightsProfile);
+  const profileLoading = profileRun.status === "running";
+  const profile = profileLoading ? profileRun.partial : (profileRun.status === "done" ? profileRun.result : null);
+  const [localErr, setLocalErr] = useState("");
+  const profileErr = localErr || (profileRun.status === "error" ? profileRun.error : "");
   const [dismissed, setDismissed] = useState(() => loadInsightsDismissed());
   const dismiss = (key) => { const next = [...dismissed, key]; setDismissed(next); saveInsightsDismissed(next); };
   const isDismissed = (key) => dismissed.includes(key);
@@ -73,16 +78,11 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
     return () => { cancelled = true; };
   }, [items]);
 
-  const handleGenerateProfile = async () => {
-    if (!apiKey) { setProfileErr("Add your Anthropic API key in Settings."); return; }
-    setProfileLoading(true); setProfileErr(""); setProfile("");
-    try {
-      const final = await streamStyleProfile(items, outfitLogs, analysis, apiKey, (partial) => {
-        setProfile(partial);
-      });
-      setProfile(final);
-    } catch (e) { setProfileErr(e.message); }
-    finally { setProfileLoading(false); }
+  const handleGenerateProfile = () => {
+    if (!apiKey) { setLocalErr("Add your Anthropic API key in Settings."); return; }
+    setLocalErr("");
+    startRun(RUN_KEYS.insightsProfile, ({ onPartial }) =>
+      streamStyleProfile(items, outfitLogs, analysis, apiKey, onPartial));
   };
 
   if (loading) return (
@@ -107,7 +107,12 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
         <button style={si.cardDismiss} onClick={() => dismiss("profile")} aria-label="Dismiss monthly profile card">✕</button>
         <div style={si.sectionLabel}>MONTHLY PROFILE</div>
         {profile ? <div style={si.profileText}>{profile}</div>
-          : <p style={si.profilePlaceholder}>{apiKey ? "Generate an AI-written style profile." : "Add your API key in Settings."}</p>}
+          : <p style={si.profilePlaceholder}>{profileLoading ? "Writing… you can leave, it keeps going." : apiKey ? "Generate an AI-written style profile." : "Add your API key in Settings."}</p>}
+        {profileRun.status === "done" && profileRun.finishedAt && (
+          <div style={{ fontSize: 10, color: "var(--color-text-muted)", margin: "6px 0 4px", letterSpacing: "0.06em" }}>
+            WRITTEN {new Date(profileRun.finishedAt).toLocaleDateString().toUpperCase()}
+          </div>
+        )}
         {profileErr && <p style={s.err}>{profileErr}</p>}
         <button style={si.profileBtn} onClick={handleGenerateProfile} disabled={profileLoading || !apiKey}>
           {profileLoading ? <><span style={s.spinnerSm}/> Writing…</> : profile ? "✦ Regenerate" : "✦ Generate Profile"}

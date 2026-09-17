@@ -23,10 +23,10 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (35 suites, no network)
+npm test           # full suite (40 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (13 screens, headless, mocked REST)
+npm run test:render     # just the render walk (23 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -91,6 +91,16 @@ Conventions worth knowing:
   pasted persona and no rubric: that is exactly how the builder chat ended up
   agreeing with everything (2026-09-10). Add the new file to the source
   contract in `scripts/stylist-standard.test.mjs`.
+- **Navigation is fixed (owner, 2026-09-17): ATELIER = Home; the closet
+  chip's NAME opens the closet grid and the ▼ beside it opens the switcher;
+  every top-level Back lands on Home.** Settings holds plumbing only
+  (account, keys, photo tools, sync). Anything else she uses — Style Profile,
+  Style Intelligence, Color Advisor, Visual AI, Brand Atlas, Shopping — is a
+  row on Home. Don't add a pointer card to Settings again.
+- **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
+  state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last
+  result persists per device. A run she can navigate away from and lose is
+  the bug she reported as "didn't run in the background".
 - **Her word is "preferences", never "rules."** *"I do not want hard rules in
   this app … only preferences."* Nothing she reads — a rationale, a tip, a
   chat reply, a Style Profile label — may call anything a rule or a
@@ -101,7 +111,14 @@ Conventions worth knowing:
   weather**: a long sleeve stands alone; short sleeves or a tank take a knit
   or blazer over them, the lightest she owns when it's hot. A weather branch
   must never delete an occasion preference — heat changes *which* layer,
-  never *whether* (that exact bug survived a year, 2026-09-10).
+  never *whether* (that exact bug survived a year, 2026-09-10). **The
+  advisory surfaces never cite the standard to her** — no "line 4", no "the
+  standard says", no "rule" or "violation" (2026-09-17: the prompts asked
+  the model to name the line it applied, and it did). The standard is the
+  stylist's eye; her only two fixed points are office dress and the open
+  blazer; everything else is spoken as taste. `advisoryPhrasing()` in
+  `standard.js` strips the validator's retry-loop voice before the chat or
+  evaluator reads a finding.
 - **A soft validator check on its own changes nothing at generation time.**
   Soft failures only reach the model inside a retry prompt, and retries only
   happen for hard failures. To hold a preference without a rule, pair the

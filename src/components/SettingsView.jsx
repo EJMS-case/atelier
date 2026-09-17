@@ -11,7 +11,7 @@ import { MODEL_TOP } from "../constants/models.js";
 import { anthropicFetch } from "../lib/ai/toolUse.js";
 import AccountPanel from "./AccountPanel.jsx";
 
-export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync, onNavigate }) {
+export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync }) {
   const [key,          setKey]          = useState(apiKey);
   const [rmbg,         setRmbg]         = useState(rmbgKey);
   const [showK,        setShowK]        = useState(false);
@@ -275,20 +275,9 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
 
       <AccountPanel />
 
-      {/* Style Profile & measurements — moved back from Home (owner,
-          2026-08-20: "settings is a better home for it along with my
-          measurements"). First card so it never gets buried under keys. */}
-      {onNavigate && (
-        <div style={s.settingsCard}>
-          <div style={s.settingsTitle}>✦ Style Profile &amp; Measurements</div>
-          <p style={s.settingsSub}>
-            Your stylist's read, color pairings, About Me &amp; measurements, and the AI Readiness audit. Everything here quietly shapes every look.
-          </p>
-          <button style={{...s.btnPrimary, width:"100%"}} onClick={() => onNavigate("profile")}>
-            Open Style Profile
-          </button>
-        </div>
-      )}
+      {/* Settings is plumbing only — account, keys, photo tools, sync. The
+          Style Profile and the specialty tools (Style Intelligence, Color
+          Advisor, Shopping, Visual AI) live on Home (owner, 2026-09-17). */}
 
       {/* Anthropic key */}
       <div style={s.settingsCard}>
@@ -342,29 +331,9 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
         </p>
       </div>
 
-      {/* More tools — Color Advisor, Style Insights, Shopping. These views
-          are deep enough that they don't deserve permanent nav real-estate,
-          but are useful enough that they shouldn't be unreachable either. */}
-      {onNavigate && (
-        <div style={s.settingsCard}>
-          <div style={s.settingsTitle}>✦ More Tools</div>
-          <p style={s.settingsSub}>Specialty views you can open without leaving Settings.</p>
-          <div style={{display:"flex", flexDirection:"column", gap:8, marginTop:6}}>
-            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("color")}>
-              ✦ Color Advisor — analyze a piece or audit your wardrobe
-            </button>
-            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("insights")}>
-              ✦ Style Intelligence — wear patterns, signature pairs, profile
-            </button>
-            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("shop")}>
-              ✦ Shopping — gap analysis and find pieces to fill them
-            </button>
-            <button style={{...s.btnSecondary, textAlign:"left"}} onClick={() => onNavigate("visionpilot")}>
-              ✦ Visual AI (pilot) — check how accurately AI reads your pieces
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Settings is plumbing only — account, keys, photo tools, sync. The
+          Style Profile and the specialty tools (Style Intelligence, Color
+          Advisor, Shopping, Visual AI) live on Home (owner, 2026-09-17). */}
 
       {/* Batch Background Removal */}
       <div style={s.settingsCard}>

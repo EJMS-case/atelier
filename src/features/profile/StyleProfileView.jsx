@@ -1,16 +1,16 @@
 // ── STYLE PROFILE ────────────────────────────────────────────────────────────
-// Roadmap B (owner survey 2026-08-08; placement "Inside Home" chosen by her
-// 2026-08-19): the taste surfaces move OUT of Settings into one place that
-// reads like her stylist's file on her —
+// Her stylist's file on her, opened from Home's "Your stylist's file & tools"
+// section (owner, 2026-09-17: anything that isn't a true setting lives on
+// Home; she first chose "Inside Home" on 2026-08-19). One place that holds —
 //   · Style Fingerprint ("your stylist's read") + refresh, now with a
 //     freshness line (how many new looks since the last read),
 //   · Color pairings editor + SUGGESTED pairs derived from her loved looks
 //     (deterministic, zero AI calls — families that co-occur in looks she
 //     hearted and aren't already on her list),
 //   · Style modes, and About Me (body + context fields).
-// Settings keeps only plumbing (keys, photo tools, data tools) and a pointer
-// here. All persistence is unchanged: prefs/About Me in localStorage via
-// storage.js (per-device, same as before), fingerprint in user_settings.
+// Settings keeps only plumbing (account, keys, photo tools, sync). All
+// persistence: prefs/About Me in localStorage via storage.js (per-device),
+// fingerprint, standing preferences and chat lessons in user_settings.
 
 import { useEffect, useMemo, useState } from "react";
 import { s } from "../../ui/styles.js";
@@ -115,12 +115,6 @@ export default function StyleProfileView({
     finally { setTrendRunning(false); }
   };
 
-  // The two photo-readable fields her office dress code turns on. Visual AI
-  // fills vision_data.sleeve for every photographed top it reads.
-  const unreadTops = useMemo(
-    () => readable.filter(it => it.category === "Tops" && getSleeveType(it) === "unknown" && it.image && !it.vision_data).length,
-    [readable],
-  );
   const updateAboutMe = (updated) => { setAboutMe(updated); saveAboutMe(updated); };
   const removePair = (i) => updatePrefs({ ...prefs, colorPairs: prefs.colorPairs.filter((_, idx) => idx !== i) });
   const addPair = (pair) => {
@@ -151,6 +145,14 @@ export default function StyleProfileView({
   // ran on `items` and left the 21 Arizona pieces without a line, 2026-09-11.)
   const readable = wardrobe.length ? wardrobe : items;
   const audit = useMemo(() => auditCloset(readable), [readable]);
+  // The photo-readable field her office dress code turns on. Visual AI fills
+  // vision_data.sleeve for every photographed top it reads. (Declared AFTER
+  // `readable`: a const read before its line throws, and this memo sat above
+  // the declaration for a session — the screen errored on open, 2026-09-17.)
+  const unreadTops = useMemo(
+    () => readable.filter(it => it.category === "Tops" && getSleeveType(it) === "unknown" && it.image && !it.vision_data).length,
+    [readable],
+  );
   const [auditOpen, setAuditOpen] = useState(false);
 
   // "Write stylist lines" — fills the line the stylist reads for every piece

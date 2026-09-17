@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { s, si } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
 import { generateShoppingRecs } from "../lib/ai/stylist.js";
+import { useRun, startRun, RUN_KEYS } from "../lib/backgroundRun.js";
 import {
   closetColorProfile, colorCategoryCoverage, pairUnlocks, textureInventory,
   seasonForDate, hexForColorLabel,
@@ -80,10 +81,17 @@ function CoveragePanel({ items }) {
 export default function ShoppingView({ items, apiKey, onBack }) {
   const [mode, setMode] = useState("gap");
   const [selectedIds, setSelectedIds] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState(null);
-  const [err, setErr] = useState("");
   const [pickerQuery, setPickerQuery] = useState("");
+  // The analysis runs in lib/backgroundRun.js, not in this component's
+  // state: leaving the screen no longer loses it, and the last result is
+  // still here tomorrow (owner, 2026-09-17: it "took FOREVER and didn't run
+  // in the background"). One run per mode.
+  const runKey = mode === "gap" ? RUN_KEYS.shoppingGap : RUN_KEYS.shoppingComplete;
+  const run = useRun(runKey);
+  const loading = run.status === "running";
+  const results = run.status === "done" ? run.result : null;
+  const [localErr, setLocalErr] = useState("");
+  const err = localErr || (run.status === "error" ? run.error : "");
 
   const PICKER_CAP = 60;
   const q = pickerQuery.trim().toLowerCase();
@@ -101,15 +109,11 @@ export default function ShoppingView({ items, apiKey, onBack }) {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
-  const handleAnalyze = async () => {
-    if (!apiKey) { setErr("Add your Anthropic API key in Settings."); return; }
-    if (mode === "complete" && selectedIds.length === 0) { setErr("Select at least one piece."); return; }
-    setLoading(true); setErr(""); setResults(null);
-    try {
-      const data = await generateShoppingRecs(items, apiKey, mode, selectedIds);
-      setResults(data);
-    } catch (e) { setErr(e.message); }
-    finally { setLoading(false); }
+  const handleAnalyze = () => {
+    if (!apiKey) { setLocalErr("Add your Anthropic API key in Settings."); return; }
+    if (mode === "complete" && selectedIds.length === 0) { setLocalErr("Select at least one piece."); return; }
+    setLocalErr("");
+    startRun(runKey, () => generateShoppingRecs(items, apiKey, mode, selectedIds));
   };
 
   const priorityColor = { high: "var(--color-danger)", medium: "#8B6914", low: "var(--color-success)" };
@@ -123,7 +127,7 @@ export default function ShoppingView({ items, apiKey, onBack }) {
 
       <div style={s.modeTabs}>
         {[["gap","Gap Analysis"],["complete","Complete a Look"]].map(([m, label]) => (
-          <button key={m} onClick={() => { setMode(m); setResults(null); setErr(""); }}
+          <button key={m} onClick={() => { setMode(m); setLocalErr(""); }}
             style={{...s.modeTab, ...(mode === m ? s.modeTabActive : {})}}>{label}</button>
         ))}
       </div>
@@ -168,9 +172,19 @@ export default function ShoppingView({ items, apiKey, onBack }) {
       )}
 
       {err && <p style={s.err}>{err}</p>}
-      <button style={{...s.btnPrimary, width:"100%", marginBottom:20}} onClick={handleAnalyze} disabled={loading}>
-        {loading ? <><span style={s.spinnerSmLight}/> Analyzing…</> : <><Icon path={icons.sparkle} size={15}/> {mode === "gap" ? "Run Gap Analysis" : `Find Pieces (${selectedIds.length} selected)`}</>}
+      <button style={{...s.btnPrimary, width:"100%", marginBottom: loading ? 6 : 20}} onClick={handleAnalyze} disabled={loading}>
+        {loading ? <><span style={s.spinnerSmLight}/> Analyzing…</> : <><Icon path={icons.sparkle} size={15}/> {mode === "gap" ? (results ? "Run Gap Analysis again" : "Run Gap Analysis") : `Find Pieces (${selectedIds.length} selected)`}</>}
       </button>
+      {loading && (
+        <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
+          This takes a minute or two. You can leave — it keeps running, and the result waits here and on Home.
+        </div>
+      )}
+      {results && run.finishedAt && (
+        <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginBottom: 10, letterSpacing: "0.06em" }}>
+          RAN {new Date(run.finishedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).toUpperCase()}
+        </div>
+      )}
 
       {results && mode === "gap" && results.gaps && (
         <div>

@@ -613,4 +613,3 @@ export const loadThumbnails      = (subjects, o)  => instance().loadThumbnails(s
 export const warmThumbnails      = (items, o)     => instance().warmThumbnails(items, o);
 export const invalidateThumbnail = (subject)      => instance().invalidateThumbnail(subject);
 export const pruneThumbnails     = (items)        => instance().pruneThumbnails(items);
-export const thumbnailStats      = ()             => instance().stats();

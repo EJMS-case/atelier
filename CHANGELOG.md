@@ -2,6 +2,97 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — ATELIER is home, the tools leave Settings, long runs survive the screen, and the stylist stops citing "line 4" — 2026-09-17
+
+### Why
+Owner, from her phone, in one message: *"When I exit out of the page that
+opens when I open the app (the colors etc), how do I get back there? I seem
+to have to force exit the app to get back there. I'd rather click 'atelier'
+to get there and have the closets clickable with the dropdown beside it."*
+*"It errors out when I open my style profile."* *"The last time I ran shopping
+ideas and analysis it took FOREVER and didn't run in the background. Can that
+feature, as well as anything that isn't a true 'setting' live on the home
+page with everything else? The colors can be collapsed as well."* *"In the
+evaluator and stylist chat, there's frequent mention of my hard rules and
+things like (line 4). I really didn't want hard rules outside of some
+specifics around what I can/can't wear at work, and how I wear my blazers."*
+
+### What shipped
+1. **Navigation.** The ATELIER brand goes **Home**; the closet chip is two
+   taps — its **name opens the closet grid**, the **▼ beside it opens the
+   switcher**. The "Home" nav chip is gone (the brand is home), so the row is
+   Style Me · Planner · Saved · Inspo · ⚙ and fits an iPhone without
+   scrolling. Every top-level "← Back" and the error boundary's "Go back"
+   land on Home, the screen the app opens on. (`App.jsx`, `ui/styles.js`.)
+2. **Style Profile errored on open.** `unreadTops` (a `useMemo` over
+   `readable`) sat eleven lines ABOVE `const readable = …` — a temporal-dead-
+   zone `ReferenceError` on the first render, caught by the view boundary as
+   "Something hiccuped". It passed every unit suite and esbuild because
+   nothing walked the screen; the render walk now opens Style Profile and the
+   five other screens that moved to Home, and Settings.
+3. **Everything that isn't a setting is on Home.** A "Your stylist's file &
+   tools" section (Style Profile, Style Intelligence, Color Advisor, Visual
+   AI) sits above "Shop smarter" (Brand Atlas, Gap Analysis & Shopping).
+   Settings is plumbing only: account, keys, photo tools, sync. Color
+   Stories collapse (▲/▼ in the section header, remembered per device).
+4. **Long AI runs survive the screen.** `lib/backgroundRun.js` — a store
+   outside React: `startRun(key, task)` once, `useRun(key)` from any
+   component, leave and come back. A Gap Analysis, a Complete-a-Look, the
+   Style Intelligence profile (streamed partials included) and a Brand Atlas
+   scout all run there now; the last result is kept in `localStorage` with
+   its time, so the answer is still there tomorrow, and the Home rows show a
+   pulsing dot while one is in flight. Before, the fetch outlived the
+   component but the result had nowhere to land — that is the "didn't run in
+   the background". `test:runs` covers join-in-flight, partials, storage
+   read-back, and error-keeps-last-good.
+5. **"Forever":** the shopping calls ran Sonnet 5's default thinking effort
+   (high) plus one full retry on an empty result. Both calls now pass
+   `effort: medium`, the same setting the Style Me fallback already uses on
+   this tier — the coverage math is done in code before the model sees it.
+6. **"Hard rules" and "(line 4)".** The model cited the standard because the
+   prompt told it to: `STYLIST_STANDARD` opened with *"Say which line you
+   are applying when you praise or fault something"*, `OPINION_RULES` with
+   *"Name the line of the standard you are applying"*, the evaluator asked
+   for *"the line of the standard it satisfies"*, and `readLook()` wrote
+   "standard line 2 / 4 / 8" into LOOK FACTS. All four are gone. The
+   standard now says it is the stylist's eye, not her rulebook, and that
+   "rule", "violation", "line N", "the standard" never reach her; HOW SHE
+   WEARS THINGS names the only two fixed points in her own words (office
+   dress, open blazer) and everything else as her taste, spoken as taste.
+   `advisoryPhrasing()` re-cuts the validator's retry-loop messages
+   ("(HC_SHOULDER)", "Drop it.", "only ONE per look", "must include") into
+   observations before an advisory surface reads them — Style Me's retry
+   loop keeps the imperative originals. The fingerprint prompt and the Style
+   Me edits block no longer call a repeated correction "a rule of taste".
+7. **Audit.** `saveStandingPreferences` / `saveChatLessons` cleared the chat
+   and evaluator memo but not Style Me's (`learnedForStyleMe`), so a
+   preference she added in Style Profile reached the builder chat at once
+   and Style Me up to ten minutes later; `invalidateAllLearning` existed for
+   exactly this and had no caller. One `invalidateLearning()` clears both
+   now; the dead wrapper, `standingAndLessons` (no caller) and
+   `thumbnailStats` (no caller) are removed. Six comments still describing
+   Settings as the home of the profile, pairings and tools are corrected.
+
+### Downstream, four ways
+- **Efficiency.** The cached advisory preamble changes bytes once (the
+  standard's wording); the closet block behind it is untouched. Two prompt
+  lines in Style Me's preamble change ("in her Style Profile") — one cache
+  miss per device, then stable. The Home tools section renders from local
+  state; no new fetch on Home. Shopping runs cost less thinking.
+- **Effectiveness.** The preference she asked for reaches every advisory
+  surface through one file (`standard.js`) and one phrasing function; the
+  fingerprint and Style Me edits block stop teaching "rule" back to her.
+- **Speed.** Fewer nav taps to Home (one); shopping at medium effort; a run
+  she leaves still lands.
+- **Education.** A preference saved in Style Profile now reaches Style Me on
+  the next tap, not ten minutes later.
+
+### Verified
+`npm test` (40 suites; `test:runs` new, `test:standard` +2), `npm run
+build`, `npm run smoke` green — the render walk now covers 23 screens
+including Style Profile, Style Intelligence, Color Advisor, Visual AI, Gap
+Analysis, Brand Atlas, the closet switcher, and Settings.
+
 ## [Unreleased] — The app-open path, measured: a research call fired on every cold open, 118 kB of unused SDK in the boot chunk, and the sweep that stopped at one closet (#239) — 2026-09-11
 
 ### Why

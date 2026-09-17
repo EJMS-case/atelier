@@ -263,8 +263,13 @@ export function composeLearnedBlocks({
 // ── Gathering (memoised per session, soft-fail) ─────────────────────────────
 
 let cache = null; // { at, key, value }
+let standingCache = null; // learnedForStyleMe's copy (below)
 const TTL_MS = 10 * 60 * 1000;
-export function invalidateLearning() { cache = null; }
+// Every save calls this. It clears BOTH memos — the advisory surfaces' and
+// Style Me's — so a preference she adds reaches every surface on the next
+// tap. (Until 2026-09-17 the saves cleared only the first; Style Me kept its
+// copy for up to ten minutes, and the function that cleared both had no caller.)
+export function invalidateLearning() { cache = null; standingCache = null; }
 
 /**
  * Everything the app has learned, as prompt blocks — for the builder chat,
@@ -357,7 +362,6 @@ export function builtLookLines(logs, wardrobe, { max = 6 } = {}) {
 // the TAP free of any log fetch. Only when absent does this fetch, and
 // fetchOutfitLogs is slim now (2026-09-10: this call sat on the Style Me tap
 // re-downloading 2.2 MB of legacy base64 collages she was waiting on).
-let standingCache = null;
 export async function learnedForStyleMe({ wardrobe = [], logs = null } = {}) {
   const key = `${(wardrobe || []).length}|${Array.isArray(logs) ? logs.length : "fetch"}`;
   if (standingCache && standingCache.key === key && Date.now() - standingCache.at < TTL_MS) return standingCache.value;
@@ -371,10 +375,3 @@ export async function learnedForStyleMe({ wardrobe = [], logs = null } = {}) {
   standingCache = { at: Date.now(), key, value };
   return value;
 }
-// Kept for callers that only need the first two.
-export async function standingAndLessons() {
-  const { standing, lessons } = await learnedForStyleMe();
-  return { standing, lessons };
-}
-const _invalidate = invalidateLearning;
-export function invalidateAllLearning() { _invalidate(); standingCache = null; }

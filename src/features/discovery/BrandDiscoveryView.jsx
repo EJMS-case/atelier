@@ -6,14 +6,21 @@
 // excluded from every future run.
 
 import { useState } from "react";
+import { useRun, startRun, RUN_KEYS } from "../../lib/backgroundRun.js";
 import { s } from "../../ui/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { generateBrandDiscovery } from "./discoveryAI.js";
 import { PALETTE } from "../../constants/palette.js";
 
 export default function BrandDiscoveryView({ items = [], apiKey, discovery, setDiscovery, onBack }) {
-  const [running, setRunning] = useState(false);
-  const [err, setErr] = useState("");
+  // The scout is a web-search-backed call that can run a minute; it lives in
+  // lib/backgroundRun.js so leaving this screen never loses it. The result
+  // itself is persisted to user_settings the moment it lands (below), so the
+  // run store only carries the in-flight state.
+  const run = useRun(RUN_KEYS.brandScout);
+  const running = run.status === "running";
+  const [localErr, setLocalErr] = useState("");
+  const err = localErr || (run.status === "error" ? run.error : "");
 
   const dismissed = discovery?.dismissed || [];
   const brands = (discovery?.brands || []).filter(
@@ -25,15 +32,14 @@ export default function BrandDiscoveryView({ items = [], apiKey, discovery, setD
     sb.saveBrandDiscovery(next);
   };
 
-  const runScout = async () => {
-    if (!apiKey) { setErr("Add your Anthropic API key in Settings."); return; }
-    setRunning(true); setErr("");
-    try {
+  const runScout = () => {
+    if (!apiKey) { setLocalErr("Add your Anthropic API key in Settings."); return; }
+    setLocalErr("");
+    startRun(RUN_KEYS.brandScout, async () => {
       const result = await generateBrandDiscovery({ items, apiKey, excludeBrands: dismissed });
       persist({ ...result, dismissed });
-    } catch (e) {
-      setErr(e.message || "Scouting failed — try again.");
-    } finally { setRunning(false); }
+      return true; // the payload lives in user_settings, not the run store
+    });
   };
 
   const dismissBrand = (name) => {

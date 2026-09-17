@@ -111,7 +111,7 @@ export async function generateStyleFingerprint({ items, logs = [], plans = [], e
 - Fabric and texture pairings she gravitates toward (matte × sheen, leather × knit, etc.)
 - Finishing choices she repeats (heels vs flats, bag style, belt usage)
 - Pieces she returns to often, or sets she always wears together
-- Notable absences (what she NEVER pairs)${editLines.length > 0 ? `\n- Corrections she keeps making to suggestions (what she consistently swaps out or in, per occasion) — a repeated correction is a strong taste rule` : ""}
+- Notable absences (what she NEVER pairs)${editLines.length > 0 ? `\n- Corrections she keeps making to suggestions (what she consistently swaps out or in, per occasion) — a repeated correction is a settled preference of yours` : ""}
 
 Do NOT:
 - Treat any color as "her favorite" — the whole closet is chosen and approved. Describe pairing technique only.

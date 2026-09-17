@@ -257,7 +257,7 @@ Weather still governs fabric weight and coverage.\n`
   // steer choices without polluting item selection. Soft bias by design: a
   // piece she removed once is not banned.
   const swapLessonsBlock = (swapLessons && swapLessons.length > 0)
-    ? `\n✂️ HER EDITS — direct corrections she made to previously suggested looks (swap = what she took OUT → what she chose INSTEAD; ×N = made the same correction N times). This is the strongest signal of her taste per context.\n${swapLessons.map((l, i) => `${i + 1}. ${l}`).join("\n")}\nRead these as standing lessons: for a similar occasion and weather, don't re-make a choice she has already un-made — reach for the KIND of piece she swapped in, and stop centering pieces she repeatedly swaps out or removes. Gentle bias, not a ban: one edit is a data point, a repeated edit (×2+) is a rule of taste.\n`
+    ? `\n✂️ HER EDITS — direct corrections she made to previously suggested looks (swap = what she took OUT → what she chose INSTEAD; ×N = made the same correction N times). This is the strongest signal of her taste per context.\n${swapLessons.map((l, i) => `${i + 1}. ${l}`).join("\n")}\nRead these as standing lessons: for a similar occasion and weather, don't re-make a choice she has already un-made — reach for the KIND of piece she swapped in, and stop centering pieces she repeatedly swaps out or removes. Gentle bias, not a ban: one edit is a data point, a repeated edit (×2+) is a settled preference.\n`
     : "";
 
   // Occasion memory — per-occasion hero-piece lines (features/stylist/
@@ -349,7 +349,7 @@ function formatStylePrefs(prefs) {
   if (!prefs) return "";
   const parts = [];
   if (prefs.colorPairs?.length > 0) {
-    // She enters these BY HAND in Settings → Style Preferences — declared
+    // She enters these BY HAND in Style Profile → Color Pairings — declared
     // favorites, not history inference. The old framing ("use to understand
     // her pairing method, not to restrict palette") told the model NOT to act
     // on the pairs themselves, and she noticed: restyling a black dress never
@@ -357,7 +357,7 @@ function formatStylePrefs(prefs) {
     // list (owner, 2026-08-13). Now the pairs are live styling tools; the
     // never-force guard stays — a pair jammed in against occasion/weather
     // would be worse than no pair at all.
-    parts.push(`🎨 HER FAVORITE COLOR PAIRINGS — she chose these herself in Settings; put them to WORK: ${prefs.colorPairs.join(", ")}.
+    parts.push(`🎨 HER FAVORITE COLOR PAIRINGS — she chose these herself in her Style Profile; put them to WORK: ${prefs.colorPairs.join(", ")}.
 When a look anchors on a color from one of these pairs, reaching for its partner is a signature move she loves. Neutrals (black, white, cream, grey, camel) are ground for ANY pair — a neutral hero piece (a plain black dress, a cream trouser) WANTS one of these pair colors on the partner piece (the blazer, the shoe, the knit, the bag), and that is the elevated stylist move to reach for BEFORE defaulting to all-neutral safety. Never force a pair against the occasion or weather; the whole closet stays approved.`);
   }
   if (prefs.autoPairs?.length > 0) {
@@ -379,7 +379,7 @@ When a look anchors on a color from one of these pairs, reaching for its partner
   // Leading/trailing newlines: this block now rides inside the personal-signal
   // cluster (right after PERSONAL PATTERNS), whose blocks all self-delimit.
   return parts.length > 0
-    ? `\nSTYLE PREFERENCES (set by her, by hand, in Settings — act on them; soft bias, never a hard rule):\n${parts.join("\n")}\n`
+    ? `\nSTYLE PREFERENCES (set by her, by hand, in her Style Profile — act on them; soft bias, never a hard rule):\n${parts.join("\n")}\n`
     : "";
 }
 

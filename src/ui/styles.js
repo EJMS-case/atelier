@@ -27,8 +27,11 @@ export const s = {
   // Active-closet chip + switcher popover (multi-closet, Phase A). The chip
   // sits in the header next to the brand and reads as a mode switch — the
   // name truncates on narrow phones instead of pushing the nav off-screen.
-  closetChip: { display:"flex", alignItems:"center", gap:4, background:"var(--color-ink-2)", border:"1px solid var(--color-border-muted)", color:"var(--color-surface)", borderRadius:12, padding:"3px 9px", fontSize:10, letterSpacing:"0.06em", cursor:"pointer", flexShrink:1, minWidth:0, maxWidth:120 },
-  closetChipName: { overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
+  // The chip is a wrapper holding two buttons: the closet NAME (opens the
+  // grid) and the ▼ ARROW (opens the switcher). Both inherit the chip's type.
+  closetChip: { display:"flex", alignItems:"stretch", background:"var(--color-ink-2)", border:"1px solid var(--color-border-muted)", color:"var(--color-surface)", borderRadius:12, fontSize:10, letterSpacing:"0.06em", flexShrink:1, minWidth:0, maxWidth:140 },
+  closetChipName: { background:"none", border:"none", color:"inherit", font:"inherit", letterSpacing:"inherit", padding:"3px 4px 3px 9px", cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 },
+  closetChipArrow: { background:"none", border:"none", borderLeft:"1px solid var(--color-border-muted)", color:"inherit", fontSize:7, padding:"0 8px 0 6px", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center" },
   closetMenu: { position:"absolute", top:"calc(100% + 6px)", left:0, background:"#fff", border:"1px solid var(--color-border)", borderRadius:8, boxShadow:"0 8px 24px rgba(0,0,0,0.18)", padding:4, minWidth:180, zIndex:120 },
   closetMenuItem: { display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1, width:"100%", background:"none", border:"none", borderRadius:6, padding:"8px 10px", fontSize:12, color:"var(--color-ink)", cursor:"pointer", textAlign:"left" },
   closetMenuItemActive: { background:"var(--color-surface)", fontWeight:600 },
