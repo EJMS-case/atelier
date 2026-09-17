@@ -1,12 +1,27 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-17**, after PR #240. The session log below
+Refreshed **2026-09-17**, after the shopping rework (second session of the day). The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-17 · the gap analysis shops at her price, from her wardrobe, and checks every pick against her closet
+
+**Owner, after her first run on #240:** a blue tote she owns, prices "way high", suggestions she didn't love, a menswear piece, and "can I add my own brand finds that map to a category?" Verified against the rows before touching code: the navy Quince tote is in NYC and reads as Blue, so the coverage math was right and the model invented the pick with nothing checking it; the persona was "styling director at Khaite" with no price data; the analysis read the active closet, not the wardrobe. CHANGELOG has the detail. To carry:
+
+1. **`src/features/shopping/` is the gap analysis now.** `runShoppingAnalysis` gathers the grounding (what she pays, who she buys from, her finds, her verdicts, the rooms she wears, the trend brief), calls the model on the WARDROBE, and `verifyGaps` drops owned pieces (category + colour family + form), menswear, and verdict repeats — shown to her as "left out". Don't add a shopping instruction to the prompt without a check behind it; that is how "don't suggest duplicates" shipped a blue tote.
+2. **Her brand finds and her verdicts are `user_settings` keys** (`brand_finds`, `shopping_verdicts`), read on the Shopping page (own GET each — not mount reads, so not in `SETTINGS_BATCH_KEYS`). Brand Atlas excludes the finds.
+3. **Womenswear-only is structural** (`MENSWEAR_RE` + the WOMENSWEAR line) — her word, and not a taste call.
+
+**Watch-items:**
+- **Her next Gap Analysis:** prices should sit in her bands (Bags ~$175–$400, Shoes ~$100–$260, Tops ~$60–$140), brands should be her tier, and the "left out" list should be short. If the list is mostly "left out", the model is still reaching for what she owns and the coverage lines' wording is the lever; if it comes back empty twice, the "zero to six" ask is too strict.
+- **A false "you already own this":** the form-word match (`ownedMatches`) is deliberately loose on category + family. If it drops a pick she does NOT own (a navy clutch matched to a navy tote should not happen — subcategory guards it — but a suggestion with no form word could), the `forms` list in `verifyGaps.js` is the lever.
+- **The verdict buttons write cross-device**; if a verdict does not survive a reload, check `user_settings.shopping_verdicts`.
+
+**Verified before push:** `npm test` (41 suites; `test:shopping` new), `npm run build`, `npm run smoke` green (24 walk steps).
 
 ### 2026-09-17 · PR #240 — ATELIER is home, the tools leave Settings, long runs survive the screen, the stylist stops citing "line 4"
 

@@ -23,10 +23,10 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (40 suites, no network)
+npm test           # full suite (41 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (23 steps, headless, mocked REST)
+npm run test:render     # just the render walk (24 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -97,6 +97,14 @@ Conventions worth knowing:
   (account, keys, photo tools, sync). Anything else she uses — Style Profile,
   Style Intelligence, Color Advisor, Visual AI, Brand Atlas, Shopping — is a
   row on Home. Don't add a pointer card to Settings again.
+- **Shopping lives in `src/features/shopping/`.** A buy decision reads the
+  WARDROBE (both closets), prices come from her own `price_paid` bands and
+  brands from her tier (`spend.js`), and every model pick is verified
+  against the closet, her verdicts, and a womenswear-only line before she
+  sees it (`verifyGaps.js`). A shopping instruction in a prompt with no
+  check behind it is how "don't suggest duplicates" shipped a blue tote she
+  owned (2026-09-17). Her brand finds and verdicts are `user_settings`
+  keys read by the gap analysis, Complete-a-Look, and Brand Atlas.
 - **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
   state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last
   result persists per device. A run she can navigate away from and lose is

@@ -467,8 +467,15 @@ async function invokeShoppingTool(opts, key) {
 }
 
 // ── SHOPPING RECS (gap analysis or outfit-completion) ───────────────────────
-export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []) {
+// `items` is the WARDROBE — everything she owns, both closets — because a
+// buy decision is a "do I own it" question (a NYC bag is owned from Arizona
+// too). `extras.available` is the Complete-a-Look picker's pool, the one
+// place the active closet is right. `extras.blocks` are the grounding lines
+// features/shopping/gapAnalysis.js gathers: what she pays, who she buys
+// from, her finds, her verdicts, the rooms she wears, the season's brief.
+export async function generateShoppingRecs(items, apiKey, mode, selectedIds = [], extras = {}) {
   const wardrobeSummary = summarizeInventory(items);
+  const grounding = (extras.blocks || []).filter(Boolean).join("\n\n");
   const now = new Date();
   const dateContext = `${now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}, NYC`;
 
@@ -510,16 +517,17 @@ ${coverageSignals}
 ${fp ? `
 HER STYLE FINGERPRINT (distilled from what she actually wears — extend this direction):
 ${fp}
+` : ""}${grounding ? `
+${grounding}
 ` : ""}
-Identify the 5-8 HIGHEST-IMPACT gaps, weighing:
-1. A CORE-PALETTE COLOR MISSING FROM AN ANCHOR CATEGORY is the sharpest kind of gap — if she lives in navy and burgundy but owns no navy bag, a navy bag beats any generic "essential". Read the COLOR × CATEGORY COVERAGE lines and act on them. HARD REQUIREMENT: when those lines list missing core colors, at least TWO of your gaps must come directly from them (fewer only if fewer exist), and at least ONE gap must come from IN-FASHION PAIRINGS ONE PURCHASE AWAY when any are listed.
+Return ONLY the gaps that are real — zero to six. A closet this considered may have two; say so rather than padding. Weigh, in order:
+1. A CORE-PALETTE COLOR MISSING FROM AN ANCHOR CATEGORY is the sharpest kind of gap — if she lives in navy and burgundy but owns no navy bag, a navy bag beats any generic "essential". Read the COLOR × CATEGORY COVERAGE lines and act on them. A colour the coverage line shows she OWNS in a category is not a gap in that category — one navy bag means she has a navy bag.
 2. IN-FASHION PAIRINGS ONE PURCHASE AWAY — one right piece that activates a pairing against many pieces she already owns is maximum leverage per dollar.
-3. TEXTURES missing or thin for the season ahead — a wardrobe this considered should have its ${season} textures covered.
-4. MISSING or THIN subcategories that a complete wardrobe needs.
-5. Her priority occasions: Work, Work Dinner, Dinner, Casual — a gap that improves those matters more than one that doesn't.
-6. The season ahead (next 3 months from today's date).
+3. The rooms she actually dresses for (above, when listed) and the season ahead (next 3 months from today's date), with the season's brief when present.
+4. TEXTURES missing or thin for the season ahead.
+5. MISSING or THIN subcategories that a complete wardrobe needs.
 
-For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Every description and reason is written TO her: "you", "your" — never "she" or "her". Infer her taste from the wardrobe summary itself — the brands and pieces she actually owns are the signal. There is NO required brand list: recommend the best piece for the gap at whatever maker and price point genuinely fits, naming a brand only when it truly is the right make for that piece. Keep description and reason to one tight sentence each. You MUST return at least one gap — if the wardrobe is genuinely complete, return the single most worthwhile upgrade instead.`;
+Before you write a gap, check the WARDROBE SUMMARY for the same category and colour: if she owns it, it is not a gap. For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Every description and reason is written TO her: "you", "your" — never "she" or "her". Price it inside WHAT SHE PAYS for that category and name a brand from her tier or her finds when one genuinely fits — never a luxury house she does not shop. Keep description and reason to one tight sentence each. If nothing is genuinely missing, return one gap that is the single most worthwhile upgrade and say in its reason that the closet is covered.`;
 
     return invokeShoppingTool({
       apiKey,
@@ -548,10 +556,10 @@ For each gap suggest ONE specific product to buy. Be specific: color, fabric, si
     }, "gaps");
   }
 
-  // Deliberately the PICK pool, not the wardrobe: these are the pieces she has
-  // selected in the closet grid right now, so they are available by
-  // construction. The one resolve in this file that is correctly scoped.
-  const selectedItems = resolveItemIds(items, selectedIds);
+  // The PICK pool: the pieces she selected in the closet grid right now come
+  // from what is available to her, so they resolve against that pool (the
+  // wardrobe is the fallback when a caller passes none).
+  const selectedItems = resolveItemIds(extras.available?.length ? extras.available : items, selectedIds);
   const outfitStr = selectedItems.map(it =>
     `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`
   ).join("\n");
@@ -570,15 +578,17 @@ ${completeFp}
 ` : ""}
 TODAY: ${dateContext}
 
-WARDROBE SUMMARY (what she already owns — don't suggest buying duplicates):
+WARDROBE SUMMARY (what she already owns — a piece she owns in the same category and colour is not something to buy):
 ${wardrobeSummary}
-
+${grounding ? `
+${grounding}
+` : ""}
 Analyze what's missing from this outfit to make it complete and elevated, then return suggestions via the return_completions tool. Consider:
 - Does it need shoes? A bag? Outerwear?
 - Could a specific accessory elevate it?
 - Is there a texture or color gap?
 
-Suggest 3-5 specific pieces to BUY that would complete or elevate this outfit. Be specific: color, fabric, silhouette. Write description and why TO her — "you", "your" — never "she" or "her". Infer her taste from what she owns — name a brand only when it's genuinely the right make for the piece, never from a default luxury short-list. Keep description and why to one tight sentence each.`;
+Suggest up to 4 specific pieces to BUY that would complete or elevate this outfit — only pieces she does not already own in that category and colour. Be specific: color, fabric, silhouette. Write description and why TO her — "you", "your" — never "she" or "her". Price inside WHAT SHE PAYS for the category; name a brand from her tier or her finds when it genuinely fits, never a default luxury short-list. Keep description and why to one tight sentence each.`;
 
   return invokeShoppingTool({
     apiKey,

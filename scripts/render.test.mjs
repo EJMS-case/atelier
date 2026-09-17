@@ -269,6 +269,12 @@ await check("Home → Style Intelligence", homeTool("✦ Style Intelligence"));
 await check("Home → Color Advisor", homeTool("✦ Color Advisor"));
 await check("Home → Visual AI", homeTool("✦ Visual AI"));
 await check("Home → Gap Analysis & Shopping", homeTool("◇ Gap Analysis"));
+await check("Shopping → the brand-finds editor opens", async () => {
+  await clickText("button", "MY BRAND FINDS");
+  await page.waitForTimeout(300);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Add brand find/.test(text)) throw new Error("the brand-finds editor did not open");
+});
 await check("Home → Brand Atlas", homeTool("✧ Brand Atlas"));
 await check("Settings (plumbing only)", async () => {
   await page.evaluate(() => [...document.querySelectorAll("nav button")].pop()?.click());
