@@ -10,6 +10,12 @@
 // band; the prompt then says so instead of inventing one.
 
 const MIN_PRICED = 3;
+// Owner, 2026-09-17: "as I grow in my career my price range does increase.
+// Look moreso at the prices of my most recent 50 or so items rather than
+// everything." `created_at` is the only date the rows carry (when she added
+// the piece), so "recent" means recently added. A category thin in the
+// recent window falls back to its all-time band and says so.
+export const RECENT_WINDOW = 50;
 
 function quantile(sorted, q) {
   if (!sorted.length) return null;
@@ -18,26 +24,39 @@ function quantile(sorted, q) {
   return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
 }
 
-/** Per-category price bands from what she actually paid. */
-export function spendBands(wardrobe) {
+function bandOf(prices) {
+  const sorted = prices.slice().sort((a, b) => a - b);
+  return {
+    n: sorted.length,
+    median: Math.round(quantile(sorted, 0.5)),
+    low: Math.round(quantile(sorted, 0.25)),
+    high: Math.round(quantile(sorted, 0.75)),
+    max: sorted[sorted.length - 1],
+  };
+}
+
+/**
+ * Per-category price bands from what she actually paid — her most RECENT
+ * purchases first (`recent` priced pieces by created_at), the all-time band
+ * only where the recent window is thin. Each band says which it is.
+ */
+export function spendBands(wardrobe, { recent = RECENT_WINDOW } = {}) {
+  const priced = (wardrobe || [])
+    .filter(it => it?.category && it.category !== "Misc" && Number(it.price_paid) > 0)
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  const recentSet = new Set(priced.slice(0, recent).map(it => it.id ?? it));
   const byCat = new Map();
-  for (const it of wardrobe || []) {
-    const p = Number(it?.price_paid);
-    if (!it?.category || it.category === "Misc" || !(p > 0)) continue;
-    if (!byCat.has(it.category)) byCat.set(it.category, []);
-    byCat.get(it.category).push(p);
+  for (const it of priced) {
+    if (!byCat.has(it.category)) byCat.set(it.category, { recent: [], all: [] });
+    const g = byCat.get(it.category);
+    const p = Number(it.price_paid);
+    g.all.push(p);
+    if (recentSet.has(it.id ?? it)) g.recent.push(p);
   }
   const bands = {};
-  for (const [cat, prices] of byCat) {
-    if (prices.length < MIN_PRICED) continue;
-    const sorted = prices.slice().sort((a, b) => a - b);
-    bands[cat] = {
-      n: sorted.length,
-      median: Math.round(quantile(sorted, 0.5)),
-      low: Math.round(quantile(sorted, 0.25)),
-      high: Math.round(quantile(sorted, 0.75)),
-      max: sorted[sorted.length - 1],
-    };
+  for (const [cat, g] of byCat) {
+    if (g.recent.length >= MIN_PRICED) bands[cat] = { ...bandOf(g.recent), basis: "recent", allTimeMax: Math.max(...g.all) };
+    else if (g.all.length >= MIN_PRICED) bands[cat] = { ...bandOf(g.all), basis: "all", allTimeMax: Math.max(...g.all) };
   }
   return bands;
 }
@@ -69,10 +88,11 @@ export function describeSpend(wardrobe) {
   if (!cats.length) return "";
   const lines = cats.map(cat => {
     const b = bands[cat];
-    const top = b.max > b.high * 1.8 ? ` (she has gone to ${money(b.max)} once for the right piece)` : "";
-    return `• ${cat}: typically ${money(b.low)}–${money(b.high)}, median ${money(b.median)}${top} — from ${b.n} priced pieces`;
+    const top = b.allTimeMax > b.high * 1.8 ? ` (she has gone to ${money(b.allTimeMax)} once for the right piece)` : "";
+    const basis = b.basis === "recent" ? `her ${b.n} most recent priced ${cat.toLowerCase()}` : `${b.n} priced pieces all-time (few recent buys here)`;
+    return `• ${cat}: typically ${money(b.low)}–${money(b.high)}, median ${money(b.median)}${top} — from ${basis}`;
   });
-  return `WHAT SHE PAYS (from her own purchase records — these are facts, not a budget she set):\n${lines.join("\n")}\nPrice every suggestion inside her typical band for that category and say the price as a range in that band. At most ONE pick per run may sit above the band as a deliberate investment — mark it "investment" in the description and say why it earns the stretch. Never price a category she has no band for above the highest band she does have.`;
+  return `WHAT SHE PAYS (from her own purchase records, weighted to her most recent buys because her range rises as her career does — facts, not a budget she set):\n${lines.join("\n")}\nPrice every suggestion inside her typical band for that category and say the price as a range in that band. At most ONE pick per run may sit above the band, and only when the piece is genuinely extraordinary — mark it "investment" in the description and say exactly what makes it worth the stretch; an ordinary piece at a stretch price is the wrong pick. Never price a category she has no band for above the highest band she does have.`;
 }
 
 export function describeBrandTier(wardrobe) {

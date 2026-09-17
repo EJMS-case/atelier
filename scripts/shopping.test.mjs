@@ -137,3 +137,22 @@ test("the rooms she dresses for come from worn logs inside the window, and the w
   assert.equal(describeWearRooms([], { now }), "");
   assert.match(WOMENSWEAR_LINE, /^WOMENSWEAR ONLY/);
 });
+
+test("spend bands weight her most recent purchases, fall back to all-time where recent is thin, and say which", () => {
+  // Older tops were cheap; the recent ones are not — her range rose.
+  const rows = [];
+  for (let i = 0; i < 8; i++) rows.push({ id: `old${i}`, category: "Tops", price_paid: 40 + i, created_at: `2025-01-0${i + 1}` });
+  for (let i = 0; i < 4; i++) rows.push({ id: `new${i}`, category: "Tops", price_paid: 150 + i * 10, created_at: `2026-09-0${i + 1}` });
+  // Bags: only two recent, five old — the band falls back to all-time.
+  for (let i = 0; i < 5; i++) rows.push({ id: `bag${i}`, category: "Bags", price_paid: 300, created_at: `2025-02-0${i + 1}` });
+  rows.push({ id: "bagnew", category: "Bags", price_paid: 900, created_at: "2026-09-10" });
+  const bands = spendBands(rows, { recent: 5 });
+  assert.equal(bands.Tops.basis, "recent");
+  assert.equal(bands.Tops.n, 4);
+  assert.ok(bands.Tops.median >= 150, `recent median ${bands.Tops.median} should reflect the newer buys`);
+  assert.equal(bands.Bags.basis, "all");
+  assert.equal(bands.Bags.allTimeMax, 900);
+  const text = describeSpend(rows);
+  assert.match(text, /weighted to her most recent buys/);
+  assert.match(text, /genuinely extraordinary/);
+});

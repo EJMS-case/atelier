@@ -6,6 +6,7 @@ import { runShoppingAnalysis } from "../features/shopping/gapAnalysis.js";
 import { loadBrandFinds, saveBrandFinds } from "../features/shopping/brandFinds.js";
 import { recordVerdict, loadVerdicts } from "../features/shopping/verdicts.js";
 import { gapKey } from "../features/shopping/verifyGaps.js";
+import { invalidateLearning } from "../features/stylist/learning.js";
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import {
   closetColorProfile, colorCategoryCoverage, pairUnlocks, textureInventory,
@@ -200,8 +201,10 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
     loadVerdicts().then(list => { if (alive) setVerdicts(list); }).catch(() => {});
     return () => { alive = false; };
   }, []);
-  const updateFinds = (list) => { setFinds(list); saveBrandFinds(list).catch(() => {}); };
-  const onVerdict = (gap, verdict) => { recordVerdict(gap, verdict).then(setVerdicts).catch(() => {}); };
+  // Every save teaches: the learning memo is cleared so the chat, Style Me
+  // and the next run read the new find or verdict on their next tap.
+  const updateFinds = (list) => { setFinds(list); saveBrandFinds(list).catch(() => {}); invalidateLearning(); };
+  const onVerdict = (gap, verdict) => { recordVerdict(gap, verdict).then(list => { setVerdicts(list); invalidateLearning(); }).catch(() => {}); };
 
   const PICKER_CAP = 60;
   const q = pickerQuery.trim().toLowerCase();

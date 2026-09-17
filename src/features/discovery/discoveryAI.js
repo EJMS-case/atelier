@@ -19,7 +19,7 @@
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { logAiError } from "../../lib/ai/logError.js";
 import { MODEL_STRONG } from "../../constants/models.js";
-import { sb } from "../../lib/supabase.js";
+import { personalGrounding } from "../stylist/standard.js";
 import { parseLooseJson } from "../../utils/coerce-shapes.js";
 import { describeCorePalette, describeTextureCoverage, seasonForDate } from "../../utils/wardrobe-coverage.js";
 
@@ -79,12 +79,12 @@ export function parseBrandDiscovery(text) {
   return [];
 }
 
-function buildPrompt({ profileLines, excludeBrands, fingerprint }) {
+function buildPrompt({ profileLines, excludeBrands, fingerprint, learned = [] }) {
   return `You are a sharp fashion editor scouting brands for one specific client. Her register is quiet luxury (The Row, Totême, Khaite; easy-feminine by way of Sézane) — but she already knows those houses. Your job is the layer BELOW the radar: newer, independent, and international labels she has likely never heard of and would genuinely love.
 
 HER TASTE, FROM HER ACTUAL CLOSET:
 ${profileLines.join("\n")}
-${fingerprint ? `\nHER STYLE FINGERPRINT (distilled from what she actually wears):\n${fingerprint}\n` : ""}
+${fingerprint ? `\nHER STYLE FINGERPRINT (distilled from what she actually wears):\n${fingerprint}\n` : ""}${learned.length ? `\nEVERYTHING ELSE THE APP KNOWS ABOUT HER (what she's drawn to, her shopping list and finds, what her closet is missing, the looks she loves and builds, how she wears things — scout brands that answer THESE):\n${learned.join("\n\n")}\n` : ""}
 Use web search to verify each brand is real, currently active, and purchasable (find its official site). Favor international finds — Scandinavian, Korean, French, Australian, anywhere — over US mall brands. NEVER include: brands she already owns, the big luxury houses, or anything mass-market (${excludeBrands.slice(0, 40).join(", ") || "none listed"}).
 
 Return 6-8 brands. For each, tie the "why" to HER closet — name the pieces or palette of hers it rhymes with — and write it TO her ("your navy column", never "her"). "startWith" is the ONE piece to order first. "priceBand" is $, $$, or $$$ with a rough range (e.g. "$$ · tops $120-250").
@@ -100,9 +100,11 @@ After any searching, end your reply with ONLY this JSON array (no prose after it
 export async function generateBrandDiscovery({ items, apiKey, excludeBrands = [] }) {
   if (!apiKey) throw new Error("Add your Anthropic API key in Settings.");
   const profile = tasteProfile(items);
-  const fingerprint = await sb.fingerprintTextCached(600).catch(() => "");
+  // The one funnel (features/stylist/learning.js): the fingerprint rides it,
+  // with what she's drawn to, her finds and wants, and the last gap analysis.
+  const { blocks: learned } = await personalGrounding({ available: items, fingerprintMax: 600, maxAutoPairs: 2 }).catch(() => ({ blocks: [] }));
   const exclude = [...new Set([...profile.ownedBrands, ...excludeBrands])];
-  const prompt = buildPrompt({ profileLines: profile.lines, excludeBrands: exclude, fingerprint });
+  const prompt = buildPrompt({ profileLines: profile.lines, excludeBrands: exclude, fingerprint: "", learned });
 
   // Web-search turns are expensive in OUTPUT tokens: every search call and
   // its results ride the assistant turn, so the budget must cover searching

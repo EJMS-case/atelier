@@ -93,7 +93,8 @@ Conventions worth knowing:
   contract in `scripts/stylist-standard.test.mjs`.
 - **Navigation is fixed (owner, 2026-09-17): ATELIER = Home; the closet
   chip's NAME opens the closet grid and the ▼ beside it opens the switcher;
-  every top-level Back lands on Home.** Settings holds plumbing only
+  every top-level Back lands on Home.** The nav is Style Me · Planner ·
+  Saved · ⚙; Inspo is Saved's fourth tab. Settings holds plumbing only
   (account, keys, photo tools, sync). Anything else she uses — Style Profile,
   Style Intelligence, Color Advisor, Visual AI, Brand Atlas, Shopping — is a
   row on Home. Don't add a pointer card to Settings again.
@@ -104,7 +105,9 @@ Conventions worth knowing:
   sees it (`verifyGaps.js`). A shopping instruction in a prompt with no
   check behind it is how "don't suggest duplicates" shipped a blue tote she
   owned (2026-09-17). Her brand finds and verdicts are `user_settings`
-  keys read by the gap analysis, Complete-a-Look, and Brand Atlas.
+  keys read by the gap analysis, Complete-a-Look, and Brand Atlas. Price
+  bands come from her most recent 50 priced pieces (her range rises with
+  her career), all-time where thin, one extraordinary stretch per run.
 - **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
   state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last
   result persists per device. A run she can navigate away from and lose is
@@ -137,9 +140,16 @@ Conventions worth knowing:
 - **Everything the app knows about her comes from
   `src/features/stylist/learning.js`** — standing preferences (Style Profile
   → How I Wear Things), lessons distilled from her chats, fingerprint, loved
-  and disliked looks, her edits, what she returns to. New AI surfaces call
+  and disliked looks, her edits, what she returns to, what she's drawn to
+  (her saved inspiration), her shopping list (finds + want-it verdicts), and
+  what her closet is missing (the last gap analysis). **Every AI surface
+  reads it** — chat, Evaluate, trips, Style Me (its slice), shopping, Brand
+  Atlas, the monthly profile, the recap. New AI surfaces call
   `personalGrounding()` and get all of it; don't hand-copy a fingerprint
-  block. Every word she reads is written to her: "you", never "she".
+  block. `learning.js` imports feature modules, never the reverse: a screen
+  that saves a signal calls `invalidateLearning()` itself. A module that
+  rides Home's chunk imports `standard.js` on call, never at the top. Every
+  word she reads is written to her: "you", never "she".
   **Every save teaches**: a builder save over a saved look, an applied
   evaluator swap, and a chat turn all record lessons — a new surface that
   lets her change a look should too. What reads current comes from the

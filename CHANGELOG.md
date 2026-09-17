@@ -2,6 +2,89 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Every surface reads everything: inspiration, her shopping list and the last gap analysis join the funnel; Inspo lives under Saved; price bands follow her recent buys — 2026-09-17
+
+### Why
+Owner: *"I'd like for all areas of the app to read everything else in the
+app, if there's a quick way to do that. For example, shopping recs to read
+my closet and gap analysis, and my inspo and saved outfits … Speaking of the
+inspo tab, is it really pulling any weight?"* And on price: *"as I grow in
+my career my price range does increase. Look moreso at the prices of my most
+recent 50 or so items rather than everything. I don't want to spend $500 on
+a single knit necessarily, but if it's extraordinary maybe I will one day."*
+
+The quick way existed: `personalGrounding()` in `features/stylist/learning.js`
+is the one funnel. It was read by the chat, Evaluate and trip days, and by
+Style Me through its own slice — and NOT by shopping, Brand Atlas, the
+monthly profile or the recap (fingerprint alone), and it did not carry her
+inspiration, her shopping list, or the last gap analysis at all.
+
+Inspo was not pulling weight, and the plumbing was the reason. Five photos
+since May, all with a vibe note; Style Me compared a row's `"Mild"` against
+the chip label `"Mild (55-69°F)"` with `===`, so it read inspiration only
+when weather was Any — for four months. The chat and evaluator had their
+own, looser predicate in `standard.js`. Shopping and Atlas never read it.
+
+### What shipped
+1. **Three more signals in the one funnel** (`composeLearnedBlocks`): WHAT
+   SHE'S DRAWN TO (every saved inspiration, newest first, trimmed, tagged
+   with its room — a standing read whatever today's brief), HER SHOPPING
+   LIST (want-it verdicts + her brand finds), and WHAT HER CLOSET IS
+   MISSING (the last verified gap analysis, saved cross-device by
+   `gapAnalysis.js` under `user_settings.last_gap_analysis`).
+2. **Every surface reads the funnel.** Shopping (gap + completions), Brand
+   Atlas, the monthly profile and the recap now call `personalGrounding()`
+   instead of the lone fingerprint; Style Me's slice (`learnedForStyleMe`)
+   carries the shopping list and the last gaps, and Style Me gets the
+   inspiration read minus what today's brief already carries (App hands it
+   the rows). The gap prompt names inspiration-versus-closet as its best
+   gap signal. The recap imports `standard.js` on call so Home's chunk
+   stays clean.
+3. **One brief matcher** (`inspirationApi.matchesBrief`): occasion by
+   canonical name, weather by its first word; shared by Style Me's
+   `vibesFor` and the advisory `inspirationBrief`. The Style Me bug is
+   gone and the two surfaces can no longer disagree.
+4. **Inspo lives under Saved** as a fourth tab (All · History · Favorites ·
+   Inspo). The nav is Style Me · Planner · Saved · ⚙. The view lost its own
+   page frame and its dead `onBack` (the prop-contract check caught it).
+5. **Price bands follow her recent buys** (`spend.js`): the band for a
+   category comes from her most recent 50 priced pieces (by `created_at`,
+   the only date the rows carry); a category with fewer than three recent
+   buys falls back to its all-time band and says so; the one stretch per
+   run is allowed only for a piece that is "genuinely extraordinary", and
+   the prompt says an ordinary piece at a stretch price is the wrong pick.
+6. **Saves teach across surfaces.** A find or a verdict saved on the
+   Shopping page clears the learning memo, so the chat and Style Me read it
+   on the next tap. The shopping modules never import `learning.js` (the
+   screen invalidates), which keeps the module graph one-directional.
+
+### Audit (this session)
+- Unused-export scan: clean beyond constants exported for tests/readers.
+- Boot chunk attributed by source map: App.jsx, item-helpers, supabase,
+  styles, thumbnail cache, Home, the collage — all load-bearing at boot;
+  `learning.js` and `standard.js` stay off it (490 kB, +1.4 kB this session).
+- Two predicates for "does this inspiration match the brief" → one.
+- Dead fingerprint scaffolding in the shopping prompts (`fp`, `completeFp`)
+  and the unused Supabase import in `discoveryAI.js` removed.
+
+### Downstream, four ways
+- **Efficiency.** The advisory cached block grows by the three blocks (~500
+  tokens, cached after the first turn). Style Me's uncached body grows by
+  the inspiration read minus the brief's rows (~300 tokens) plus two short
+  blocks. The funnel's gather adds three small settings GETs, memoised 10
+  minutes. No new model calls.
+- **Effectiveness.** What she saves, wants and lacks reaches every surface
+  through one file; a new surface calls `personalGrounding()` and inherits
+  all of it.
+- **Speed.** No new calls on any tap; the recap's dynamic import runs only
+  when it judges.
+- **Education.** Verdicts, finds and each gap analysis feed back into every
+  surface, not just the one that produced them.
+
+### Verified
+`npm test` (41 suites; `test:shopping` +1, `test:standard` +3),
+`npm run build`, `npm run smoke` (24 walk steps; Saved → Inspo walked).
+
 ## [Unreleased] — The gap analysis shops at her price, from her wardrobe, and checks every pick against her closet before she sees it (#241) — 2026-09-17
 
 ### Why

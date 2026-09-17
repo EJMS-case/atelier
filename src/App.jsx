@@ -61,7 +61,6 @@ const SetEditModal      = lazy(() => import("./components/SetEditModal.jsx"));
 const BulkAddView       = lazy(() => import("./components/BulkAddView.jsx"));
 const EditItemView      = lazy(() => import("./components/EditItemView.jsx"));
 const SilhouetteBuilder = lazy(() => import("./features/builder/SilhouetteBuilder.jsx"));
-const InspirationView   = lazy(() => import("./features/inspiration/InspirationView.jsx"));
 const VisionPilotView   = lazy(() => import("./components/VisionPilotView.jsx"));
 const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView.jsx"));
 const BrandDiscoveryView = lazy(() => import("./features/discovery/BrandDiscoveryView.jsx"));
@@ -1194,7 +1193,7 @@ export default function App() {
       const result = await generateOutfit(
         itemsForStyling, occasion, weatherLabel, request, apiKey, allLooks,
         stylePrefsWithAuto, loadAboutMe(), styleExcludes,
-        { wardrobe, feedbackScores, recentlyWornItems, onLook, onProgress, inspirationVibes, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
+        { wardrobe, feedbackScores, recentlyWornItems, onLook, onProgress, inspirationVibes, inspirations, styleFingerprint: fingerprintText, lovedLooks, dislikedLooks, lookEdits,
           // Occasion memory inputs (roadmap A4) — raw rows already in state,
           // summarized to text lines inside generateOutfit (occasionMemory.js).
           outfitLogs: wearData.logs || [], lovedFeedback,
@@ -1768,7 +1767,7 @@ export default function App() {
           <nav style={s.nav}>
             {/* No Home or Closet chip: ATELIER is home and the closet chip
                 opens the grid, so the row holds only the destinations. */}
-            {[["style","Style Me"],["planner","Planner"],["favorites","Saved"],["inspiration","Inspo"]].map(([v,label]) => (
+            {[["style","Style Me"],["planner","Planner"],["favorites","Saved"]].map(([v,label]) => (
               <button key={v} onClick={() => {
                 setView(v);
                 // Clicking the Style Me nav always opens the generator
@@ -2055,13 +2054,6 @@ export default function App() {
       )}
 
       {/* ── INSPIRATION ── */}
-      {view === "inspiration" && (
-        <InspirationView
-          apiKey={apiKey}
-          items={inspirations}
-          setItems={setInspirations}
-          onBack={() => setView("home")}/>
-      )}
 
       {/* ── EDIT ── */}
       {view === "edit" && editItem && (
@@ -2425,6 +2417,8 @@ export default function App() {
           available={available}
           setsMeta={setsMeta}
           apiKey={apiKey}
+          inspirations={inspirations}
+          setInspirations={setInspirations}
           favorites={favorites}
           toggleFav={toggleFav}
           isFav={isFav}

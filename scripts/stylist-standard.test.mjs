@@ -35,6 +35,60 @@ import {
 } from "../src/features/stylist/learning.js";
 import { parseTrendReply, trendBriefIsStale, composeTrendBlock, briefSeasonLabel, shouldAttemptTrendRefresh, REFRESH_RETRY_MS } from "../src/features/stylist/trendBrief.js";
 import { inspirationBrief } from "../src/features/stylist/standard.js";
+import { matchesBrief, vibesFor, describeInspirationRead } from "../src/features/inspiration/inspirationApi.js";
+import { composeShoppingBlock, composeLastGapsBlock } from "../src/features/stylist/learning.js";
+
+test("one brief matcher: Style Me's chip label matches a row saved with the short weather word", () => {
+  // Style Me compared "Mild" === "Mild (55-69°F)" and read inspiration only
+  // when weather was Any (2026-09-17). The chat's predicate was looser and
+  // separate. One matcher now.
+  const row = { vibe_text: "a column in tonal black", occasion: "Work", weather: "Mild" };
+  assert.ok(matchesBrief(row, ["Work"], ["Mild (55-69°F)"]));
+  assert.ok(!matchesBrief(row, ["Work"], ["Hot (85°F+)"]));
+  assert.ok(matchesBrief(row, [], []), "no brief matches every row");
+  assert.ok(matchesBrief({ vibe_text: "x" }, ["Dinner"], ["Cold"]), "an untagged row matches every brief");
+  assert.ok(matchesBrief({ vibe_text: "x", occasion: "Date Night" }, ["Dinner"], []), "legacy occasion aliases fold");
+  assert.equal(vibesFor([row], "Work", "Mild (55-69°F)").length, 1);
+  assert.equal(vibesFor([row], "Work", "Cold (< 40°F)").length, 0);
+  assert.equal(inspirationBrief([row], ["Work"], ["Mild (55-69°F)"]).includes("tonal black"), true);
+});
+
+test("what she's drawn to: every saved note, newest first, trimmed, minus what today's brief already carries", () => {
+  const rows = [
+    { vibe_text: "Old: chocolate and white tonal ease. ".repeat(12), occasion: "Casual", weather: "Hot", created_at: "2026-05-13" },
+    { vibe_text: "New: a teal coat over black and grey.", occasion: "Dinner", weather: "Cold", created_at: "2026-09-02" },
+    { vibe_text: "", created_at: "2026-09-03" },
+  ];
+  const text = describeInspirationRead(rows);
+  assert.match(text, /^WHAT SHE'S DRAWN TO/);
+  assert.ok(text.indexOf("teal coat") < text.indexOf("chocolate"), "newest first");
+  assert.match(text, /\[Dinner · Cold\] New: a teal coat/);
+  assert.match(text, /…$/m, "a long note is trimmed");
+  assert.equal(describeInspirationRead(rows, { exclude: ["New: a teal coat over black and grey."] }).includes("teal"), false);
+  assert.equal(describeInspirationRead([]), "");
+});
+
+test("the funnel carries her shopping list and what her closet is missing", () => {
+  const shop = composeShoppingBlock({ wants: ["Navy satin clutch"], finds: [{ name: "Vagabond", categories: ["Shoes"] }, { name: "", categories: [] }] });
+  assert.match(shop, /^HER SHOPPING LIST:/);
+  assert.match(shop, /Navy satin clutch/);
+  assert.match(shop, /Vagabond \(Shoes\)/);
+  assert.match(shop, /not a piece she owns/);
+  assert.equal(composeShoppingBlock({}), "");
+  const gaps = composeLastGapsBlock({ at: "2026-09-17T10:00:00Z", gaps: [{ category: "Bags", suggestion: "Navy satin clutch" }, { suggestion: "" }] });
+  assert.match(gaps, /WHAT HER CLOSET IS MISSING \(the last gap analysis, Sep 17/);
+  assert.match(gaps, /Navy satin clutch \[Bags\]/);
+  assert.equal(composeLastGapsBlock(null), "");
+  const { blocks } = composeLearnedBlocks({
+    inspirations: [{ vibe_text: "a column", created_at: "2026-09-01" }],
+    wants: ["Navy satin clutch"], finds: [], lastGaps: { gaps: [{ suggestion: "A camel coat" }] },
+  });
+  const joined = blocks.join("\n");
+  assert.match(joined, /WHAT SHE'S DRAWN TO/);
+  assert.match(joined, /HER SHOPPING LIST/);
+  assert.match(joined, /WHAT HER CLOSET IS MISSING/);
+  assert.doesNotMatch(joined, /\brule\b/i);
+});
 import { parseEvalResponse } from "../src/features/builder/evalParse.js";
 import { STANDING_PREFERENCES } from "../src/constants/styling.js";
 import { composeSystemBlock, currentLookBlock } from "../src/features/builder/builderChat.js";

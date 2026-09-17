@@ -8,9 +8,10 @@
 // she owns, prices "way high", a menswear piece.
 
 import { generateShoppingRecs } from "../../lib/ai/stylist.js";
-import { loadTrendBrief, composeTrendBlock } from "../stylist/trendBrief.js";
+import { sb } from "../../lib/supabase.js";
+import { personalGrounding } from "../stylist/standard.js";
+import { invalidateLearning, LAST_GAPS_KEY } from "../stylist/learning.js";
 import { describeSpend, describeBrandTier } from "./spend.js";
-import { loadBrandFinds, describeBrandFinds } from "./brandFinds.js";
 import { loadVerdicts, describeVerdicts } from "./verdicts.js";
 import { verifyGaps } from "./verifyGaps.js";
 
@@ -40,22 +41,34 @@ export function describeWearRooms(logs, { days = 120, now = new Date() } = {}) {
  * @param {Object[]} p.logs        - outfit logs App already holds
  */
 export async function runShoppingAnalysis({ wardrobe = [], available = [], apiKey, mode = "gap", selectedIds = [], logs = [] }) {
-  const [finds, verdicts, trend] = await Promise.all([
-    loadBrandFinds().catch(() => []),
+  // Everything the app has learned about her (features/stylist/learning.js)
+  // — fingerprint, preferences, loved and built looks, her edits, what she's
+  // drawn to, her shopping list and finds, the last analysis, the season's
+  // brief — plus the shopping-only facts: what she pays, who she buys from,
+  // the rooms she wears, and the verdicts that rule pieces OUT.
+  const [{ blocks: learned }, verdicts] = await Promise.all([
+    personalGrounding({ wardrobe, available, fingerprintMax: 800, maxAutoPairs: 3 }).catch(() => ({ blocks: [] })),
     loadVerdicts().catch(() => []),
-    loadTrendBrief().catch(() => null),
   ]);
   const blocks = [
     WOMENSWEAR_LINE,
     describeSpend(wardrobe),
     describeBrandTier(wardrobe),
-    describeBrandFinds(finds),
-    describeVerdicts(verdicts),
     mode === "gap" ? describeWearRooms(logs) : "",
-    composeTrendBlock(trend),
+    ...learned,
+    describeVerdicts(verdicts, { wants: false }),
   ].filter(Boolean);
   const data = await generateShoppingRecs(wardrobe, apiKey, mode, selectedIds, { blocks, available });
   const listKey = mode === "gap" ? "gaps" : "completions";
   const { kept, dropped } = verifyGaps(data?.[listKey] || [], { wardrobe, verdicts });
+  if (mode === "gap") {
+    // Cross-device, so the chat, Style Me and the next run know what is
+    // missing; the learning memo is cleared so they read it on the next tap.
+    sb.saveSettingJson(LAST_GAPS_KEY, {
+      at: new Date().toISOString(),
+      gaps: kept.slice(0, 8).map(g => ({ category: g.category, suggestion: g.suggestion, priority: g.priority })),
+    }).catch(() => {});
+    invalidateLearning();
+  }
   return { ...data, [listKey]: kept, dropped };
 }

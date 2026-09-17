@@ -5,7 +5,6 @@
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
-import { sb } from "../../lib/supabase.js";
 
 // A year of daily looks can be hundreds of candidates — cap the lines sent to
 // the judge, keeping every hearted look and then the most recent of the rest.
@@ -51,9 +50,13 @@ export async function judgeMostStylish({ looks = [], items = [], apiKey, topN = 
   if (candidates.length === 0) return [];
   const n = Math.min(topN, candidates.length);
 
-  // Her style fingerprint (session-memoized, soft-fail) — the judge should
-  // rank against HER taste, not a generic one.
-  const fp = await sb.fingerprintTextCached(600).catch(() => "");
+  // Everything the app knows about her (features/stylist/learning.js) — the
+  // judge ranks against HER taste, not a generic one. Imported on call:
+  // this module rides Home's chunk, and standard.js would drag the validator
+  // and the prompt preamble into the boot bundle if imported at the top.
+  const { personalGrounding } = await import("../stylist/standard.js");
+  const { blocks } = await personalGrounding({ wardrobe: items, available: items, fingerprintMax: 600, maxAutoPairs: 2 }).catch(() => ({ blocks: [] }));
+  const fp = blocks.join("\n\n");
 
   const lines = candidates.map(({ i, l, line }) => {
     const ctx = [
@@ -76,7 +79,7 @@ Rules:
 - Favor RANGE across the winners — a ${periodLabel} in review should show her best Work look and her best off-duty look, not four variations of one recipe.
 - Reason must be ONE short clause (≤14 words), specific to that look — name what makes it work, written TO her ("your", never "her").${fp ? `
 
-HER STYLE FINGERPRINT (judge against her taste, not a generic one):
+EVERYTHING THE APP KNOWS ABOUT HER (judge against her taste, not a generic one):
 ${fp}` : ""}
 
 Return ONLY a JSON array, no prose, highest first:
