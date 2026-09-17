@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — Every surface reads everything: inspiration, her shopping list and the last gap analysis join the funnel; Inspo lives under Saved; price bands follow her recent buys — 2026-09-17
+## [Unreleased] — Every surface reads everything: inspiration, her shopping list and the last gap analysis join the funnel; Inspo lives under Saved; price bands follow her recent buys (#242) — 2026-09-17
 
 ### Why
 Owner: *"I'd like for all areas of the app to read everything else in the

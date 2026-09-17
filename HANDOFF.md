@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-17**, after the funnel / Inspo / price-band session (third of the day). The session log below
+Refreshed **2026-09-17**, after PR #242. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-17 · every surface reads everything; Inspo under Saved; price bands follow her recent buys
+### 2026-09-17 · PR #242 — every surface reads everything; Inspo under Saved; price bands follow her recent buys
 
 **Owner:** "all areas of the app to read everything else … is the inspo tab really pulling any weight?" and, on price, "look moreso at my most recent 50 or so items … if it's extraordinary maybe I will one day." CHANGELOG has the detail. To carry:
 
