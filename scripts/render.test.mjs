@@ -268,7 +268,17 @@ await check("Home → Style Profile", homeTool("✦ Style Profile"));
 await check("Home → Style Intelligence", homeTool("✦ Style Intelligence"));
 await check("Home → Color Advisor", homeTool("✦ Color Advisor"));
 await check("Home → Visual AI", homeTool("✦ Visual AI"));
-await check("Home → Gap Analysis & Shopping", homeTool("◇ Gap Analysis"));
+await check("Home → Shopping List", homeTool("◇ Shopping List"));
+await check("Shopping → an entry she writes lands on her list", async () => {
+  // The list she writes herself is the screen's centre (owner, 2026-09-17);
+  // the add path is the one that must work on the phone.
+  await page.fill('input[placeholder^="What are you looking for"]', "a burgundy suede loafer");
+  await clickText("button", "Add to my list");
+  await page.waitForTimeout(300);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/a burgundy suede loafer/.test(text)) throw new Error("the entry did not render on the list");
+  if (!/FROM YOUR CLOSET'S NUMBERS/.test(text)) throw new Error("the numbers card is missing");
+});
 await check("Shopping → the brand-finds editor opens", async () => {
   await clickText("button", "MY BRAND FINDS");
   await page.waitForTimeout(300);

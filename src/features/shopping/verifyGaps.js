@@ -39,7 +39,30 @@ export function suggestionFamily(gap) {
   return familyForColorString(String(gap?.suggestion || "")) || familyForColorString(String(gap?.colorNote || "")) || "";
 }
 
-const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+export const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+// The form words a description can name ("tote", "loafer") — a piece must
+// share one when the description does. Read by ownedMatches below and by the
+// shopping list's "did this add answer an entry" check (shoppingList.js), so
+// one list decides what a form is.
+// Each form maps to the word its subcategory carries, so "trouser" finds
+// "Pants" and "pump" finds "Heels" — the old bare list let a navy trouser she
+// owned past the check because no subcategory is spelled "trouser".
+export const FORM_WORDS = {
+  tote: "tote", clutch: "clutch", crossbody: "crossbody", shoulder: "shoulder",
+  loafer: "loafer", boot: "boot", heel: "heel", pump: "heel", flat: "flat", sneaker: "sneaker", sandal: "sandal",
+  cardigan: "cardigan", pullover: "pullover",
+  blazer: "blazer", coat: "coat", trench: "coat", jacket: "jacket",
+  skirt: "skirt", trouser: "pant", pant: "pant", jean: "pant", short: "short",
+  blouse: "blouse", shirt: "shirt", tank: "tank", bodysuit: "bodysuit",
+  maxi: "maxi", midi: "midi", mini: "mini",
+};
+
+/** The subcategory words a free-text description asks for, via the forms it names. */
+export function namedForms(text) {
+  const words = norm(text).split(" ");
+  return Object.entries(FORM_WORDS).filter(([f]) => words.some(w => w.startsWith(f))).map(([, sub]) => sub);
+}
 
 /**
  * Pieces she owns that already answer the suggestion: same category, same
@@ -50,7 +73,7 @@ export function ownedMatches(gap, wardrobe) {
   const fam = suggestionFamily(gap);
   if (!cat || !fam) return [];
   const sub = norm(gap?.subcategory);
-  const words = norm(gap?.suggestion).split(" ");
+  const named = namedForms(gap?.suggestion);
   return (wardrobe || []).filter(it => {
     if (it?.category !== cat) return false;
     if (effectiveColorFamily(it) !== fam) return false;
@@ -58,11 +81,7 @@ export function ownedMatches(gap, wardrobe) {
     if (sub && itSub && sub !== itSub && !sub.includes(itSub) && !itSub.includes(sub)) return false;
     // The suggestion names a form ("tote", "loafer") the piece must share
     // when the piece has a subcategory to compare with.
-    if (!sub && itSub) {
-      const forms = ["tote", "clutch", "crossbody", "shoulder", "loafer", "boot", "heel", "flat", "sneaker", "sandal", "cardigan", "pullover", "blazer", "coat", "trench", "skirt", "trouser", "jean", "short"];
-      const named = forms.filter(f => words.some(w => w.startsWith(f)));
-      if (named.length && !named.some(f => itSub.startsWith(f) || itSub.includes(f))) return false;
-    }
+    if (!sub && itSub && named.length && !named.some(f => itSub.includes(f))) return false;
     return true;
   });
 }

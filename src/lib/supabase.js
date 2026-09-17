@@ -78,6 +78,7 @@ function dataUrlToBlob(base64DataUrl, fallbackMime) {
 export const SETTINGS_BATCH_KEYS = [
   "style_fingerprint", "rotation_state", "brand_discovery",
   "style_notes", "style_notes_seen", "chat_lessons", "trend_brief",
+  "shopping_list", // Home's row reads it at mount (features/shopping/shoppingList.js)
 ];
 
 // Every outfit_logs column except collage_url (see fetchOutfitLogs).

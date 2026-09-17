@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRun, RUN_KEYS } from "../../lib/backgroundRun.js";
+import { loadShoppingList } from "../shopping/shoppingListStore.js";
 import { loadHomeCollapsed, saveHomeCollapsed } from "../../utils/storage.js";
 import { flattenPlanItemIds } from "../planner/outfits.js";
 import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
@@ -121,6 +122,25 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
   const profileRun = useRun(RUN_KEYS.insightsProfile);
   const scoutRun = useRun(RUN_KEYS.brandScout);
   const shopRunning = gapRun.status === "running" || completeRun.status === "running";
+  // Her shopping list (features/shopping/shoppingList.js): the row says what
+  // is open and what her last closet add answered. Rides the mount-time
+  // settings batch (SETTINGS_BATCH_KEYS), so this is no extra request.
+  const [shoppingList, setShoppingList] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    loadShoppingList().then(list => { if (alive) setShoppingList(list); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const shopSub = useMemo(() => {
+    if (shopRunning) return "Atelier is looking for ideas — it keeps going while you do other things; they wait here.";
+    const open = shoppingList.filter(e => e.status === "open");
+    const bought = shoppingList.filter(e => e.status === "done" && e.boughtName).sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""))[0];
+    if (!open.length && !bought) return "The list you write and check off yourself — every stylist surface reads it, and a closet add checks it off.";
+    const parts = [];
+    if (open.length) parts.push(`${open.length} on your list${open.length ? ` — ${open.slice(-2).map(e => e.text).join(" · ")}` : ""}`);
+    if (bought) parts.push(`${bought.boughtName} answered "${bought.text}"`);
+    return parts.join(". ") + ".";
+  }, [shoppingList, shopRunning]);
 
   const itemsWithPrice = useMemo(() => wearItems.filter(it => Number(it.price_paid) > 0), [wearItems]);
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
@@ -336,7 +356,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
         </section>
       )}
 
-      {/* Shop Smarter — Brand Atlas + Gap Analysis, at the BOTTOM of Home
+      {/* Shop Smarter — Brand Atlas + her Shopping List, at the BOTTOM of Home
           (owner request 2026-08-20: dressing sections first, shopping last). */}
       {(onOpenDiscovery || onOpenShop) && (
         <section style={{ ...sectionStyle, background: "#fff" }}>
@@ -349,12 +369,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
                   : "Lesser-known, international labels scouted live against your closet."}/>
             )}
             {onOpenShop && (
-              <ToolRow onClick={onOpenShop} icon="◇" title="Gap Analysis & Shopping" running={shopRunning}
-                sub={shopRunning
-                  ? "The analysis is running — it keeps going while you do other things; the result waits here."
-                  : gapRun.result?.gaps?.length
-                    ? `${gapRun.result.gaps.length} gaps found last time — open to read them or run it again.`
-                    : "Which core colors, categories, and textures your closet is missing — computed live, then shopped by the AI."}/>
+              <ToolRow onClick={onOpenShop} icon="◇" title="Shopping List" running={shopRunning} sub={shopSub}/>
             )}
           </div>
         </section>

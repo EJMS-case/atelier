@@ -106,7 +106,7 @@ test("an 'I own this' verdict covers the same category + family whatever the wor
   assert.equal(withVerdict(twice, { category: "Bags", suggestion: "Deep navy leather work tote" }, null).length, 0);
   assert.equal(typeof gapKey(next), "string");
   const text = describeVerdicts([...twice, ...withVerdict([], { category: "Belts", suggestion: "Wide western belt" }, "no")]);
-  assert.match(text, /She WANTS.*Deep navy leather work tote/);
+  assert.doesNotMatch(text, /Deep navy leather work tote/, "wants live on her list, not in the verdict block");
   assert.match(text, /NOT her taste: Wide western belt/);
 });
 
@@ -155,4 +155,85 @@ test("spend bands weight her most recent purchases, fall back to all-time where 
   const text = describeSpend(rows);
   assert.match(text, /weighted to her most recent buys/);
   assert.match(text, /genuinely extraordinary/);
+});
+
+// ── Her shopping list (features/shopping/shoppingList.js) ───────────────────
+// Owner, 2026-09-17: "an area I write and check off etc myself." What makes
+// it useful: every prompt reads it, a closet add checks it off with the piece
+// named, and the numbers / Atelier's ideas add to it instead of replacing it.
+import { addEntry, setDone, removeEntry, entryFromGap, entryAnswers, answerList, describeShoppingList, cleanList } from "../src/features/shopping/shoppingList.js";
+
+test("the list: she adds in her words, the same open wish is not added twice, and check-off keeps the evidence", () => {
+  const now = new Date("2026-09-17T12:00:00Z");
+  let list = addEntry([], { text: "a burgundy suede loafer", category: "Shoes" }, { now });
+  list = addEntry(list, { text: "A burgundy suede loafer" }, { now });
+  assert.equal(list.length, 1, "the same wish, differently cased, is one entry");
+  list = addEntry(list, { text: "a charcoal trouser", note: "for the camel blazer" }, { now });
+  assert.equal(list.length, 2);
+  assert.equal(list[0].status, "open");
+  assert.equal(list[0].source, "me");
+  list = setDone(list, list[0].id, true, { bought: { id: "w9", brand: "Rivecour", name: "Numero 525" }, now });
+  assert.equal(list[0].status, "done");
+  assert.equal(list[0].boughtName, "Rivecour Numero 525");
+  assert.equal(list[0].boughtId, "w9");
+  list = setDone(list, list[0].id, false, { now });
+  assert.equal(list[0].status, "open");
+  assert.equal(list[0].boughtName, "");
+  assert.equal(removeEntry(list, list[1].id).length, 1);
+  assert.deepEqual(cleanList([{ text: "" }, null, { text: "ok", status: "weird", source: "bot" }]).map(e => [e.text, e.status, e.source]), [["ok", "open", "me"]]);
+});
+
+test("an idea from Atelier becomes an entry she keeps, with its category and colour read from the words", () => {
+  const e = entryFromGap({ category: "Bag", suggestion: "Deep navy leather work tote", reason: "your navy runs through 15 pieces but no bag" });
+  assert.equal(e.category, "Bags");
+  assert.equal(e.color, "Blue");
+  assert.equal(e.source, "atelier");
+  assert.match(e.note, /15 pieces/);
+});
+
+test("a closet add answers an entry by category + colour family + form — and a loose entry is left for her to tick", () => {
+  const now = new Date("2026-09-17T12:00:00Z");
+  const list = addEntry(addEntry(addEntry([],
+    { text: "a burgundy suede loafer", category: "Shoes" }, { now }),
+    { text: "a new bag" }, { now }),
+    { text: "navy work tote" }, { now });
+  const loafers = piece("Shoes", "Loafers", "Burgundy", { name: "Suede Loafer", brand: "Rivecour" });
+  const heels = piece("Shoes", "Heels", "Burgundy", { name: "Slingback" });
+  const tote = piece("Bags", "Tote", "Navy", { name: "Work Tote" });
+  const clutch = piece("Bags", "Clutch", "Navy", { name: "Evening Clutch" });
+  assert.equal(entryAnswers(list[0], loafers), true);
+  assert.equal(entryAnswers(list[0], heels), false, "the form is named, so heels do not answer a loafer");
+  assert.equal(entryAnswers(list[1], tote), false, "no colour and no form: too loose to check off by itself");
+  assert.equal(entryAnswers(list[2], tote), true, "category read from 'tote', colour from 'navy'");
+  assert.equal(entryAnswers(list[2], clutch), false);
+  const { list: next, answered } = answerList(list, [heels, clutch, loafers, tote], { now });
+  assert.deepEqual(answered.map(a => a.item.name), ["Suede Loafer", "Work Tote"]);
+  assert.equal(next[0].boughtName, "Rivecour Suede Loafer");
+  assert.equal(next[1].status, "open");
+  assert.equal(next[2].status, "done");
+  // A done entry never re-answers.
+  assert.equal(answerList(next, [loafers], { now }).answered.length, 0);
+});
+
+test("the list reads as one block: what she is looking for, and what she just bought", () => {
+  const now = new Date("2026-09-17T12:00:00Z");
+  let list = addEntry([], { text: "a burgundy suede loafer", category: "Shoes" }, { now });
+  list = addEntry(list, { text: "a charcoal trouser" }, { now });
+  list = setDone(list, list[0].id, true, { bought: { id: "w9", name: "Numero 525" }, now: new Date("2026-09-10T12:00:00Z") });
+  const text = describeShoppingList(list, { now });
+  assert.match(text, /looking for.*a charcoal trouser/);
+  assert.doesNotMatch(text, /looking for.*loafer/);
+  assert.match(text, /Just bought.*Numero 525 \(for "a burgundy suede loafer"\)/);
+  assert.match(text, /Never propose one of these as if it were new/);
+  const old = setDone(list, list[0].id, true, { bought: { id: "w9", name: "Numero 525" }, now: new Date("2026-01-10T12:00:00Z") });
+  assert.doesNotMatch(describeShoppingList(old, { now }), /Just bought/, "a buy older than the window is just closet now");
+  assert.equal(describeShoppingList([], { now }), "");
+});
+
+test("a form word finds the subcategory it lives under: a navy trouser she owns is caught, a pump answers 'heels'", () => {
+  const owned = [piece("Bottoms", "Pants", "Navy", { name: "Wool Trouser" })];
+  const { dropped } = verifyGaps([{ category: "Bottoms", suggestion: "A navy wide-leg trouser", description: "", reason: "" }], { wardrobe: owned, verdicts: [] });
+  assert.equal(dropped.length, 1, "trouser → Pants");
+  assert.equal(ownedMatches({ category: "Shoes", suggestion: "A burgundy suede pump" }, [piece("Shoes", "Heels", "Burgundy")]).length, 1);
+  assert.equal(ownedMatches({ category: "Shoes", suggestion: "A burgundy suede pump" }, [piece("Shoes", "Flats", "Burgundy")]).length, 0);
 });
