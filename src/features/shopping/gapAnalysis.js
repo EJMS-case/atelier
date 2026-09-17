@@ -56,7 +56,7 @@ export async function runShoppingAnalysis({ wardrobe = [], available = [], apiKe
     describeBrandTier(wardrobe),
     mode === "gap" ? describeWearRooms(logs) : "",
     ...learned,
-    describeVerdicts(verdicts, { wants: false }),
+    describeVerdicts(verdicts),
   ].filter(Boolean);
   const data = await generateShoppingRecs(wardrobe, apiKey, mode, selectedIds, { blocks, available });
   const listKey = mode === "gap" ? "gaps" : "completions";

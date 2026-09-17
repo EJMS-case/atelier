@@ -69,9 +69,9 @@ test("what she's drawn to: every saved note, newest first, trimmed, minus what t
 });
 
 test("the funnel carries her shopping list and what her closet is missing", () => {
-  const shop = composeShoppingBlock({ wants: ["Navy satin clutch"], finds: [{ name: "Vagabond", categories: ["Shoes"] }, { name: "", categories: [] }] });
+  const shop = composeShoppingBlock({ list: [{ id: "a", text: "Navy satin clutch", category: "Bags", status: "open" }], finds: [{ name: "Vagabond", categories: ["Shoes"] }, { name: "", categories: [] }] });
   assert.match(shop, /^HER SHOPPING LIST:/);
-  assert.match(shop, /Navy satin clutch/);
+  assert.match(shop, /Navy satin clutch \[Bags\]/);
   assert.match(shop, /Vagabond \(Shoes\)/);
   assert.match(shop, /not a piece she owns/);
   assert.equal(composeShoppingBlock({}), "");
@@ -81,7 +81,7 @@ test("the funnel carries her shopping list and what her closet is missing", () =
   assert.equal(composeLastGapsBlock(null), "");
   const { blocks } = composeLearnedBlocks({
     inspirations: [{ vibe_text: "a column", created_at: "2026-09-01" }],
-    wants: ["Navy satin clutch"], finds: [], lastGaps: { gaps: [{ suggestion: "A camel coat" }] },
+    shoppingList: [{ id: "a", text: "Navy satin clutch", status: "open" }], finds: [], lastGaps: { gaps: [{ suggestion: "A camel coat" }] },
   });
   const joined = blocks.join("\n");
   assert.match(joined, /WHAT SHE'S DRAWN TO/);

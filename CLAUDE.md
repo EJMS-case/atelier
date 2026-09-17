@@ -98,16 +98,28 @@ Conventions worth knowing:
   (account, keys, photo tools, sync). Anything else she uses — Style Profile,
   Style Intelligence, Color Advisor, Visual AI, Brand Atlas, Shopping — is a
   row on Home. Don't add a pointer card to Settings again.
-- **Shopping lives in `src/features/shopping/`.** A buy decision reads the
-  WARDROBE (both closets), prices come from her own `price_paid` bands and
-  brands from her tier (`spend.js`), and every model pick is verified
-  against the closet, her verdicts, and a womenswear-only line before she
-  sees it (`verifyGaps.js`). A shopping instruction in a prompt with no
-  check behind it is how "don't suggest duplicates" shipped a blue tote she
-  owned (2026-09-17). Her brand finds and verdicts are `user_settings`
-  keys read by the gap analysis, Complete-a-Look, and Brand Atlas. Price
-  bands come from her most recent 50 priced pieces (her range rises with
-  her career), all-time where thin, one extraordinary stretch per run.
+- **Shopping lives in `src/features/shopping/`, and HER LIST is the centre
+  of it** (owner, 2026-09-17: "an area I write and check off etc myself").
+  `shoppingList.js` is the list she writes; every AI surface reads it
+  through `personalGrounding()`, a closet add that answers an entry checks
+  it off with the piece named (`answerList`, called from `App.addItems`),
+  and the two idea sources — the numbers panel and Atelier's ideas — ADD to
+  it, never replace it. `shoppingListStore.js` is the load/save half Home
+  reads at mount (boot chunk); the matcher stays out of boot. A buy
+  decision reads the WARDROBE (both closets), prices come from her own
+  `price_paid` bands and brands from her tier (`spend.js`), and every model
+  pick is verified against the closet, her verdicts, and a womenswear-only
+  line before she sees it (`verifyGaps.js`). A shopping instruction in a
+  prompt with no check behind it is how "don't suggest duplicates" shipped
+  a blue tote she owned (2026-09-17). Her brand finds and verdicts are
+  `user_settings` keys read by the ideas run, Complete-a-Look, and Brand
+  Atlas. Price bands come from her most recent 50 priced pieces (her range
+  rises with her career), all-time where thin, one extraordinary stretch
+  per run. **Every number the app shows her about her closet counts the
+  pieces she styles** — `coverageEligible` in `utils/wardrobe-coverage.js`
+  (gym, lounge, swim and metal-coloured jewellery out) — and says the count
+  it rests on; "zero charcoal" to a woman with three charcoal sweatpants is
+  how "What the numbers say" read as wrong (2026-09-17).
 - **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
   state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last
   result persists per device. A run she can navigate away from and lose is

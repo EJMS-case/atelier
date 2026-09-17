@@ -49,10 +49,27 @@ const FAMILY_SHADES = (() => {
   return out;
 })();
 
+// ── What counts ─────────────────────────────────────────────────────────────
+// Every number this module reports is a claim about how she DRESSES, so it
+// counts the pieces she styles: gym, lounge and swim are out, and a colour
+// string that names a metal ("Silver" hoop earrings, "Gold" sandals) is a
+// finish, not a palette colour. Owner, 2026-09-17: "What the numbers say"
+// was wrong — Green read as a core colour on the strength of three hoodies,
+// Gray on silver jewellery, and "zero charcoal" was three charcoal lounge
+// pieces the panel never mentioned. One predicate, used by every count here;
+// comboEligible narrows it further for a colour STORY (a promise about an
+// outfit, so occasionwear and comfort-coded pieces stay out of those too).
+const COVERAGE_EXCLUDED_CATS = new Set(["Athleisure", "Loungewear", "Swim"]);
+const METAL_COLOR_RE = /^(silver|gold|platinum|rose gold|gunmetal|bronze|brass|metallic|pewter)$/i;
+export function coverageEligible(item) {
+  if (!item || COVERAGE_EXCLUDED_CATS.has(item.category)) return false;
+  return !METAL_COLOR_RE.test(String(item.color || "").trim());
+}
+
 export function closetColorProfile(items) {
   const familyCounts = {};
   const shadeCounts = {}; // family → { shadeName: n }
-  for (const it of items || []) {
+  for (const it of (items || []).filter(coverageEligible)) {
     const fam = effectiveColorFamily(it);
     if (!fam) continue;
     familyCounts[fam] = (familyCounts[fam] || 0) + 1;
@@ -67,9 +84,11 @@ export function closetColorProfile(items) {
   }
   const ranked = Object.entries(familyCounts).sort((a, b) => b[1] - a[1]);
   const colored = ranked.reduce((s, [, n]) => s + n, 0);
-  // Core = the families her closet demonstrably leans on: at least 5% of
-  // colored items or 8+ pieces, capped at 7 families so "core" keeps meaning.
-  const threshold = Math.max(4, Math.min(8, Math.round(colored * 0.05)));
+  // Core = the families her closet demonstrably leans on: at least 5% of the
+  // pieces she styles, capped at 7 families so "core" keeps meaning. The old
+  // "or 8+ pieces" floor let Pink (13 of 389) and Green read as core on a
+  // wardrobe this size, and then "no pink bag" as a gap.
+  const threshold = Math.max(4, Math.round(colored * 0.05));
   const coreFamilies = ranked.filter(([, n]) => n >= threshold).slice(0, 7).map(([f]) => f);
   const dominantShade = (fam) => {
     const shades = Object.entries(shadeCounts[fam] || {}).sort((a, b) => b[1] - a[1]);
@@ -100,7 +119,7 @@ export const ANCHOR_CATS = ["Bags", "Shoes", "Outerwear", "Knits", "Tops", "Bott
 export function colorCategoryCoverage(items) {
   const profile = closetColorProfile(items);
   const byCat = new Map(ANCHOR_CATS.map(c => [c, {}]));
-  for (const it of items || []) {
+  for (const it of (items || []).filter(coverageEligible)) {
     if (!byCat.has(it.category)) continue;
     const fam = effectiveColorFamily(it);
     if (!fam) continue;
@@ -147,7 +166,7 @@ function textureText(it) {
 export function textureInventory(items, { season } = {}) {
   const owned = {};
   for (const tex of TEXTURE_ROSTER) owned[tex.name] = 0;
-  for (const it of items || []) {
+  for (const it of (items || []).filter(coverageEligible)) {
     const text = textureText(it);
     for (const tex of TEXTURE_ROSTER) {
       if (tex.re.test(text)) owned[tex.name] += 1;
@@ -185,17 +204,23 @@ export function matchesComboSide(item, side) {
 // story — owner screenshot, 2026-08-20) and never occasionwear (a gown's
 // color doesn't make a Tuesday pairing). Shoes/bags/belts/accessories stay
 // eligible: a navy bag legitimately carries a navy story.
-const COMBO_EXCLUDED_CATS = new Set(["Athleisure", "Loungewear", "Swim", "Occasionwear"]);
 function comboEligible(item) {
-  if (COMBO_EXCLUDED_CATS.has(item.category)) return false;
+  if (!coverageEligible(item) || item.category === "Occasionwear") return false;
   return !isComfortCoded(item);
 }
 
+// `aElsewhere` / `bElsewhere` count the pieces that match a side but cannot
+// carry a story (lounge, gym, a comfort-coded piece): "zero charcoal" to a
+// woman with three charcoal sweatpants is a lie by omission — the unlock
+// line names them.
 export function comboOwnership(items, combo) {
-  const eligible = (items || []).filter(comboEligible);
+  const all = items || [];
+  const eligible = all.filter(comboEligible);
   const a = eligible.filter(it => matchesComboSide(it, combo.a));
   const b = eligible.filter(it => matchesComboSide(it, combo.b));
-  return { a, b, owned: a.length > 0 && b.length > 0 };
+  const aElsewhere = all.filter(it => !comboEligible(it) && matchesComboSide(it, combo.a)).length;
+  const bElsewhere = all.filter(it => !comboEligible(it) && matchesComboSide(it, combo.b)).length;
+  return { a, b, aElsewhere, bElsewhere, owned: a.length > 0 && b.length > 0 };
 }
 
 const comboLabel = (combo) => `${combo.a.label} + ${combo.b.label}`;
@@ -298,15 +323,28 @@ export function pairUnlocks(items, { date = new Date(), max = 4 } = {}) {
         haveLabel: aStrong ? x.combo.a.label : x.combo.b.label,
         haveCount: aStrong ? x.a.length : x.b.length,
         needLabel: aStrong ? x.combo.b.label : x.combo.a.label,
+        // Pieces in the needed colour that live in lounge / gym / comfort —
+        // owned, but not what the pairing is about.
+        needElsewhere: aStrong ? x.bElsewhere : x.aElsewhere,
       };
     });
+}
+
+// "nothing in charcoal you'd style (3 lounge pieces aside)" — the same
+// sentence on the panel and in the prompt, so she and the stylist read one
+// number.
+export function unlockNeedPhrase(u) {
+  const need = u.needLabel.toLowerCase();
+  return u.needElsewhere > 0
+    ? `nothing in ${need} you'd style (${u.needElsewhere} gym, lounge or comfort piece${u.needElsewhere === 1 ? "" : "s"} aside)`
+    : `nothing in ${need}`;
 }
 
 export function describePairUnlocks(items, date = new Date()) {
   const unlocks = pairUnlocks(items, { date, max: 6 });
   if (unlocks.length === 0) return "";
   const lines = unlocks.map(u =>
-    `${u.label}: she owns ${u.haveCount} ${u.haveLabel.toLowerCase()} pieces but nothing in ${u.needLabel.toLowerCase()} — one ${u.needLabel.toLowerCase()} piece unlocks the pairing (${u.note})`
+    `${u.label}: she owns ${u.haveCount} ${u.haveLabel.toLowerCase()} pieces but ${unlockNeedPhrase(u)} — one ${u.needLabel.toLowerCase()} piece unlocks the pairing (${u.note})`
   );
   return `IN-FASHION PAIRINGS ONE PURCHASE AWAY:\n${lines.join("\n")}`;
 }

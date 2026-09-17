@@ -782,6 +782,18 @@ export default function App() {
     } else {
       anyFailed ? flashSync("error") : flashSync("synced");
     }
+    // Every save teaches: a new piece that answers an entry on her shopping
+    // list checks it off, with the piece as the evidence, and every AI surface
+    // reads the bought piece on its next tap. Off the save path — a list
+    // failure can never fail an add.
+    // Loaded on call so the matcher (and verifyGaps behind it) stays out of
+    // the boot chunk — an add is the only time App needs it.
+    import("./features/shopping/shoppingList.js").then(async ({ answerShoppingList }) => {
+      const answered = await answerShoppingList(pendingNew);
+      if (!answered.length) return;
+      const { invalidateLearning } = await import("./features/stylist/learning.js");
+      invalidateLearning();
+    }).catch(() => {});
   }, [items, activeCloset.id]);
 
   // Returns { ok, error, imageUploadFailed }. Callers can choose to await and

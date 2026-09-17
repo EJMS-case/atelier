@@ -6,18 +6,105 @@ import { runShoppingAnalysis } from "../features/shopping/gapAnalysis.js";
 import { loadBrandFinds, saveBrandFinds } from "../features/shopping/brandFinds.js";
 import { recordVerdict, loadVerdicts } from "../features/shopping/verdicts.js";
 import { gapKey } from "../features/shopping/verifyGaps.js";
+import { loadShoppingList, saveShoppingList, addEntry, setDone, removeEntry, entryFromGap } from "../features/shopping/shoppingList.js";
 import { invalidateLearning } from "../features/stylist/learning.js";
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import {
   closetColorProfile, colorCategoryCoverage, pairUnlocks, textureInventory,
-  seasonForDate, hexForColorLabel,
+  seasonForDate, hexForColorLabel, unlockNeedPhrase,
 } from "../utils/wardrobe-coverage.js";
 
-// The deterministic half of the gap analysis, rendered as FACTS before any AI
-// runs (owner, 2026-08-20: "gap analysis didn't move" — the coverage math was
-// feeding the prompt invisibly; now the navy-bag class of finding is on
-// screen the moment the tab opens, and the AI's job is products, not math).
-function CoveragePanel({ items }) {
+const label = { fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)" };
+const chip = (on) => ({ ...s.btnSecondary, fontSize: 10, padding: "4px 8px", ...(on ? { background: "var(--color-ink)", color: "var(--color-surface)", borderColor: "var(--color-ink)" } : {}) });
+const addBtn = { ...s.btnSecondary, fontSize: 10, padding: "3px 8px", whiteSpace: "nowrap", flexShrink: 0 };
+const when = (iso) => iso ? new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+
+// ── Her list ────────────────────────────────────────────────────────────────
+// The centre of the screen (owner, 2026-09-17: "an area I write and check off
+// myself"). Everything else on the page ADDS to it; a closet add checks an
+// entry off (App.addItems → answerShoppingList) and the piece is named here.
+function ShoppingListCard({ list, onChange }) {
+  const [text, setText] = useState("");
+  const [cat, setCat] = useState("");
+  const [note, setNote] = useState("");
+  const [boughtOpen, setBoughtOpen] = useState(false);
+  const open = list.filter(e => e.status === "open");
+  const done = list.filter(e => e.status === "done").sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
+  const add = () => {
+    const v = text.trim();
+    if (!v) return;
+    onChange(addEntry(list, { text: v, category: cat, note: note.trim(), source: "me" }));
+    setText(""); setNote(""); setCat("");
+  };
+  const source = (e) => e.source === "numbers" ? "from your closet's numbers" : e.source === "atelier" ? "Atelier's idea, kept by you" : "";
+  return (
+    <div style={{ ...si.card, marginBottom: 16 }}>
+      <div style={{ ...label, marginBottom: 8 }}>MY LIST{open.length ? ` · ${open.length}` : ""}</div>
+      {open.length === 0 && (
+        <p style={{ fontSize: 12, color: "var(--color-text-2)", margin: "0 0 8px", lineHeight: 1.5 }}>
+          Nothing on it yet. Write what you're looking for — every stylist surface reads this list, and when a piece you add to the closet answers an entry, it's checked off for you.
+        </p>
+      )}
+      {open.map(e => (
+        <div key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+          <input type="checkbox" checked={false} aria-label={`Bought: ${e.text}`} onChange={() => onChange(setDone(list, e.id, true))}
+            style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--color-ink)", flexShrink: 0 }}/>
+          <div style={{ flex: 1, fontSize: 13, color: "var(--color-text)", lineHeight: 1.4 }}>
+            {e.text}
+            {(e.category || e.color) && <span style={{ color: "var(--color-text-muted)", fontSize: 11 }}> · {[e.category, e.color].filter(Boolean).join(" · ")}</span>}
+            {e.note && <div style={{ fontSize: 11, color: "var(--color-text-2)", lineHeight: 1.45 }}>{e.note}</div>}
+            {(source(e) || e.url) && (
+              <div style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                {source(e)}{source(e) && e.url ? " · " : ""}{e.url && <a href={e.url} target="_blank" rel="noreferrer" style={{ color: "var(--color-ink)" }}>link</a>}
+              </div>
+            )}
+          </div>
+          <button onClick={() => onChange(removeEntry(list, e.id))} aria-label={`Remove ${e.text}`}
+            style={{ background: "none", border: "none", color: "var(--color-border-muted)", cursor: "pointer", fontSize: 13 }}>✕</button>
+        </div>
+      ))}
+      <input style={{ ...s.input, width: "100%", fontSize: 13, marginTop: 4 }} placeholder="What are you looking for? — e.g. a burgundy suede loafer" value={text}
+        onChange={e => setText(e.target.value)} onKeyDown={e => e.key === "Enter" && add()}/>
+      <input style={{ ...s.input, width: "100%", fontSize: 12, marginTop: 6 }} placeholder="Note (optional) — why, or what it has to go with" value={note} onChange={e => setNote(e.target.value)}/>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+        {STYLING_CATEGORY_ORDER.map(c => (
+          <button key={c} onClick={() => setCat(cat === c ? "" : c)} aria-pressed={cat === c} style={chip(cat === c)}>{c}</button>
+        ))}
+      </div>
+      <button style={{ ...s.btnPrimary, width: "100%", marginTop: 8, fontSize: 12 }} onClick={add} disabled={!text.trim()}>Add to my list</button>
+      {done.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <button onClick={() => setBoughtOpen(o => !o)} aria-expanded={boughtOpen}
+            style={{ width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <span style={label}>BOUGHT · {done.length}</span>
+            <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>{boughtOpen ? "▲" : "▼"}</span>
+          </button>
+          {boughtOpen && done.map(e => (
+            <div key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8 }}>
+              <input type="checkbox" checked aria-label={`Still looking: ${e.text}`} onChange={() => onChange(setDone(list, e.id, false))}
+                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--color-ink)", flexShrink: 0 }}/>
+              <div style={{ flex: 1, fontSize: 12, color: "var(--color-text-2)", lineHeight: 1.4, textDecoration: "line-through" }}>{e.text}</div>
+              <div style={{ fontSize: 10, color: "var(--color-text-muted)", textAlign: "right", lineHeight: 1.4 }}>
+                {e.boughtName ? <>answered by <span style={{ color: "var(--color-text)" }}>{e.boughtName}</span><br/></> : null}{when(e.doneAt)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── The numbers, as things she can add ──────────────────────────────────────
+// The deterministic read of the wardrobe (utils/wardrobe-coverage.js): which
+// of her core colours no bag or dress carries, which pairing one piece would
+// unlock, which textures are missing for the season. Counted over the pieces
+// she styles — gym, lounge, swim and metal-coloured jewellery stay out — and
+// every line says the count it rests on. Each is an offer for the list, not a
+// finding (owner, 2026-09-17: the old panel was wrong and read as orders).
+const SINGULAR = { Bags: "bag", Shoes: "pair of shoes", Outerwear: "coat or jacket", Knits: "knit", Tops: "top", Bottoms: "bottom", Dresses: "dress" };
+function NumbersCard({ items, list, onAdd }) {
+  const [open, setOpen] = useState(false);
   const data = useMemo(() => {
     try {
       const season = seasonForDate();
@@ -34,50 +121,53 @@ function CoveragePanel({ items }) {
   }, [items]);
   if (!data) return null;
   const { profile, coverage, unlocks, textures, season } = data;
-  const famLabel = (f) => {
-    const shade = profile.dominantShade(f);
-    return shade && shade.toLowerCase() !== f.toLowerCase() ? `${shade}` : f;
+  const shade = (f) => {
+    const sh = profile.dominantShade(f);
+    return (sh && sh.toLowerCase() !== f.toLowerCase() ? sh : f).toLowerCase();
   };
-  const swatch = (label) => (
-    <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8 }}>
-      <span style={{ width: 10, height: 10, borderRadius: "50%", display: "inline-block", background: hexForColorLabel(label), boxShadow: "0 0 0 1px rgba(0,0,0,0.12)" }}/>
-      {label}
-    </span>
+  const onList = (text) => list.some(e => e.status === "open" && e.text.toLowerCase() === text.toLowerCase());
+  const swatch = (lbl) => (
+    <span style={{ width: 10, height: 10, borderRadius: "50%", display: "inline-block", background: hexForColorLabel(lbl), boxShadow: "0 0 0 1px rgba(0,0,0,0.12)", marginRight: 5, verticalAlign: "middle" }}/>
   );
+  const offers = [];
+  for (const c of coverage) {
+    for (const f of c.missingCore) {
+      const text = `A ${shade(f)} ${SINGULAR[c.category] || c.category.toLowerCase()}`;
+      const note = `Your ${shade(f)} runs through ${profile.familyCounts[f] || 0} pieces you style, and none of them is a ${SINGULAR[c.category] || c.category.toLowerCase()}.`;
+      offers.push({ key: `${c.category}|${f}`, text, note, category: c.category, color: shade(f), swatch: shade(f) });
+    }
+  }
+  for (const u of unlocks) {
+    const text = `A ${u.needLabel.toLowerCase()} piece — unlocks ${u.label}`;
+    offers.push({ key: u.label, text, note: `You own ${u.haveCount} ${u.haveLabel.toLowerCase()} pieces and ${unlockNeedPhrase(u)}. ${u.note}`, category: "", color: u.needLabel, swatch: u.needLabel });
+  }
+  for (const t of textures.missing) offers.push({ key: `tex|${t}`, text: `Something in ${t}`, note: `Nothing you style reads as ${t}, and it is a ${season} texture.`, category: "", color: "" });
+  for (const t of textures.thin) offers.push({ key: `thin|${t}`, text: `Another piece in ${t}`, note: `${textures.owned[t]} piece${textures.owned[t] === 1 ? "" : "s"} in ${t} — thin for ${season}.`, category: "", color: "" });
   return (
     <div style={{ ...si.card, marginBottom: 16 }}>
-      <div style={{ fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)", marginBottom: 8 }}>
-        WHAT THE NUMBERS SAY · computed from your closet, no AI
-      </div>
-      {coverage.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "var(--color-text-2)", marginBottom: 4 }}>Core colors missing from anchor categories:</div>
-          {coverage.map(c => (
-            <div key={c.category} style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.7 }}>
-              <strong>{c.category}</strong>: no {c.missingCore.map(f => swatch(famLabel(f)))}
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+        style={{ width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={label}>FROM YOUR CLOSET'S NUMBERS{offers.length ? ` · ${offers.length}` : ""}</span>
+        <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 11, color: "var(--color-text-2)", margin: "0 0 8px", lineHeight: 1.45 }}>
+            Counted from the pieces you style, both closets — gym, lounge and swim left out, no AI. Ideas, not orders: add the ones you agree with.
+          </p>
+          {offers.length === 0 && <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>No structural colour or texture holes in what you style.</div>}
+          {offers.map(o => (
+            <div key={o.key} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+              <div style={{ flex: 1, fontSize: 12, color: "var(--color-text)", lineHeight: 1.45 }}>
+                {o.swatch ? swatch(o.swatch) : null}<strong>{o.text}</strong>
+                <div style={{ fontSize: 11, color: "var(--color-text-2)" }}>{o.note}</div>
+              </div>
+              {onList(o.text)
+                ? <span style={{ fontSize: 10, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>on your list</span>
+                : <button style={addBtn} onClick={() => onAdd({ text: o.text, category: o.category, color: o.color, note: o.note, source: "numbers" })}>+ Add</button>}
             </div>
           ))}
         </div>
-      )}
-      {unlocks.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "var(--color-text-2)", marginBottom: 4 }}>Pairings one purchase away:</div>
-          {unlocks.map(u => (
-            <div key={u.label} style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.55 }}>
-              <strong>{u.label}</strong> — you own {u.haveCount} {u.haveLabel.toLowerCase()} pieces and zero {u.needLabel.toLowerCase()}.
-            </div>
-          ))}
-        </div>
-      )}
-      {(textures.missing.length > 0 || textures.thin.length > 0) && (
-        <div style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.55 }}>
-          <div style={{ fontSize: 11, color: "var(--color-text-2)", marginBottom: 4 }}>Textures for {season}:</div>
-          {textures.missing.length > 0 && <div>Missing: {textures.missing.join(", ")}</div>}
-          {textures.thin.length > 0 && <div style={{ color: "var(--color-text-2)" }}>Thin (1–2 pieces): {textures.thin.join(", ")}</div>}
-        </div>
-      )}
-      {coverage.length === 0 && unlocks.length === 0 && textures.missing.length === 0 && (
-        <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>No structural color or texture holes — the numbers say your closet is covered; the AI hunt below is for upgrades.</div>
       )}
     </div>
   );
@@ -85,7 +175,7 @@ function CoveragePanel({ items }) {
 
 // ── Her brand finds — the editor ─────────────────────────────────────────────
 // Name + the categories she'd shop there + an optional link. Stored
-// cross-device (features/shopping/brandFinds.js); read by the gap analysis,
+// cross-device (features/shopping/brandFinds.js); read by Atelier's ideas,
 // Complete-a-Look, and Brand Atlas.
 function BrandFindsCard({ finds, onChange }) {
   const [open, setOpen] = useState(false);
@@ -110,7 +200,7 @@ function BrandFindsCard({ finds, onChange }) {
       {open && (
         <div style={{ marginTop: 10 }}>
           <p style={{ fontSize: 11, color: "var(--color-text-2)", margin: "0 0 8px", lineHeight: 1.45 }}>
-            Labels you found and want to buy from, mapped to what you'd buy there. The gap analysis names them when a pick fits, and Brand Atlas stops re-scouting them.
+            Labels you found and want to buy from, mapped to what you'd buy there. Atelier names them when an idea fits, and Brand Atlas stops re-scouting them.
           </p>
           {finds.map((f, i) => (
             <div key={`${f.name}-${i}`} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
@@ -144,7 +234,7 @@ function BrandFindsCard({ finds, onChange }) {
 // ── Her verdict on one suggestion ────────────────────────────────────────────
 function VerdictRow({ gap, verdicts, onVerdict }) {
   const current = verdicts.find(v => v.key === gapKey(gap))?.verdict || "";
-  const opts = [["own", "I own this"], ["no", "Not for me"], ["yes", "Want it"]];
+  const opts = [["own", "I own this"], ["no", "Not for me"], ["yes", "Add to list"]];
   return (
     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
       {opts.map(([v, label]) => (
@@ -195,16 +285,25 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
 
   const [finds, setFinds] = useState([]);
   const [verdicts, setVerdicts] = useState([]);
+  const [list, setList] = useState([]);
   useEffect(() => {
     let alive = true;
-    loadBrandFinds().then(list => { if (alive) setFinds(list); }).catch(() => {});
-    loadVerdicts().then(list => { if (alive) setVerdicts(list); }).catch(() => {});
+    loadBrandFinds().then(l => { if (alive) setFinds(l); }).catch(() => {});
+    loadVerdicts().then(l => { if (alive) setVerdicts(l); }).catch(() => {});
+    loadShoppingList().then(l => { if (alive) setList(l); }).catch(() => {});
     return () => { alive = false; };
   }, []);
   // Every save teaches: the learning memo is cleared so the chat, Style Me
-  // and the next run read the new find or verdict on their next tap.
-  const updateFinds = (list) => { setFinds(list); saveBrandFinds(list).catch(() => {}); invalidateLearning(); };
-  const onVerdict = (gap, verdict) => { recordVerdict(gap, verdict).then(list => { setVerdicts(list); invalidateLearning(); }).catch(() => {}); };
+  // and the next run read the new entry, find or verdict on their next tap.
+  const updateFinds = (l) => { setFinds(l); saveBrandFinds(l).catch(() => {}); invalidateLearning(); };
+  const updateList = (l) => { setList(l); saveShoppingList(l).catch(() => {}); invalidateLearning(); };
+  const addToList = (fields) => updateList(addEntry(list, fields));
+  // "Add to list" keeps the idea on HER list (what every prompt reads); the
+  // verdict itself is what the card remembers and what the next run rules out.
+  const onVerdict = (gap, verdict) => {
+    if (verdict === "yes") addToList(entryFromGap(gap));
+    recordVerdict(gap, verdict).then(l => { setVerdicts(l); invalidateLearning(); }).catch(() => {});
+  };
 
   const PICKER_CAP = 60;
   const q = pickerQuery.trim().toLowerCase();
@@ -239,16 +338,17 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
       </div>
 
       <div style={s.modeTabs}>
-        {[["gap","Gap Analysis"],["complete","Complete a Look"]].map(([m, label]) => (
+        {[["gap","My List"],["complete","Complete a Look"]].map(([m, name]) => (
           <button key={m} onClick={() => { setMode(m); setLocalErr(""); }}
-            style={{...s.modeTab, ...(mode === m ? s.modeTabActive : {})}}>{label}</button>
+            style={{...s.modeTab, ...(mode === m ? s.modeTabActive : {})}}>{name}</button>
         ))}
       </div>
 
       {mode === "gap" && (
         <>
-          <div style={s.advisorNote}>The numbers below are computed live from everything you own, both closets; Run Gap Analysis turns them (plus what you pay, who you buy from, your finds, the rooms you dress for, and the season) into specific pieces to buy — then checks every pick against your closet before you see it.</div>
-          <CoveragePanel items={owned}/>
+          <div style={s.advisorNote}>Your list, in your words. Style Me, the stylist chat, Evaluate and trips all read it; a piece you add to the closet that answers an entry checks it off. Below it, two sources of ideas you can add or ignore: what the numbers say about the pieces you style, and what Atelier would look for.</div>
+          <ShoppingListCard list={list} onChange={updateList}/>
+          <NumbersCard items={owned} list={list} onAdd={addToList}/>
           <BrandFindsCard finds={finds} onChange={updateFinds}/>
         </>
       )}
@@ -287,7 +387,7 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
 
       {err && <p style={s.err}>{err}</p>}
       <button style={{...s.btnPrimary, width:"100%", marginBottom: loading ? 6 : 20}} onClick={handleAnalyze} disabled={loading}>
-        {loading ? <><span style={s.spinnerSmLight}/> Analyzing…</> : <><Icon path={icons.sparkle} size={15}/> {mode === "gap" ? (results ? "Run Gap Analysis again" : "Run Gap Analysis") : `Find Pieces (${selectedIds.length} selected)`}</>}
+        {loading ? <><span style={s.spinnerSmLight}/> Analyzing…</> : <><Icon path={icons.sparkle} size={15}/> {mode === "gap" ? (results ? "Ask Atelier for ideas again" : "Ask Atelier for ideas") : `Find Pieces (${selectedIds.length} selected)`}</>}
       </button>
       {loading && (
         <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
@@ -303,7 +403,7 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
       {results && mode === "gap" && results.gaps && (
         <div>
           <div style={{fontSize:11,letterSpacing:"0.2em",color:"var(--color-text-muted)",marginBottom:16,fontFamily:"sans-serif"}}>
-            {results.gaps.length === 0 ? "NOTHING GENUINELY MISSING" : `${results.gaps.length} GAP${results.gaps.length === 1 ? "" : "S"} FOUND`}
+            {results.gaps.length === 0 ? "NOTHING ATELIER WOULD ADD" : `${results.gaps.length} IDEA${results.gaps.length === 1 ? "" : "S"} FROM ATELIER · add the ones you agree with`}
           </div>
           {results.gaps.length === 0 && (
             <div style={{ ...si.card, fontSize: 12, color: "var(--color-text-2)", lineHeight: 1.5 }}>

@@ -1,12 +1,30 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-17**, after PR #242. The session log below
+Refreshed **2026-09-17**, after PR #243. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-17 · PR #243 — her shopping list is the Shopping screen; the numbers count what she styles
+
+**Owner:** *"'What the numbers say' data is incorrect. I don't think the gap analysis is particularly useful. Think it might be better to keep it as an area I write and check off etc myself. How best to make it useful?"* Checked against the rows first: the panel counted gym, lounge, swim and silver jewellery, so Green and Gray read as core colours and "zero charcoal" ignored three charcoal lounge pieces. CHANGELOG has the detail. To carry:
+
+1. **Every number the app shows her counts the pieces she styles** — `coverageEligible` in `utils/wardrobe-coverage.js`, the one predicate for the palette, the category coverage, the textures and the stories. Core = a 5% share, no piece floor. An unlock line says what she owns in the needed colour that cannot carry the story (`unlockNeedPhrase`, same words on the panel and in the prompt).
+2. **`features/shopping/shoppingList.js` is the list she writes.** `user_settings.shopping_list`. Entries: text, optional category/colour/note/url, `status` open|done, `source` me|numbers|atelier, `boughtId`/`boughtName` when a closet add answered it. `shoppingListStore.js` is the load/save half Home reads at mount (in `SETTINGS_BATCH_KEYS`); the matcher is loaded on call from `App.addItems`.
+3. **Every AI surface reads it** via `composeShoppingBlock({ list, finds })` in `learning.js` — open entries plus what she bought in the last 45 days. The "Want it" verdict now writes to the list; verdicts carry only the rule-outs.
+4. **The numbers and Atelier's ideas ADD to the list** ("+ Add" / "Add to list"); nothing on the screen replaces what she wrote.
+5. **Render walk asserts the add path** ("Shopping → an entry she writes lands on her list") and the numbers card's header.
+
+**Watch-items:**
+- **Her first entries:** an entry that names a colour and a form ("a burgundy suede loafer") is checked off when a matching piece is added; one that names neither ("a new bag") stays for her to tick. If an add checks off an entry she is still looking for, `entryAnswers` in `shoppingList.js` is the lever (it is deliberately no looser than `ownedMatches`); un-ticking under "Bought" reopens it.
+- **Her next Style Me / chat turn** should mention a listed piece only as "would be finished by", never place it. If the stylist proposes something already on her list, the "Never propose one of these as if it were new" line in `describeShoppingList` is the lever.
+- **The numbers card, live today:** Bags no white; Dresses no brown, tan or white; unlocks Slate Gray + Burgundy (11 grey pieces in gym/lounge/comfort aside), Charcoal + Camel, Charcoal + Burgundy; velvet missing, cashmere and tweed thin. If she still reads one as wrong, the row-level check is `node` over `closetColorProfile` / `pairUnlocks` with `coverageEligible` — the excluded set is the first suspect (a comfort-coded daily skirt is counted for coverage but not for a story).
+- **Home's row** reads the list from the settings batch; after a save on the Shopping screen, Home re-reads on its next mount (the batch serves a key once, then per-key GETs).
+
+**Verified before push:** `npm test` (41 suites), `npm run build`, `npm run smoke` green (25 walk steps).
 
 ### 2026-09-17 · PR #242 — every surface reads everything; Inspo under Saved; price bands follow her recent buys
 

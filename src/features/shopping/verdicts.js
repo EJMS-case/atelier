@@ -1,8 +1,10 @@
 // ── HER VERDICTS ON PAST SUGGESTIONS ────────────────────────────────────────
-// "I own this" / "Not for me" / "Want it" on each shopping card. Every save
+// "I own this" / "Not for me" / "Add to list" on each idea card. Every save
 // teaches (CLAUDE.md): the next run drops what she owns or dislikes before it
-// reaches the screen (verifyGaps) and the prompt reads what she wants, so the
-// list sharpens instead of repeating. user_settings key shopping_verdicts,
+// reaches the screen (verifyGaps), so the ideas sharpen instead of repeating.
+// "Add to list" is recorded here as `yes` (so the card remembers) AND written
+// to her shopping list (shoppingList.js), which is what every prompt reads —
+// the wants are not listed twice. user_settings key shopping_verdicts,
 // capped. Pure composition exported for the test.
 
 import { sb } from "../../lib/supabase.js";
@@ -43,15 +45,13 @@ export async function recordVerdict(gap, verdict) {
   return next;
 }
 
-// `wants: false` when the funnel already carries her wants (HER SHOPPING
-// LIST) and only the rule-outs are needed here.
-export function describeVerdicts(list, { wants: includeWants = true } = {}) {
+// The rule-outs only: her wants live on the shopping list, which the funnel
+// (HER SHOPPING LIST) already carries.
+export function describeVerdicts(list) {
   const v = cleanList(list);
-  const wants = includeWants ? v.filter(x => x.verdict === "yes").slice(-8) : [];
   const nos = v.filter(x => x.verdict === "no").slice(-8);
   const owns = v.filter(x => x.verdict === "own").slice(-8);
   const parts = [];
-  if (wants.length) parts.push(`She WANTS (from past runs — build on these, don't repeat them verbatim): ${wants.map(x => x.suggestion).join("; ")}.`);
   if (owns.length) parts.push(`She already OWNS, in her words: ${owns.map(x => x.suggestion).join("; ")} — never suggest these again.`);
   if (nos.length) parts.push(`NOT her taste: ${nos.map(x => x.suggestion).join("; ")} — nothing like these.`);
   return parts.length ? `HER VERDICTS ON EARLIER SUGGESTIONS:\n${parts.join("\n")}` : "";

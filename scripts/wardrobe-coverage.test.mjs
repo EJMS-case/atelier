@@ -179,3 +179,58 @@ test("owner-requested pairings exist and manual pairs are only excluded when ask
   const fall = autoColorPairs(CLOSET, { date: new Date(2026, 9, 15), max: 30 }).map(p => p.label);
   assert.ok(fall.includes("Charcoal + Burgundy") || fall.includes("Camel + Burgundy") || true, "library carries the new combos");
 });
+
+// ── What counts (owner, 2026-09-17: "What the numbers say" was wrong) ───────
+import { coverageEligible, comboOwnership, unlockNeedPhrase } from "../src/utils/wardrobe-coverage.js";
+import { FASHION_COMBOS } from "../src/constants/fashion-combos.js";
+
+test("the numbers count what she styles: gym, lounge, swim and metal-coloured jewellery stay out of the palette", () => {
+  const noise = [
+    ...mk(9, { category: "Loungewear", color: "Green", name: "Hoodie" }),
+    ...mk(6, { category: "Athleisure", color: "Green", name: "Skort" }),
+    ...mk(5, { category: "Accessories", color: "Silver", name: "Hoop earrings" }),
+    ...mk(3, { category: "Swim", color: "Pink", name: "One-piece" }),
+  ];
+  assert.equal(coverageEligible(noise[0]), false);
+  assert.equal(coverageEligible({ category: "Accessories", color: "Silver" }), false);
+  assert.equal(coverageEligible({ category: "Accessories", color: "Burgundy", name: "Silk twilly" }), true);
+  const p = closetColorProfile([...CLOSET, ...noise]);
+  assert.equal(p.familyCounts.Green, undefined, "fifteen green gym and lounge pieces are not a green palette");
+  assert.equal(p.familyCounts.Gray, undefined, "silver hoops are a finish, not a grey piece");
+  assert.ok(!p.coreFamilies.includes("Green"));
+  const bags = colorCategoryCoverage([...CLOSET, ...noise]).find(c => c.category === "Bags");
+  assert.ok(!bags.missingCore.includes("Green"), "so 'no green bag' is not a gap");
+  assert.equal(textureInventory([...CLOSET, ...mk(3, { category: "Loungewear", name: "Velvet lounge set", material: "Velvet" })], { season: "winter" }).owned.velvet, 0);
+});
+
+test("core means share, not a fixed floor: eight pink pieces in a 400-piece closet are not a core colour", () => {
+  const big = [
+    ...mk(200, { category: "Tops", color: "Black", name: "Tee" }),
+    ...mk(150, { category: "Bottoms", color: "Navy", name: "Trouser" }),
+    ...mk(50, { category: "Knits", color: "Burgundy", name: "Pullover" }),
+    ...mk(8, { category: "Tops", color: "Pink", name: "Blouse" }),
+    ...mk(2, { category: "Bags", color: "Black", name: "Tote" }),
+  ];
+  const p = closetColorProfile(big);
+  assert.ok(!p.coreFamilies.includes("Pink"));
+  assert.deepEqual(p.coreFamilies, ["Black", "Blue", "Red"]);
+  assert.ok(!colorCategoryCoverage(big).find(c => c.category === "Bags").missingCore.includes("Pink"));
+});
+
+test("an unlock says what she owns in the needed colour that cannot carry the story, instead of 'zero'", () => {
+  const combo = FASHION_COMBOS.find(c => c.a.label === "Charcoal" && c.b.label === "Camel");
+  const closet = [
+    ...mk(4, { category: "Bottoms", color: "Camel", name: "Trouser" }),
+    ...mk(3, { category: "Loungewear", color: "Charcoal", name: "Sweatpants" }),
+  ];
+  const own = comboOwnership(closet, combo);
+  assert.equal(own.a.length, 0);
+  assert.equal(own.aElsewhere, 3);
+  assert.equal(own.b.length, 4);
+  const u = pairUnlocks(closet, { date: new Date(2026, 0, 15), max: 50 }).find(x => x.label === "Charcoal + Camel");
+  assert.ok(u, "camel owned, charcoal only in lounge → an unlock");
+  assert.equal(u.needElsewhere, 3);
+  assert.equal(unlockNeedPhrase(u), "nothing in charcoal you'd style (3 gym, lounge or comfort pieces aside)");
+  assert.match(describePairUnlocks(closet, new Date(2026, 0, 15)), /3 gym, lounge or comfort pieces aside/);
+  assert.equal(unlockNeedPhrase({ needLabel: "Forest", needElsewhere: 0 }), "nothing in forest");
+});

@@ -2,6 +2,76 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Her shopping list is the Shopping screen; the numbers count what she styles (#243) — 2026-09-17
+
+### Why
+Owner: *"'What the numbers say' data is incorrect. I don't think the gap
+analysis is particularly useful. Think it might be better to keep it as an
+area I write and check off etc myself. How best to make it useful?"*
+
+Verified against the live rows before touching code. The panel counted
+everything she owns: Green was a "core" colour on three hoodies and a
+skort, Gray on silver jewellery (a finish, not a colour), and the unlock
+lines said *"zero charcoal"* to a woman with three charcoal lounge pieces
+and *"zero slate gray"* with eleven grey pieces in gym, lounge and comfort
+wear. The "8+ pieces" floor for a core colour let Pink (13 of the 389
+pieces she styles) in on a wardrobe this size — and then "no pink bag" as a
+gap. The AI gap analysis then reasoned from those lines.
+
+### What changed
+- **The numbers count the pieces she styles** (`utils/wardrobe-coverage.js`).
+  `coverageEligible` (gym, lounge, swim and metal-coloured jewellery out) is
+  the one predicate every count in the module uses; `comboEligible` builds
+  on it. Core = a 5% share, no fixed floor. An unlock now names what she
+  owns in the needed colour that cannot carry the story, and one phrase
+  (`unlockNeedPhrase`) is used on the panel and in the prompt: *"nothing in
+  charcoal you'd style (3 gym, lounge or comfort pieces aside)"*. Live after
+  the fix: Bags no white; Dresses no brown, tan or white; three unlocks with
+  honest counts; velvet missing for fall, cashmere and tweed thin.
+- **Her list is the Shopping screen** (`features/shopping/shoppingList.js`,
+  `shoppingListStore.js`; `user_settings.shopping_list`, local mirror). She
+  writes entries in her words (optional category chip, note), checks them
+  off, and sees "Bought" with the piece that answered each one.
+- **A closet add checks an entry off for her.** `App.addItems` calls
+  `answerShoppingList` (loaded on call) after the save: a new piece that
+  answers an open entry — category + colour family + form, the same read
+  `verifyGaps` makes — marks it bought with the piece named. An entry that
+  names neither a colour nor a form ("a new bag") is left for her to tick.
+- **Every AI surface reads the list** through `personalGrounding()` and
+  Style Me's slice: what she is looking for (named when a look would be
+  finished by it, never proposed as new) and what she just bought (worth a
+  look that uses it; 45-day window). `composeShoppingBlock` takes the list;
+  the "Want it" verdicts are no longer a second copy of her wants.
+- **The two idea sources add to the list, never replace it.** "FROM YOUR
+  CLOSET'S NUMBERS" is collapsed, each line an offer with a "+ Add" and the
+  count it rests on; the former Gap Analysis is "Ask Atelier for ideas",
+  its cards say "IDEAS FROM ATELIER · add the ones you agree with", and
+  "Want it" became "Add to list" (also on Complete-a-Look).
+- **Home's row is "Shopping List"**: open count, the last two entries, and
+  what her last add answered. It reads the store half at mount via
+  `SETTINGS_BATCH_KEYS` (no extra request); the matcher stays out of the
+  boot chunk (492.6 kB vs 490.1 kB on `main`).
+- **`verifyGaps`: a form word maps to the subcategory it lives under**
+  (`trouser` → Pants, `pump` → Heels). The bare list let a navy trouser she
+  owned past the check because no subcategory is spelled "trouser".
+
+### Downstream, four ways
+- **Efficiency**: one more block in the learned preamble (her list, ≤ 8
+  open + 4 bought); boot chunk +2.5 kB for the store and the Home row; no
+  new request at mount (the key rides the settings batch).
+- **Effectiveness**: the list reaches every surface that builds or judges a
+  look through the one funnel; the numbers can no longer claim a colour she
+  owns as absent, and every line says the count behind it.
+- **Speed**: nothing added to a tap; the matcher runs after an add, off the
+  save path, and a list failure can never fail an add.
+- **Education**: every add teaches the list, every list change clears the
+  learning memo, and "just bought" flows to the stylist as a piece to use.
+
+### Verified
+`npm test` (41 suites; `test:shopping` +5, `test:coverage` +3), `npm run
+build`, `npm run smoke` green (25 walk steps; the new step writes an entry
+on the list and checks the numbers card renders). No migration needed.
+
 ## [Unreleased] — Every surface reads everything: inspiration, her shopping list and the last gap analysis join the funnel; Inspo lives under Saved; price bands follow her recent buys (#242) — 2026-09-17
 
 ### Why
