@@ -40,6 +40,35 @@ import { summarizeSilhouette } from "./silhouette.js";
 import { summarizeLookEdits } from "./lookEdits.js";
 import { summarizeOccasionMemory } from "./occasionMemory.js";
 import { loadTrendBrief, composeTrendBlock } from "./trendBrief.js";
+import { describeInspirationRead } from "../inspiration/inspirationApi.js";
+import { loadBrandFinds } from "../shopping/brandFinds.js";
+import { loadVerdicts } from "../shopping/verdicts.js";
+
+// The last verified gap analysis, saved cross-device by
+// features/shopping/gapAnalysis.js so every surface knows what her closet is
+// missing — the chat can style around a gap, and the next analysis builds on
+// the last one instead of repeating it.
+export const LAST_GAPS_KEY = "last_gap_analysis";
+
+// Her shopping list, as one block: what she said she wants from earlier
+// runs, and the labels she found herself. Pure; exported for the test.
+export function composeShoppingBlock({ wants = [], finds = [] } = {}) {
+  const w = (Array.isArray(wants) ? wants : []).filter(Boolean).slice(-8);
+  const f = (Array.isArray(finds) ? finds : []).filter(x => x && x.name);
+  if (!w.length && !f.length) return "";
+  const parts = [];
+  if (w.length) parts.push(`Pieces she has said she wants to buy: ${w.join("; ")}. When a look would be finished by one of them, say so — it is a real option on her horizon, not a piece she owns.`);
+  if (f.length) parts.push(`Labels she found and wants to shop: ${f.map(x => `${x.name}${x.categories?.length ? ` (${x.categories.join(", ")})` : ""}`).join(", ")}.`);
+  return `HER SHOPPING LIST:\n${parts.join("\n")}`;
+}
+
+// The last gap analysis, as one block. Pure; exported for the test.
+export function composeLastGapsBlock(last) {
+  const gaps = Array.isArray(last?.gaps) ? last.gaps.filter(g => g && g.suggestion) : [];
+  if (!gaps.length) return "";
+  const when = last.at ? new Date(last.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+  return `WHAT HER CLOSET IS MISSING (the last gap analysis${when ? `, ${when}` : ""} — verified against what she owns): ${gaps.slice(0, 6).map(g => `${g.suggestion}${g.category ? ` [${g.category}]` : ""}`).join("; ")}. Style around a gap when it shows (a bag family she lacks, a texture she is thin on) rather than pretending the piece exists.`;
+}
 
 export const STYLE_NOTES_KEY = "style_notes";
 export const STYLE_NOTES_SEEN_KEY = "style_notes_seen";
@@ -211,6 +240,7 @@ export function composeLearnedBlocks({
   manualPairs = [], autoPairs = [], prefs = {},
   lovedLines = [], dislikedLines = [], swapLessons = [], occasionMemory = [],
   builtLines = [], trendBrief = null,
+  inspirations = [], wants = [], finds = [], lastGaps = null,
   dateContext = "", maxLessons = 20,
 } = {}) {
   const blocks = [];
@@ -252,6 +282,12 @@ export function composeLearnedBlocks({
   if (occasionMemory.length) {
     blocks.push(`WHAT SHE RETURNS TO, PER OCCASION:\n${occasionMemory.map(l => `• ${l}`).join("\n")}`);
   }
+  const drawnTo = describeInspirationRead(inspirations);
+  if (drawnTo) blocks.push(drawnTo);
+  const shopping = composeShoppingBlock({ wants, finds });
+  if (shopping) blocks.push(shopping);
+  const missing = composeLastGapsBlock(lastGaps);
+  if (missing) blocks.push(missing);
   if (dateContext) {
     blocks.push(`TODAY: ${dateContext}. Beyond the temperature band, what reads current is what reads right for this moment of the year — fabrics, colour depth, the weight of the shoe.`);
   }
@@ -288,7 +324,7 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
   if (cache && cache.key === key && Date.now() - cache.at < TTL_MS) return cache.value;
 
   const safe = (p) => p.catch(() => null);
-  const [fp, standing, lessons, favs, logs, lovedFb, disliked, edits, inspirations, trendBrief] = await Promise.all([
+  const [fp, standing, lessons, favs, logs, lovedFb, disliked, edits, inspirations, trendBrief, finds, verdicts, lastGaps] = await Promise.all([
     safe(sb.fingerprintTextCached(fingerprintMax)),
     safe(loadStandingPreferences()),
     safe(loadChatLessons()),
@@ -299,6 +335,9 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
     safe(sb.fetchLookEdits()),
     safe(sb.fetchInspirations()),
     safe(loadTrendBrief()),
+    safe(loadBrandFinds()),
+    safe(loadVerdicts()),
+    safe(sb.getSettingJson(LAST_GAPS_KEY)),
   ]);
   const resolveAgainst = (wardrobe && wardrobe.length) ? wardrobe : available;
 
@@ -334,6 +373,10 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
     manualPairs, autoPairs, prefs,
     lovedLines, dislikedLines, swapLessons, occasionMemory,
     builtLines, trendBrief,
+    inspirations: inspirations || [],
+    wants: (verdicts || []).filter(v => v?.verdict === "yes").map(v => v.suggestion),
+    finds: finds || [],
+    lastGaps: lastGaps || null,
     dateContext: describeDateContext(),
   });
   value.standing = standing || [];
@@ -365,13 +408,21 @@ export function builtLookLines(logs, wardrobe, { max = 6 } = {}) {
 export async function learnedForStyleMe({ wardrobe = [], logs = null } = {}) {
   const key = `${(wardrobe || []).length}|${Array.isArray(logs) ? logs.length : "fetch"}`;
   if (standingCache && standingCache.key === key && Date.now() - standingCache.at < TTL_MS) return standingCache.value;
-  const [standing, lessons, trendBrief, logRows] = await Promise.all([
+  const [standing, lessons, trendBrief, logRows, finds, verdicts, lastGaps] = await Promise.all([
     loadStandingPreferences().catch(() => []),
     loadChatLessons().catch(() => []),
     loadTrendBrief().catch(() => null),
     Array.isArray(logs) ? Promise.resolve(logs) : sb.fetchOutfitLogs().catch(() => []),
+    loadBrandFinds().catch(() => []),
+    loadVerdicts().catch(() => []),
+    sb.getSettingJson(LAST_GAPS_KEY).catch(() => null),
   ]);
-  const value = { standing, lessons, trendBrief, builtLines: builtLookLines(logRows || [], wardrobe) };
+  const value = {
+    standing, lessons, trendBrief,
+    builtLines: builtLookLines(logRows || [], wardrobe),
+    shoppingBlock: composeShoppingBlock({ wants: (verdicts || []).filter(v => v?.verdict === "yes").map(v => v.suggestion), finds }),
+    lastGapsBlock: composeLastGapsBlock(lastGaps),
+  };
   standingCache = { at: Date.now(), key, value };
   return value;
 }

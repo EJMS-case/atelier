@@ -137,7 +137,16 @@ export function buildStylingPrompt({
   chatLessons = [],
   trendBrief = null,
   builtLooks = [],
+  drawnTo = "",
+  shoppingBlock = "",
+  lastGapsBlock = "",
 }) {
+  // What she's drawn to beyond today's brief, her shopping list, and what her
+  // closet is missing — the same three signals every advisory surface reads
+  // (features/stylist/learning.js), so Style Me sees what the chat sees.
+  const drawnToBlock = drawnTo ? `\n🖼️ ${drawnTo}\n` : "";
+  const shoppingListBlock = shoppingBlock ? `\n🛍️ ${shoppingBlock}\nNever place a wanted piece in a look — it is not in the inventory. A rationale may note when a look would be finished by one.\n` : "";
+  const missingBlock = lastGapsBlock ? `\n◇ ${lastGapsBlock}\n` : "";
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 
   // How she wears things — the preferences she set by hand in Style Profile
@@ -323,7 +332,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${standingBlock}${fingerprintBlock}${stylePrefsBlock}${builtBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${trendBlock}${recentCombosBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${drawnToBlock}${standingBlock}${fingerprintBlock}${stylePrefsBlock}${builtBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${trendBlock}${shoppingListBlock}${missingBlock}${recentCombosBlock}${honestyBlock}
 ${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}

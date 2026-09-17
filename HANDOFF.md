@@ -1,12 +1,29 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-17**, after PR #241. The session log below
+Refreshed **2026-09-17**, after PR #242. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-17 · PR #242 — every surface reads everything; Inspo under Saved; price bands follow her recent buys
+
+**Owner:** "all areas of the app to read everything else … is the inspo tab really pulling any weight?" and, on price, "look moreso at my most recent 50 or so items … if it's extraordinary maybe I will one day." CHANGELOG has the detail. To carry:
+
+1. **`personalGrounding()` is read by EVERY AI surface now** — chat, Evaluate, trips, Style Me (its slice), shopping, Brand Atlas, the monthly profile, the recap — and carries what she's drawn to, her shopping list, and the last gap analysis. A new surface calls it and gets all of it; a new signal is added to `composeLearnedBlocks` once.
+2. **Module direction:** `learning.js` imports the shopping modules; they never import it back. A screen that saves a find or a verdict calls `invalidateLearning()` itself. The recap imports `standard.js` on call, not at the top — Home's chunk must stay clean.
+3. **One brief matcher** for inspiration (`inspirationApi.matchesBrief`). Style Me's four-month-old `===` bug is why Inspo read as dead weight.
+4. **Nav is Style Me · Planner · Saved · ⚙**; Inspo is Saved's fourth tab.
+5. **`spendBands` reads her most recent 50 priced pieces** (`created_at`), all-time fallback where thin, one extraordinary stretch per run.
+
+**Watch-items:**
+- **Her next Style Me tap after saving an inspiration:** the rationale may echo a saved mood ("the column you keep saving"). If Style Me feels longer, the inspiration read (`describeInspirationRead` max 8 / 240 chars) is the dial.
+- **First gap analysis after this:** the "WHAT SHE'S DRAWN TO" block should show up as a named gap source ("answers the teal-coat note you saved") when the closet cannot make a saved mood. `user_settings.last_gap_analysis` should hold the verified list afterwards; the chat should be able to name it.
+- **Price bands:** with her rows today the recent window covers Tops/Bottoms/Athleisure well and thins out for Bags/Outerwear (all-time fallback, said so in the prompt). If bands read low for a category she has been buying up in, `RECENT_WINDOW` (50) is the dial.
+
+**Verified before push:** `npm test` (41 suites), `npm run build`, `npm run smoke` green (24 walk steps).
 
 ### 2026-09-17 · PR #241 — the gap analysis shops at her price, from her wardrobe, and checks every pick against her closet
 

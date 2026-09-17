@@ -14,7 +14,8 @@ import { summarizeInspiration } from "./summarize.js";
 
 const WEATHERS = WEATHER_SHORTS;
 
-export default function InspirationView({ apiKey, onBack, items, setItems }) {
+// Rendered inside Saved's Inspo tab (2026-09-17) — no page frame of its own.
+export default function InspirationView({ apiKey, items, setItems }) {
   const [loading, setLoading] = useState(items.length === 0);
   const [filter, setFilter] = useState({ occasion: "All", weather: "All" });
   const [uploadOcc, setUploadOcc] = useState("Casual");
@@ -102,12 +103,7 @@ export default function InspirationView({ apiKey, onBack, items, setItems }) {
   };
 
   return (
-    <div style={s.page}>
-      <div style={s.pageHeader}>
-        <button style={s.backBtn} onClick={onBack}>← Back</button>
-        <h2 style={s.pageTitle}>Inspiration</h2>
-      </div>
-
+    <div style={{ paddingTop: 4 }}>
       <p style={{...s.settingsSub, marginBottom:16}}>
         Upload 3–5 style references per occasion + weather combo. The AI reads the vibe (silhouette, color, mood) — never the items themselves — and uses it to bias looks built from <strong>your closet</strong>. Your closet is the only source of clothes; these images only set the feel.
       </p>

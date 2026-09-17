@@ -49,6 +49,7 @@ import {
 } from "../../utils/item-helpers.js";
 import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
 import { learnedContext } from "./learning.js";
+import { matchesBrief } from "../inspiration/inspirationApi.js";
 
 // ── The prose ────────────────────────────────────────────────────────────────
 
@@ -160,14 +161,7 @@ export function weatherBrief(weathers) {
 // chat and the evaluator never did. Mood only, never pieces: the note says so.
 export function inspirationBrief(inspirations, occasions = [], weathers = [], { max = 4 } = {}) {
   const rows = Array.isArray(inspirations) ? inspirations : [];
-  const occs = canonicalOccasions(occasions);
-  const wxShorts = (weathers || []).filter(Boolean).map(w => String(w).split(" ")[0]);
-  const hits = rows.filter(r => {
-    if (!r?.vibe_text) return false;
-    const occOk = !occs.length || !r.occasion || occs.includes(normalizeOccasion(r.occasion));
-    const wxOk = !wxShorts.length || !r.weather || wxShorts.some(w => String(r.weather).startsWith(w));
-    return occOk && wxOk;
-  }).slice(0, max);
+  const hits = rows.filter(r => r?.vibe_text && matchesBrief(r, canonicalOccasions(occasions), weathers)).slice(0, max);
   if (!hits.length) return "";
   return `HER SAVED INSPIRATION for this brief (mood, silhouette, colour story — a direction to lean toward, never pieces to find; nothing described here is in her closet unless the closet list says so):
 ${hits.map(r => `• ${String(r.vibe_text).trim()}`).join("\n")}`;

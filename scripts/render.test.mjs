@@ -414,7 +414,16 @@ await check("Saved → History shows a worn Arizona look by default", async () =
   }
 });
 
-await check("Inspo", tab("Inspo"));
+await check("Saved → Inspo tab (folded in from the nav, 2026-09-17)", async () => {
+  await clickText("nav button", "Saved");
+  await page.waitForTimeout(400);
+  await clickText("button", "Inspo");
+  await page.waitForTimeout(500);
+  const nav = await page.evaluate(() => [...document.querySelectorAll("nav button")].map(b => b.textContent.trim()));
+  if (nav.includes("Inspo")) throw new Error("the Inspo nav chip is still there");
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/inspiration|Upload|Inspo/i.test(text)) throw new Error("the Inspo tab did not render");
+});
 await check("Style Me", tab("Style Me"));
 // Opening a trip is what dereferences `available` down the planner chain. The
 // walk missed it once and a prop rename shipped an `undefined` straight

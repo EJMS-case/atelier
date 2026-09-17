@@ -43,9 +43,11 @@ export async function recordVerdict(gap, verdict) {
   return next;
 }
 
-export function describeVerdicts(list) {
+// `wants: false` when the funnel already carries her wants (HER SHOPPING
+// LIST) and only the rule-outs are needed here.
+export function describeVerdicts(list, { wants: includeWants = true } = {}) {
   const v = cleanList(list);
-  const wants = v.filter(x => x.verdict === "yes").slice(-8);
+  const wants = includeWants ? v.filter(x => x.verdict === "yes").slice(-8) : [];
   const nos = v.filter(x => x.verdict === "no").slice(-8);
   const owns = v.filter(x => x.verdict === "own").slice(-8);
   const parts = [];

@@ -8,6 +8,8 @@ import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASIO
 import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { weatherAdjustedSlots } from "../../features/stylist/standard.js";
 import { learnedForStyleMe, describeDateContext } from "../../features/stylist/learning.js";
+import { describeInspirationRead } from "../../features/inspiration/inspirationApi.js";
+import { personalGrounding } from "../../features/stylist/standard.js";
 import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
@@ -219,8 +221,11 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // How she wears things — her standing preferences and what she has told
   // her stylist in conversation (features/stylist/learning.js). The one
   // personal signal App did not already hold in state; memoised, soft-fail.
-  const { standing: standingPreferences, lessons: chatLessons, trendBrief, builtLines: builtLooks } =
-    await learnedForStyleMe({ wardrobe, logs: outfitLogs }).catch(() => ({ standing: [], lessons: [], trendBrief: null, builtLines: [] }));
+  const { standing: standingPreferences, lessons: chatLessons, trendBrief, builtLines: builtLooks, shoppingBlock, lastGapsBlock } =
+    await learnedForStyleMe({ wardrobe, logs: outfitLogs }).catch(() => ({ standing: [], lessons: [], trendBrief: null, builtLines: [], shoppingBlock: "", lastGapsBlock: "" }));
+  // What she's drawn to, beyond today's brief: every saved inspiration the
+  // per-brief block above did not already carry (App hands the rows over).
+  const drawnTo = describeInspirationRead(extras.inspirations || [], { exclude: inspirationVibes });
 
   const { staticPreamble, dynamicBody } = buildStylingPrompt({
     occasion,
@@ -248,6 +253,9 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     comfortMode,
     standingPreferences,
     chatLessons,
+    drawnTo,
+    shoppingBlock,
+    lastGapsBlock,
     trendBrief,
     builtLooks,
   });
@@ -384,7 +392,7 @@ ${wardrobeItems ? "Fill in pairingCount, pairingItemIds (up to 5), and dimension
 }
 
 // ── STYLE PROFILE (editorial monthly snapshot) ──────────────────────────────
-function buildProfilePrompt(items, outfitLogs, analysis) {
+function buildProfilePrompt(items, outfitLogs, analysis, learned = []) {
   const month = new Date().toLocaleDateString("en-US", { month:"long", year:"numeric" });
   const catDist = Object.entries(analysis.catCounts).map(([c, n]) => `${c}: ${n}`).join(", ");
   const colorPairs = analysis.colorPairs.map(p => `${p.pair} (${p.count}x)`).join(", ") || "none yet";
@@ -395,7 +403,7 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
     const logItems = resolveItemIds(wardrobe?.length ? wardrobe : items, l.garment_ids);
     return `${l.date_worn}: ${logItems.map(it => `${it.category}:${it.name}`).join(", ")} (${l.occasion || "casual"})`;
   }).join("\n");
-  return `Write a 2-3 sentence monthly style profile for this wardrobe's owner, addressed TO her — "you", "your", never "she" or "the user". Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}`;
+  return `Write a 2-3 sentence monthly style profile for this wardrobe's owner, addressed TO her — "you", "your", never "she" or "the user". Tone: editorial, personal, observational. Mention: dominant silhouettes, color story, any emerging signature, and one underutilized piece worth exploring.\n\nData for ${month}:\nCategory distribution: ${catDist}\nTop color pairs: ${colorPairs}\nWardrobe anchors: ${anchors}\nUnderutilized pieces: ${underutil}\nRecent outfits:\n${recentLogs || "No outfit logs yet."}\nTotal outfits: ${analysis.totalOutfits}${learned.length ? `\n\nEverything else the app knows about her (read it; do not list it back):\n${learned.join("\n\n")}` : ""}`;
 }
 
 // Streaming variant: invokes onDelta(textSoFar) as tokens arrive and returns
@@ -403,7 +411,10 @@ function buildProfilePrompt(items, outfitLogs, analysis) {
 // (A non-streaming generateStyleProfile once lived here but had no callers —
 // StyleInsightsView uses the streaming path below.)
 export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, onDelta, wardrobe = null) {
-  const prompt = buildProfilePrompt(items, outfitLogs, analysis);
+  // The same funnel every surface reads — the profile should know what she's
+  // drawn to and what she wants, not just the counts.
+  const { blocks: learned } = await personalGrounding({ wardrobe: wardrobe || items, available: items, fingerprintMax: 600, maxAutoPairs: 2 }).catch(() => ({ blocks: [] }));
+  const prompt = buildProfilePrompt(items, outfitLogs, analysis, learned);
   const res = await anthropicFetch(
     { model: MODEL_STANDARD, max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] },
     { apiKey },
@@ -498,9 +509,6 @@ export async function generateShoppingRecs(items, apiKey, mode, selectedIds = []
       describePairUnlocks(items, now),
     ].filter(Boolean).join("\n\n");
 
-    // Her style fingerprint (session-memoized, soft-fail) — recommendations
-    // should extend HER wardrobe's direction, not a generic one.
-    const fp = await sb.fingerprintTextCached(800).catch(() => "");
 
     const dynamic = `You are a wardrobe strategist analyzing gaps in this client's wardrobe. Return your findings through the return_gaps tool.
 
@@ -514,10 +522,8 @@ ${wardrobeSummary}
 
 COVERAGE ANALYSIS (computed from her actual closet — treat these as facts, not suggestions):
 ${coverageSignals}
-${fp ? `
-HER STYLE FINGERPRINT (distilled from what she actually wears — extend this direction):
-${fp}
-` : ""}${grounding ? `
+${grounding ? `
+EVERYTHING THE APP KNOWS ABOUT HER (her fingerprint, how she wears things, what she loves and builds, what she's drawn to, her shopping list, the last analysis — extend THIS direction):
 ${grounding}
 ` : ""}
 Return ONLY the gaps that are real — zero to six. A closet this considered may have two; say so rather than padding. Weigh, in order:
@@ -527,7 +533,7 @@ Return ONLY the gaps that are real — zero to six. A closet this considered may
 4. TEXTURES missing or thin for the season ahead.
 5. MISSING or THIN subcategories that a complete wardrobe needs.
 
-Before you write a gap, check the WARDROBE SUMMARY for the same category and colour: if she owns it, it is not a gap. For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Every description and reason is written TO her: "you", "your" — never "she" or "her". Price it inside WHAT SHE PAYS for that category and name a brand from her tier or her finds when one genuinely fits — never a luxury house she does not shop. Keep description and reason to one tight sentence each. If nothing is genuinely missing, return one gap that is the single most worthwhile upgrade and say in its reason that the closet is covered.`;
+WHAT SHE'S DRAWN TO (when listed) is the best gap signal you have: a mood, silhouette, or colour story she keeps saving that her closet cannot make is a gap worth naming — say which saved note it answers. Before you write a gap, check the WARDROBE SUMMARY for the same category and colour: if she owns it, it is not a gap. For each gap suggest ONE specific product to buy. Be specific: color, fabric, silhouette, and the details that make it right for her. When the gap comes from the coverage analysis, SAY SO in the reason ("your core navy runs through 15 pieces but no bag") — she should see the data behind the pick. Every description and reason is written TO her: "you", "your" — never "she" or "her". Price it inside WHAT SHE PAYS for that category and name a brand from her tier or her finds when one genuinely fits — never a luxury house she does not shop. Keep description and reason to one tight sentence each. If nothing is genuinely missing, return one gap that is the single most worthwhile upgrade and say in its reason that the closet is covered.`;
 
     return invokeShoppingTool({
       apiKey,
@@ -564,23 +570,18 @@ Before you write a gap, check the WARDROBE SUMMARY for the same category and col
     `${it.category}${it.subcategory ? ` > ${it.subcategory}` : ""}: ${it.name}${it.color ? ` (${it.color})` : ""}${it.brand ? ` [${it.brand}]` : ""}`
   ).join("\n");
 
-  // Same personal grounding as gap mode — completions should read like her
-  // stylist shopping for her, not a mannequin.
-  const completeFp = await sb.fingerprintTextCached(600).catch(() => "");
 
   const dynamic = `You are completing an outfit. The client has selected these pieces:
 
 SELECTED OUTFIT:
 ${outfitStr}
-${completeFp ? `
-HER STYLE FINGERPRINT (distilled from what she actually wears — extend this direction):
-${completeFp}
-` : ""}
+
 TODAY: ${dateContext}
 
 WARDROBE SUMMARY (what she already owns — a piece she owns in the same category and colour is not something to buy):
 ${wardrobeSummary}
 ${grounding ? `
+EVERYTHING THE APP KNOWS ABOUT HER (extend this direction; her finds are the makes to reach for):
 ${grounding}
 ` : ""}
 Analyze what's missing from this outfit to make it complete and elevated, then return suggestions via the return_completions tool. Consider:
