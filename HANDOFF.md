@@ -1,6 +1,6 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-17**, after the nav / Home / background-run / preferences session. The session log below
+Refreshed **2026-09-17**, after PR #240. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
@@ -8,7 +8,7 @@ it through.
 
 ## Session log
 
-### 2026-09-17 · ATELIER is home, the tools leave Settings, long runs survive the screen, the stylist stops citing "line 4"
+### 2026-09-17 · PR #240 — ATELIER is home, the tools leave Settings, long runs survive the screen, the stylist stops citing "line 4"
 
 **Owner, from her phone:** five asks in one message — how to get back to the landing screen, Style Profile erroring on open, a shopping run that "took FOREVER and didn't run in the background", everything that isn't a setting on Home with the colours collapsible, and the chat/evaluator's "hard rules … (line 4)". CHANGELOG has the detail; the things to carry:
 

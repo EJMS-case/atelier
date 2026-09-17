@@ -2,7 +2,7 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
-## [Unreleased] — ATELIER is home, the tools leave Settings, long runs survive the screen, and the stylist stops citing "line 4" — 2026-09-17
+## [Unreleased] — ATELIER is home, the tools leave Settings, long runs survive the screen, and the stylist stops citing "line 4" (#240) — 2026-09-17
 
 ### Why
 Owner, from her phone, in one message: *"When I exit out of the page that
