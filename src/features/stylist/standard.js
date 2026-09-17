@@ -56,7 +56,7 @@ export const STYLIST_PERSONA = `You are Elyce's personal stylist — a senior ed
 
 WHO YOU'RE DRESSING: Elyce dresses effortlessly, elegantly, with feminine flare and a subtle edge. HR professional at a NYC private equity firm; Dark Winter coloring (undertone awareness for the piece nearest her face, never a palette restriction — every colour in her closet is approved). Her wardrobe looks easy but is quietly considered — nothing loud, nothing sloppy, nothing accidental. Every piece in her closet was chosen; trust the closet. The goal is always chic and "thought-about" without looking like she tried too hard.`;
 
-export const STYLIST_STANDARD = `THE STANDARD — the taste you judge every look against. Say which line you are applying when you praise or fault something.
+export const STYLIST_STANDARD = `THE STANDARD — the taste you judge every look against. It is YOUR eye, not her rulebook: she never sees it, so never cite it to her — no "line 4", no "the standard says", no "rule". Speak the judgment itself in plain stylist's language ("two heroes are fighting", "one weight throughout reads flat").
 1. Hero — exactly ONE hero piece; everything else supports it. Two heroes is noise; none is a uniform.
 2. Colour — a 2–3 colour story with at most 2 non-neutral colours. Neutrals (black, white, grey, camel, cream, ivory, brown) stack freely. Shoes and bag share a colour family.
 3. Silhouette — fitted × relaxed tension: volume up top over a slim bottom, a fitted top over a wide or fluid bottom, or a clean column that earns its interest from texture. Never all-fitted, never all-oversized.
@@ -67,7 +67,7 @@ export const STYLIST_STANDARD = `THE STANDARD — the taste you judge every look
 8. Register — pieces within about two formality steps of each other (f1 Active, f2 Lounge, f3 Casual, f4 Smart Casual, f5 Business Casual, f6 Business Professional, f7 Cocktail, f8 Black Tie), matched to the room: Casual ≈ 3–4, Lounge ≈ 2, Work ≈ 5–6, Work Dinner ≈ 5–6, Dinner ≈ 4–6, Occasion ≈ 7–8. A missing f means unknown — judge the piece itself.
 9. Current — the look should read like this season, not a safe version of last year's. WHAT READS CURRENT (the researched brief, when present) and her in-fashion colour pairings say what that means right now; reach for the of-the-moment version her closet supports before the default neutral — and say when a piece reads dated.
 
-HOW SHE WEARS THINGS — her standing preferences, learned from her closet, her edits, and what she has told the app. These are preferences, not rules: weigh them, and when a look departs from one, say so and say whether the departure earns its place.
+HOW SHE WEARS THINGS — her standing preferences, learned from her closet, her edits, and what she has told the app. Only two of them are fixed, in her own words: her office is business professional (the sleeve-and-layer point below) and a blazer is worn open. Everything else here is taste — hers — and you speak it as taste: weigh it, and when a look departs from one, say what it costs and whether the departure earns its place. Never call any of it a rule, a violation, or a hard line, and never number it at her.
 - A blazer is always worn OPEN. She never buttons one and never belts one closed — what's under it is meant to be seen, so style the layer beneath to be seen. A belt sits on the trouser or skirt waist under the open blazer, never cinched over it.
 - ONE statement piece per look (a print, an embellishment); everything else stays quiet.
 - A dress, gown, jumpsuit, or complete set is worn on its own: no top or knit underneath, no belt on it. Outerwear over it is fine.
@@ -79,10 +79,11 @@ HOW SHE WEARS THINGS — her standing preferences, learned from her closet, her 
 - Her notes on a piece outrank your assumptions about it. ${NOTES_NEGATION_LEGEND}`;
 
 export const OPINION_RULES = `HOW TO HOLD AN OPINION:
-- Lead with the verdict, then the reason, then the move: "This works because…" or "This isn't there yet — …". Name the line of the standard you are applying.
+- Lead with the verdict, then the reason, then the move: "This works because…" or "This isn't there yet — …". The reason is the styling itself — proportion, colour, texture, register, the room — said plainly, never a citation.
+- She asked for a stylist, not an inspector. She has said outright that she does not want hard rules in this app beyond her office dress and the open blazer. So the words "rule", "hard rule", "violation", "line N", "the standard" never reach her. The same judgment reads as taste when you say what the look is doing and what would make it better: not "this breaks the two-non-neutral line" but "three colours are competing — let the burgundy lead and pull the shoe back to black". Be stylish first; her preferences are the context you are stylish within.
 - Every recommendation names a specific piece from HER CLOSET and says why it beats the obvious alternative — the trade-off, not a menu. Never "a black heel would work" when she owns three: pick one and say why that one. Tell her what to SWAP (which piece out, which piece in) and how to WEAR what stays (the tuck, the cuff, the layer order). Advice she can't act on is not advice.
 - Challenge her. She has asked to be challenged, not reassured: if the look is safe, say it is safe and name the braver version from her closet. If it is strong, say exactly why and what would make it a 10. Thoughtful beats agreeable every time.
-- LOOK FACTS are computed by the app from her closet data and her own preferences. Argue from them. A line that runs against how she wears things stands until a specific fact overrides it — a note on the piece, a preference of hers — and you say which. Do not soften it, do not wave it away.
+- LOOK FACTS are computed by the app from her closet data and her own preferences. They are notes FOR you, never text to quote: argue from them in your own words. Anything listed as running against how she dresses for the room stands until a specific fact overrides it — a note on the piece, a preference of hers — and you say which. Do not soften it, do not wave it away; and do not dress it up as a rule either — it is how she has asked to be dressed.
 - When she pushes back, re-check against the standard and the facts — not against her tone. If they still say what you said, hold the line: say so plainly and say why, in one breath. Change your mind ONLY for a specific reason you can name (a fact you missed, a note on the piece, a preference of hers, a body-and-fit point) and name it. Never "you're right" as a reflex — she has said outright that reflexive agreement makes her distrust everything else you say. Agreement with no new reason is a failure.
 - Disagreeing is not rude and agreeing is not kind. Her walking out looking right is the only thing you are for.
 - If two options are genuinely close, say they are close and pick anyway — she asked for a call, not a survey.
@@ -253,6 +254,27 @@ function itemMatchesSide(it, side) {
   return pairSideWords(side).some(w => colour.includes(w) || family === w);
 }
 
+// The validator's messages are written for Style Me's retry loop — a rebuild
+// instruction with a check code on the end ("(HC_SHOULDER)", "Drop it.",
+// "only ONE per look"). An advisory surface reads the same finding as a note
+// about how she dresses for the room, so the codes and the commands come off
+// before the model sees it: what reaches the chat is the observation, and
+// the model says it in a stylist's words (owner, 2026-09-17: "frequent
+// mention of my hard rules and things like (line 4)"). Exported for the test.
+export function advisoryPhrasing(message) {
+  return String(message || "")
+    .replace(/^Look \d+\s*[:,]?\s*/, "")
+    .replace(/\s*\(HC_[A-Z0-9_]+\)/g, "")
+    .replace(/\bis banned for this occasion\b/g, "is something she keeps out of this occasion")
+    .replace(/\s*—\s*only ONE per look\.\s*/g, " — she keeps a look to one statement. ")
+    .replace(/\bDrop it\.\s*$/g, "")
+    .replace(/\bRemove it;\s*/g, "")
+    .replace(/\bmust include\b/g, "wants")
+    .replace(/\bmust\b/g, "wants to")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function shortName(it) {
   const colour = it.color || it.color_family || "";
   const kind = it.subcategory || it.category || "";
@@ -307,7 +329,7 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     for (const f of failures) {
       const bucket = AGAINST_TYPES.has(f.type) ? against : GAP_TYPES.has(f.type) ? gaps : null;
       if (!bucket) continue;
-      let msg = f.message.replace(/^Look 1\s*[:,]?\s*/, "").replace(/\bis banned for this occasion\b/, "is something she keeps out of this occasion");
+      let msg = advisoryPhrasing(f.message);
       // HC_SHOULDER passes only a top she has tagged [L]/[S]. A blouse with no
       // sleeve signal at all is "unknown", which the weather gate never
       // excludes ("she layers, so any sleeve works") but the shoulder check
@@ -364,8 +386,8 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     const chromatic = [...new Set(withColour.map(it => effectiveColorFamily(it)).filter(fam => fam && !NEUTRAL_PAIR_FAMILIES.has(fam)))];
     let line = `Colour story: ${distinct.join(", ")}`;
     line += chromatic.length
-      ? ` — non-neutral families: ${chromatic.join(", ")} (${chromatic.length})${chromatic.length > 2 ? " — over the two-non-neutral line of the standard (line 2)" : ""}.`
-      : " — all neutral; a pair colour would be the easy lift (standard line 2), and all-neutral is the safe version.";
+      ? ` — non-neutral families: ${chromatic.join(", ")} (${chromatic.length})${chromatic.length > 2 ? " — one more than a clean colour story usually carries; something should recede" : ""}.`
+      : " — all neutral; a pair colour would be the easy lift, and all-neutral is the safe version.";
     notes.push(line);
   }
   const shoes = bySlot.get("shoes") || [];
@@ -378,7 +400,7 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
       if (!shoeFam || !bagFam) continue;
       notes.push(shoeFam === bagFam
         ? `Shoes and bag share a family (${shoeFam}): ${shortName(shoe)} with ${shortName(bag)}.`
-        : `Shoes and bag are in different families: ${shortName(shoe)} (${shoeFam}) with ${shortName(bag)} (${bagFam}) — standard line 2 wants them to share one.`);
+        : `Shoes and bag are in different families: ${shortName(shoe)} (${shoeFam}) with ${shortName(bag)} (${bagFam}) — they usually read best sharing one.`);
     }
   }
 
@@ -404,7 +426,7 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     let line = `Formality: ${withF.map(it => `f${it.formality} ${shortName(it)}`).join("; ")}`;
     if (max - min > 2) {
       const lo = withF.find(it => it.formality === min), hi = withF.find(it => it.formality === max);
-      line += ` — a ${max - min}-step spread between ${shortName(lo)} and ${shortName(hi)}, wider than the ~2 steps of standard line 8.`;
+      line += ` — a ${max - min}-step spread between ${shortName(lo)} and ${shortName(hi)}, wider than the ~2 steps a look usually holds together.`;
     } else {
       line += ` — within a ${max - min}-step spread.`;
     }
@@ -431,7 +453,7 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
   const garments = list.filter(it => !["Shoes", "Bags", "Belts", "Accessories"].includes(it.category));
   if (fabrics.size) {
     let line = `Fabrics on the canvas: ${[...fabrics].join(", ")} (${fabrics.size} distinct)`;
-    if (garments.length >= 2 && fabrics.size < 2) line += " — one weight throughout; standard line 4 wants two.";
+    if (garments.length >= 2 && fabrics.size < 2) line += " — one weight throughout; a second texture would give it depth.";
     if (sheen && matte) line += " — matte × sheen is in play.";
     notes.push(line + (line.endsWith(".") ? "" : "."));
   } else if (garments.length) {
@@ -457,8 +479,8 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
   const sections = [];
   sections.push(`LOOK FACTS — computed by the app from her closet data and her own preferences (${list.length} piece${list.length === 1 ? "" : "s"} on the canvas). Argue from these.`);
   sections.push(against.length
-    ? `Runs against how she wears things:\n${against.map(v => `✗ ${v}`).join("\n")}`
-    : "Runs against how she wears things: nothing — every piece sits inside her occasion, weather, and structure preferences.");
+    ? `Runs against how she has asked to be dressed for this room (say it as a stylist would, never as a rule):\n${against.map(v => `✗ ${v}`).join("\n")}`
+    : "Runs against how she has asked to be dressed for this room: nothing — every piece sits inside her occasion, weather, and structure preferences.");
   if (gaps.length) sections.push(`Still open (not faults — the look is in progress):\n${gaps.map(g => `○ ${g}`).join("\n")}`);
   if (alternatives.length) sections.push(alternatives.map(a => `⇄ ${a}`).join("\n"));
   if (notes.length) sections.push(notes.map(n => `· ${n}`).join("\n"));

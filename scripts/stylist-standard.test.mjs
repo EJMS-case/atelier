@@ -28,7 +28,7 @@ import { dirname, join } from "node:path";
 
 import {
   readLook, occasionBrief, weatherBrief, weatherAdjustedSlots, canonicalOccasions,
-  describeItem, STYLIST_STANDARD, OPINION_RULES, STYLIST_PERSONA, VOICE_RULES,
+  describeItem, STYLIST_STANDARD, OPINION_RULES, STYLIST_PERSONA, VOICE_RULES, advisoryPhrasing,
 } from "../src/features/stylist/standard.js";
 import {
   composeLearnedBlocks, mergeLessons, describeLookLine, describeDateContext, mergeNewSeeds, builtLookLines,
@@ -68,7 +68,7 @@ test("a clean Work look has no violations and reads its colour story", () => {
   const r = readLook([blouse(), trouser(), pump(), tote()], { occasions: ["Work"], weathers: ["Mild (55-69°F)"] });
   assert.deepEqual(r.against, []);
   assert.deepEqual(r.gaps, []);
-  assert.match(r.text, /Runs against how she wears things: nothing/);
+  assert.match(r.text, /Runs against how she has asked to be dressed for this room: nothing/);
   assert.match(r.text, /non-neutral families: Blue, Red \(2\)/);
   assert.match(r.text, /Shoes and bag share a family \(Black\)/);
   // An untagged sleeve is a check-the-sleeve note, never a violation.
@@ -318,6 +318,24 @@ test("the builder chat's per-turn block carries the brief, the rules, and the fa
   assert.match(block, /Activates her pairing Burgundy \+ Navy/);
 });
 
+test("the look facts never cite a line of the standard, and the validator's retry voice is re-cut for advice", () => {
+  const facts = readLook([blouse(), trouser(), pump(), pick("Bags", "Tote", { color: "Tan" })], { occasions: ["Work"], weathers: ["Mild (55-69°F)"] });
+  assert.doesNotMatch(facts.text, /standard line|line \d\b|\(line/i);
+  assert.doesNotMatch(facts.text, /\(HC_/);
+  assert.equal(
+    advisoryPhrasing("Look 1: Work — her office is business professional: a tank takes a layer. Add a Knits or Outerwear layer (HC_SHOULDER)."),
+    "Work — her office is business professional: a tank takes a layer. Add a Knits or Outerwear layer.",
+  );
+  assert.equal(
+    advisoryPhrasing('Look 2 has 2 statement pieces (a, b) — only ONE per look. Pair the most important one with quiet neutrals; swap the rest for solids.'),
+    "has 2 statement pieces (a, b) — she keeps a look to one statement. Pair the most important one with quiet neutrals; swap the rest for solids.",
+  );
+  assert.equal(advisoryPhrasing("Look 1 pairs hosiery \"x\" with a full-length bottom — hosiery is legwear for skirts and dresses only. Drop it."),
+    "pairs hosiery \"x\" with a full-length bottom — hosiery is legwear for skirts and dresses only.");
+  assert.equal(advisoryPhrasing("Look 1 contains 'Slides' (Sandals) which is banned for this occasion."),
+    "contains 'Slides' (Sandals) which is something she keeps out of this occasion.");
+});
+
 test("the evaluator's prompt carries the standard, the brief, and the facts", () => {
   const prompt = composeEvalPrompt({
     items: [blouse(), trouser(), pump()],
@@ -327,6 +345,8 @@ test("the evaluator's prompt carries the standard, the brief, and the facts", ()
   assert.ok(prompt.includes(STYLIST_STANDARD));
   assert.ok(prompt.includes(OPINION_RULES));
   assert.match(prompt, /counts heavily against the score/);
+  assert.doesNotMatch(prompt, /line of the standard/);
+  assert.match(prompt, /never as a rule broken or a line cited/);
   assert.match(prompt, /WORK BRIEF/);
   assert.match(prompt, /WEATHER: MILD/);
   assert.match(prompt, /LOOK FACTS/);
@@ -364,6 +384,13 @@ test("every advisory surface imports the standard (source contract)", () => {
 
 test("the standard speaks in preferences, in the second person, and never buttons a blazer", () => {
   assert.doesNotMatch(STYLIST_STANDARD, /HARD RULES/);
+  // Owner, 2026-09-17: "frequent mention of my hard rules and things like
+  // (line 4)". The model cited the standard because the prompt TOLD it to.
+  for (const text of [STYLIST_STANDARD, OPINION_RULES]) {
+    assert.doesNotMatch(text, /Say which line|Name the line|line of the standard/i, "the prompt asks the model to cite the standard");
+  }
+  assert.match(OPINION_RULES, /never reach her/);
+  assert.match(STYLIST_STANDARD, /Only two of them are fixed/);
   assert.match(STYLIST_STANDARD, /HOW SHE WEARS THINGS — her standing preferences/);
   assert.match(STYLIST_STANDARD, /blazer is always worn OPEN/);
   assert.match(OPINION_RULES, /Challenge her/);

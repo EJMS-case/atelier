@@ -5,6 +5,8 @@
 // Style Me CTA and the user's plan for today (if any).
 
 import { useEffect, useMemo, useState } from "react";
+import { useRun, RUN_KEYS } from "../../lib/backgroundRun.js";
+import { loadHomeCollapsed, saveHomeCollapsed } from "../../utils/storage.js";
 import { flattenPlanItemIds } from "../planner/outfits.js";
 import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
 import { nyToday, todayInTz, friendlyDate, addDaysIso } from "../../lib/time.js";
@@ -19,7 +21,7 @@ import { autoColorPairs, rotateDaily, hexForColorLabel, seasonalBucketForDate } 
 import { PALETTE } from "../../constants/palette.js";
 
 
-export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop }) {
+export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop, onNavigate }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -101,6 +103,24 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
       return autoColorPairs(items, { max: 8 });
     } catch { return []; }
   }, [items]);
+  // Eight stories is a screen of swatches between "Today" and the rest of
+  // Home; she asked for them to fold away (2026-09-17: "The colors can be
+  // collapsed as well"). Remembered per device.
+  const [colorsOpen, setColorsOpen] = useState(() => !loadHomeCollapsed().colorStories);
+  const toggleColors = () => setColorsOpen(open => {
+    saveHomeCollapsed({ ...loadHomeCollapsed(), colorStories: open });
+    return !open;
+  });
+
+  // Long AI runs that used to live only inside their screens — a Gap
+  // Analysis, the Style Intelligence profile, a Brand Atlas scout — run in
+  // lib/backgroundRun.js now, so leaving the screen never loses them. Home
+  // shows which are in flight so she can come back for the result.
+  const gapRun = useRun(RUN_KEYS.shoppingGap);
+  const completeRun = useRun(RUN_KEYS.shoppingComplete);
+  const profileRun = useRun(RUN_KEYS.insightsProfile);
+  const scoutRun = useRun(RUN_KEYS.brandScout);
+  const shopRunning = gapRun.status === "running" || completeRun.status === "running";
 
   const itemsWithPrice = useMemo(() => wearItems.filter(it => Number(it.price_paid) > 0), [wearItems]);
   const cpwValues      = useMemo(() => itemsWithPrice.map(costPerWear).filter(v => v !== null), [itemsWithPrice]);
@@ -147,15 +167,17 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
         </button>
       )}
 
-      {/* Style Profile moved BACK to Settings (owner, 2026-08-20: "settings
-          is a better home for it along with my measurements") — no Home card. */}
-
       {/* Color Stories — in-fashion pairings the closet already supports.
           Auto-derived (autoColorPairs), so she never has to type a color.
-          Tap → Style Me pre-briefed to build around the pair. */}
+          Tap → Style Me pre-briefed to build around the pair. Collapsible. */}
       {colorStories.length > 0 && (
         <section style={sectionStyle}>
-          <div style={sectionHeader}>COLOR STORIES · IN FASHION, IN YOUR CLOSET</div>
+          <button onClick={toggleColors} aria-expanded={colorsOpen}
+            style={{ ...sectionHeader, display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: colorsOpen ? 10 : 0, textAlign: "left" }}>
+            <span>COLOR STORIES · IN FASHION, IN YOUR CLOSET</span>
+            <span style={{ fontSize: 10, letterSpacing: 0 }}>{colorsOpen ? "▲" : `▼ ${colorStories.length}`}</span>
+          </button>
+          {colorsOpen && (<>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {colorStories.map(story => (
               <button key={story.label}
@@ -183,6 +205,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
           <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 8 }}>
             Tap a pairing and the stylist builds the look around it.
           </div>
+          </>)}
         </section>
       )}
 
@@ -290,39 +313,48 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
       </section>
       )}
 
+      {/* Your stylist's tools — everything that used to hide under Settings →
+          "More tools" and the Style Profile pointer (owner, 2026-09-17: "Can
+          that feature, as well as anything that isn't a true 'setting' live
+          on the home page with everything else?"). Settings now holds only
+          plumbing: account, keys, photo tools, sync. Every row renders from
+          local data; the AI work lives behind explicit taps inside each
+          screen and keeps running if she leaves it. */}
+      {onNavigate && (
+        <section style={{ ...sectionStyle, background: "#fff" }}>
+          <div style={sectionHeader}>YOUR STYLIST'S FILE &amp; TOOLS</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <ToolRow onClick={() => onNavigate("profile")} icon="✦" title="Style Profile"
+              sub="Your stylist's read, how you wear things, what reads current, color pairings, About Me & measurements, and the AI Readiness audit."/>
+            <ToolRow onClick={() => onNavigate("insights")} icon="✦" title="Style Intelligence" running={profileRun.status === "running"}
+              sub={profileRun.status === "running" ? "Writing your monthly profile — it keeps going while you do other things." : "Wear patterns, signature pairs, category balance, and a monthly written profile."}/>
+            <ToolRow onClick={() => onNavigate("color")} icon="✦" title="Color Advisor"
+              sub="Analyze a piece against your Dark Winter coloring, or audit the whole closet."/>
+            <ToolRow onClick={() => onNavigate("visionpilot")} icon="✦" title="Visual AI"
+              sub="Reads sleeves, fabrics and formality off your photos so the stylist styles what is actually there."/>
+          </div>
+        </section>
+      )}
+
       {/* Shop Smarter — Brand Atlas + Gap Analysis, at the BOTTOM of Home
-          (owner request 2026-08-20: dressing sections first, shopping last).
-          Both rows render from local data only; the heavy work lives behind
-          explicit taps inside each view. */}
+          (owner request 2026-08-20: dressing sections first, shopping last). */}
       {(onOpenDiscovery || onOpenShop) && (
         <section style={{ ...sectionStyle, background: "#fff" }}>
           <div style={sectionHeader}>SHOP SMARTER</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {onOpenDiscovery && (
-              <button onClick={onOpenDiscovery}
-                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>✧ Brand Atlas</div>
-                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
-                </div>
-                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
-                  {brandDiscovery?.brands?.length
-                    ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
-                    : "Lesser-known, international labels scouted live against your closet."}
-                </div>
-              </button>
+              <ToolRow onClick={onOpenDiscovery} icon="✧" title="Brand Atlas" running={scoutRun.status === "running"}
+                sub={scoutRun.status === "running" ? "Scouting the fashion world — it keeps going while you do other things." : brandDiscovery?.brands?.length
+                  ? `${brandDiscovery.brands.slice(0, 3).map(b => b.name).join(" · ")} — and more, scouted for you`
+                  : "Lesser-known, international labels scouted live against your closet."}/>
             )}
             {onOpenShop && (
-              <button onClick={onOpenShop}
-                style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500 }}>◇ Gap Analysis</div>
-                  <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
-                </div>
-                <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>
-                  Which core colors, categories, and textures your closet is missing — computed live, then shopped by the AI.
-                </div>
-              </button>
+              <ToolRow onClick={onOpenShop} icon="◇" title="Gap Analysis & Shopping" running={shopRunning}
+                sub={shopRunning
+                  ? "The analysis is running — it keeps going while you do other things; the result waits here."
+                  : gapRun.result?.gaps?.length
+                    ? `${gapRun.result.gaps.length} gaps found last time — open to read them or run it again.`
+                    : "Which core colors, categories, and textures your closet is missing — computed live, then shopped by the AI."}/>
             )}
           </div>
         </section>
@@ -346,6 +378,26 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
         </div>
       )}
     </div>
+  );
+}
+
+// One tappable row in a tools section. `running` shows the same pulsing dot
+// the nav uses for a Style Me in flight.
+function ToolRow({ onClick, icon, title, sub, running = false }) {
+  return (
+    <button onClick={onClick}
+      style={{ width: "100%", textAlign: "left", padding: "9px 11px", background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <div style={{ fontSize: 12, color: PALETTE.ink, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+          {icon} {title}
+          {running && (
+            <span title="Running in the background" style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-accent)", animation: "pulse 1.4s ease-in-out infinite" }}/>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: PALETTE.muted }}>›</div>
+      </div>
+      <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 3, lineHeight: 1.4 }}>{sub}</div>
+    </button>
   );
 }
 

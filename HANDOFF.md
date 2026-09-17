@@ -1,12 +1,30 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-11**, after PR #239. The session log below
+Refreshed **2026-09-17**, after PR #240. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-17 · PR #240 — ATELIER is home, the tools leave Settings, long runs survive the screen, the stylist stops citing "line 4"
+
+**Owner, from her phone:** five asks in one message — how to get back to the landing screen, Style Profile erroring on open, a shopping run that "took FOREVER and didn't run in the background", everything that isn't a setting on Home with the colours collapsible, and the chat/evaluator's "hard rules … (line 4)". CHANGELOG has the detail; the things to carry:
+
+1. **Navigation is: ATELIER = Home; the closet chip's NAME = the closet grid; the ▼ beside it = the switcher.** No Home chip in the nav. Every top-level Back lands on Home. The render walk asserts all three (`aria-label`s "Go home", "Go to closet", "Switch closet").
+2. **Style Profile's crash was a `const` read above its declaration** — a class the unit suites and esbuild cannot see. The rule from CLAUDE.md stands: add a walk step whenever a screen lands. The walk now opens every Home tool and Settings.
+3. **Long AI runs live in `lib/backgroundRun.js`**, not in a screen's state. Gap Analysis, Complete-a-Look, the Style Intelligence profile, and the Brand Atlas scout all go through `startRun` / `useRun`; the last result is in `localStorage` under `atelier:run:<key>`. A new long call (anything over ~10 s that she might navigate away from) goes there too — do not put it in component state again.
+4. **The advisory prompts never cite the standard.** `STYLIST_STANDARD` / `OPINION_RULES` / the evaluator task say so outright, and `advisoryPhrasing()` in `standard.js` re-cuts the validator's retry-loop messages before the chat or evaluator reads them. The two fixed points, in her words: office dress and the open blazer. A new advisory surface composes the same block and inherits this.
+5. **One `invalidateLearning()` clears both learning memos.** The saves used to clear only the chat/evaluator cache; Style Me kept a 10-minute copy.
+
+**Watch-items:**
+- **Her next chat or Evaluate turn** is the real test of #4: it should read as a stylist talking, with no "line N", "rule", or "violation". If a citation still appears, the model is echoing LOOK FACTS text — `advisoryPhrasing()` is the lever, then the OPINION_RULES wording.
+- **The first Gap Analysis after this deploys:** the Home row should show the pulsing dot if she leaves, and the result should be there when she returns (and after a reload). If it is not, check `localStorage["atelier:run:shopping:gap"]`.
+- **Shopping at `effort: medium`:** if the gaps read thinner than before, the lever is effort back to `high` on the gap call only — the completions call is a shorter list and can stay.
+- **The closet chip at 140 px max** on a phone with a long closet name: the name ellipsises; if it ever crowds the nav, the width in `ui/styles.js` (`closetChip.maxWidth`) is the dial.
+
+**Verified before push:** `npm test` (40 suites; `test:runs` new), `npm run build`, `npm run smoke` green (23 walk steps).
 
 ### 2026-09-11 · PR #239 — the app-open path, measured: a research call on every cold open, 118 kB of unused SDK at boot, the one-closet sweep
 

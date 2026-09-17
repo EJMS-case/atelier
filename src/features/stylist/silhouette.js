@@ -1,6 +1,6 @@
 // ── ABOUT ME → SILHOUETTE GUIDANCE ───────────────────────────────────────────
 // Pure translation (node-testable, no I/O): turns her free-text About Me
-// (Settings → About Me, loadAboutMe) into compact dress-to-flatter lines for
+// (Style Profile → About Me, loadAboutMe) into compact dress-to-flatter lines for
 // the stylist prompt's HER BODY & FIT block. Roadmap A5.
 //
 //   petite frame — favor cropped or tucked tops, high-rise bottoms, …

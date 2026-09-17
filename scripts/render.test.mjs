@@ -240,9 +240,42 @@ const clickText = async (selector, text) => {
 };
 const tab = (label) => () => clickText("nav button", label);
 
-await check("Home", tab("Home"));
-await check("Closet grid", async () => {
+// ATELIER is home; the closet chip's NAME is the closet (owner, 2026-09-17).
+const brandHome = () => page.evaluate(() => document.querySelector('button[aria-label="Go home"]')?.click());
+await check("Home (the ATELIER brand)", brandHome);
+await check("Closet grid (the closet chip)", async () => {
   await page.evaluate(() => document.querySelector('button[aria-label="Go to closet"]')?.click());
+});
+await check("Closet switcher opens from the chip's arrow", async () => {
+  await page.evaluate(() => document.querySelector('button[aria-label="Switch closet"]')?.click());
+  await page.waitForTimeout(300);
+  const listed = await page.evaluate(() => document.querySelector('[role="listbox"]')?.textContent || "");
+  if (!/NYC/.test(listed) || !/Arizona/.test(listed)) throw new Error("the closet menu did not list both closets");
+  await page.evaluate(() => document.querySelector('button[aria-label="Switch closet"]')?.click());
+});
+
+// Everything that is not a true setting lives on Home now (owner, 2026-09-17),
+// and Style Profile is the screen that errored on open for a session because
+// nothing walked it — a `const` read above its declaration passes every unit
+// suite and esbuild alike. Each of these opens from its Home row and must
+// render; the walk also proves the rows exist.
+const homeTool = (label) => async () => {
+  await brandHome();
+  await page.waitForTimeout(400);
+  await clickText("button", label);
+};
+await check("Home → Style Profile", homeTool("✦ Style Profile"));
+await check("Home → Style Intelligence", homeTool("✦ Style Intelligence"));
+await check("Home → Color Advisor", homeTool("✦ Color Advisor"));
+await check("Home → Visual AI", homeTool("✦ Visual AI"));
+await check("Home → Gap Analysis & Shopping", homeTool("◇ Gap Analysis"));
+await check("Home → Brand Atlas", homeTool("✧ Brand Atlas"));
+await check("Settings (plumbing only)", async () => {
+  await page.evaluate(() => [...document.querySelectorAll("nav button")].pop()?.click());
+  await page.waitForTimeout(500);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Anthropic API Key/.test(text)) throw new Error("Settings did not render its key card");
+  if (/More Tools|Open Style Profile/.test(text)) throw new Error("Settings still carries the tools that moved to Home");
 });
 await check("Planner (calendar month grid)", tab("Planner"));
 await check("Planner → day modal", async () => {

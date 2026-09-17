@@ -255,7 +255,7 @@ export default function App() {
   const [lookEdits, setLookEdits] = useState([]);
   const [inspirations, setInspirations] = useState([]);
   // { text, source_count, generated_at } | null — loaded from user_settings
-  // and refreshed via the Settings → Update Style Fingerprint button.
+  // and refreshed via Style Profile → Refresh the Read (Home → Style Profile).
   const [styleFingerprint, setStyleFingerprint] = useState(null);
   // Lazy-load inspirations + fingerprint on first render. They live in their
   // own table/key and never block the closet boot — failures here shouldn't
@@ -1687,11 +1687,15 @@ export default function App() {
       {/* ── HEADER ── */}
       <header style={s.header}>
         <div style={s.headerInner}>
+          {/* ATELIER is the way home. Owner, 2026-09-17: "When I exit out of
+              the page that opens when I open the app, how do I get back
+              there? … I'd rather click 'atelier' to get there and have the
+              closets clickable with the dropdown beside it." */}
           <button
-            onClick={() => setView("closet")}
+            onClick={() => setView("home")}
             style={{ ...s.brand, background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", font: "inherit" }}
-            aria-label="Go to closet"
-            title="Go to your closet"
+            aria-label="Go home"
+            title="Home"
           >
             <span style={s.brandMark}>✦</span>
             <span style={s.brandName}>ATELIER</span>
@@ -1706,26 +1710,32 @@ export default function App() {
               >{syncStatus === "error" ? "⚠ offline — tap to retry" : syncLabel}</span>
             )}
           </button>
-          {/* Active-closet chip — a mode switch, not a filter. Tapping opens
-              a small popover listing every closet (✓ on the active one).
-              During an active trip the chip reads as trip mode: the pool is
-              destination closet + packed items, and switching closets only
-              takes effect once the trip ends (the popover says so). */}
-          <div style={{ position:"relative", flexShrink:1, minWidth:0, zIndex:2 }}>
+          {/* Active-closet chip — two taps in one chip. The NAME opens the
+              closet grid (the brand no longer does); the ▼ beside it opens a
+              small popover listing every closet (✓ on the active one) — a
+              mode switch, not a filter. During an active trip the chip reads
+              as trip mode: the pool is destination closet + packed items, and
+              switching closets only takes effect once the trip ends (the
+              popover says so). */}
+          <div style={{ ...s.closetChip, position:"relative", zIndex:2, padding:0 }}>
             <button
-              style={s.closetChip}
+              style={s.closetChipName}
+              onClick={() => setView("closet")}
+              aria-label="Go to closet"
+              title={activeTrip
+                ? `Trip mode: ${activeTrip.destination || activeTrip.destination_city || "trip"} — tap to open the closet`
+                : `Closet: ${activeCloset.name} — tap to open it`}
+            >
+              {activeTrip ? `✈ ${activeTrip.destination || activeTrip.destination_city || "Trip"}` : activeCloset.name}
+            </button>
+            <button
+              style={s.closetChipArrow}
               onClick={() => setClosetMenuOpen(v => !v)}
               aria-haspopup="listbox"
               aria-expanded={closetMenuOpen}
-              title={activeTrip
-                ? `Trip mode: ${activeTrip.destination || activeTrip.destination_city || "trip"}`
-                : `Closet: ${activeCloset.name} — tap to switch`}
-            >
-              <span style={s.closetChipName}>
-                {activeTrip ? `✈ ${activeTrip.destination || activeTrip.destination_city || "Trip"}` : activeCloset.name}
-              </span>
-              <span style={{ fontSize:7, flexShrink:0 }}>▼</span>
-            </button>
+              aria-label="Switch closet"
+              title="Switch closet"
+            >▼</button>
             {closetMenuOpen && (
               <>
                 {/* Invisible backdrop: any outside tap closes the popover. */}
@@ -1756,10 +1766,9 @@ export default function App() {
             )}
           </div>
           <nav style={s.nav}>
-            {/* "Closet" link removed — the ATELIER brand button now takes
-                users to the full closet grid. Home (the curated dashboard)
-                stays as a distinct destination. */}
-            {[["home","Home"],["style","Style Me"],["planner","Planner"],["favorites","Saved"],["inspiration","Inspo"]].map(([v,label]) => (
+            {/* No Home or Closet chip: ATELIER is home and the closet chip
+                opens the grid, so the row holds only the destinations. */}
+            {[["style","Style Me"],["planner","Planner"],["favorites","Saved"],["inspiration","Inspo"]].map(([v,label]) => (
               <button key={v} onClick={() => {
                 setView(v);
                 // Clicking the Style Me nav always opens the generator
@@ -1795,7 +1804,7 @@ export default function App() {
       </header>
 
       <Suspense fallback={<RouteFallback/>}>
-      <ErrorBoundary scope="view" key={view} onReset={() => setView("closet")}>
+      <ErrorBoundary scope="view" key={view} onReset={() => setView("home")}>
       {/* ── CLOSET ── */}
       {view === "home" && (
         <div style={s.page}>
@@ -1817,6 +1826,7 @@ export default function App() {
             brandDiscovery={brandDiscovery}
             onOpenDiscovery={() => setView("discovery")}
             onOpenShop={() => setView("shop")}
+            onNavigate={setView}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onStyleItem={(item) => {
               setRequest(`Style around my ${item.name}`);
@@ -2236,7 +2246,7 @@ export default function App() {
       {view === "style" && !manualBuilderOpen && (
         <div style={s.page}>
           <div style={s.pageHeader}>
-            <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
+            <button style={s.backBtn} onClick={() => setView("home")}>← Back</button>
             <h2 style={s.pageTitle}>Your Looks</h2>
             {/* Manual-builder entry for the loading + results states. The
                 empty state renders its own (single) button below, so this
@@ -2360,14 +2370,14 @@ export default function App() {
 
       {/* ── COLOR ADVISOR ── */}
       {view === "color" && (
-        <ColorAdvisorView items={available} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <ColorAdvisorView items={available} apiKey={apiKey} onBack={() => setView("home")}/>
       )}
 
       {/* ── PLANNER (F3) ── */}
       {view === "planner" && (
         <div style={s.page}>
           <div style={s.pageHeader}>
-            <button style={s.backBtn} onClick={() => setView("closet")}>← Back</button>
+            <button style={s.backBtn} onClick={() => setView("home")}>← Back</button>
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
           <PlannerWrapper
@@ -2541,12 +2551,12 @@ export default function App() {
 
       {/* ── INSIGHTS ── */}
       {view === "insights" && (
-        <StyleInsightsView items={available} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <StyleInsightsView items={available} apiKey={apiKey} onBack={() => setView("home")}/>
       )}
 
       {/* ── SHOPPING ── */}
       {view === "shop" && (
-        <ShoppingView items={available} apiKey={apiKey} onBack={() => setView("settings")}/>
+        <ShoppingView items={available} apiKey={apiKey} onBack={() => setView("home")}/>
       )}
 
       {/* ── SETTINGS ── */}
@@ -2560,17 +2570,17 @@ export default function App() {
             saveApiKey(k);  setApiKey(k);
             saveRmbgKey(rk); setRmbgKey(rk);
             // Auto-save (silent) doesn't navigate; only the explicit
-            // Save Settings button bounces back to closet.
-            if (!opts.silent) setView("closet");
+            // Save Settings button bounces back home.
+            if (!opts.silent) setView("home");
           }}
           onAddItems={addItems}
           onForceSync={forceSyncAll}
-          onNavigate={setView}
-          onBack={() => setView("closet")}/>
+          onBack={() => setView("home")}/>
       )}
 
-      {/* ── STYLE PROFILE (roadmap B — her stylist's file; entry card on Home,
-             pointer in Settings; placement "Inside Home" chosen by owner) ── */}
+      {/* ── STYLE PROFILE — her stylist's file. Opened from Home's tools
+             section (owner, 2026-09-17: anything that isn't a true setting
+             lives on Home). ── */}
       {view === "profile" && (
         <StyleProfileView
           items={available}
@@ -2580,7 +2590,7 @@ export default function App() {
           setStyleFingerprint={setStyleFingerprint}
           lovedLooks={lovedLooks}
           logCount={wearData.logs ? wearData.logs.length : null}
-          onBack={() => setView("settings")}
+          onBack={() => setView("home")}
           onEditItem={(item) => { setEditItem(item); setEditReturnView("profile"); setView("edit"); }}
           onNavigate={setView}
           onLineWritten={(id, line) => setItems(prev => prev.map(it => it.id === id ? { ...it, stylist_line: line } : it))}
@@ -2603,7 +2613,7 @@ export default function App() {
         <VisionPilotView
           items={available}
           apiKey={apiKey}
-          onBack={() => setView("settings")}
+          onBack={() => setView("home")}
           onEnriched={(id, vd) => setItems(prev => prev.map(it => it.id === id ? { ...it, vision_data: vd } : it))}
         />
       )}

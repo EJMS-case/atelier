@@ -128,6 +128,15 @@ export function saveClosets(list) {
   try { localStorage.setItem(CLOSETS_KEY, JSON.stringify(list)); } catch {}
 }
 
+// Which Home sections she folded away (per device). { colorStories: true }
+const HOME_COLLAPSED_KEY = "atelier:home-collapsed";
+export function loadHomeCollapsed() {
+  try { return JSON.parse(localStorage.getItem(HOME_COLLAPSED_KEY) || "{}") || {}; } catch { return {}; }
+}
+export function saveHomeCollapsed(state) {
+  try { localStorage.setItem(HOME_COLLAPSED_KEY, JSON.stringify(state || {})); } catch { /* private mode */ }
+}
+
 export function loadInsightsDismissed() {
   try { return JSON.parse(localStorage.getItem(INSIGHTS_DISMISSED_KEY) || "[]"); }
   catch { return []; }
