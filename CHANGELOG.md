@@ -2,6 +2,77 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The gap analysis shops at her price, from her wardrobe, and checks every pick against her closet before she sees it (#241) — 2026-09-17
+
+### Why
+Owner, after one run: *"the gap analysis was wrong. It suggested a blue tote
+which I have. And the price points are way high! I didn't really love the
+suggestions either … can I add my own brand finds that map to a category?"*
+Then: *"1 of the shopping suggestions was menswear only so that should be a
+hard rule to avoid lol."*
+
+Verified against the live rows first. She owns a navy Quince Vivienne Work
+Tote in NYC, and `familyForColorString("Navy")` is Blue — so the coverage
+math did not say "no blue bag"; the model invented the pick, and nothing
+checked its answer against the closet. The shopping persona was literally
+*"the styling director at Khaite"* with no price information anywhere in
+the prompt, against a closet whose medians are $90 for a top, $175 for
+shoes, $350 for a bag, bought from Favorite Daughter, Theory, Ripley Rader,
+Quince, Mango, Mansur Gavriel. And the analysis read `available` — the
+active closet — so from Arizona her NYC bags do not exist to it.
+
+### What shipped — `src/features/shopping/`
+1. **`spend.js` — what she pays and who she buys from, derived from her rows.**
+   Per-category price bands (25th–75th percentile, median, the one-off
+   high) from `price_paid`, and her brand tier (brands bought three or more
+   times, with the average paid). Both go into the prompt as facts; a pick
+   is priced inside her band, one "investment" stretch per run at most,
+   named as such. Categories with fewer than three priced pieces get no
+   band rather than an invented one.
+2. **`verifyGaps.js` — the check the feature was missing.** Every returned
+   pick is matched against the WARDROBE by category (free-text → taxonomy),
+   colour family (read from the suggestion's own words), and form (tote,
+   loafer, boot…). A match is dropped and shown to her as "left out — you
+   already own this: Quince Vivienne Work Tote". Menswear is dropped on a
+   regex (`MENSWEAR_RE`) — structural, not taste — and the prompt says
+   WOMENSWEAR ONLY up front. Her verdicts (below) drop repeats.
+3. **`brandFinds.js` — her own brand finds.** Name, categories, optional
+   link and note; `user_settings.brand_finds`, cross-device, a collapsible
+   card on the Shopping page. Read by the gap analysis and Complete-a-Look
+   ("name her find when it fits") and by Brand Atlas (never re-scout one).
+4. **`verdicts.js` — every save teaches.** "I own this" / "Not for me" /
+   "Want it" on each card (`user_settings.shopping_verdicts`, capped). The
+   next run drops what she owns or ruled out before it reaches the screen
+   and reads what she wants. An "I own this" covers the category + family
+   whatever the next wording is.
+5. **`gapAnalysis.js` — one grounded run.** Gathers the blocks (spend, tier,
+   finds, verdicts, the rooms she actually dresses for from her worn logs,
+   the season's trend brief), calls `generateShoppingRecs` on the
+   **wardrobe** (both closets), then verifies. The prompt asks for "the
+   gaps that are real, zero to six" instead of "5–8 with at least two from
+   the coverage lines" — the padding is where the blue tote came from. The
+   Shopping page shows "Nothing genuinely missing" when the verified list
+   is empty, and the picker for Complete-a-Look still reads `available`.
+6. `SHOPPING_STYLE_PROFILE` is her personal shopper at HER tier, not a
+   luxury house's director.
+
+### Downstream, four ways
+- **Efficiency.** The shopping preamble (cached block) changes bytes once.
+  The grounding rides the uncached body: ~400 tokens on a run that already
+  carries a ~3k summary. Two more settings reads on the Shopping page
+  (`brand_finds`, `shopping_verdicts`), each its own GET, not at mount — so
+  not in `SETTINGS_BATCH_KEYS`, by the #239 rule.
+- **Effectiveness.** The two facts she complained about (owns it, price)
+  are now facts in the prompt AND a check after the answer. Both closets.
+- **Speed.** No new model calls; the verification is synchronous over the
+  wardrobe. Still `effort: medium`.
+- **Education.** Verdicts and finds are read by three surfaces (gap
+  analysis, completions, Brand Atlas) through one module each.
+
+### Verified
+`npm test` (41 suites; `test:shopping` new, 7 tests), `npm run build`,
+`npm run smoke` (24 walk steps; the brand-finds editor is walked).
+
 ## [Unreleased] — ATELIER is home, the tools leave Settings, long runs survive the screen, and the stylist stops citing "line 4" (#240) — 2026-09-17
 
 ### Why

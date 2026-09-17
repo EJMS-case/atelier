@@ -2556,7 +2556,7 @@ export default function App() {
 
       {/* ── SHOPPING ── */}
       {view === "shop" && (
-        <ShoppingView items={available} apiKey={apiKey} onBack={() => setView("home")}/>
+        <ShoppingView items={available} wardrobe={wardrobe} logs={wearData.logs || []} apiKey={apiKey} onBack={() => setView("home")}/>
       )}
 
       {/* ── SETTINGS ── */}

@@ -1,8 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { s, si } from "../ui/styles.js";
 import { icons, Icon } from "../ui/icons.jsx";
-import { generateShoppingRecs } from "../lib/ai/stylist.js";
 import { useRun, startRun, RUN_KEYS } from "../lib/backgroundRun.js";
+import { runShoppingAnalysis } from "../features/shopping/gapAnalysis.js";
+import { loadBrandFinds, saveBrandFinds } from "../features/shopping/brandFinds.js";
+import { recordVerdict, loadVerdicts } from "../features/shopping/verdicts.js";
+import { gapKey } from "../features/shopping/verifyGaps.js";
+import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import {
   closetColorProfile, colorCategoryCoverage, pairUnlocks, textureInventory,
   seasonForDate, hexForColorLabel,
@@ -78,7 +82,99 @@ function CoveragePanel({ items }) {
   );
 }
 
-export default function ShoppingView({ items, apiKey, onBack }) {
+// ── Her brand finds — the editor ─────────────────────────────────────────────
+// Name + the categories she'd shop there + an optional link. Stored
+// cross-device (features/shopping/brandFinds.js); read by the gap analysis,
+// Complete-a-Look, and Brand Atlas.
+function BrandFindsCard({ finds, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [note, setNote] = useState("");
+  const [cats, setCats] = useState([]);
+  const toggleCat = (c) => setCats(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+  const add = () => {
+    const v = name.trim();
+    if (!v) return;
+    onChange([...finds, { name: v, categories: cats, url: url.trim(), note: note.trim() }]);
+    setName(""); setUrl(""); setNote(""); setCats([]);
+  };
+  return (
+    <div style={{ ...si.card, marginBottom: 16 }}>
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+        style={{ width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)" }}>MY BRAND FINDS{finds.length ? ` · ${finds.length}` : ""}</span>
+        <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 11, color: "var(--color-text-2)", margin: "0 0 8px", lineHeight: 1.45 }}>
+            Labels you found and want to buy from, mapped to what you'd buy there. The gap analysis names them when a pick fits, and Brand Atlas stops re-scouting them.
+          </p>
+          {finds.map((f, i) => (
+            <div key={`${f.name}-${i}`} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+              <div style={{ flex: 1, fontSize: 12, color: "var(--color-text)", lineHeight: 1.4 }}>
+                {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={{ color: "var(--color-ink)" }}>{f.name}</a> : f.name}
+                <span style={{ color: "var(--color-text-muted)" }}> · {f.categories.length ? f.categories.join(", ") : "any category"}</span>
+                {f.note && <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{f.note}</div>}
+              </div>
+              <button onClick={() => onChange(finds.filter((_, idx) => idx !== i))} aria-label={`Remove ${f.name}`}
+                style={{ background: "none", border: "none", color: "var(--color-border-muted)", cursor: "pointer", fontSize: 13 }}>✕</button>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <input style={{ ...s.input, flex: 1, fontSize: 12 }} placeholder="Brand name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && add()}/>
+            <input style={{ ...s.input, flex: 1, fontSize: 12 }} placeholder="Link (optional)" value={url} onChange={e => setUrl(e.target.value)}/>
+          </div>
+          <input style={{ ...s.input, width: "100%", fontSize: 12, marginTop: 6 }} placeholder="Note (optional) — e.g. great loafers, runs small" value={note} onChange={e => setNote(e.target.value)}/>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+            {STYLING_CATEGORY_ORDER.map(c => (
+              <button key={c} onClick={() => toggleCat(c)} aria-pressed={cats.includes(c)}
+                style={{ ...s.btnSecondary, fontSize: 10, padding: "4px 8px", ...(cats.includes(c) ? { background: "var(--color-ink)", color: "var(--color-surface)", borderColor: "var(--color-ink)" } : {}) }}>{c}</button>
+            ))}
+          </div>
+          <button style={{ ...s.btnPrimary, width: "100%", marginTop: 8, fontSize: 12 }} onClick={add} disabled={!name.trim()}>Add brand find</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Her verdict on one suggestion ────────────────────────────────────────────
+function VerdictRow({ gap, verdicts, onVerdict }) {
+  const current = verdicts.find(v => v.key === gapKey(gap))?.verdict || "";
+  const opts = [["own", "I own this"], ["no", "Not for me"], ["yes", "Want it"]];
+  return (
+    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+      {opts.map(([v, label]) => (
+        <button key={v} onClick={() => onVerdict(gap, current === v ? null : v)} aria-pressed={current === v}
+          style={{ ...s.btnSecondary, fontSize: 10, padding: "4px 9px", ...(current === v ? { background: "var(--color-ink)", color: "var(--color-surface)", borderColor: "var(--color-ink)" } : {}) }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── What was left out, and why ───────────────────────────────────────────────
+// The verified-away picks (features/shopping/verifyGaps.js): she sees the
+// blue tote the model wanted to sell her, next to the navy one she owns.
+function DroppedList({ dropped }) {
+  if (!dropped?.length) return null;
+  return (
+    <div style={{ ...si.card, background: "var(--color-bg)" }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)", marginBottom: 6 }}>LEFT OUT · CHECKED AGAINST YOUR CLOSET</div>
+      {dropped.map((d, i) => (
+        <div key={i} style={{ fontSize: 11, color: "var(--color-text-2)", lineHeight: 1.5 }}>
+          <span style={{ color: "var(--color-text)" }}>{d.gap?.suggestion}</span> — {d.reason}
+          {d.owned?.length ? `: ${d.owned.slice(0, 3).map(it => [it.brand, it.name].filter(Boolean).join(" ")).join(", ")}` : ""}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, onBack }) {
   const [mode, setMode] = useState("gap");
   const [selectedIds, setSelectedIds] = useState([]);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -92,6 +188,20 @@ export default function ShoppingView({ items, apiKey, onBack }) {
   const results = run.status === "done" ? run.result : null;
   const [localErr, setLocalErr] = useState("");
   const err = localErr || (run.status === "error" ? run.error : "");
+  // A buy decision reads everything she owns, both closets; the picker below
+  // (Complete a Look) offers what she can pick from right now.
+  const owned = wardrobe.length ? wardrobe : items;
+
+  const [finds, setFinds] = useState([]);
+  const [verdicts, setVerdicts] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    loadBrandFinds().then(list => { if (alive) setFinds(list); }).catch(() => {});
+    loadVerdicts().then(list => { if (alive) setVerdicts(list); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const updateFinds = (list) => { setFinds(list); saveBrandFinds(list).catch(() => {}); };
+  const onVerdict = (gap, verdict) => { recordVerdict(gap, verdict).then(setVerdicts).catch(() => {}); };
 
   const PICKER_CAP = 60;
   const q = pickerQuery.trim().toLowerCase();
@@ -113,7 +223,7 @@ export default function ShoppingView({ items, apiKey, onBack }) {
     if (!apiKey) { setLocalErr("Add your Anthropic API key in Settings."); return; }
     if (mode === "complete" && selectedIds.length === 0) { setLocalErr("Select at least one piece."); return; }
     setLocalErr("");
-    startRun(runKey, () => generateShoppingRecs(items, apiKey, mode, selectedIds));
+    startRun(runKey, () => runShoppingAnalysis({ wardrobe: owned, available: items, apiKey, mode, selectedIds, logs }));
   };
 
   const priorityColor = { high: "var(--color-danger)", medium: "#8B6914", low: "var(--color-success)" };
@@ -134,8 +244,9 @@ export default function ShoppingView({ items, apiKey, onBack }) {
 
       {mode === "gap" && (
         <>
-          <div style={s.advisorNote}>The numbers below are computed live from your closet; Run Gap Analysis turns them (plus taxonomy and season) into specific pieces to buy.</div>
-          <CoveragePanel items={items}/>
+          <div style={s.advisorNote}>The numbers below are computed live from everything you own, both closets; Run Gap Analysis turns them (plus what you pay, who you buy from, your finds, the rooms you dress for, and the season) into specific pieces to buy — then checks every pick against your closet before you see it.</div>
+          <CoveragePanel items={owned}/>
+          <BrandFindsCard finds={finds} onChange={updateFinds}/>
         </>
       )}
 
@@ -189,8 +300,13 @@ export default function ShoppingView({ items, apiKey, onBack }) {
       {results && mode === "gap" && results.gaps && (
         <div>
           <div style={{fontSize:11,letterSpacing:"0.2em",color:"var(--color-text-muted)",marginBottom:16,fontFamily:"sans-serif"}}>
-            {results.gaps.length} GAPS FOUND
+            {results.gaps.length === 0 ? "NOTHING GENUINELY MISSING" : `${results.gaps.length} GAP${results.gaps.length === 1 ? "" : "S"} FOUND`}
           </div>
+          {results.gaps.length === 0 && (
+            <div style={{ ...si.card, fontSize: 12, color: "var(--color-text-2)", lineHeight: 1.5 }}>
+              Every pick the stylist reached for is something you already own or have ruled out. Your closet is covered for the season — the list below shows what was checked.
+            </div>
+          )}
           {results.gaps.map((gap, i) => (
             <div key={i} style={si.card}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -204,8 +320,10 @@ export default function ShoppingView({ items, apiKey, onBack }) {
               <div style={{fontSize:12,color:"var(--color-text-2)",marginBottom:6,lineHeight:1.5}}>{gap.description}</div>
               <div style={{fontSize:11,color:"var(--color-text)",lineHeight:1.5,marginBottom:4,fontStyle:"italic"}}>{gap.reason}</div>
               {gap.colorNote && <div style={{fontSize:10,color:"var(--color-success)"}}>✓ {gap.colorNote}</div>}
+              <VerdictRow gap={gap} verdicts={verdicts} onVerdict={onVerdict}/>
             </div>
           ))}
+          <DroppedList dropped={results.dropped}/>
         </div>
       )}
 
@@ -227,8 +345,10 @@ export default function ShoppingView({ items, apiKey, onBack }) {
               <div style={{fontSize:12,color:"var(--color-text-2)",marginBottom:6,lineHeight:1.5}}>{comp.description}</div>
               <div style={{fontSize:11,color:"var(--color-text)",lineHeight:1.5,marginBottom:4}}>{comp.why}</div>
               {comp.colorNote && <div style={{fontSize:10,color:"var(--color-success)"}}>✓ {comp.colorNote}</div>}
+              <VerdictRow gap={comp} verdicts={verdicts} onVerdict={onVerdict}/>
             </div>
           ))}
+          <DroppedList dropped={results.dropped}/>
         </div>
       )}
     </div>

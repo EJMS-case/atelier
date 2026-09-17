@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { useRun, startRun, RUN_KEYS } from "../../lib/backgroundRun.js";
+import { loadBrandFinds } from "../shopping/brandFinds.js";
 import { s } from "../../ui/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { generateBrandDiscovery } from "./discoveryAI.js";
@@ -36,7 +37,9 @@ export default function BrandDiscoveryView({ items = [], apiKey, discovery, setD
     if (!apiKey) { setLocalErr("Add your Anthropic API key in Settings."); return; }
     setLocalErr("");
     startRun(RUN_KEYS.brandScout, async () => {
-      const result = await generateBrandDiscovery({ items, apiKey, excludeBrands: dismissed });
+      // Never re-scout a label she already found herself (Shopping → My brand finds).
+      const finds = await loadBrandFinds().catch(() => []);
+      const result = await generateBrandDiscovery({ items, apiKey, excludeBrands: [...dismissed, ...finds.map(f => f.name)] });
       persist({ ...result, dismissed });
       return true; // the payload lives in user_settings, not the run store
     });
