@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — `ATELIER_STATE.md`: the app and every feature, described for sharing (docs only) — 2026-09-18
+
+### Why
+
+Owner: *"Write a .md describing the current state of atelier and all its features so I can share with Claude chat."* `HANDOFF.md` and `CHANGELOG.md` are session logs written for the next session in the repo; nothing described the app whole, in plain language, for a reader with no access to the code.
+
+### Added
+
+- `ATELIER_STATE.md` — what Atelier is, how it is built (tiers, code split, caching, background runs), every screen and what it does, what the app knows about her and through which funnel, the principles in her words, data and security, engineering practice, where things stand after #243 (shipped, watch-items, her open calls, ideas not started), and a glossary. Written from the source headers, `HANDOFF.md`, `CHANGELOG.md` and `CLAUDE.md`; nothing in it is new behaviour.
+- A row in `CLAUDE.md`'s orientation table pointing at it, with the instruction to refresh it when a feature lands or moves.
+
+### Downstream, four ways
+
+Docs only: no tokens, bundle, latency or learning change. Effectiveness: a Claude chat reading this file starts from the same vocabulary and principles the code holds (`wardrobe` / `available`, preferences not rules, completion not refusal), so advice given outside the repo lands inside it.
+
+### Verified
+
+`npm test`, `npm run build`, `npm run smoke` green (no source change).
+
 ## [Unreleased] — Her shopping list is the Shopping screen; the numbers count what she styles (#243) — 2026-09-17
 
 ### Why
