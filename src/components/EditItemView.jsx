@@ -3,12 +3,12 @@ import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
-import { readKnitWeight, KNIT_WEIGHTS } from "../utils/item-helpers.js";
+import { readKnitWeight, KNIT_WEIGHTS, CURATED_NOTES_MAX, notesBeyondLine } from "../utils/item-helpers.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
 
-export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans }) {
+export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans, onOpenItem, onOpenDay, onOpenLook }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -196,26 +196,51 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
         ))}
 
         {!isMisc && (<>
-        {/* Stylist line — the short curated line the AI reads (classifiers +
-            prompts). Long pasted product copy in Notes stays for display and
-            search; when this line exists it speaks for the piece instead. */}
-        <div>
-          <div style={s.fieldLabel}>Stylist line · what the AI reads (≤200 chars)</div>
-          <input style={{...s.input, width:"100%"}} maxLength={200}
-            placeholder="e.g. silk cami, bias cut, layers under blazers; not for work alone"
-            value={form.stylist_line} onChange={e=>setForm(f=>({...f,stylist_line:e.target.value}))}/>
-        </div>
-
-        {/* Notes gets a real multi-line editor — her notes are sentences
-            (fit, care, occasion guidance the stylist reads), and a one-line
-            input made editing them a horizontal-scroll exercise. */}
-        <div>
-          <div style={s.fieldLabel}>Notes</div>
-          <textarea rows={4}
-            style={{...s.input, width:"100%", minHeight:96, resize:"vertical", fontFamily:"inherit", lineHeight:1.5}}
-            placeholder="e.g. cropped, chunky knit, cashmere — fit, care, when to wear it"
-            value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}/>
-        </div>
+        {/* Stylist line — THE text field for a piece (owner, 2026-09-18:
+            "remove the notes section and keep only the stylist line"). It is
+            what every prompt and every keyword classifier reads, so the cap
+            is the classifier cap (CURATED_NOTES_MAX): she cannot type past
+            what the AI reads. Multi-line editor + live count.
+            The `notes` column is not shown and not editable, but it is not
+            dropped either: it rides `form` untouched so a save never wipes
+            it, and the classifiers still read a SHORT note the line doesn't
+            already carry (notesBeyondLine — the one reader). That text is
+            quoted here so nothing the app reads is hidden from her, with one
+            tap to move it into the line, which is the only way a note can
+            be changed now. Long pasted copy is read by nothing once a line
+            exists, so it is not quoted. */}
+        {(() => {
+          const beyond = notesBeyondLine(form);
+          const line = form.stylist_line.trim();
+          const folded = line ? `${line.replace(/[\s;,.]+$/, "")}; ${beyond}` : beyond;
+          const fits = beyond && folded.length <= CURATED_NOTES_MAX;
+          return (
+            <div>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline"}}>
+                <div style={s.fieldLabel}>Stylist line · what the AI reads</div>
+                <div style={{fontSize:10, color: form.stylist_line.length >= CURATED_NOTES_MAX ? "var(--color-danger)" : "var(--color-text-muted)"}}>
+                  {form.stylist_line.length} / {CURATED_NOTES_MAX}
+                </div>
+              </div>
+              <textarea rows={5} maxLength={CURATED_NOTES_MAX} aria-label="Stylist line"
+                style={{...s.input, width:"100%", minHeight:120, resize:"vertical", fontFamily:"inherit", lineHeight:1.5}}
+                placeholder="e.g. black silk cami, bias cut, long sleeve, layers under a blazer; for dinner and weekends, NOT for work alone"
+                value={form.stylist_line} onChange={e=>setForm(f=>({...f,stylist_line:e.target.value}))}/>
+              {beyond && (
+                <div style={{fontSize:11, color:"var(--color-text-muted)", marginTop:4, lineHeight:1.5}}>
+                  Also read from your notes: “{beyond}”
+                  {fits ? (
+                    <button type="button"
+                      onClick={() => setForm(f => ({ ...f, stylist_line: folded, notes: "" }))}
+                      style={{marginLeft:6, background:"none", border:"none", padding:0, color:"var(--color-text)", textDecoration:"underline", cursor:"pointer", fontSize:11, fontFamily:"inherit"}}>
+                      Move into the line
+                    </button>
+                  ) : " — trim the line to make room, and it can move in."}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* minWidth:0 lets each half shrink below its control's content width
             on narrow screens instead of overflowing the page sideways. */}
@@ -305,10 +330,10 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
                 {read && (
                   <div style={{fontSize:10,color:"var(--color-text-muted)",marginTop:4}}>
                     {read.weight
-                      ? `Read from your ${read.source === "photo" ? "photo" : "notes"} as ${read.weight} ("${read.evidence}") — set it here to confirm.`
+                      ? `Read from your ${read.source === "photo" ? "photo" : "stylist line"} as ${read.weight} ("${read.evidence}") — set it here to confirm.`
                       : read.evidence
-                        ? `Your notes point both ways (${read.evidence}) — pick one here.`
-                        : "Nothing in the name, material, or notes says the weight — add \"light knit\" or \"heavy\" to the notes, or set it here."}
+                        ? `Your words point both ways (${read.evidence}) — pick one here.`
+                        : "Nothing in the name, material, or stylist line says the weight — add \"light knit\" or \"heavy\" to the line, or set it here."}
                   </div>
                 )}
               </div>
@@ -468,8 +493,10 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
 
       {/* "In Your Looks" — worn/planned/saved outfits featuring this piece,
           with dates, so she can judge repeat spacing at a glance. Renders
-          nothing when the piece has no history. */}
-      {!isMisc && <ItemWearHistory item={item} wardrobe={wardrobe} logs={logs} plans={plans} />}
+          nothing when the piece has no history. Every row is a way out
+          (owner, 2026-09-18): the date opens that planner day, a saved look
+          opens it under Saved, and a companion thumb opens that garment. */}
+      {!isMisc && <ItemWearHistory item={item} wardrobe={wardrobe} logs={logs} plans={plans} onOpenItem={onOpenItem} onOpenDay={onOpenDay} onOpenLook={onOpenLook} />}
 
       {onStyleAround && !isMisc && (
         <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}

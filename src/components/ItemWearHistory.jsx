@@ -38,7 +38,14 @@ function agoLabel(iso, today) {
 }
 
 // One outfit row: date/label line + a strip of the OTHER pieces in the look.
-function OutfitRow({ entry, item, wardrobe, today }) {
+// Every row is a way out (owner, 2026-09-18: "I'd like these outfits to be
+// clickable"): the header opens the day in the Planner (dated wears and
+// pins) or the look under Saved (undated saved looks); each companion thumb
+// opens that garment's own Edit screen. Handlers are optional so the card
+// still renders read-only where a caller has nowhere to send her.
+const plainBtn = { background: "none", border: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer", textAlign: "left" };
+
+function OutfitRow({ entry, item, wardrobe, today, onOpenItem, onOpenDay, onOpenLook }) {
   const companions = sortByCategoryOrder(
     resolveItemIds(wardrobe, entry.ids).filter(it => it.id !== item.id)
   );
@@ -47,36 +54,54 @@ function OutfitRow({ entry, item, wardrobe, today }) {
   const occText = joinTags(tagsFor(entry, "occasions", "occasion"));
   const future = entry.date && entry.date > today;
   const ago = entry.date && !future ? agoLabel(entry.date, today) : null;
+  const open = entry.date
+    ? (onOpenDay ? { go: () => onOpenDay(entry.date), where: "Planner", label: `Open ${friendlyDate(entry.date)} in the Planner` } : null)
+    : (onOpenLook && entry.logId ? { go: () => onOpenLook(entry.logId), where: "Saved", label: "Open this look under Saved" } : null);
+
+  const header = (
+    <>
+      {entry.date ? (
+        <span style={{ fontSize: 12, fontWeight: 600 }}>{friendlyDate(entry.date)}</span>
+      ) : (
+        <span style={{ fontSize: 12, fontWeight: 600 }}>
+          Saved look{entry.created ? ` · ${friendlyDate(String(entry.created).slice(0, 10))}` : ""}
+        </span>
+      )}
+      {future && (
+        <span style={{ fontSize: 9, letterSpacing: "0.1em", padding: "1px 6px", borderRadius: 3, border: "1px solid var(--color-border)", color: "var(--color-text-muted)" }}>
+          PLANNED
+        </span>
+      )}
+      {ago && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>· {ago}</span>}
+      {occText && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>· {occText}</span>}
+      {open && <span style={{ fontSize: 10, color: "var(--color-text-muted)", marginLeft: "auto" }}>{open.where} ›</span>}
+    </>
+  );
+  const headerStyle = { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6, flexWrap: "wrap", width: "100%" };
+
+  const thumb = (it) => it.image ? (
+    <img src={it.image} alt={it.name} title={it.name} loading="lazy"
+      style={{ ...ss.modalItemThumb, background: "#fff" }} />
+  ) : (
+    <div title={it.name}
+      style={{ ...ss.modalItemThumb, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "var(--color-text-muted)", textAlign: "center", overflow: "hidden", padding: 2 }}>
+      {it.name}
+    </div>
+  );
 
   return (
     <div style={{ padding: "8px 0", borderTop: "1px solid var(--color-border)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-        {entry.date ? (
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{friendlyDate(entry.date)}</span>
-        ) : (
-          <span style={{ fontSize: 12, fontWeight: 600 }}>
-            Saved look{entry.created ? ` · ${friendlyDate(String(entry.created).slice(0, 10))}` : ""}
-          </span>
-        )}
-        {future && (
-          <span style={{ fontSize: 9, letterSpacing: "0.1em", padding: "1px 6px", borderRadius: 3, border: "1px solid var(--color-border)", color: "var(--color-text-muted)" }}>
-            PLANNED
-          </span>
-        )}
-        {ago && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>· {ago}</span>}
-        {occText && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>· {occText}</span>}
-      </div>
+      {open
+        ? <button type="button" onClick={open.go} aria-label={open.label} style={{ ...plainBtn, ...headerStyle }}>{header}</button>
+        : <div style={headerStyle}>{header}</div>}
       {shown.length > 0 && (
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {shown.map(it => it.image ? (
-            <img key={it.id} src={it.image} alt={it.name} title={it.name} loading="lazy"
-              style={{ ...ss.modalItemThumb, background: "#fff" }} />
-          ) : (
-            <div key={it.id} title={it.name}
-              style={{ ...ss.modalItemThumb, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "var(--color-text-muted)", textAlign: "center", overflow: "hidden", padding: 2 }}>
-              {it.name}
-            </div>
-          ))}
+          {shown.map(it => onOpenItem ? (
+            <button key={it.id} type="button" onClick={() => onOpenItem(it)} aria-label={`Open ${it.name}`}
+              style={{ ...plainBtn, display: "block", lineHeight: 0 }}>
+              {thumb(it)}
+            </button>
+          ) : <span key={it.id} style={{ display: "block", lineHeight: 0 }}>{thumb(it)}</span>)}
           {extra > 0 && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>+{extra}</span>}
         </div>
       )}
@@ -84,7 +109,7 @@ function OutfitRow({ entry, item, wardrobe, today }) {
   );
 }
 
-function Section({ label, entries, item, wardrobe, today }) {
+function Section({ label, entries, item, wardrobe, today, open }) {
   const [expanded, setExpanded] = useState(false);
   if (entries.length === 0) return null;
   const shown = expanded ? entries : entries.slice(0, PREVIEW_ROWS);
@@ -93,7 +118,7 @@ function Section({ label, entries, item, wardrobe, today }) {
       <div style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--color-text-muted)", marginBottom: 2 }}>
         {label} · {entries.length}
       </div>
-      {shown.map(e => <OutfitRow key={e.key} entry={e} item={item} wardrobe={wardrobe} today={today} />)}
+      {shown.map(e => <OutfitRow key={e.key} entry={e} item={item} wardrobe={wardrobe} today={today} {...open} />)}
       {entries.length > PREVIEW_ROWS && (
         <button onClick={() => setExpanded(x => !x)}
           style={{ background: "none", border: "none", padding: "6px 0 0", fontSize: 11, color: "var(--color-text-muted)", textDecoration: "underline", cursor: "pointer" }}>
@@ -104,7 +129,8 @@ function Section({ label, entries, item, wardrobe, today }) {
   );
 }
 
-export default function ItemWearHistory({ item, wardrobe, logs, plans }) {
+export default function ItemWearHistory({ item, wardrobe, logs, plans, onOpenItem, onOpenDay, onOpenLook }) {
+  const open = { onOpenItem, onOpenDay, onOpenLook };
   const today = nyToday();
 
   const { worn, saved } = useMemo(() => {
@@ -135,7 +161,7 @@ export default function ItemWearHistory({ item, wardrobe, logs, plans }) {
     // Undated logs = her saved looks (LooksView semantics), newest first.
     const saved = (logs || [])
       .filter(l => !l.date_worn && inLook(l.garment_ids))
-      .map(l => ({ key: `look:${l.id}`, date: null, created: l.created_at, ids: l.garment_ids, occasion: l.occasion, occasions: l.occasions }))
+      .map(l => ({ key: `look:${l.id}`, logId: l.id, date: null, created: l.created_at, ids: l.garment_ids, occasion: l.occasion, occasions: l.occasions }))
       .sort((a, b) => ((a.created || "") < (b.created || "") ? 1 : -1));
 
     return { worn, saved };
@@ -155,8 +181,8 @@ export default function ItemWearHistory({ item, wardrobe, logs, plans }) {
           ? <>Worn <strong>{wearDays.size}</strong> day{wearDays.size !== 1 ? "s" : ""}{lastWorn ? <> · last {friendlyDate(lastWorn)}{agoLabel(lastWorn, today) ? ` (${agoLabel(lastWorn, today)})` : ""}</> : null}.</>
           : "Not worn yet — it appears in your saved looks below."}
       </p>
-      <Section label="WORN & PLANNED" entries={worn} item={item} wardrobe={wardrobe} today={today} />
-      <Section label="SAVED LOOKS" entries={saved} item={item} wardrobe={wardrobe} today={today} />
+      <Section label="WORN & PLANNED" entries={worn} item={item} wardrobe={wardrobe} today={today} open={open} />
+      <Section label="SAVED LOOKS" entries={saved} item={item} wardrobe={wardrobe} today={today} open={open} />
     </div>
   );
 }

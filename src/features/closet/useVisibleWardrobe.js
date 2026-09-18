@@ -85,7 +85,7 @@
 // Pure functions, no React: every consumer (App's `available` memo, the tests,
 // the doctor) calls through here so the rule never forks.
 
-import { DEFAULT_CLOSET_ID, closetOf } from "./closets.js";
+import { closetOf } from "./closets.js";
 import { MISC_CATEGORY } from "../../constants/taxonomy.js";
 
 // Items whose closet_id is missing (locally cached pre-migration rows) are

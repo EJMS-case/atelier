@@ -29,7 +29,6 @@ import {
   describeCorePalette, describeColorCoverage, describeTextureCoverage,
   describePairUnlocks, seasonForDate,
 } from "../../utils/wardrobe-coverage.js";
-import { sb } from "../supabase.js";
 import {
   KnitSchema, KnitTool,
   ColorAnalysisSchema, ColorAnalysisTool,

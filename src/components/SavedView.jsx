@@ -7,7 +7,7 @@ import InspirationView from "../features/inspiration/InspirationView.jsx";
 import SearchInput from "./SearchInput.jsx";
 import { LookSearchContext } from "./SavedLookCard.jsx";
 
-export default function SavedView({ wardrobe, available, setsMeta, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar, inspirations, setInspirations }) {
+export default function SavedView({ wardrobe, available, setsMeta, favorites, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar, inspirations, setInspirations, focusLookId, onFocusLookConsumed }) {
   // The Wear tab and its metrics (most-worn / neglected / cost-per-wear) moved
   // to the Home dashboard. Saved holds: All your saved looks, History (with
   // subcategories), Favorites, and — since 2026-09-17 — Inspo: a handful of
@@ -33,7 +33,7 @@ export default function SavedView({ wardrobe, available, setsMeta, favorites, to
       )}
       <LookSearchContext.Provider value={tab === "history" ? "" : searchQ}>
       {tab === "looks" && (
-        <LooksView wardrobe={wardrobe} available={available} setsMeta={setsMeta} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar}/>
+        <LooksView wardrobe={wardrobe} available={available} setsMeta={setsMeta} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar} focusLookId={focusLookId} onFocusLookConsumed={onFocusLookConsumed}/>
       )}
       {tab === "history" && (
         <OutfitHistory

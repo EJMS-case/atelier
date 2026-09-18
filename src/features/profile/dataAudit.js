@@ -37,8 +37,8 @@ export const ISSUE_LABELS = {
   // (short/sleeveless); a cardigan with no knit weight can't be recognised
   // as the summer office layer. Enhancers, not critical — the stylist still
   // reads the piece, it just can't apply her rule to it with confidence.
-  sleeve_unknown:      "no sleeve length the AI can read — add 'long sleeve' / 'short sleeve' / 'sleeveless' to the name or notes",
-  knit_weight_missing: "cardigan with no knit weight in its tag, name, or notes — can't be recognised as the summer office layer",
+  sleeve_unknown:      "no sleeve length the AI can read — add 'long sleeve' / 'short sleeve' / 'sleeveless' to the name or stylist line",
+  knit_weight_missing: "cardigan with no knit weight in its tag, name, or stylist line — can't be recognised as the summer office layer",
   // The line the stylist reads for the piece. Without it the app reads the
   // notes through a fallback (or nothing, for long copy); "Write stylist
   // lines" below the audit fills every empty one from her fields, her notes,

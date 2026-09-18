@@ -35,7 +35,6 @@
 // Everything here is read-only and allocation-cheap: the doctor runs it over
 // the full 533-row wardrobe, and tests run it per case.
 
-import { DEFAULT_CLOSET_ID, closetOf } from "./closets.js";
 import { isMiscItem } from "./useVisibleWardrobe.js";
 
 

@@ -1,12 +1,29 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-17**, after PR #243. The session log below
+Refreshed **2026-09-18**, after the stylist-line PR (#245). The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-18 · PR #245 — the stylist line is the one text field; "In Your Looks" rows open the day, the look, or the garment
+
+**Owner, from the Edit screen:** remove the Notes box and keep only the stylist line "unless you think it will impact how the AI reads it"; convert notes into lines where the line was empty first; a bigger box with a hard cap and no "≤200" text; and make the wear-history outfits clickable. Checked the rows first: 21 line-less pieces (the #239 sweep was never tapped), and 356 of the 403 short notes beside a line are not repeated in it — so the classifiers were reading text that would have become invisible. CHANGELOG has the detail. To carry:
+
+1. **The stylist line is THE text field.** Edit and Bulk Add write `stylist_line` (cap `CURATED_NOTES_MAX`, 200); nothing in the app writes `notes` any more. The column stays as an archive; a save carries it untouched.
+2. **`notesBeyondLine(item)` is the one reader for a note the line does not carry** — the Edit screen quotes it, `classifierNotes` appends it, and "Move into the line" folds it and clears the note. Add a reader of `item.notes` in the AI path only through it.
+3. **All 551 styled pieces have a line now.** 21 written this session by id from her notes and fields (listed in the PR); the sweep button in Style Profile remains for pieces added without one.
+4. **`ItemWearHistory` rows navigate**: `onOpenDay(iso)` → Planner with `focusDay`; `onOpenLook(logId)` → Saved with `focusLookId` (LooksView scrolls to `#look-<id>` and outlines it); `onOpenItem(it)` → that garment's Edit screen (`key={editItem.id}` re-seeds the form). Each focus is consumed on mount.
+
+**Watch-items:**
+- **Her first Edit open after this:** most pieces will show the muted *Also read from your notes: “…”* line, because the September sweep paraphrased her notes rather than repeating them. That is honest, not a bug — the classifiers read that text. If it reads as clutter, the lever is `notesBeyondLine`'s containment test (word-level overlap instead of substring) — but a looser test hides text the classifiers still read, so pair any loosening with the same change in `classifierNotes` (they share the helper, so that is automatic).
+- **A tapped date whose plan is empty:** a dated `outfit_logs` row that never mirrored into `planned_outfits` opens the Planner on an empty day. `App.logOutfit` mirrors every wear it records; a row that predates that path is the case. Not seen in the fixture or the code path, only possible in old data.
+- **The planner remembers the month she last opened**, so after tapping a July wear, the next plain Planner open shows July until she pages forward. By design; the walk pages forward itself.
+- **`IMG 1887`** is a sandal named after its photo file; the cardigan filed under Pullovers. Both surfaced in the CHANGELOG; her call.
+
+**Verified before push:** `npm test` (41 suites), `npm run build`, `npm run smoke` green (27 walk steps).
 
 ### 2026-09-17 · PR #243 — her shopping list is the Shopping screen; the numbers count what she styles
 

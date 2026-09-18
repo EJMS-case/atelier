@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
+import { CURATED_NOTES_MAX } from "../utils/item-helpers.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
@@ -48,7 +49,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         // "20962754 1680 4DD6…" which used to save as the item name.
         // AI auto-detect proposes a real title (applyDetection).
         name: "",
-        category: "Tops", subcategory: "", brand: "", color: "", notes: "",
+        category: "Tops", subcategory: "", brand: "", color: "", stylist_line: "",
         material: "", pattern: "", price_paid: null, has_bg: false,
         detected_at: null, detection_confidence: null,
       }]);
@@ -324,10 +325,14 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                       style={{...s.input,...s.queueInput}} placeholder="Price paid (USD, optional)"
                       value={item.price_paid ?? ""}
                       onChange={e=>update(item.id,"price_paid", e.target.value === "" ? null : Number(e.target.value))}/>
-                    <textarea rows={2}
+                    {/* The stylist line is the one text field a piece has
+                        (owner, 2026-09-18) — what every prompt and classifier
+                        reads, capped at what they read. A piece added with
+                        none is picked up by the Style Profile sweep. */}
+                    <textarea rows={2} maxLength={CURATED_NOTES_MAX}
                       style={{...s.input,...s.queueInput, minHeight:52, resize:"vertical", fontFamily:"inherit", lineHeight:1.4}}
-                      placeholder="Notes (e.g. cropped, chunky knit, cashmere)"
-                      value={item.notes} onChange={e=>update(item.id,"notes",e.target.value)}/>
+                      placeholder="Stylist line — what the AI reads (e.g. black cropped cardigan, chunky knit; for weekends, NOT for work)"
+                      value={item.stylist_line} onChange={e=>update(item.id,"stylist_line",e.target.value)}/>
                     </>)}
                   </div>
                   <button style={s.queueRemove} onClick={()=>remove(item.id)}>✕</button>

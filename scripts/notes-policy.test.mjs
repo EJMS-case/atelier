@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  classifierNotes, stylistNotes, CURATED_NOTES_MAX, PROMPT_NOTES_MAX,
+  classifierNotes, stylistNotes, notesBeyondLine, pieceLine, CURATED_NOTES_MAX, PROMPT_NOTES_MAX,
   getSleeveType, isStatementPiece, filterByWeather,
 } from "../src/utils/item-helpers.js";
 import { FILTER_TYPES } from "../src/utils/style-filters.js";
@@ -61,6 +61,36 @@ test("classifierNotes: curated notes pass through verbatim", () => {
 test("classifierNotes: product copy is excluded from classification", () => {
   assert.equal(classifierNotes({ notes: COPY_CAMI }), "");
   assert.equal(classifierNotes({ notes: COPY_TROUSER }), "");
+});
+
+test("classifierNotes: the line plus a short note it does not carry; a note the line already carries is never doubled", () => {
+  // Her keyword keeps firing after a line lands beside it.
+  assert.equal(
+    classifierNotes({ stylist_line: "black silk cami, bias cut", notes: "NOT FOR WORK" }),
+    "black silk cami, bias cut NOT FOR WORK");
+  // Once the note is in the line (typed, or moved in from the Edit screen),
+  // the classifier reads it once — punctuation and case do not count.
+  assert.equal(
+    classifierNotes({ stylist_line: "black silk cami, bias cut; not for work", notes: "NOT FOR WORK." }),
+    "black silk cami, bias cut; not for work");
+  // Long copy beside a line is still excluded: the line speaks for it.
+  assert.equal(classifierNotes({ stylist_line: "silk cami", notes: COPY_CAMI }), "silk cami");
+});
+
+test("notesBeyondLine: exactly the text the Edit screen quotes and the classifier appends", () => {
+  assert.equal(notesBeyondLine({ stylist_line: "wool coat", notes: "best for colder weather" }), "best for colder weather");
+  assert.equal(notesBeyondLine({ stylist_line: "wool coat, best for colder weather", notes: "Best for colder weather" }), "");
+  assert.equal(notesBeyondLine({ stylist_line: "", notes: "long sleeve" }), "long sleeve");
+  assert.equal(notesBeyondLine({ stylist_line: "silk cami", notes: COPY_CAMI }), "", "product copy is not quoted");
+  assert.equal(notesBeyondLine({ stylist_line: "silk cami" }), "");
+  assert.equal(notesBeyondLine(null), "");
+});
+
+test("pieceLine: what a display surface shows — the line, or the notes of a piece that has none yet", () => {
+  assert.equal(pieceLine({ stylist_line: " navy blazer ", notes: "old notes" }), "navy blazer");
+  assert.equal(pieceLine({ stylist_line: "", notes: "old notes" }), "old notes");
+  assert.equal(pieceLine({}), "");
+  assert.equal(pieceLine(null), "");
 });
 
 // ── stylistNotes (prompt digest) ─────────────────────────────────────────────

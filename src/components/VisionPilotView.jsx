@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from "react";
 import { s } from "../ui/styles.js";
+import { pieceLine } from "../utils/item-helpers.js";
 import { enrichItemVision, enrichAndPersistItem, pickPilotSample } from "../features/vision/visionEnrich.js";
 import { PALETTE as SHARED_PALETTE } from "../constants/palette.js";
 
@@ -171,7 +172,7 @@ export default function VisionPilotView({ items, apiKey, onBack, onEnriched }) {
                     <div style={{ fontSize: 13, color: PALETTE.ink, fontWeight: 500, marginBottom: 4 }}>{item.name}</div>
                     <div style={{ color: PALETTE.muted, marginBottom: 6 }}>
                       <span style={{ letterSpacing: "0.1em", fontSize: 9 }}>YOUR TAGS</span> · {item.color || "—"} · {item.category}{item.subcategory ? ` > ${item.subcategory}` : ""}
-                      {item.notes && <div style={{ fontStyle: "italic", marginTop: 2 }}>“{item.notes}”</div>}
+                      {pieceLine(item) && <div style={{ fontStyle: "italic", marginTop: 2 }}>“{pieceLine(item)}”</div>}
                     </div>
                     {!r && <div style={{ color: PALETTE.muted }}>—</div>}
                     {r?.loading && <div style={{ color: PALETTE.muted, display: "flex", gap: 6, alignItems: "center" }}><span style={s.spinner}/> reading…</div>}
