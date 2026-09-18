@@ -254,6 +254,58 @@ await check("Closet switcher opens from the chip's arrow", async () => {
   await page.evaluate(() => document.querySelector('button[aria-label="Switch closet"]')?.click());
 });
 
+// A garment's Edit screen (owner, 2026-09-18): the stylist line is the ONE
+// text field — no Notes box, no "≤200" instruction — and every "In Your
+// Looks" row is a way out. The fixture's NYC look (log-nyc, 2026-08-01) is
+// made of wardrobe[0], so that piece's screen must list the look, and the
+// date must land on the Planner with August 2026 showing and August 1 open.
+// The walk searches the grid by name first so the Edit tap lands on a piece
+// the look is made of, not on whatever sorts first.
+await check("Closet → a garment's Edit screen: one stylist-line field, no Notes box", async () => {
+  await page.fill('input[placeholder^="Search name"]', wardrobe[0].name);
+  await page.waitForTimeout(500);
+  const clicked = await page.evaluate(() => {
+    const b = document.querySelector('button[aria-label="Edit"]');
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!clicked) throw new Error("no Edit button on the filtered grid");
+  await page.waitForTimeout(600);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Stylist line · what the AI reads/.test(text)) throw new Error("the stylist-line field did not render");
+  if (/≤\s*200/.test(text)) throw new Error('the "≤200 chars" instruction is back on the label');
+  if (/^Notes$/m.test(text)) throw new Error("the Notes box is back");
+  if (!/In Your Looks/.test(text)) throw new Error("In Your Looks did not render for the piece the fixture's look is made of");
+});
+await check("Edit → a worn date opens that day in the Planner", async () => {
+  const clicked = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button[aria-label]")]
+      // The piece is also pinned to the fixture's future trip day, and that row
+      // sorts first; the assertion is about the AUGUST wear.
+      .find(el => /Aug 1 in the Planner$/.test(el.getAttribute("aria-label") || ""));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!clicked) throw new Error("no row for the August 1 wear to open");
+  await page.waitForTimeout(1500);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/August 2026/.test(text)) throw new Error("the Planner did not open on the look's month");
+  if (!/Saturday, August 1/.test(text)) throw new Error("the day modal did not open on the look's day");
+  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "×")?.click());
+  // The planner remembers the month she last looked at — by design, and now
+  // that month is August. Walk it forward to the current month so the trip
+  // step below (a trip pinned relative to today) finds its strip.
+  const nowLabel = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  for (let i = 0; i < 24; i++) {
+    const label = await page.evaluate(() => document.body.innerText);
+    if (label.includes(nowLabel)) break;
+    await page.evaluate(() => [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "›")?.click());
+    await page.waitForTimeout(200);
+  }
+});
+
 // Everything that is not a true setting lives on Home now (owner, 2026-09-17),
 // and Style Profile is the screen that errored on open for a session because
 // nothing walked it — a `const` read above its declaration passes every unit

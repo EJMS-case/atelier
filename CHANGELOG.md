@@ -2,6 +2,45 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The stylist line is the one text field; "In Your Looks" rows open the day, the look, or the garment — 2026-09-18
+
+### Why
+
+Owner, from the Edit screen on her phone: *"I'd like to remove the notes section and keep only the stylist line, unless you think it will impact how the AI reads it. For items with notes and nothing in the stylist line, convert what exists in the notes to highly effective ai-readable stylist notes and input there before removing that box. Make the stylist notes box larger … put a character limit so I can't type beyond what AI can actually read. Remove the >200 part."* And on the wear-history card: *"I'd like these outfits to be clickable. Either take me to the garment or the planner day in which I wore it."*
+
+Checked against the rows before touching code (551 styled pieces): 21 had no stylist line (14 with notes, 7 with neither — the sweep from #239 was never tapped); 403 had a line AND a short note, and for 356 of them the line does not repeat the note word for word. So: prompts read the line alone when it exists (`promptNotes`) — no impact there. The keyword classifiers read the line PLUS a short note (`classifierNotes`) — removing the box while the app kept reading a note she could no longer see or change would have been a hidden preference, the exact thing she asked the app never to hold.
+
+### Changed
+
+- **Edit item: one text field.** The stylist line is a five-row textarea with a live `n / 200` count and `maxLength` at the classifier cap (`CURATED_NOTES_MAX`); the label reads "Stylist line · what the AI reads" with no instruction. The Notes box is gone. The `notes` column stays (never dropped; it rides the form untouched so a save cannot wipe it).
+- **Nothing the app reads is hidden.** `notesBeyondLine(item)` in `utils/item-helpers.js` is the one reader for "what her note says that the line does not" (short notes only, normalised containment). The Edit screen quotes exactly that text under the line — *Also read from your notes: “…”* — with one tap, **Move into the line**, that appends it to the line and clears the note (offered only when it fits; otherwise it says to trim the line). `classifierNotes` now reads through the same helper, so a note she moved in is read once, not twice, and the classifier and the screen can never disagree about what is read. Long pasted copy beside a line is read by nothing, and is not quoted.
+- **21 live rows written** (`stylist_line`, where it was empty; listed in the PR with the note or fields each was written from). Her occasion clauses are carried verbatim ("NOT for work", "best for lounge, athleisure, travel in warm or hot climates"); nothing was added that her notes, fields, or name did not say (no sleeve on the tees, no heel on the sandals, no colour on the Minnie Mouse tee). `select count(*) … stylist_line is null or ''` is 0 for styled pieces now.
+- **Bulk Add writes a stylist line, not a note** — same cap, same placeholder vocabulary. A piece added with none is still picked up by the Style Profile sweep.
+- **Display surfaces show the line she edits**: closet card, the detail sheet, Visual AI's "your tags" (`pieceLine`, line with notes as the fallback for a piece that has none). Closet search matches the stylist line too; the AI Readiness flags name the stylist line as the field to fix; the knit-weight hint says "stylist line" where it said "notes".
+- **"In Your Looks" rows are ways out** (`ItemWearHistory`): the date of a worn or planned row opens the Planner ON that day (anchor month + day modal, opened once that month's plans have settled, and the remembered trip is not re-opened over it); a saved look's header opens Saved scrolled to that look, outlined; every companion thumb opens that garment's own Edit screen (the Edit view is keyed by item id so the form re-seeds). `focusDay` / `focusLookId` are consumed on mount so a later plain open of Planner or Saved starts clean.
+- **Day-modal title anchored at noon UTC** (`fullLabel`), like `friendlyDate`: a local-midnight parse read the previous day for any browser east of New York.
+- **Cleanup**: six unused imports removed (`DEFAULT_CLOSET_ID` in `packingSync`, `TripDetailView`, `useVisibleWardrobe`, `poolInvariants`; `closetOf` in `poolInvariants`; `sb` in `lib/ai/stylist.js`). An export-usage sweep found no exported symbol that nothing imports.
+
+### Tests
+
+- `test:notes` +3: the line plus a note it does not carry; a carried note is never doubled; product copy beside a line is excluded; `notesBeyondLine` and `pieceLine` edge cases.
+- Render walk +2 (27 steps): a garment's Edit screen renders one stylist-line field, no Notes box, no "≤200" text, and its "In Your Looks" card; tapping the August wear lands on the Planner with August 2026 showing and Saturday, August 1 open, then walks the month back to today so the trip step still finds its strip.
+- `test:props` covers the six new props (`onOpenItem` / `onOpenDay` / `onOpenLook`, `focusDay` / `onFocusDayConsumed`, `focusLookId` / `onFocusLookConsumed`, `highlight`).
+
+### Downstream, four ways
+
+*Efficiency* — no prompt change: the line was already what prompts carry, and the classifier text for a piece can only get shorter (a carried note is no longer appended twice). No new fetch: the wear history, the Planner focus and the Saved focus all run on state the app already holds. Bundle: `notesBeyondLine`/`pieceLine` are a few lines in a module every chunk already imports. *Effectiveness* — the field the app designed to be read is now the field she edits, with the cap the readers actually have; a note the app reads is on the screen, with the lever to change it. *Speed* — nothing on the tap path. *Education* — her edits to the line reach every classifier and prompt on the next tap (the line is read live, not cached); moving a note into the line is a teaching act she can see.
+
+### Surfaced, not actioned — her call
+
+- `IMG 1887` (Tory Burch, black leather sandal) is named after a photo file; the line reads "black leather sandal". A name would help every list it appears in.
+- The white Banana Republic Crinkle Knit Cardigan (button front, her notes) is filed under Knits > Pullovers; its black twin is under Cardigans.
+- 61 pieces carry long pasted product copy beside their line; nothing reads it now except closet search. Clearing it is a data decision, not a bug.
+
+### Verified
+
+`npm test` (41 suites), `npm run build`, `npm run smoke` (27 walk steps) green. Live: 21 rows updated by id with `where stylist_line is empty`; recount 0 line-less styled pieces, 0 lines over the cap.
+
 ## [Unreleased] — `ATELIER_STATE.md`: the app and every feature, described for sharing (docs only) — 2026-09-18
 
 ### Why

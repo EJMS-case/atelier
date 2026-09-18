@@ -24,7 +24,7 @@
 // (scripts/packing-sync.test.mjs) exercise the rule directly.
 
 import { outfitsOf } from "./outfits.js";
-import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
+import { closetOf } from "../closet/closets.js";
 
 
 // Order-independent, dedupe-tolerant id-list compare (outfit_ids arrays).

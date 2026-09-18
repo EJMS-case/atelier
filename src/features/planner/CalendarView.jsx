@@ -98,8 +98,22 @@ let lastTripScrollY = 0;
 // activation / suitcase-close flows call it after flipping trip status.
 // `onItemsClosetChanged` patches App's local items after the trip-complete
 // flow reassigns left-behind pieces to the destination closet (B5).
-export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
-  const [anchor, setAnchor] = useState(() => lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date()));
+export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed }) {
+  // `focusDay` (iso) opens the planner ON that day — the way in from a
+  // garment's "In Your Looks" row. It wins over the remembered month and the
+  // remembered trip, is consumed once on mount (so a later plain open of the
+  // Planner starts clean), and the day modal waits for that month's plans to
+  // land so it never opens on an empty day that is about to fill in.
+  const pendingFocusRef = useRef(focusDay || null);
+  const [anchor, setAnchor] = useState(() => focusDay
+    ? startOfMonth(new Date(focusDay + "T12:00:00"))
+    : (lastAnchorTime != null ? new Date(lastAnchorTime) : startOfMonth(new Date())));
+  useEffect(() => {
+    if (!focusDay) return;
+    lastTripId = null;
+    onFocusDayConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
@@ -148,7 +162,16 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       setSyncError("");
     } catch (e) {
       setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
-    } finally { setRefreshing(false); }
+    } finally {
+      setRefreshing(false);
+      // The day she came for opens once the month has settled — after the
+      // plans land, or after the fetch fails (the modal then shows the empty
+      // day and the sync error says why), never on a day about to fill in.
+      if (pendingFocusRef.current) {
+        setActiveDay(pendingFocusRef.current);
+        pendingFocusRef.current = null;
+      }
+    }
   };
 
   // Fetch plans for the visible month, on mount/month-change AND when the
@@ -671,7 +694,9 @@ function DayModal({ iso, plan, available, wardrobe: wardrobeProp, outfitLogs, fo
   const [pickedWeather, setPickedWeather] = useState(plan?.weather || suggested);
 
   const friendly = friendlyDate(iso); // "Today" / "Tomorrow" / weekday-month-day
-  const fullLabel = new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" });
+  // Noon UTC, like time.js's friendlyDate: a local-midnight parse rendered
+  // the previous calendar day for any browser east of New York.
+  const fullLabel = new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" });
   const headerEyebrow = isPast ? "WORN" : isToday ? "TODAY" : "PLAN";
   // Every look on the day — not just the legacy `items` mirror (outfit #0).
   const planOutfits = outfitsOf(plan);

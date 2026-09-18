@@ -27,7 +27,7 @@ const badgeStyle = {
   borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap",
 };
 
-export default function LooksView({ wardrobe, available, setsMeta, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar }) {
+export default function LooksView({ wardrobe, available, setsMeta, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar, focusLookId, onFocusLookConsumed }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -71,6 +71,17 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
       .catch(() => { /* non-fatal — worst case a scheduled look misses its badge */ });
   };
   useEffect(() => { loadLogs(); }, []);
+  // The way in from a garment's "In Your Looks" row: once the logs are here,
+  // scroll to that look and keep it outlined for this mount. The App-level
+  // focus is consumed straight away so a later plain open of Saved is clean;
+  // the outline survives that because it is captured here at mount.
+  const [highlightId] = useState(focusLookId || null);
+  useEffect(() => {
+    if (loading || !focusLookId) return;
+    document.getElementById(`look-${focusLookId}`)?.scrollIntoView({ block: "start" });
+    onFocusLookConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, focusLookId]);
 
   const isScheduled = (l) => schedSigs.has(sigOf(l.garment_ids));
   // Unworn ("ready to wear") first — newest saved on top — then worn looks,
@@ -243,7 +254,7 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
           </>
         );
         return (
-          <SavedLookCard key={log.id} log={log} wardrobe={wardrobe} subtitle={subtitle} headerRight={statusBadge} notes={log.notes} onEditItem={onEditItem}
+          <SavedLookCard key={log.id} log={log} wardrobe={wardrobe} subtitle={subtitle} headerRight={statusBadge} notes={log.notes} onEditItem={onEditItem} highlight={log.id === highlightId}
             actions={
               <>
                 <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>

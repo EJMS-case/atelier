@@ -83,6 +83,13 @@ Conventions worth knowing:
   `src/features/closet/useVisibleWardrobe.js`. Read it before naming a variable
   that holds garments; `src/features/closet/poolInvariants.js` turns the rule
   into a check that runs in tests and against live data (`npm run doctor`).
+- **The stylist line is the one text field a piece has** (owner, 2026-09-18).
+  Edit and Bulk Add write `stylist_line`, capped at `CURATED_NOTES_MAX`;
+  nothing writes `notes` any more (the column is an archive). Prompts read
+  the line (`promptNotes`); classifiers read the line plus a short note it
+  does not carry, through `notesBeyondLine()` — the same helper the Edit
+  screen uses to quote that note to her. Don't read `item.notes` in the AI
+  path any other way: what the app reads must be what she can see.
 - **Structured AI output goes through tool-use + Zod**, not JSON parsing — see
   `src/lib/ai/schemas.js` and `src/lib/ai/toolUse.js`.
 - **Every surface that gives her an OPINION on a look composes in

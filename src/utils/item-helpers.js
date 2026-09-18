@@ -53,12 +53,35 @@ export const NOTES_NEGATION_LEGEND =
 // is the app's write-up, the notes are her words, and a keyword she typed
 // ("NOT FOR WORK") must keep firing after a line lands beside it. Long copy
 // is still excluded (the line speaks for it).
+//
+// Since 2026-09-18 the stylist line is the ONE text field she edits (the
+// Notes box left the Edit screen; the column stays as an archive of what she
+// wrote before). notesBeyondLine() is the single reader for "what do her
+// notes still say that the line does not": the Edit screen shows her exactly
+// that text and offers to move it into the line, and this classifier reads
+// the same text — so nothing the app reads is invisible to her, and a note
+// she folded into the line is never counted twice.
+const normText = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+export function notesBeyondLine(item) {
+  const notes = item && item.notes ? String(item.notes).trim() : "";
+  if (!notes || notes.length > CURATED_NOTES_MAX) return "";
+  const line = item && item.stylist_line ? String(item.stylist_line) : "";
+  if (line && normText(line).includes(normText(notes))) return "";
+  return notes;
+}
 export function classifierNotes(item) {
   const line = item && item.stylist_line ? String(item.stylist_line).trim().slice(0, CURATED_NOTES_MAX) : "";
-  const notes = item && item.notes ? String(item.notes) : "";
-  const shortNotes = notes.length <= CURATED_NOTES_MAX ? notes : "";
-  if (line && shortNotes && shortNotes.trim() && shortNotes.trim() !== line) return `${line} ${shortNotes}`;
-  return line || shortNotes;
+  const extra = notesBeyondLine(item);
+  if (line && extra) return `${line} ${extra}`;
+  return line || extra;
+}
+
+// The one line a DISPLAY surface shows for a piece (closet card, detail
+// sheet, Visual AI): her stylist line, or — for a piece that has none yet —
+// her notes. Prompts use promptNotes() (bounded); this is for her eyes.
+export function pieceLine(item) {
+  const line = item && item.stylist_line ? String(item.stylist_line).trim() : "";
+  return line || (item && item.notes ? String(item.notes).trim() : "");
 }
 
 // ── SWIM PIECE KIND ─────────────────────────────────────────────────────────

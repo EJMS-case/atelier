@@ -229,6 +229,11 @@ export default function App() {
   const [rmbgKey,    setRmbgKey]    = useState(() => loadRmbgKey());
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const [editItem,   setEditItem]   = useState(null);
+  // Where an "In Your Looks" row sends her (owner, 2026-09-18): the Planner
+  // opened ON that day, or Saved scrolled TO that look. Each screen consumes
+  // its focus on mount so a later plain open of Planner/Saved starts clean.
+  const [plannerFocusDay, setPlannerFocusDay] = useState(null); // iso date
+  const [savedFocusLook, setSavedFocusLook] = useState(null);   // outfit_logs id
   // Remember which view launched the EditItem flow so Save/Back/Delete
   // return the user there instead of dumping them on the closet/home.
   // Editing a piece from Style Me used to land back on Home — annoying when
@@ -1457,7 +1462,7 @@ export default function App() {
       base = base.filter(it => {
         const haystack = [
           it.name, it.brand, it.color, it.color_family, it.subcategory,
-          it.category, it.notes, it.pattern, it.material,
+          it.category, it.stylist_line, it.notes, it.pattern, it.material,
           Array.isArray(it.tags) ? it.tags.join(" ") : it.tags,
         ].filter(Boolean).join(" ").toLowerCase();
         return terms.every(t => haystack.includes(t));
@@ -1857,7 +1862,7 @@ export default function App() {
           <div style={{ position:"relative", marginBottom: 12 }}>
             <input
               type="text"
-              placeholder="Search name, brand, color, notes…"
+              placeholder="Search name, brand, color, stylist line…"
               value={closetSearch}
               onChange={e => setClosetSearch(e.target.value)}
               style={{
@@ -2070,6 +2075,7 @@ export default function App() {
       {/* ── EDIT ── */}
       {view === "edit" && editItem && (
         <EditItemView
+          key={editItem.id}
           item={editItem}
           wardrobe={wardrobe}
           closets={closets}
@@ -2085,7 +2091,10 @@ export default function App() {
           }}
           onDelete={() => { deleteItem(editItem.id); setView(editReturnView || "closet"); }}
           onBack={() => setView(editReturnView || "closet")}
-          onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}/>
+          onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}
+          onOpenItem={(it) => { setEditItem(it); window.scrollTo(0, 0); }}
+          onOpenDay={(iso) => { setPlannerFocusDay(iso); setView("planner"); }}
+          onOpenLook={(id) => { setSavedFocusLook(id); setView("favorites"); }}/>
       )}
 
       {/* ── LOOKS ── */}
@@ -2393,6 +2402,8 @@ export default function App() {
             onItemsClosetChanged={applyItemsClosetChange}
             apiKey={apiKey}
             onGoToStyleMe={() => setView("style")}
+            focusDay={plannerFocusDay}
+            onFocusDayConsumed={() => setPlannerFocusDay(null)}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onEditPlan={(iso, plan) => {
               setEditingPlan({ iso, plan });
@@ -2434,6 +2445,8 @@ export default function App() {
           favorites={favorites}
           toggleFav={toggleFav}
           isFav={isFav}
+          focusLookId={savedFocusLook}
+          onFocusLookConsumed={() => setSavedFocusLook(null)}
           onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
           onDeleteLog={async (id) => { await sb.deleteOutfitLog(id); }}
           onUnlog={async (log) => {

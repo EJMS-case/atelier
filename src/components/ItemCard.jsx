@@ -3,15 +3,18 @@ import { s } from "../ui/styles.js";
 import { icons, Icon, HeartIcon } from "../ui/icons.jsx";
 import SetPanel from "./SetPanel.jsx";
 import Thumb from "./Thumb.jsx";
+import { pieceLine } from "../utils/item-helpers.js";
 
 // memo'd so the 400-item grid doesn't re-render every card on unrelated App
 // state changes (sync-status flash, search typing). onEdit/onToggleFav
 // take the item so the parent can pass STABLE useCallback handlers.
-// Notes at or under this length can't overflow the 2-line clamp at any grid
-// width (≥180px column, 10px italic ≈ 30+ chars/line), so the more/less
-// toggle only renders past it. Slightly conservative on purpose: a toggle on
-// text that happens to fit is a dead click; hidden text with NO toggle would
-// lose her words.
+// The card shows the piece's stylist line — the one text field she edits
+// (pieceLine falls back to notes for a piece that has no line yet). Text at
+// or under this length can't overflow the 2-line clamp at any grid width
+// (≥180px column, 10px italic ≈ 30+ chars/line), so the more/less toggle
+// only renders past it. Slightly conservative on purpose: a toggle on text
+// that happens to fit is a dead click; hidden text with NO toggle would lose
+// her words.
 const NOTES_CLAMP_CHARS = 60;
 
 // `isPacked` (wave 2, trips): true while the item sits in the active trip's
@@ -26,7 +29,8 @@ function ItemCard({ item, wardrobe, onDelete, onEdit, onDuplicate, duplicateHint
   // closet she isn't looking at) → busy while the image copy + upsert run.
   const [dupState, setDupState] = useState("idle");
   const isPartOfSet = item.set_id && item.is_separable;
-  const clampNotes = (item.notes || "").length > NOTES_CLAMP_CHARS;
+  const line = pieceLine(item);
+  const clampNotes = line.length > NOTES_CLAMP_CHARS;
   return (
     <div style={s.card}>
       <div style={s.cardImg} onClick={() => onEdit(item)}>
@@ -51,10 +55,10 @@ function ItemCard({ item, wardrobe, onDelete, onEdit, onDuplicate, duplicateHint
         <div style={s.cardName}>{item.name}</div>
         {item.brand && <div style={{...s.cardColor,fontStyle:"italic"}}>{item.brand}</div>}
         {item.color && <div style={s.cardColor}>{item.color}</div>}
-        {item.notes && (
+        {line && (
           <>
             <div style={clampNotes && !notesOpen ? { ...s.cardNotes, ...s.cardNotesClamp } : s.cardNotes}>
-              {item.notes}
+              {line}
             </div>
             {clampNotes && (
               <button style={s.cardNotesToggle}

@@ -1,6 +1,8 @@
 // Shared bottom-sheet shown when a garment is tapped inside an outfit collage.
 // Used by both LookCard (generated looks) and SavedLookCard (saved / worn /
 // favorited outfits) so tapping a piece behaves identically everywhere.
+import { pieceLine } from "../utils/item-helpers.js";
+
 export default function ItemDetailSheet({ item, onClose, onEditItem, onStyleItem }) {
   if (!item) return null;
   return (
@@ -20,7 +22,7 @@ export default function ItemDetailSheet({ item, onClose, onEditItem, onStyleItem
               {item.color && <span> · {item.color}</span>}
             </div>
             {item.material && <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>{item.material}</div>}
-            {item.notes && <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 6, fontStyle: "italic" }}>{item.notes}</div>}
+            {pieceLine(item) && <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 6, fontStyle: "italic" }}>{pieceLine(item)}</div>}
           </div>
         </div>
         {onEditItem && (

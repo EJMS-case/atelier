@@ -7,7 +7,7 @@ import CalendarView from "../features/planner/CalendarView.jsx";
 // `available` is what she may pick from right now; `wardrobe` + `closets` ride
 // along for trip planning, which resolves across both closets (Phase B).
 // The vocabulary is defined in features/closet/useVisibleWardrobe.js.
-export default function PlannerWrapper({ available, wardrobe, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay }) {
+export default function PlannerWrapper({ available, wardrobe, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed }) {
   const [logs, setLogs] = useState([]);
   useEffect(() => {
     sb.fetchOutfitLogs().then(setLogs).catch(() => {});
@@ -22,6 +22,8 @@ export default function PlannerWrapper({ available, wardrobe, closets, activeClo
     outfitLogs={logs}
     apiKey={apiKey}
     onGoToStyleMe={onGoToStyleMe}
+    focusDay={focusDay}
+    onFocusDayConsumed={onFocusDayConsumed}
     onEditItem={onEditItem}
     onEditPlan={onEditPlan}
     onBuildDay={onBuildDay}

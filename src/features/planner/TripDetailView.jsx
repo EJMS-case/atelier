@@ -21,7 +21,7 @@ import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCov
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
-import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
+import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";

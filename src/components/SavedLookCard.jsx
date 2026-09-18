@@ -23,7 +23,9 @@ export const LookSearchContext = createContext("");
 // `layout_data` arrangement (e.g. edited via the planner), the collage restores
 // it on desktop.
 
-export default function SavedLookCard({ log, wardrobe, subtitle, headerRight, notes, actions, onEditItem }) {
+// `highlight` outlines the card — the landing state when she arrives from a
+// garment's "In Your Looks" row (LooksView scrolls to `#look-<id>`).
+export default function SavedLookCard({ log, wardrobe, subtitle, headerRight, notes, actions, onEditItem, highlight }) {
   const [detailItem, setDetailItem] = useState(null);
   const searchQ = useContext(LookSearchContext);
 
@@ -48,7 +50,7 @@ export default function SavedLookCard({ log, wardrobe, subtitle, headerRight, no
   }
 
   return (
-    <div style={s.histCard}>
+    <div id={`look-${log.id}`} style={highlight ? { ...s.histCard, outline: "2px solid var(--color-ink)", outlineOffset: 2 } : s.histCard}>
       <div style={s.histCardHeader}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
           <div>
