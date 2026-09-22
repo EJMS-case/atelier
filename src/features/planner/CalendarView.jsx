@@ -21,6 +21,7 @@ import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { restoreScroll } from "../../utils/restoreScroll.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
+import { logAiError } from "../../lib/ai/logError.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
@@ -952,6 +953,11 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
   // Error string from handlePreview — surfaces buildDailyOutfits exceptions or
   // empty-result cases that would otherwise look like the button did nothing.
   const [previewError, setPreviewError] = useState("");
+  // Save trip failed (no trip row came back). Shown beside the Save button —
+  // a message at the top of the sheet is off-screen when she taps Save at the
+  // bottom. Owner, 2026-09-22: a save that wrote three calendar days and no
+  // trip row, silently, left her with days under a name and no trip to open.
+  const [saveError, setSaveError] = useState("");
   // Ref to the preview section so we can scroll it into view after generation —
   // on mobile the bottom-sheet button sits at the viewport edge and the per-day
   // cards render below it, off-screen. Without auto-scroll users tap Preview
@@ -1390,8 +1396,10 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
   async function handleAssign() {
     if (!dayLooks || saving) return;
     setSaving(true);
+    setSaveError("");
     try {
       let savedTrip = null;
+      let saveErr = null;
       try {
         const rows = await saveTrip({
           start_date: start,
@@ -1415,7 +1423,22 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
           must_include_ids: [...mustIncludeIds],
         });
         savedTrip = Array.isArray(rows) ? rows[0] : rows;
-      } catch { /* non-fatal */ }
+      } catch (e) { saveErr = e; }
+
+      // No trip row → nothing is pinned. Days pinned under a trip that does
+      // not exist are half a trip she has to clean up by hand (it happened:
+      // 2026-09-22, three days saved, no trip, no message). Say what failed,
+      // record it where the next session can read it, and let her tap again.
+      if (!savedTrip?.id) {
+        const err = saveErr || new Error("saveTrip returned no row");
+        console.error("[Trip Save] failed:", err);
+        logAiError("trip_save", {
+          destination: destination || null, start, end, days: dayLooks.length,
+          destClosetId: destClosetId || null, hadBrief: !!brief, pins: mustIncludeIds.size,
+        }, err);
+        setSaveError(`Couldn't save the trip${err.message ? ` — ${err.message}` : ""}. Nothing was pinned; tap Save trip to try again.`);
+        return;
+      }
 
       // Record the pulled pieces as trip_items (status 'suggested'): every
       // item used by any generated outfit that is NOT already at the
@@ -1801,6 +1824,9 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
               );
             })()}
 
+            {saveError && (
+              <div style={{ fontSize: 11, color: PALETTE.accent, marginBottom: 8, lineHeight: 1.5 }}>{saveError}</div>
+            )}
             <button onClick={handleAssign} disabled={saving} style={{ ...btnPrimary, width: "100%" }}>
               {saving ? "Saving trip…" : "Save trip"}
             </button>

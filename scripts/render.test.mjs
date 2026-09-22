@@ -29,6 +29,7 @@
 
 import { findBrowser, serveDist } from "./browser-harness.mjs";
 import { buildWardrobe, buildDuplicatedSet, NYC_CLOSET, AZ_CLOSET } from "./fixtures/build-wardrobe.mjs";
+import { cutoutPng } from "./fixtures/cutout-png.mjs";
 
 const found = await findBrowser("render");
 if (!found) process.exit(0);
@@ -48,7 +49,7 @@ const wardrobe = [
   ...buildWardrobe({ closetId: NYC_CLOSET }),
   ...buildWardrobe({ closetId: AZ_CLOSET }).map(it => ({ ...it, id: `az-${it.id}` })),
   ...buildDuplicatedSet().items,
-].map(it => ({ ...it, color: "Black", brand: "Fixture", image: null, wear_count: 0 }))
+].map(it => ({ ...it, color: "Black", brand: "Fixture", image: `https://ljcwsrfmojbjdveefoqa.supabase.co/storage/v1/object/public/wardrobe-images/${it.id}?v=1`, wear_count: 0 }))
  // The Arizona piece the saved look is made of gets a name that occurs NOWHERE
  // else in the fixture. The wardrobe deliberately mirrors the same vocabulary
  // in both rooms, so "<subcategory> piece" names a NYC row too — and an
@@ -186,13 +187,29 @@ await page.route("**/rest/v1/**", route => {
   const url = new URL(route.request().url());
   const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0];
   const method = route.request().method();
-  if (method !== "GET") return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+  if (method !== "GET") {
+    // A trip save must come back as a ROW: the sheet refuses to pin days under
+    // a trip that did not save (2026-09-22), so an empty 201 here would read
+    // as that failure, not as success.
+    if (method === "POST" && table === "trips") {
+      const body = JSON.parse(route.request().postData() || "{}");
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify([{ id: "22222222-2222-4222-8222-222222222222", created_at: new Date().toISOString(), ...(Array.isArray(body) ? body[0] : body) }]) });
+    }
+    return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+  }
   const rows = applyFilters(TABLE[table] ?? [], url);
   return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
 });
 await page.route("**/auth/v1/**", route =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "u", email: "fixture@example.com" } }) }));
 await page.route("**/storage/v1/**", route => route.fulfill({ status: 200, body: "" }));
+// Every photo is a real transparent cutout (registered AFTER the catch-all:
+// Playwright tries the newest route first), served cacheable and CORS-open the
+// way the bucket does since migration 0037 — so TrimmedImage's real path runs
+// and a tile that never paints is a failure, not an invisible fallback.
+const CUTOUT = cutoutPng();
+await page.route("**/storage/v1/object/public/wardrobe-images/**", route =>
+  route.fulfill({ status: 200, body: CUTOUT, headers: { "content-type": "image/png", "cache-control": "public, max-age=31536000", "access-control-allow-origin": "*" } }));
 await page.route("**/api.anthropic.com/**", route => route.abort());
 await page.route("**/api.open-meteo.com/**", route =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ daily: { time: [], temperature_2m_max: [] } }) }));
@@ -380,6 +397,11 @@ await check("Saved", tab("Saved"));
 // has already made once, where filtered-out looks read as LOST. So the walk
 // asserts the narrowing is LOUD: both counts on screen, and a sentence saying
 // how many are hidden. A silent narrowing must fail here.
+// A piece is "on screen" as its name in the text OR as its photo (the img's
+// alt is the name) — the fixture carries real photos now, and a look card
+// draws the collage rather than printing its pieces.
+const pieceOnScreen = (name) => page.evaluate((n) =>
+  document.body.innerText.includes(n) || !![...document.querySelectorAll("img")].find(i => i.alt === n), name);
 await check("Saved: standing in NYC, the list narrows itself and says so", async () => {
   const text = await page.evaluate(() => document.body.innerText);
   if (!/All looks \(2\)/.test(text) || !/Wearable now \(1\)/.test(text)) {
@@ -388,7 +410,7 @@ await check("Saved: standing in NYC, the list narrows itself and says so", async
   if (!/1 look is hidden/.test(text)) {
     throw new Error("the list narrowed itself without saying so — this is how looks read as lost");
   }
-  if (text.includes(AZ_LOOK_PIECE)) {
+  if (await pieceOnScreen(AZ_LOOK_PIECE)) {
     throw new Error("the Arizona look is still listed — the default did not narrow");
   }
 });
@@ -410,7 +432,7 @@ await check("Saved: All looks brings the Arizona look back, with its pieces", as
   await clickText("button", "All looks");
   await page.waitForTimeout(700);
   const text = await page.evaluate(() => document.body.innerText);
-  if (!text.includes(AZ_LOOK_PIECE)) {
+  if (!(await pieceOnScreen(AZ_LOOK_PIECE))) {
     throw new Error(`the Arizona piece "${AZ_LOOK_PIECE}" is missing from the saved look`);
   }
   if (/no longer in your closet|deleted from your wardrobe/.test(text)) {
@@ -479,7 +501,7 @@ await check("Saved → History shows a worn Arizona look by default", async () =
   await clickText("button", "History");
   await page.waitForTimeout(900);
   const text = await page.evaluate(() => document.body.innerText);
-  if (!text.includes(AZ_LOOK_PIECE)) {
+  if (!(await pieceOnScreen(AZ_LOOK_PIECE))) {
     throw new Error("History hid a worn look — a record must not narrow itself to the current closet");
   }
   if (/looks? (is|are) hidden/.test(text)) {
@@ -530,12 +552,35 @@ await check("Plan a trip → Preview looks builds every day", async () => {
   const err = text.match(/(Couldn't build the preview[^\n]*|No outfits could be built[^\n]*)/);
   if (err) throw new Error(`the preview reported an error: ${err[1]}`);
   if (!/ITEMS TO PACK/.test(text)) throw new Error("no day cards rendered after Preview looks");
+  // Owner, 2026-09-22: "Nothing is really loading here" — every tile blank.
+  // Each piece on a day card must have PAINTED its photo, not merely mounted
+  // an <img>. Polls up to 6 s: the crop is real work.
+  let tiles = [];
+  for (let i = 0; i < 12; i++) {
+    tiles = await page.evaluate(() => [...document.querySelectorAll('button[title^="Swap "] img')]
+      .map(img => ({ name: img.alt, painted: img.complete && img.naturalWidth > 0 })));
+    if (tiles.length && tiles.every(t => t.painted)) break;
+    await page.waitForTimeout(500);
+  }
+  if (!tiles.length) throw new Error("the day cards hold no piece tiles");
+  const blank = tiles.filter(t => !t.painted);
+  if (blank.length) throw new Error(`${blank.length} of ${tiles.length} tiles never painted their photo (${blank.slice(0, 3).map(t => t.name).join(", ")})`);
 });
-await check("Plan a trip → Save trip lands back on the month", async () => {
+await check("Plan a trip → Save trip opens the new trip", async () => {
   await clickText("button", "Save trip");
   await page.waitForTimeout(1500);
   const text = await page.evaluate(() => document.body.innerText);
   if (/PLAN A TRIP/.test(text)) throw new Error("the sheet is still open after Save trip");
+  if (/Couldn't save the trip/.test(text)) throw new Error("Save trip reported a failure");
+  // The app lands her IN the trip she just made (the mock returns the row).
+  if (!/Packing|Looks|Suitcase|Start trip/i.test(text)) throw new Error("the new trip's screen did not open after Save trip");
+  // The trip screen's own Back ("← Back to Calendar"), not the nav's "← Back"
+  // to Home, which sorts first in the DOM.
+  const backed = await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find(b => /Back to Calendar/.test(b.textContent || "")); if (!b) return false; b.click(); return true; });
+  if (!backed) throw new Error("no Back to Calendar on the new trip's screen");
+  await page.waitForTimeout(800);
+  const after = await page.evaluate(() => document.body.innerText);
+  if (!/\b(January|February|March|April|May|June|July|August|September|October|November|December) 20\d\d\b/.test(after)) throw new Error("Back did not return to the month");
 });
 await check("Planner → open the trip", async () => {
   const opened = await page.evaluate(() => {

@@ -1,12 +1,27 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-22**, after the trip-planner fix and Most worn by room. The session log below
+Refreshed **2026-09-22**, after the trip-planner fix, Most worn by room, and the photo-cache fix. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-22 · "Nothing is really loading here": photos were served no-cache since March; a failed trip save now says so
+
+**Owner, screenshot of the Plan a trip sheet:** every tile blank. Logs first: the same photo requested 6–9× a minute, all 200s; the bucket's metadata had `cacheControl: no-cache` on all 1,129 objects because the raw REST upload never sent the header. Each `<img>` mount re-downloaded the full photo; the sheet re-renders on every tap and every focus refetch; on a phone the loads never finished. CHANGELOG has the detail. To carry:
+
+1. **`PHOTO_CACHE_CONTROL` goes on every storage upload** (`lib/supabase.js`); `test:storage` fails any upload path without it. The `?v=` stamp on photo URLs and the hashed `?v=` on thumb URLs are what make a year safe — **never mint a photo URL without one.** Migration 0037 backfilled the bucket (applied live, verified).
+2. **A trip that fails to save pins nothing and says why** beside the Save button; the failure lands in `ai_errors` as `trip_save`. Her save that night wrote three days and no trip; no request reached Supabase, so the cause is not known — the next `trip_save` row will say.
+3. **The render walk serves real cutout PNGs** (`fixtures/cutout-png.mjs`) so TrimmedImage's real path runs, and asserts every trip tile painted. Register a more specific Playwright route AFTER the catch-all; the newest route wins.
+
+**Watch-items:**
+- **Her next Plan a trip:** the first preview still downloads each new photo once (~28 × 250 kB on a cold device); everything after is instant. If tiles are still blank on the first preview after a hard reload, that is the first download, not the bug — a second Preview tap is the tell.
+- **Sep 25–27 (Juliette's birthday):** three `planned_outfits` rows with `source = 'trip'` and no trip row. Hers to keep (they are real day plans) or clear from the day modal.
+- **The thumb path for tiles is the next win:** a 46-px tile loads the 1000-px photo. `Thumb.jsx` knows which pieces have a 256-px thumb; giving `TrimmedImage` a `fallbackSrc` and handing the trip tiles the thumb would cut a cold preview from ~7 MB to ~1.5 MB. Not done here — the cache fix is the root, and the thumb path needs the onerror fallback first.
+
+**Verified before push:** `npm test` (44 suites), `npm run build`, `npm run smoke` green (31 walk steps). Live: 1,129 objects at `max-age=31536000`.
 
 ### 2026-09-22 · Most worn reads by room (Work / Work Dinner / Casual / Dinner), swim never ranked
 

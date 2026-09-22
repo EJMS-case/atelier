@@ -24,7 +24,7 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (43 suites, no network)
+npm test           # full suite (44 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
 npm run test:render     # just the render walk (31 steps, headless, mocked REST)
@@ -345,6 +345,14 @@ reintroduce a `USING (true)` policy.
   inside `App`.
 - Break-glass rollback for every policy change is written at the top of each
   migration file. `0030` and `0031` are the ones that can lock the owner out.
+- **Photos and thumbs are uploaded with `Cache-Control: max-age=31536000`**
+  (`PHOTO_CACHE_CONTROL`, sent by every upload in `lib/supabase.js`; migration
+  0037 backfilled the bucket). The raw storage REST API stores `no-cache`
+  unless told otherwise, and for six months every `<img>` mount re-downloaded
+  the full photo — "Nothing is really loading here" (2026-09-22). A year is
+  safe only because the URL changes with the bytes: `uploadImage` stamps
+  `?v=<now>`, `thumbUrl` hashes the photo URL. Never mint a photo URL without
+  the stamp; `test:storage` fails an upload path without the header.
 
 Still open, deliberately:
 

@@ -14,6 +14,18 @@ import { selfHealingWrite } from "./selfHealingWrite.js";
 
 export { SUPABASE_URL, SUPABASE_KEY, BUCKET };
 
+// Every photo and thumb is uploaded with this Cache-Control. Without the
+// header the storage REST API stores `no-cache`, and the browser re-downloads
+// the full 200–400 kB photo EVERY time an <img> mounts — which is what "nothing
+// is really loading" in the trip sheet was (owner, 2026-09-22): each tap
+// re-rendered the sheet, each render re-fetched every tile, and on a phone the
+// loads never finished. Her edge logs showed the same photo requested 6–9× in
+// a minute. A year is safe because the URL is the cache key and the URL
+// changes when the bytes do: uploadImage stamps ?v=<now> on every upload, and
+// thumbUrl hashes the photo URL into its own ?v=. Migration 0037 set the same
+// value on every object uploaded before this header existed.
+export const PHOTO_CACHE_CONTROL = "max-age=31536000";
+
 // `apikey` still identifies the project and is always the anon key.
 // `Authorization` carries the user's session when signed in, and falls back to
 // the anon key when signed out — so a signed-out client behaves exactly as it
@@ -224,7 +236,7 @@ export const sb = {
         if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
         const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${itemId}`, {
           method: "POST",
-          headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true" },
+          headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true", "cache-control": PHOTO_CACHE_CONTROL },
           body: blob,
         });
         // Cache-buster: the storage path is stable (same itemId), so without a
@@ -244,7 +256,7 @@ export const sb = {
     const { blob, mime } = dataUrlToBlob(base64DataUrl, "image/png");
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/thumbs/${itemId}`, {
       method: "POST",
-      headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true" },
+      headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true", "cache-control": PHOTO_CACHE_CONTROL },
       body: blob,
     });
     if (!res.ok) throw new Error(`Thumb upload failed (HTTP ${res.status})`);
@@ -682,7 +694,7 @@ export const sb = {
     const path = `inspiration/${id}`;
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
       method: "POST",
-      headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true" },
+      headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true", "cache-control": PHOTO_CACHE_CONTROL },
       body: blob,
     });
     if (!res.ok) throw new Error(`Inspiration upload failed: ${res.status}`);

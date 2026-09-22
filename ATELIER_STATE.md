@@ -18,7 +18,7 @@ The register is quiet luxury on a Dark Winter palette (The Row, Totême, Khaite;
 | AI | Anthropic API called directly from the browser with her own key (stored per device, never in the database) |
 | Weather | Open-Meteo (keyless): 16-day forecasts, geocoding for trips |
 | Closet size | ~540 pieces across the two closets (~460 in NYC), roughly 105 saved looks |
-| History | ~120 merged PRs since mid-2026; a 43-suite offline test battery plus a headless signed-in render walk |
+| History | ~120 merged PRs since mid-2026; a 44-suite offline test battery plus a headless signed-in render walk |
 
 ---
 
@@ -178,7 +178,7 @@ Every save teaches. Every word she reads is written to her ("you", never "she").
 
 ## 7. Data and security
 
-**Tables**: `wardrobe_items`, `closets`, `sets`, `outfit_logs` (saved and worn looks, with layout and a `source` marking looks she built herself), `look_feedback`, `look_edits`, `planned_outfits`, `trips`, `trip_items`, `favorites`, `inspiration_images`, `stylist_chats`, `user_settings` (key/value: fingerprint, rotation state, standing preferences, chat lessons, trend brief, shopping list, brand finds, verdicts, last gap analysis, Brand Atlas result), and `ai_errors` (failures and timing rows). Photos live in the `wardrobe-images` bucket with 256-pixel grid thumbnails.
+**Tables**: `wardrobe_items`, `closets`, `sets`, `outfit_logs` (saved and worn looks, with layout and a `source` marking looks she built herself), `look_feedback`, `look_edits`, `planned_outfits`, `trips`, `trip_items`, `favorites`, `inspiration_images`, `stylist_chats`, `user_settings` (key/value: fingerprint, rotation state, standing preferences, chat lessons, trend brief, shopping list, brand finds, verdicts, last gap analysis, Brand Atlas result), and `ai_errors` (failures and timing rows). Photos live in the `wardrobe-images` bucket with 256-pixel grid thumbnails, every object served with a one-year `Cache-Control` (the `?v=` stamp on each URL is the cache key, so a replaced photo is a new URL).
 
 **Security**: sign-in is required; every application table is `FOR ALL TO authenticated` pinned to her user id, and the photo bucket accepts writes only from authenticated users. The anonymous role returns zero rows from every table. API keys are per device in localStorage and are never synced through the database (that sync was the hole, closed 2026-08-28/29). The committed Supabase anon key identifies the project and is not an access boundary.
 
