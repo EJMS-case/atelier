@@ -51,7 +51,10 @@ function analyzeWardrobe(items, outfitLogs) {
 }
 
 // ── STYLE INSIGHTS VIEW ───────────────────────────────────────────────────
-export default function StyleInsightsView({ items, apiKey, onBack }) {
+// `items` is what she can wear now (the counts, the anchors, the underused
+// piece); `wardrobe` is everything she owns, so a worn look that holds a piece
+// now in the other closet still resolves in the profile prompt (a record).
+export default function StyleInsightsView({ items, wardrobe, apiKey, onBack }) {
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState(null);
   const [outfitLogs, setOutfitLogs] = useState([]);
@@ -82,7 +85,7 @@ export default function StyleInsightsView({ items, apiKey, onBack }) {
     if (!apiKey) { setLocalErr("Add your Anthropic API key in Settings."); return; }
     setLocalErr("");
     startRun(RUN_KEYS.insightsProfile, ({ onPartial }) =>
-      streamStyleProfile(items, outfitLogs, analysis, apiKey, onPartial));
+      streamStyleProfile(items, outfitLogs, analysis, apiKey, onPartial, wardrobe));
   };
 
   if (loading) return (

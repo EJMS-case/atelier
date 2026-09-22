@@ -2570,7 +2570,7 @@ export default function App() {
 
       {/* ── INSIGHTS ── */}
       {view === "insights" && (
-        <StyleInsightsView items={available} apiKey={apiKey} onBack={() => setView("home")}/>
+        <StyleInsightsView items={available} wardrobe={wardrobe} apiKey={apiKey} onBack={() => setView("home")}/>
       )}
 
       {/* ── SHOPPING ── */}

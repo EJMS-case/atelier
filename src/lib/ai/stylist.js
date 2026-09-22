@@ -391,7 +391,11 @@ ${wardrobeItems ? "Fill in pairingCount, pairingItemIds (up to 5), and dimension
 }
 
 // ── STYLE PROFILE (editorial monthly snapshot) ──────────────────────────────
-function buildProfilePrompt(items, outfitLogs, analysis, learned = []) {
+// `wardrobe` is everything she owns, for resolving a worn look (a record); `items`
+// is what she can wear now. #217 read `wardrobe` here without passing it in,
+// so a profile with any wear history threw a ReferenceError (caught 2026-09-22
+// by scripts/undeclared.test.mjs, alongside the trip sheet).
+function buildProfilePrompt(items, outfitLogs, analysis, learned = [], wardrobe = null) {
   const month = new Date().toLocaleDateString("en-US", { month:"long", year:"numeric" });
   const catDist = Object.entries(analysis.catCounts).map(([c, n]) => `${c}: ${n}`).join(", ");
   const colorPairs = analysis.colorPairs.map(p => `${p.pair} (${p.count}x)`).join(", ") || "none yet";
@@ -413,7 +417,7 @@ export async function streamStyleProfile(items, outfitLogs, analysis, apiKey, on
   // The same funnel every surface reads — the profile should know what she's
   // drawn to and what she wants, not just the counts.
   const { blocks: learned } = await personalGrounding({ wardrobe: wardrobe || items, available: items, fingerprintMax: 600, maxAutoPairs: 2 }).catch(() => ({ blocks: [] }));
-  const prompt = buildProfilePrompt(items, outfitLogs, analysis, learned);
+  const prompt = buildProfilePrompt(items, outfitLogs, analysis, learned, wardrobe);
   const res = await anthropicFetch(
     { model: MODEL_STANDARD, max_tokens: 300, stream: true, messages: [{ role: "user", content: prompt }] },
     { apiKey },

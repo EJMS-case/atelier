@@ -196,6 +196,10 @@ await page.route("**/storage/v1/**", route => route.fulfill({ status: 200, body:
 await page.route("**/api.anthropic.com/**", route => route.abort());
 await page.route("**/api.open-meteo.com/**", route =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ daily: { time: [], temperature_2m_max: [] } }) }));
+// The trip sheet geocodes its destination before it forecasts; answer with one
+// hit so the walk exercises the same path a typed city takes on her phone.
+await page.route("**/geocoding-api.open-meteo.com/**", route =>
+  route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35, timezone: "Europe/Paris", country: "France" }] }) }));
 
 let failed = 0;
 const check = async (label, fn) => {
@@ -494,6 +498,35 @@ await check("Style Me", tab("Style Me"));
 // open, that is a failure of the itinerary and it says so, rather than
 // quietly clicking nothing and reporting a tick.
 await check("back to Planner", tab("Planner"));
+
+// The trip PLANNER is the "✦ Plan a trip" sheet, not the trip detail below —
+// and until 2026-09-22 nothing walked it. Owner: "My trip planner stopped
+// working!" A Preview that throws, or a sheet that never mounts, leaves no
+// trace anywhere (no REST write, no ai_errors row), so this walk is the only
+// check that can see it. It refuses to pass vacuously: the day cards must
+// render with an "ITEMS TO PACK" header, and any previewError is a failure.
+await check("Planner → Plan a trip sheet opens", async () => {
+  await clickText("button", "✦ Plan a trip");
+  await page.waitForTimeout(500);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/PLAN A TRIP/.test(text)) throw new Error("the Plan a trip sheet did not open");
+});
+await check("Plan a trip → Preview looks builds every day", async () => {
+  await page.fill('input[placeholder^="e.g. Disneyland"]', "Paris");
+  await page.waitForTimeout(600);
+  await clickText("button", "Preview looks");
+  await page.waitForTimeout(2500);
+  const text = await page.evaluate(() => document.body.innerText);
+  const err = text.match(/(Couldn't build the preview[^\n]*|No outfits could be built[^\n]*)/);
+  if (err) throw new Error(`the preview reported an error: ${err[1]}`);
+  if (!/ITEMS TO PACK/.test(text)) throw new Error("no day cards rendered after Preview looks");
+});
+await check("Plan a trip → Save trip lands back on the month", async () => {
+  await clickText("button", "Save trip");
+  await page.waitForTimeout(1500);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (/PLAN A TRIP/.test(text)) throw new Error("the sheet is still open after Save trip");
+});
 await check("Planner → open the trip", async () => {
   const opened = await page.evaluate(() => {
     // The trip strip renders a "View →" button. Clicking the strip itself does
