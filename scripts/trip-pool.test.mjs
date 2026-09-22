@@ -155,8 +155,14 @@ section("Misc is never readmitted");
 // the middle of a trip." / "When I edit a look within an Arizona vacation,
 // only Arizona closet + anything I packed should be included."
 {
-  const { homeClosetFor, isHomeTravelDay, poolForTripDay, TRAVEL_DAY } = await import("../src/features/planner/tripPools.js");
+  const { homeClosetFor, isHomeTravelDay, poolForTripDay, defaultTripDayOccasion, TRAVEL_DAY } = await import("../src/features/planner/tripPools.js");
   section("tripPools: home closet, travel days, and the edit pool");
+
+  assert(defaultTripDayOccasion(0, 5) === TRAVEL_DAY, "day one defaults to Travel Day");
+  assert(defaultTripDayOccasion(4, 5) === TRAVEL_DAY, "the last day defaults to Travel Day");
+  assert(defaultTripDayOccasion(2, 5) === "Casual", "a day between defaults to Casual");
+  assert(defaultTripDayOccasion(0, 1) === TRAVEL_DAY, "a one-day trip is a Travel Day");
+  assert(defaultTripDayOccasion(0, 0) === "Casual", "no days → Casual, never a throw");
 
   const closets = [{ id: DEFAULT_CLOSET_ID, name: "NYC", is_default: true }, { id: ARIZONA_CLOSET_ID, name: "Arizona", is_default: false }];
   assert(homeClosetFor(closets, ARIZONA_CLOSET_ID) === DEFAULT_CLOSET_ID, "home for an Arizona trip is NYC");

@@ -22,15 +22,19 @@
 import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
+import { defaultTripDayOccasion } from "./tripPools.js";
 
 // ── Default occasion seed ──────────────────────────────────────────────────
 // We used to gate this through a "vibe" concept (Casual / Theme Park / Beach
 // / Smart Casual / Business / Active / Mixed) that picked a pattern of
 // occasions. After per-day occasion + per-day activity landed, vibe was
 // redundant — the user can just override each day directly. Removed.
-// New default: every day starts as "Casual"; user adjusts per-day.
+// Default: the first and last day are Travel Days (she flies in, she flies
+// home — owner, 2026-09-22), every day between starts as "Casual"; she
+// adjusts per day. tripPools.defaultTripDayOccasion is the one reader.
 export function defaultOccasions(dayCount) {
-  return Array.from({ length: dayCount }, () => "Casual");
+  const n = Math.max(0, Math.floor(dayCount) || 0);
+  return Array.from({ length: n }, (_, i) => defaultTripDayOccasion(i, n));
 }
 
 // ── RELAXED DESTINATIONS ─────────────────────────────────────────────────────
@@ -107,13 +111,14 @@ function tripTouchesDecember(startDate, dayCount) {
 
 // Which day indices get a Dinner. Spread EVENLY across the trip rather than
 // clustered (four dinners in a row is one dinner wardrobe, not four), and off
-// the arrival day for any trip long enough to have a spare day — you land,
-// you don't go straight out. Placement is the midpoint of each of N equal
-// slices of the eligible window, which keeps every gap between consecutive
-// dinners within 1 day of every other gap.
+// the travel days at either end — the first and last day are Travel Days by
+// default (owner, 2026-09-22), so a trip shorter than three days has no
+// dinner night unless she picks one. Placement is the midpoint of each of N
+// equal slices of the eligible window, which keeps every gap between
+// consecutive dinners within 1 day of every other gap.
 export function dinnerDayIndices(dayCount, nights) {
-  const offset = dayCount >= 3 ? 1 : 0;            // skip the arrival day
-  const span = dayCount - offset;
+  const offset = 1;                                // skip the arrival day…
+  const span = Math.max(0, dayCount - 2);          // …and the departure day
   const n = clamp(nights, 0, span);
   const out = [];
   for (let k = 0; k < n; k++) {
@@ -140,7 +145,7 @@ export function dinnerDayIndices(dayCount, nights) {
  */
 export function tripDayOccasions({ dayCount, startDate, relaxed = false } = {}) {
   const days = Math.max(0, Math.floor(dayCount) || 0);
-  const plan = Array.from({ length: days }, () => "Casual");
+  const plan = defaultOccasions(days);
   if (!relaxed || days === 0) return plan;
   const december = tripTouchesDecember(startDate, days);
   const nights = december
@@ -648,11 +653,16 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     : Array.from({ length: dayCount }, () => fallbackActivity);
 
   // Pool of eligible items per day, filtered by that day's weather + activity.
+  // opts.dayItems[d], when given, is what THAT day may draw from instead of
+  // `items` (tripPools.js: a Travel Day at either end draws from home); the
+  // capsule state below still spans `items`, the union of every day.
+  const dayItems = Array.isArray(opts.dayItems) ? opts.dayItems : null;
   const dayPools = dailyHighsF.map((hi, d) => {
     const wxBucket = opts.weather || bucketFromHigh(hi);
     const dayActivity = activities[d] || fallbackActivity;
     const actFilter = ACTIVITY_FILTERS[dayActivity] || ACTIVITY_FILTERS.Sightseeing;
-    let pool = filterByWeather(items, wxBucket).filter(it => {
+    const source = Array.isArray(dayItems?.[d]) ? dayItems[d] : items;
+    let pool = filterByWeather(source, wxBucket).filter(it => {
       if (!it.category) return false;
       // Default-banned: swim + loungewear unless the activity explicitly
       // re-admits them (Beach / Resort want swim + cover-ups).

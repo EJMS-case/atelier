@@ -956,26 +956,33 @@ section("tripDayOccasions");
   const dinnerIdx   = (plan) => plan.map((o, i) => o === "Dinner" ? i : -1).filter(i => i >= 0);
   const AUG = "2026-08-15", DEC = "2026-12-05";
 
-  // A non-relaxed trip is unchanged: all Casual, exactly like defaultOccasions.
+  // The first and last day are Travel Days (owner, 2026-09-22: "I'd rather
+  // the first and last day of a trip default to travel day"); a non-relaxed
+  // trip is Casual between them, December included.
+  const TD = "Travel Day";
   for (const days of [1, 2, 5, 7, 10]) {
     const plan = tripDayOccasions({ dayCount: days, startDate: DEC });
-    assert(plan.length === days && plan.every(o => o === "Casual"),
-      `non-relaxed ${days}-day trip is all Casual (December included)`);
+    assert(plan.length === days && plan[0] === TD && plan[days - 1] === TD,
+      `non-relaxed ${days}-day trip starts and ends on a Travel Day`);
+    assert(plan.slice(1, -1).every(o => o === "Casual"),
+      `non-relaxed ${days}-day trip is Casual between (December included)`);
     assert(JSON.stringify(plan) === JSON.stringify(defaultOccasions(days)),
       `non-relaxed ${days}-day plan matches defaultOccasions exactly`);
   }
-  assert(JSON.stringify(defaultOccasions(7)) === JSON.stringify(Array(7).fill("Casual")),
-    "defaultOccasions itself still returns all Casual for its existing callers");
+  assert(JSON.stringify(defaultOccasions(7)) === JSON.stringify([TD, "Casual", "Casual", "Casual", "Casual", "Casual", TD]),
+    "defaultOccasions: Travel Day, five Casual days, Travel Day");
+  assert(JSON.stringify(defaultOccasions(1)) === JSON.stringify([TD]), "a one-day trip is a Travel Day");
+  assert(JSON.stringify(defaultOccasions(0)) === "[]", "zero days is an empty plan");
 
   // Normal month: N = clamp(round(dayCount/2), 1, 4).
   const seven = tripDayOccasions({ dayCount: 7, startDate: AUG, relaxed: true });
   assert(seven.length === 7, "7-day relaxed trip returns 7 days");
   assert(dinnerCount(seven) === 4, `7-day relaxed trip gets exactly 4 dinners (got ${dinnerCount(seven)})`);
-  assert(seven.filter(o => o === "Casual").length === 3, "the other 3 days are Casual");
-  assert(seven.every(o => o === "Casual" || o === "Dinner"), "only Casual and Dinner are emitted");
-  assert(seven[0] === "Casual", "no dinner on the arrival day");
-  assert(dinnerCount(tripDayOccasions({ dayCount: 2, startDate: AUG, relaxed: true })) === 1,
-    "2-day relaxed trip gets 1 dinner");
+  assert(seven.filter(o => o === "Casual").length === 1, "the one other interior day is Casual");
+  assert(seven.every(o => o === "Casual" || o === "Dinner" || o === TD), "only Travel Day, Casual and Dinner are emitted");
+  assert(seven[0] === TD && seven[6] === TD, "the arrival and departure days are Travel Days, never dinners");
+  assert(dinnerCount(tripDayOccasions({ dayCount: 2, startDate: AUG, relaxed: true })) === 0,
+    "a 2-day relaxed trip is two Travel Days — no dinner night unless she picks one");
   assert(dinnerCount(tripDayOccasions({ dayCount: 5, startDate: AUG, relaxed: true })) === 3,
     "5-day relaxed trip gets 3 dinners");
   assert(dinnerCount(tripDayOccasions({ dayCount: 10, startDate: AUG, relaxed: true })) === 4,
@@ -986,9 +993,11 @@ section("tripDayOccasions");
   // December (holiday season): N = clamp(round(dayCount*0.7), 2, 6).
   const dec7 = tripDayOccasions({ dayCount: 7, startDate: DEC, relaxed: true });
   assert(dinnerCount(dec7) === 5, `December 7-day relaxed trip gets 5 dinners (got ${dinnerCount(dec7)})`);
-  assert(dec7[0] === "Casual", "December trips still skip the arrival day");
-  assert(dinnerCount(tripDayOccasions({ dayCount: 2, startDate: DEC, relaxed: true })) === 2,
-    "December 2-day trip floors at 2 dinners");
+  assert(dec7[0] === TD && dec7[6] === TD, "December trips still start and end on a Travel Day");
+  assert(dinnerCount(tripDayOccasions({ dayCount: 2, startDate: DEC, relaxed: true })) === 0,
+    "a December 2-day trip has no interior day to dine on");
+  assert(dinnerCount(tripDayOccasions({ dayCount: 3, startDate: DEC, relaxed: true })) === 1,
+    "a December 3-day trip dines on its one interior day");
   assert(dinnerCount(tripDayOccasions({ dayCount: 10, startDate: DEC, relaxed: true })) === 6,
     "December 10-day trip caps at 6 dinners");
   // OVERLAPPING December counts too — the holiday season is the reason.
@@ -1000,7 +1009,9 @@ section("tripDayOccasions");
     "a November trip that never reaches December is a normal month");
   // Date parsing must be LOCAL, not UTC — new Date("2026-12-01") is UTC
   // midnight, which reads as Nov 30 in every western timezone.
-  assert(dinnerCount(tripDayOccasions({ dayCount: 3, startDate: "2026-12-01", relaxed: true })) === 2,
+  // Seven days: December gives 5 dinner nights, November 4 — a length short
+  // enough to fit in the interior of the trip (the ends are Travel Days).
+  assert(dinnerCount(tripDayOccasions({ dayCount: 7, startDate: "2026-12-01", relaxed: true })) === 5,
     "an ISO Dec 1 start parses as December, not Nov 30");
   assert(dinnerCount(tripDayOccasions({ dayCount: 7, startDate: new Date(2026, 11, 5), relaxed: true })) === 5,
     "a Date object start works as well as an ISO string");
@@ -1025,7 +1036,7 @@ section("tripDayOccasions");
       for (const relaxed of [true, false]) {
         const plan = tripDayOccasions({ dayCount: days, startDate: iso, relaxed });
         assert(plan.length === days && !plan.includes("Lounge") &&
-               plan.every(o => o === "Casual" || o === "Dinner"),
+               plan.every(o => o === "Casual" || o === "Dinner" || o === "Travel Day"),
           `no Lounge ever (${days}d ${iso} relaxed=${relaxed})`);
       }
     }
@@ -1034,9 +1045,9 @@ section("tripDayOccasions");
   for (const days of [1, 2, 3, 4]) {
     for (const iso of [AUG, DEC]) {
       const plan = tripDayOccasions({ dayCount: days, startDate: iso, relaxed: true });
-      const cap = days >= 3 ? days - 1 : days;
+      const cap = Math.max(0, days - 2); // the ends are Travel Days
       assert(dinnerCount(plan) <= cap, `${days}d ${iso}: dinners fit the eligible days`);
-      if (days >= 3) assert(plan[0] === "Casual", `${days}d ${iso}: arrival day stays Casual`);
+      if (days >= 1) assert(plan[0] === "Travel Day" && plan[days - 1] === "Travel Day", `${days}d ${iso}: the ends are Travel Days`);
     }
   }
   assert(tripDayOccasions({ dayCount: 0, relaxed: true }).length === 0, "a 0-day trip is an empty plan");

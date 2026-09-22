@@ -92,7 +92,7 @@ Conventions worth knowing:
   **A trip day's `available` comes from `features/planner/tripPools.js`**
   (owner, 2026-09-22): a build (`pack`) may pick from destination ∪ home, an
   edit (`edit`) from destination ∪ suitcase ∪ the look, and a Travel Day on
-  the first or last day from home. Every surface that builds or edits a trip
+  the first or last day from home (the ends of a trip default to Travel Day). Every surface that builds or edits a trip
   day calls `poolForTripDay`; don't compose a trip pool by hand.
 - **The stylist line is the one text field a piece has** (owner, 2026-09-18).
   Edit and Bulk Add write `stylist_line`, capped at `CURATED_NOTES_MAX`;

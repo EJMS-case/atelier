@@ -2,6 +2,32 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The first and last day of a trip default to Travel Day — 2026-09-22
+
+### Why
+
+Owner: *"I'd rather the first and last day of a trip default to travel day."* Until now every day of a new trip started as Casual (a relaxed destination laid dinner nights over that), and Travel Day was only ever hers to pick.
+
+### Changed
+
+- **`defaultTripDayOccasion(dayIdx, dayCount)` in `tripPools.js`** is the one reader: the first and last day are Travel Days (a one-day trip is one), every day between is Casual. `tripPacker.defaultOccasions` and `tripDayOccasions` build on it, and the relaxed-destination dinner nights are laid over the **interior** days only — a two-day trip is two Travel Days with no dinner night unless she picks one; a three-day trip dines on its middle day.
+- **The Plan a trip sheet** previews with that rhythm, and because the ends are Travel Days, **each day draws from its own pool**: `buildDailyOutfits` takes `opts.dayItems` (one list per day) and the sheet hands it `poolForTripDay` per day, so day one and the last day dress from her home closet while the capsule is still measured across the whole trip.
+- **The trip screen** uses the same default for a day with no occasion yet: the empty-day select, Generate, Generate all, ⊞ Build's pool, and the prior-days context all read `occasionFor(iso)`.
+
+### Tests
+
+- `test:packer`: the rhythm's expectations rewritten for Travel Day ends (dinners never on the ends; a 2-day trip has none; December still counts; the parsing check uses a 7-day trip where December and November differ).
+- `test:trippool` +5 (42): the default per position.
+- Render walk: the Preview step reads every day card's occasion select and asserts Travel Day at both ends and never between (32 steps).
+
+### Downstream, four ways
+
+*Efficiency* — one extra pool computation per day at preview, on rows already in memory. *Effectiveness* — the default she asked for reaches the sheet, the trip screen and the packer from one reader; the home-closet rule for travel days now holds in the whole-trip build, not only in single-day rebuilds. *Speed* — nothing on a tap path. *Education* — none new.
+
+### Verified
+
+`npm test` (44 suites), `npm run build`, `npm run smoke` (32 walk steps) green.
+
 ## [Unreleased] — A trip day's pool, in one place: Travel Days start and end at home; an edited trip look offers the destination and the suitcase only — 2026-09-22
 
 ### Why

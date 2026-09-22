@@ -23,7 +23,7 @@ import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
-import { homeClosetFor, poolForTripDay } from "./tripPools.js";
+import { homeClosetFor, poolForTripDay, defaultTripDayOccasion } from "./tripPools.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 
@@ -337,6 +337,10 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     lookIds, pins: mustIncludeIds, occasion,
     dayIdx: days.indexOf(iso), dayCount: days.length, mode,
   });
+  // A day's occasion before she says otherwise: Travel Day at either end
+  // (owner, 2026-09-22), Casual between — the same default the sheet lays
+  // down, so Generate on an empty first day dresses her for the airport.
+  const occasionFor = (iso) => dayOccasion[iso] || defaultTripDayOccasion(days.indexOf(iso), days.length);
   const editPoolIds = (iso, occasion, lookIds) => poolForDay(iso, occasion, { mode: "edit", lookIds }).map(it => it.id);
 
   // ── Trip_items reconcile (wave 2 — B4) ────────────────────────────────────
@@ -793,7 +797,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     days
       .filter(d => d !== currentIso && plansMap[d])
       .flatMap(d => outfitsOf(plansMap[d]).map(o => ({
-        occasion: o.occasion || plansMap[d].occasion || dayOccasion[d] || "Casual",
+        occasion: o.occasion || plansMap[d].occasion || occasionFor(d),
         weather:  weatherForDay(d),
         itemIds:  o.items || [],
       })));
@@ -835,9 +839,9 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
         const used = new Set(existing.map(o => o.occasion).filter(Boolean));
         occasion = ["Dinner","Occasion","Lounge","Casual"].find(o => !used.has(o)) || "Dinner";
       } else if (outfitIdx == null) {
-        occasion = existing[0]?.occasion || dayOccasion[iso] || "Casual";
+        occasion = existing[0]?.occasion || occasionFor(iso);
       } else {
-        occasion = existing[outfitIdx]?.occasion || dayOccasion[iso] || "Casual";
+        occasion = existing[outfitIdx]?.occasion || occasionFor(iso);
       }
       const weather   = weatherForDay(iso);
       const priorDays = buildPriorDays(iso, plans);
@@ -885,7 +889,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     for (const iso of empty) {
       setGeneratingDay(iso);
       try {
-        const occasion  = dayOccasion[iso] || "Casual";
+        const occasion  = occasionFor(iso);
         const weather   = weatherForDay(iso);
         const priorDays = buildPriorDays(iso, running);
         const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
@@ -1426,7 +1430,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                       No look planned yet
                     </div>
                     <div style={{ padding: "8px 12px", borderTop: `1px solid ${PALETTE.line}`, display: "flex", gap: 6 }}>
-                      <select value={dayOccasion[iso] || "Casual"}
+                      <select value={occasionFor(iso)}
                         onChange={e => handleOccasionChange(iso, null, e.target.value)}
                         style={{ fontSize: 10, letterSpacing: "0.06em", border: `1px solid ${PALETTE.line}`, borderRadius: 4, padding: "5px 6px", background: "#fff", color: PALETTE.ink, cursor: "pointer" }}>
                         {OCCASIONS.map(o => <option key={o}>{o}</option>)}
@@ -1436,7 +1440,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                         ✦ Generate
                       </button>
                       {onBuildDay && (
-                        <button onClick={() => onBuildDay(iso, [], null, null, editPoolIds(iso, dayOccasion[iso] || "Casual", []))}
+                        <button onClick={() => onBuildDay(iso, [], null, null, editPoolIds(iso, occasionFor(iso), []))}
                           style={{ padding: "7px 12px", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                           ⊞ Build
                         </button>

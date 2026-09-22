@@ -1191,22 +1191,30 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
       if (!brief && destination.trim() && apiKey) {
         await fetchBrief();
       }
-      // Relaxed destination (her Arizona closet): Casual days with a few
-      // Dinner nights spread through the trip — more of them in December.
-      // Everywhere else this still returns all-Casual, exactly as
-      // defaultOccasions(dayCount) did.
+      // The first and last day are Travel Days (owner, 2026-09-22). Between
+      // them: Casual, and for a relaxed destination (her Arizona closet) a
+      // few Dinner nights spread through the trip — more of them in December.
       const occasions = tripDayOccasions({ dayCount, startDate: start, relaxed: destRelaxed });
       const dayIsos = Array.from({ length: dayCount }, (_, i) => addDaysIso(start, i));
       const highs = dayIsos.map(iso => perDayHigh(iso));
       // Per-day activity defaults to the trip-level activity for every day.
       // The user can override individual days from the preview cards.
       const activities = Array.from({ length: dayCount }, () => activity);
+      // Each day draws from its own pool (tripPools.js): the first and last
+      // day are Travel Days and dress from home; the days between from the
+      // trip's pool. `tripPool` stays the union the capsule is measured over.
+      const source = Array.isArray(wardrobe) && wardrobe.length ? wardrobe : available;
+      const dayItems = dayIsos.map((_, i) => poolForTripDay({
+        pool: tripPool, wardrobe: source, homeClosetId, destClosetId: destClosetId || null,
+        pins: mustIncludeIds, occasion: occasions[i], dayIdx: i, dayCount, mode: "pack",
+      }));
       const { dailyOutfits, poolSuits } = buildDailyOutfits(tripPool, highs, {
         occasions,
         activity,
         activities,
         preferItemIds,
         mustIncludeIds,
+        dayItems,
       });
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
       if (totalItems === 0) {

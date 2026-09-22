@@ -1,12 +1,22 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-22**, after the trip-planner fix, Most worn by room, the photo-cache fix, and the trip-day pool rule. The session log below
+Refreshed **2026-09-22**, after the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-22 · The first and last day of a trip default to Travel Day
+
+**Owner:** *"I'd rather the first and last day of a trip default to travel day."* `defaultTripDayOccasion` in `tripPools.js` is the reader; the packer's rhythm and the trip screen's fallbacks use it; dinner nights sit on interior days only. The sheet's whole-trip build now takes per-day pools (`buildDailyOutfits` `opts.dayItems`), so the Travel Day ends dress from home there too. CHANGELOG has the detail.
+
+**Watch-items:**
+- **A two-day trip previews as two Travel Days** and no dinner. If that reads as too literal for a weekend away, the lever is `dinnerDayIndices` (its window is `dayCount - 2`).
+- **Her next preview:** day one's look should be airport-ready from NYC pieces (the packer's Casual/Travel scoring: flats or sneakers, no heels, a tote or crossbody). If a Travel Day look reaches for a heel, `occasionPriorityRegex`'s default branch is the place — it treats Travel like Casual today.
+
+**Verified before push:** `npm test` (44 suites), `npm run build`, `npm run smoke` green (32 walk steps).
 
 ### 2026-09-22 · A trip day's pool in one place: Travel Days start and end at home; an edited trip look offers the destination and the suitcase only
 
