@@ -552,6 +552,14 @@ await check("Plan a trip → Preview looks builds every day", async () => {
   const err = text.match(/(Couldn't build the preview[^\n]*|No outfits could be built[^\n]*)/);
   if (err) throw new Error(`the preview reported an error: ${err[1]}`);
   if (!/ITEMS TO PACK/.test(text)) throw new Error("no day cards rendered after Preview looks");
+  // The first and last day default to Travel Day (owner, 2026-09-22); the
+  // days between to Casual. Read off the day cards' occasion selects.
+  const occ = await page.evaluate(() => [...document.querySelectorAll("select")]
+    .filter(s => [...s.options].some(o => o.text === "Travel Day") && !s.closest("label"))
+    .map(s => s.value));
+  if (occ.length < 3) throw new Error(`expected a look per day with an occasion select, found ${occ.length}`);
+  if (occ[0] !== "Travel Day" || occ[occ.length - 1] !== "Travel Day") throw new Error(`the first and last day did not default to Travel Day (${occ[0]} … ${occ[occ.length - 1]})`);
+  if (occ.slice(1, -1).some(o => o === "Travel Day")) throw new Error("a day between the ends defaulted to Travel Day");
   // Owner, 2026-09-22: "Nothing is really loading here" — every tile blank.
   // Each piece on a day card must have PAINTED its photo, not merely mounted
   // an <img>. Polls up to 6 s: the crop is real work.

@@ -40,6 +40,17 @@ export function homeClosetFor(closets, destClosetId = null) {
   return (list.find(c => c.is_default) || list[0])?.id || DEFAULT_CLOSET_ID;
 }
 
+// What a trip day is for before she says otherwise (owner, 2026-09-22: "I'd
+// rather the first and last day of a trip default to travel day"): the first
+// and last day are Travel Days — she flies in, she flies home — and every day
+// between is Casual. The packer's relaxed-destination rhythm lays its dinner
+// nights over the Casual days only.
+export function defaultTripDayOccasion(dayIdx, dayCount) {
+  const n = Number(dayCount) || 0;
+  if (n <= 0) return "Casual";
+  return dayIdx === 0 || dayIdx === n - 1 ? TRAVEL_DAY : "Casual";
+}
+
 // A Travel Day that starts or ends at home: the first or last day of the
 // trip (a one-day trip is both). Legacy "Travel" folds through the alias.
 export function isHomeTravelDay({ occasion, dayIdx, dayCount } = {}) {
