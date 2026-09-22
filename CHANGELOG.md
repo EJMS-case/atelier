@@ -2,6 +2,33 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — "My trip planner stopped working!": the Plan a trip sheet threw on open, and the check for that whole class — 2026-09-22
+
+### Why
+
+Owner, from her phone: *"My trip planner stopped working!"* Nothing recorded it: every Supabase call in her last 48 hours returned 200, `ai_errors` holds no trip row at all, and `npm test`, `npm run build` and the 27-step render walk were green on `main`. Her request trail told the story instead — the Planner opened, then the app rebooted three times in fifteen seconds, which is what a "Something hiccuped" card and a Reload tap look like from the server. The walk had never opened "✦ Plan a trip"; adding that step reproduced it on the fixtures at once: `ReferenceError: wardrobe is not defined`, thrown by `TripModal` the moment the sheet mounts.
+
+The pool-vocabulary sweep (#217, 2026-09-07) renamed the sheet's prop to `wardrobe: wardrobeProp` and dropped the `const wardrobe = …` fallback that its three siblings (`CalendarView`, `DayModal`, `TripDetailView`) kept. The body still read `wardrobe`. A free identifier is legal JavaScript, so esbuild built it; the unit suites test pure functions; `test:props` passed because the prop *was* declared; the walk never reached the sheet. Her last trip was created on 2026-08-29, before the rename, so the sheet had been broken for fifteen days and she was its first user.
+
+### Changed
+
+- **`TripModal` resolves against the wardrobe again** — the same one-line fallback the sibling components have (`wardrobeProp` when it has rows, else `available`). Plan a trip previews and saves.
+- **The monthly Style Profile prompt had the same break, from the same PR.** `buildProfilePrompt` in `lib/ai/stylist.js` read `wardrobe` to resolve her recent worn looks; the only declaration was a parameter of the calling function, so a profile with any wear history threw. It now takes `wardrobe` as an argument; `StyleInsightsView` accepts a `wardrobe` prop and `App` passes it (`test:props` in #217 had removed that prop as dead — it was dead only because the body's read was broken). A worn look holding a piece now in the other closet resolves in the profile, as a record should.
+- **`scripts/undeclared.test.mjs` (`npm run test:undeclared`, in `npm test`) is the check for the class.** It parses every file under `src/` with Babel's parser and scope tracker (already in `node_modules` via `@vitejs/plugin-react`; no new dependency) and fails on any identifier read that is neither bound in scope nor a known browser/JavaScript global (Vite `define` constants are read from `vite.config.js`). Validated on the real bug: the pre-fix `CalendarView` fails with five `wardrobe` reads, `main`'s `stylist.js` with two; the fixed tree is clean across 130 files. This is `no-undef` without a linter, and it is the grep that `test:props` cannot be: a rename that leaves the declaration intact and breaks a read.
+- **The render walk opens the trip planner** (+3 steps, 30): the sheet mounts, Preview looks builds day cards ("ITEMS TO PACK" on screen; any `previewError` fails the step), Save trip lands back on the month. The geocoder is mocked with one hit so the walk takes the same path a typed city takes on her phone.
+
+### Verified against her live rows
+
+Read-only dump of every table she has (546 pieces, 4 trips, 55 packing rows, 108 planned days, 121 worn looks) replayed through the built app in headless Chromium: Plan a trip → Paris previews 7 days with 12 items to pack and saves; → "Scottsdale, Arizona" auto-selects the Arizona closet, previews with 13 pieces already at the destination and nothing to pack, and saves; Disneyland, APM and Chile each open from their month's strip. No page error anywhere. Nothing was written to the live project.
+
+### Downstream, four ways
+
+*Efficiency* — no prompt change, no new fetch; the profile prompt reads the same rows it always meant to. `test:undeclared` runs in under a second. *Effectiveness* — the trip planner works, the monthly profile works, and the check holds every surface at once: a stale read anywhere in `src/` now fails `npm test` before it can ship. *Speed* — nothing on a tap path. *Education* — the profile prompt sees her worn looks whole again (an Arizona piece in a July NYC look was resolving to nothing), so the monthly read is written from all of her history.
+
+### Verified
+
+`npm test` (42 suites; `test:undeclared` new), `npm run build`, `npm run smoke` (30 walk steps) green. Live replay above.
+
 ## [Unreleased] — The stylist line is the one text field; "In Your Looks" rows open the day, the look, or the garment — 2026-09-18
 
 ### Why

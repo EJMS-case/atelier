@@ -1,12 +1,28 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-18**, after the stylist-line PR (#245). The session log below
+Refreshed **2026-09-22**, after the trip-planner fix. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-22 · "My trip planner stopped working!" — the Plan a trip sheet threw on open; `test:undeclared` is the check for the class
+
+**Owner, from her phone, one line.** No trace anywhere: REST all 200, no `ai_errors` trip row, every check green. Her request trail showed the Planner open and then three app boots in fifteen seconds — the Reload tap on the error card. The render walk had never opened "✦ Plan a trip"; the step reproduced it on the fixtures: `ReferenceError: wardrobe is not defined` in `TripModal`. #217 renamed the prop and dropped the fallback line; her last trip predated #217, so the sheet was broken for fifteen days before she reached it. CHANGELOG has the detail. To carry:
+
+1. **`scripts/undeclared.test.mjs` is in `npm test`.** Every identifier read under `src/` must be bound in scope or a known global. Babel parser + traverse, already in `node_modules`; validated on the real bug (pre-fix file red, fixed tree clean). It found a second break from #217 in the same minute: `buildProfilePrompt` (monthly Style Profile) read a `wardrobe` that was never passed. **A rename that keeps the declaration and breaks a read passes `test:props`; this is the check for that.**
+2. **The walk opens the trip planner now** (30 steps): sheet → Preview looks (day cards, no `previewError`) → Save trip. The sheet was the one planner surface not on the itinerary; #217's own lesson ("the walk is only as good as its itinerary") applied to #217.
+3. **`StyleInsightsView` takes `wardrobe` again**, passed from `App`. #217's `test:props` had removed it as "dead" — it was dead because the read that wanted it was broken, not because nothing needed it. When `test:props` reports a no-call-site prop, check whether a body read is failing before deleting the prop.
+4. **Verified on her live rows, read-only**: a dump of every table replayed through the built app (scratchpad only, not committed): Paris and Arizona trips preview and save, all three planning trips open. The method — dump, mock REST from the JSON, walk — settles "does it work on her data" in a minute; worth repeating for any planner change.
+
+**Watch-items:**
+- **Her next Plan a trip** should preview at once. If Preview reports "No outfits could be built", that is the packer and the pool, not this bug — the live replay built 7 days for Paris and Arizona with zero "may need more" flags.
+- **Her next Style Profile generation** ("✦ Style Profile" → generate) should stream; it threw for every profile with wear history since #217. If she never tapped it, she never saw that break.
+- **`test:undeclared` on a new browser global**: the allow-list in the script is explicit (`BROWSER_GLOBALS`); a new `window.*` API read bare fails the check with its name — add it there, once.
+
+**Verified before push:** `npm test` (42 suites), `npm run build`, `npm run smoke` green (30 walk steps).
 
 ### 2026-09-18 · PR #245 — the stylist line is the one text field; "In Your Looks" rows open the day, the look, or the garment
 

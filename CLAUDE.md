@@ -24,10 +24,10 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (41 suites, no network)
+npm test           # full suite (42 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (24 steps, headless, mocked REST)
+npm run test:render     # just the render walk (30 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -42,6 +42,12 @@ component not — passes even the render walk unless the walk opens that screen.
 `npm run test:props` (in `npm test`) is the check for that class: it pairs every
 JSX call site against the component's declared props, both directions. Run it
 after any rename, and add a walk step whenever a new screen or modal lands.
+
+The other half of a rename — the declaration changes, a READ of the old name
+survives in the body — passes `test:props` and the build, and throws only when
+that code runs (`TripModal` read `wardrobe` for fifteen days after #217 renamed
+it, 2026-09-22). `npm run test:undeclared` (in `npm test`) is the check: every
+identifier read under `src/` must be bound in scope or a known global.
 
 There is no linter or formatter configured — match the style of the file you
 are editing.

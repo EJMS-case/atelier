@@ -900,6 +900,12 @@ function DayModal({ iso, plan, available, wardrobe: wardrobeProp, outfitLogs, fo
 // All edits stay local until "Pin to calendar".
 
 function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, apiKey, onClose, onAssign }) {
+  // The wardrobe is what a committed choice RESOLVES against (a pin, a piece
+  // already at the destination); `available` is the fallback, exactly as
+  // CalendarView, DayModal and TripDetailView do it. #217 renamed the prop
+  // here and dropped this line, so the sheet threw a ReferenceError the
+  // moment it opened — "My trip planner stopped working!" (owner, 2026-09-22).
+  const wardrobe = (Array.isArray(wardrobeProp) && wardrobeProp.length) ? wardrobeProp : available;
   const [start, setStart] = useState(isoDate(new Date()));
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
