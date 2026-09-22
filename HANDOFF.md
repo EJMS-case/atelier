@@ -1,12 +1,26 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-22**, after the trip-planner fix. The session log below
+Refreshed **2026-09-22**, after the trip-planner fix and Most worn by room. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-22 · Most worn reads by room (Work / Work Dinner / Casual / Dinner), swim never ranked
+
+**Owner:** *"Most worn isn't accurate and shouldn't include swim - I'd rather it be separated by work / work dinner and casual and dinners only please. Everything else doesn't matter as much."* Rows first: Home's strip was four bags and a pump (all-occasion day counts), and the Look-Back card's September top pieces led with a swimsuit (the Arizona trip's daily pool look). CHANGELOG has the detail. To carry:
+
+1. **`WEAR_ROOMS` / `wearRoomsOf()` / `wearEligible()` in `features/wear/wearApi.js` are the one reader for "which room was this worn in" and "does this piece rank".** `deriveWearStats` counts distinct days per room; `mostWornByRoom` ranks per room. Any new "most worn" surface reads these — a hand-rolled count that forgets swim is the regression.
+2. **Non-room occasions still count toward totals** (cost per wear, neglected, the per-item history) — only the room strips ignore them. If she asks for a fifth room, add it to `WEAR_ROOMS` and every surface follows.
+3. **Legacy labels fold through `OCCASION_ALIASES`** (Executive → Work; Daytime, Lunch/Brunch → Casual). Her April logs carry those labels; they now read as their rooms.
+
+**Watch-items:**
+- **Her Home strip today** should read Work → Hazel slingback, Rhea bag, Whipstitch heel…; Casual → heeled thong sandal, Elsa slide…. If a room she expects is missing, the wear's occasion is outside the four (check `wearRoomsOf` on that row) — not a counting bug.
+- **A multi-look day with a day-level `occasions[]`**: the day's tags apply to every look on that day (rare in her rows; the array is a legacy of single-look days). If a dinner look on such a day reads as Work, the lever is the `occasions` argument in `deriveWearStats`.
+
+**Verified before push:** `npm test` (43 suites), `npm run build`, `npm run smoke` green (31 walk steps).
 
 ### 2026-09-22 · "My trip planner stopped working!" — the Plan a trip sheet threw on open; `test:undeclared` is the check for the class
 

@@ -18,7 +18,7 @@ The register is quiet luxury on a Dark Winter palette (The Row, Totême, Khaite;
 | AI | Anthropic API called directly from the browser with her own key (stored per device, never in the database) |
 | Weather | Open-Meteo (keyless): 16-day forecasts, geocoding for trips |
 | Closet size | ~540 pieces across the two closets (~460 in NYC), roughly 105 saved looks |
-| History | ~120 merged PRs since mid-2026; a 42-suite offline test battery plus a headless signed-in render walk |
+| History | ~120 merged PRs since mid-2026; a 43-suite offline test battery plus a headless signed-in render walk |
 
 ---
 
@@ -53,7 +53,7 @@ The register is quiet luxury on a Dark Winter palette (The Row, Totême, Khaite;
 - **Colour Stories, in fashion, in your closet**: up to eight colour-blocking pairs her closet can already make, derived deterministically; tapping one opens Style Me briefed to build around it.
 - **Coming up**: the next planned days within two weeks.
 - **Look-back**: a Month / Quarter / Year recap of the wear diary (where she went, utilisation, colour story, the pieces she leaned on with "try instead" nudges, rediscover and challenge suggestions). An on-demand "most stylish" judge picks the best looks of the period with a one-line reason each.
-- **Most worn**, **cost per wear**, and **Back in Rotation**: pieces resting 60+ days, restricted to restyle-worthy garments, season-filtered by the live forecast, rotated daily. Tapping a piece styles it.
+- **Most worn** (one strip per room — Work, Work Dinner, Casual, Dinner — counting only the pieces she styles: swim, gym and lounge never rank), **cost per wear**, and **Back in Rotation**: pieces resting 60+ days, restricted to restyle-worthy garments, season-filtered by the live forecast, rotated daily. Tapping a piece styles it.
 - **Your stylist's file and tools**: rows for Style Profile, Style Intelligence, Color Advisor, Visual AI, Brand Atlas and Shopping List, each with a live subtitle.
 
 ### Closet
@@ -136,7 +136,7 @@ Account (with a "server sees me as" probe), the Anthropic and Remove.bg keys (pe
 
 ## 4. Wear tracking and learning from wear
 
-Wear stats are derived from the record itself (calendar days plus dated logs), counting distinct days per piece, never from a stored counter that could drift. That feeds most-worn, neglected (60+ days), cost per wear when a price is set, the per-item history inside Edit, the Home recap, and the stylist's occasion memory (the pieces she returns to per occasion over the last 180 days, loved looks counted double).
+Wear stats are derived from the record itself (calendar days plus dated logs), counting distinct days per piece, never from a stored counter that could drift. That feeds most-worn (per room: Work, Work Dinner, Casual, Dinner), neglected (60+ days), cost per wear when a price is set, the per-item history inside Edit, the Home recap, and the stylist's occasion memory (the pieces she returns to per occasion over the last 180 days, loved looks counted double).
 
 ---
 
@@ -189,7 +189,7 @@ Every save teaches. Every word she reads is written to her ("you", never "she").
 ## 8. Engineering practice
 
 - `npm test`: 41 offline suites of plain `node:test` files, one per feature area, including a matrix that runs the real sampler and validator over every occasion × weather cell, a pool-invariants suite, and a prop-contract check that pairs every JSX call site against its component's declared props.
-- `npm run build` then `npm run smoke`: a blank-screen check and a **signed-in render walk** (30 steps, headless Chromium, mocked REST) that opens every screen, the builder, the trip planner sheet through Preview and Save, a trip, and the shopping add path. It exists because a duplicate declaration once passed every unit test and failed only at build, and a stale prop reference passed both.
+- `npm run build` then `npm run smoke`: a blank-screen check and a **signed-in render walk** (31 steps, headless Chromium, mocked REST) that opens every screen, the builder, the trip planner sheet through Preview and Save, a trip, and the shopping add path. It exists because a duplicate declaration once passed every unit test and failed only at build, and a stale prop reference passed both.
 - `npm run doctor`: the app's own invariants run against the live data.
 - The service worker precaches each build's chunks and retains the previous build's cache, so an app kept open across a deploy keeps working.
 - No linter or formatter; match the file's style. No TypeScript.

@@ -9,7 +9,7 @@ import { useRun, RUN_KEYS } from "../../lib/backgroundRun.js";
 import { loadShoppingList } from "../shopping/shoppingListStore.js";
 import { loadHomeCollapsed, saveHomeCollapsed } from "../../utils/storage.js";
 import { flattenPlanItemIds } from "../planner/outfits.js";
-import { mostWornItems, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
+import { mostWornByRoom, neglectedItems, costPerWear, applyWearStats } from "../wear/wearApi.js";
 import { nyToday, todayInTz, friendlyDate, addDaysIso } from "../../lib/time.js";
 import { fetchClosetForecast } from "../../lib/weather.js";
 import LookBackCard from "../recap/LookBackCard.jsx";
@@ -59,7 +59,16 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
   // and the Look-Back card — reads accurate wears.
   const wearItems = useMemo(() => applyWearStats(items, wearStats || {}), [items, wearStats]);
 
-  const topWorn   = useMemo(() => mostWornItems(wearItems, 5), [wearItems]);
+  // Most worn, by the room she dressed for (Work / Work Dinner / Casual /
+  // Dinner), swim, gym and lounge aside — owner, 2026-09-22. Rooms with no
+  // wears are left out rather than shown empty. A wear is a RECORD, so it
+  // resolves against the wardrobe (both closets): the sandal she reached for
+  // all of an Arizona week still ranks while she is standing in NYC. The
+  // resting list below stays on `items` — what she can wear THIS week.
+  const wornByRoom = useMemo(() => {
+    const record = Array.isArray(wardrobe) && wardrobe.length ? wardrobe : items;
+    return mostWornByRoom(applyWearStats(record, wearStats || {}), 5);
+  }, [wardrobe, items, wearStats]);
 
   // Today's weather bucket at the ACTIVE CLOSET's location (cached 6h by
   // lib/weather.js; NYC fallback when the closet lacks coords) — the
@@ -269,23 +278,28 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
           plans={plans} onEditItem={onEditItem} onStyleItem={onStyleItem}/>
       )}
 
-      {/* Most-worn metric */}
-      {topWorn.length > 0 && (
-        <section style={sectionStyle}>
+      {/* Most worn — one strip per room */}
+      {wornByRoom.length > 0 && (
+        <section style={sectionStyle} aria-label="Most worn">
           <div style={sectionHeader}>MOST WORN</div>
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-            {topWorn.map((it, i) => (
-              <button key={it.id} onClick={() => onEditItem?.(it)}
-                style={{ flexShrink: 0, width: 96, background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
-                <div style={{ position: "relative", aspectRatio: "1", background: PALETTE.cream, borderRadius: 6, overflow: "hidden", border: `1px solid ${PALETTE.soft_line}` }}>
-                  {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
-                  <div style={{ position: "absolute", top: 4, left: 4, background: PALETTE.ink, color: PALETTE.cream, fontSize: 9, padding: "2px 6px", borderRadius: 10 }}>#{i + 1}</div>
-                </div>
-                <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4 }}>{it.wear_count} wear{it.wear_count === 1 ? "" : "s"}</div>
-                <div style={{ fontSize: 11, color: PALETTE.soft, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{it.name}</div>
-              </button>
-            ))}
-          </div>
+          {wornByRoom.map(({ room, items: ranked }, r) => (
+            <div key={room} style={{ marginBottom: r === wornByRoom.length - 1 ? 0 : 10 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.14em", color: PALETTE.soft, marginBottom: 6 }}>{room.toUpperCase()}</div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                {ranked.map(({ item: it, wears }, i) => (
+                  <button key={it.id} onClick={() => onEditItem?.(it)}
+                    style={{ flexShrink: 0, width: 96, background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+                    <div style={{ position: "relative", aspectRatio: "1", background: PALETTE.cream, borderRadius: 6, overflow: "hidden", border: `1px solid ${PALETTE.soft_line}` }}>
+                      {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                      <div style={{ position: "absolute", top: 4, left: 4, background: PALETTE.ink, color: PALETTE.cream, fontSize: 9, padding: "2px 6px", borderRadius: 10 }}>#{i + 1}</div>
+                    </div>
+                    <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4 }}>{wears} wear{wears === 1 ? "" : "s"}</div>
+                    <div style={{ fontSize: 11, color: PALETTE.soft, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{it.name}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
       )}
 
@@ -377,14 +391,14 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
 
       {/* First-wear nudge — replaces the old always-rendered empty Neglected
           box (it read as a big blank gap on the page). */}
-      {items.length > 0 && topWorn.length === 0 && (
+      {items.length > 0 && wornByRoom.length === 0 && (
         <div style={{ ...emptyStyle, padding: "4px 2px 12px" }}>
           Log a couple of outfits as worn and your top pieces + resting list will populate here.
         </div>
       )}
 
       {/* Empty state for brand-new closets */}
-      {topWorn.length === 0 && neglected.length === 0 && items.length === 0 && (
+      {wornByRoom.length === 0 && neglected.length === 0 && items.length === 0 && (
         <div style={{ marginTop: 20, padding: 20, background: PALETTE.cream, borderRadius: 10, textAlign: "center" }}>
           <div style={{ fontSize: 22, marginBottom: 6 }}>✦</div>
           <div style={{ fontSize: 13, color: PALETTE.soft, lineHeight: 1.5 }}>

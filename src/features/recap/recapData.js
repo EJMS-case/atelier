@@ -8,6 +8,7 @@
 // from the leaned-on / overwear tally — trips are meant to repeat pieces.
 
 import { outfitsOf } from "../planner/outfits.js";
+import { WEAR_ROOMS, wearEligible, wearRoomsOf } from "../wear/wearApi.js";
 import { asArray } from "../../lib/multitag.js";
 import { filterByWeather, isComfortCoded } from "../../utils/item-helpers.js";
 import { getSubcatL2 } from "../../constants/taxonomy.js";
@@ -120,7 +121,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   looks.filter(l => !l.isTrip).forEach(l => {
     l.itemIds.forEach(id => {
       const it = itemMap[id];
-      if (!it || OVERWEAR_EXCLUDE.has(it.category)) return;
+      if (!it || OVERWEAR_EXCLUDE.has(it.category) || !wearEligible(it)) return;
       (wearDays[id] ||= new Set()).add(l.date);
     });
   });
@@ -179,20 +180,28 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
 
   // ── Period stats — the "in review" layer (month/quarter/year windows).
   // All derived from the same looks; garments only for the piece rankings so
-  // shoes/bags (which repeat by design) don't crowd the story.
+  // shoes/bags (which repeat by design) don't crowd the story, and only the
+  // pieces she styles (wearEligible — a trip's daily pool suit is not a top
+  // piece). Ranked BY ROOM (owner, 2026-09-22), the same four rooms Home's
+  // Most worn reads.
   const periodWearDays = {};
+  const periodRoomDays = {}; // room -> id -> Set(date)
   looks.forEach(l => {
+    const rooms = wearRoomsOf(l);
     l.itemIds.forEach(id => {
       const it = itemMap[id];
-      if (!it || OVERWEAR_EXCLUDE.has(it.category)) return;
+      if (!it || OVERWEAR_EXCLUDE.has(it.category) || !wearEligible(it)) return;
       (periodWearDays[id] ||= new Set()).add(l.date);
+      for (const room of rooms) ((periodRoomDays[room] ||= {})[id] ||= new Set()).add(l.date);
     });
   });
-  const topPieces = Object.entries(periodWearDays)
-    .map(([id, ds]) => ({ item: itemMap[id], wears: ds.size }))
-    .filter(x => x.item)
-    .sort((a, b) => b.wears - a.wears || (a.item.name || "").localeCompare(b.item.name || ""))
-    .slice(0, 6);
+  const topByRoom = WEAR_ROOMS.map(room => ({
+    room,
+    pieces: Object.entries(periodRoomDays[room] || {})
+      .map(([id, ds]) => ({ item: itemMap[id], wears: ds.size }))
+      .sort((a, b) => b.wears - a.wears || (a.item.name || "").localeCompare(b.item.name || ""))
+      .slice(0, 6),
+  })).filter(r => r.pieces.length > 0);
   // Color story of the period — families actually WORN (weighted by
   // appearances), not families merely owned.
   const famCounts = {};
@@ -210,7 +219,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     garmentCount,
     utilizationPct: garmentCount > 0 ? Math.round((distinctGarments / garmentCount) * 100) : null,
     heartedCount: looks.filter(l => l.hearted).length,
-    topPieces,
+    topByRoom,
     colorFamilies,
   };
 

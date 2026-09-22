@@ -6,6 +6,39 @@
 import { SUPABASE_URL, sbHeaders } from "../../lib/supabase.js";
 import { outfitsOf } from "../planner/outfits.js";
 import { nyToday } from "../../lib/time.js";
+import { normalizeOccasion } from "../../constants/taxonomy.js";
+
+// ── Rooms ────────────────────────────────────────────────────────────────────
+// "Most worn" reads by the room she dressed for (owner, 2026-09-22: "I'd
+// rather it be separated by work / work dinner and casual and dinners only …
+// everything else doesn't matter as much"). These four are the rooms. A wear
+// logged under any other occasion (Active, Lounge, Occasion, a travel day)
+// still counts toward the piece's total but never toward a room. Legacy labels
+// fold through the taxonomy's aliases (Executive → Work, Daytime → Casual) so
+// her April logs read the same as her September ones.
+export const WEAR_ROOMS = ["Work", "Work Dinner", "Casual", "Dinner"];
+
+// Pieces she does not style — swim, gym, lounge — never rank as most worn: a
+// suit worn to the pool every day of a trip is not what she reaches for. The
+// same three categories utils/wardrobe-coverage.js keeps out of her numbers;
+// its metal-jewellery clause is about colour, not wear, so it stays out here.
+const WEAR_EXCLUDED_CATS = new Set(["Swim", "Athleisure", "Loungewear"]);
+export function wearEligible(item) {
+  return !!item && !WEAR_EXCLUDED_CATS.has(item.category);
+}
+
+// The rooms one wear record counts toward. Reads the single `occasion` and the
+// multi-tag `occasions[]` a log or a day may carry — a "Work, Work Dinner" day
+// counts in both rooms. Unknown and non-room labels drop out.
+export function wearRoomsOf(rec) {
+  const raw = [rec?.occasion, ...(Array.isArray(rec?.occasions) ? rec.occasions : [])];
+  const out = new Set();
+  for (const o of raw) {
+    const room = normalizeOccasion(o);
+    if (WEAR_ROOMS.includes(room)) out.add(room);
+  }
+  return [...out];
+}
 
 // Must be a function call, not a module-level object. A snapshot taken at
 // import time freezes the signed-out headers forever, and because the writes
@@ -19,29 +52,44 @@ const H = () => sbHeaders({ Prefer: "return=minimal" });
  * user switched to the calendar. Counts distinct days per item (a piece worn in
  * two looks on one day = one wear).
  *
- * @returns {Object.<string,{wears:number,lastWorn:string}>}
+ * Also counts distinct days PER ROOM (`rooms`), read by mostWornByRoom.
+ *
+ * @returns {Object.<string,{wears:number,lastWorn:string,rooms:Object.<string,number>}>}
  */
 export function deriveWearStats(plans = [], logs = []) {
   const today = nyToday();
-  const byItem = new Map(); // id -> Set(dateIso)
-  const add = (id, date) => {
+  const byItem = new Map(); // id -> { dates: Set(iso), rooms: Map(room -> Set(iso)) }
+  const add = (id, date, rooms) => {
     if (!id || !date) return;
     if (date > today) return; // future planned outfits are NOT wears
-    if (!byItem.has(id)) byItem.set(id, new Set());
-    byItem.get(id).add(date);
+    if (!byItem.has(id)) byItem.set(id, { dates: new Set(), rooms: new Map() });
+    const entry = byItem.get(id);
+    entry.dates.add(date);
+    for (const room of rooms) {
+      if (!entry.rooms.has(room)) entry.rooms.set(room, new Set());
+      entry.rooms.get(room).add(date);
+    }
   };
   (plans || []).forEach(p => {
     if (!p?.date) return;
-    outfitsOf(p).forEach(o => (o.items || []).forEach(id => add(id, p.date)));
+    // A look's own occasion (outfitsOf falls back to the day's) plus the
+    // day's multi-tag occasions, if she filed more than one.
+    outfitsOf(p).forEach(o => {
+      const rooms = wearRoomsOf({ occasion: o.occasion, occasions: p.occasions });
+      (o.items || []).forEach(id => add(id, p.date, rooms));
+    });
   });
   (logs || []).forEach(l => {
     if (!l?.date_worn) return; // only actually-worn logs count
-    (l.garment_ids || []).forEach(id => add(id, l.date_worn));
+    const rooms = wearRoomsOf(l);
+    (l.garment_ids || []).forEach(id => add(id, l.date_worn, rooms));
   });
   const stats = {};
-  for (const [id, dates] of byItem) {
+  for (const [id, { dates, rooms }] of byItem) {
     const arr = [...dates].sort();
-    stats[id] = { wears: arr.length, lastWorn: arr[arr.length - 1] };
+    const byRoom = {};
+    for (const [room, ds] of rooms) byRoom[room] = ds.size;
+    stats[id] = { wears: arr.length, lastWorn: arr[arr.length - 1], rooms: byRoom };
   }
   return stats;
 }
@@ -56,7 +104,7 @@ export function applyWearStats(items = [], stats = {}) {
   return (items || []).map(it => {
     const s = stats[it.id];
     if (!s) return it;
-    return { ...it, wear_count: s.wears, last_worn: s.lastWorn };
+    return { ...it, wear_count: s.wears, last_worn: s.lastWorn, wear_rooms: s.rooms || {} };
   });
 }
 
@@ -134,15 +182,25 @@ export function neglectedItems(items, thresholdDays = 60) {
 }
 
 /**
- * Top-N most worn items. Ties broken by most-recent last_worn.
+ * Most worn, by room: for each of WEAR_ROOMS, the top-N pieces she styles
+ * (wearEligible) ranked by distinct days worn IN that room, ties broken by the
+ * most recent wear, then name. A room nothing was worn in is left out, so the
+ * caller renders exactly the rooms her record has. Reads the `wear_rooms`
+ * applyWearStats attaches; a piece with no calendar or log record has none
+ * and cannot rank (the stored wear_count cache never knew the room).
+ *
+ * @returns {Array<{room:string, items:Array<{item:Object, wears:number}>}>}
  */
-export function mostWornItems(items, n = 5) {
-  return [...(items || [])]
-    .filter(it => (it.wear_count || 0) > 0)
-    .sort((a, b) => {
-      const delta = (b.wear_count || 0) - (a.wear_count || 0);
-      if (delta !== 0) return delta;
-      return (b.last_worn || "").localeCompare(a.last_worn || "");
-    })
-    .slice(0, n);
+export function mostWornByRoom(items, n = 5) {
+  return WEAR_ROOMS.map(room => {
+    const ranked = (items || [])
+      .filter(it => wearEligible(it) && (it.wear_rooms?.[room] || 0) > 0)
+      .sort((a, b) =>
+        (b.wear_rooms[room] - a.wear_rooms[room])
+        || (b.last_worn || "").localeCompare(a.last_worn || "")
+        || (a.name || "").localeCompare(b.name || ""))
+      .slice(0, n)
+      .map(it => ({ item: it, wears: it.wear_rooms[room] }));
+    return { room, items: ranked };
+  }).filter(r => r.items.length > 0);
 }

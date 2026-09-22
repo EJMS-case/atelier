@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { s, si } from "../ui/styles.js";
 import { sb } from "../lib/supabase.js";
 import { streamStyleProfile, colorHex } from "../lib/ai/stylist.js";
+import { wearEligible } from "../features/wear/wearApi.js";
 // STYLING_CATEGORY_ORDER: insights never names the "Misc" holding room (its
 // items are stripped upstream, so the row would always read zero anyway).
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
@@ -45,7 +46,9 @@ function analyzeWardrobe(items, outfitLogs) {
   const wearCounts = {};
   outfitLogs.forEach(log => { (log.garment_ids || []).forEach(id => { wearCounts[id] = (wearCounts[id] || 0) + 1; }); });
   results.wardrobeAnchors = Object.entries(wearCounts).filter(([, c]) => c >= 5).sort((a, b) => b[1] - a[1])
-    .map(([id, count]) => ({ item: items.find(it => it.id === id), count })).filter(a => a.item);
+    // Anchors are pieces she styles — swim, gym and lounge never anchor a
+    // wardrobe (same eligibility as Home's Most worn).
+    .map(([id, count]) => ({ item: items.find(it => it.id === id), count })).filter(a => a.item && wearEligible(a.item));
   results.totalOutfits = outfitLogs.length;
   return results;
 }
