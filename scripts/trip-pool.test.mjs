@@ -149,5 +149,63 @@ section("Misc is never readmitted");
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
+
+// ── tripPools.js — what one trip day may pick from (owner, 2026-09-22) ──────
+// "When I select travel day … take items from my NYC closet … unless it's in
+// the middle of a trip." / "When I edit a look within an Arizona vacation,
+// only Arizona closet + anything I packed should be included."
+{
+  const { homeClosetFor, isHomeTravelDay, poolForTripDay, TRAVEL_DAY } = await import("../src/features/planner/tripPools.js");
+  section("tripPools: home closet, travel days, and the edit pool");
+
+  const closets = [{ id: DEFAULT_CLOSET_ID, name: "NYC", is_default: true }, { id: ARIZONA_CLOSET_ID, name: "Arizona", is_default: false }];
+  assert(homeClosetFor(closets, ARIZONA_CLOSET_ID) === DEFAULT_CLOSET_ID, "home for an Arizona trip is NYC");
+  assert(homeClosetFor(closets, DEFAULT_CLOSET_ID) === ARIZONA_CLOSET_ID, "home for a NYC-destination trip is the other closet");
+  assert(homeClosetFor(closets, null) === DEFAULT_CLOSET_ID, "no destination → the default closet");
+  assert(homeClosetFor([], ARIZONA_CLOSET_ID) === DEFAULT_CLOSET_ID, "no closets loaded → the default closet id");
+
+  assert(isHomeTravelDay({ occasion: TRAVEL_DAY, dayIdx: 0, dayCount: 5 }), "first day travel day is a home day");
+  assert(isHomeTravelDay({ occasion: TRAVEL_DAY, dayIdx: 4, dayCount: 5 }), "last day travel day is a home day");
+  assert(!isHomeTravelDay({ occasion: TRAVEL_DAY, dayIdx: 2, dayCount: 5 }), "a travel day in the middle is an ordinary trip day");
+  assert(isHomeTravelDay({ occasion: "Travel", dayIdx: 0, dayCount: 3 }), "the legacy 'Travel' label folds to Travel Day");
+  assert(isHomeTravelDay({ occasion: TRAVEL_DAY, dayIdx: 0, dayCount: 1 }), "a one-day trip is both ends");
+  assert(!isHomeTravelDay({ occasion: "Casual", dayIdx: 0, dayCount: 5 }), "a Casual first day is not a travel day");
+  assert(!isHomeTravelDay({ occasion: null, dayIdx: 0, dayCount: 5 }), "no occasion → not a travel day");
+
+  const nyc = (id, category = "Tops") => ({ id, name: id, category, closet_id: DEFAULT_CLOSET_ID });
+  const az  = (id, category = "Tops") => ({ id, name: id, category, closet_id: ARIZONA_CLOSET_ID });
+  const wardrobe = [
+    nyc("n-tee"), nyc("n-jean", "Bottoms"), nyc("n-heel", "Shoes"), nyc("n-coat", "Outerwear"),
+    az("a-dress", "Dresses"), az("a-sandal", "Shoes"), az("a-tote", "Bags"),
+    { id: "m-1", name: "misc", category: "Misc", closet_id: DEFAULT_CLOSET_ID },
+  ];
+  const wide = wardrobe.filter(it => it.category !== "Misc"); // the trip's generation pool: destination ∪ home
+  const base = { pool: wide, wardrobe, homeClosetId: DEFAULT_CLOSET_ID, destClosetId: ARIZONA_CLOSET_ID, dayCount: 4 };
+  const ids = (list) => list.map(it => it.id).sort().join(",");
+
+  // pack: a build decides what to bring → the wide pool stands
+  assert(ids(poolForTripDay({ ...base, occasion: "Casual", dayIdx: 1, mode: "pack" })) === ids(wide), "a Casual build keeps destination ∪ home");
+  // pack on a first-day Travel Day → home only (+ suitcase, pins, the look)
+  const t0 = poolForTripDay({ ...base, occasion: TRAVEL_DAY, dayIdx: 0, mode: "pack", suitcaseIds: ["a-tote"], pins: ["a-sandal"] });
+  assert(ids(t0) === "a-sandal,a-tote,n-coat,n-heel,n-jean,n-tee", `first-day Travel Day builds from home + what she carries + pins, got ${ids(t0)}`);
+  const tLast = poolForTripDay({ ...base, occasion: TRAVEL_DAY, dayIdx: 3, mode: "edit" });
+  assert(ids(tLast) === "n-coat,n-heel,n-jean,n-tee", "last-day Travel Day is home even in edit mode");
+  const tMid = poolForTripDay({ ...base, occasion: TRAVEL_DAY, dayIdx: 2, mode: "pack" });
+  assert(ids(tMid) === ids(wide), "a mid-trip Travel Day is an ordinary trip day");
+
+  // edit: destination ∪ suitcase ∪ the look's own pieces ∪ pins — never the rest of home
+  const e = poolForTripDay({ ...base, occasion: "Dinner", dayIdx: 2, mode: "edit", suitcaseIds: ["n-heel"], lookIds: ["n-tee", "a-dress"], pins: ["n-coat"] });
+  assert(ids(e) === "a-dress,a-sandal,a-tote,n-coat,n-heel,n-tee", `editing an Arizona look offers Arizona + suitcase + the look + pins, got ${ids(e)}`);
+  assert(!e.some(it => it.id === "n-jean"), "a NYC piece that is not packed and not in the look is NOT offered");
+  // edit without a destination closet → the surface's pool (home) stands
+  const e2 = poolForTripDay({ ...base, destClosetId: null, occasion: "Dinner", dayIdx: 2, mode: "edit", lookIds: ["n-tee"] });
+  assert(ids(e2) === ids(wide), "a trip with no destination closet edits from its own pool");
+  // Misc never enters, even when named
+  const m = poolForTripDay({ ...base, occasion: "Casual", dayIdx: 1, mode: "edit", lookIds: ["m-1"] });
+  assert(!m.some(it => it.id === "m-1"), "Misc never enters a trip pool");
+  // Empty inputs degrade, never throw
+  assert(Array.isArray(poolForTripDay({})), "no arguments → an empty pool, no throw");
+}
+
 console.log(`\ntrip-pool: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

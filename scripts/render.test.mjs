@@ -605,6 +605,30 @@ await check("Planner → open the trip", async () => {
     /Packing|Looks|Suitcase|Start trip/i.test(document.body.innerText));
   if (!onTrip) throw new Error("the trip detail screen did not mount after View →");
 });
+// ⊞ Build on a trip day hands the builder the DAY'S pool (tripPools.js:
+// destination ∪ suitcase ∪ the look's own pieces) and nothing else. The
+// canvas must still land the look — a pool that dropped the look's pieces
+// would open blank and save back an emptied look (#217's builder bug). The
+// fixture's trip day holds two NYC pieces, one of them in the suitcase.
+await check("Trip → ⊞ Build opens the builder on the day's look", async () => {
+  const clicked = await page.evaluate(() => {
+    // The Build beside "↺ Regenerate" is the one on a PLANNED look; the
+    // empty days' Build (beside "✦ Generate") sorts first and opens a blank
+    // canvas by design.
+    const b = [...document.querySelectorAll("button")].find(el => /⊞\s*Build/.test(el.textContent || "")
+      && [...(el.parentElement?.querySelectorAll("button") || [])].some(x => /Regenerate/.test(x.textContent || "")));
+    if (!b) return false;
+    b.click(); return true;
+  });
+  if (!clicked) throw new Error("no ⊞ Build on the trip's day");
+  await page.waitForTimeout(1400);
+  const state = await page.evaluate(() => ({
+    mounted: /BUILD A LOOK/.test(document.body.innerText),
+    onCanvas: document.querySelectorAll("[data-resize]").length,
+  }));
+  if (!state.mounted) throw new Error("⊞ Build did not open the builder");
+  if (state.onCanvas < 2) throw new Error(`the day's look did not land on the canvas (${state.onCanvas} pieces)`);
+});
 
 await browser.close();
 server.close();

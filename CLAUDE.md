@@ -27,7 +27,7 @@ npm run build      # production build + service-worker cache stamp
 npm test           # full suite (44 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (31 steps, headless, mocked REST)
+npm run test:render     # just the render walk (32 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -89,6 +89,11 @@ Conventions worth knowing:
   `src/features/closet/useVisibleWardrobe.js`. Read it before naming a variable
   that holds garments; `src/features/closet/poolInvariants.js` turns the rule
   into a check that runs in tests and against live data (`npm run doctor`).
+  **A trip day's `available` comes from `features/planner/tripPools.js`**
+  (owner, 2026-09-22): a build (`pack`) may pick from destination ∪ home, an
+  edit (`edit`) from destination ∪ suitcase ∪ the look, and a Travel Day on
+  the first or last day from home. Every surface that builds or edits a trip
+  day calls `poolForTripDay`; don't compose a trip pool by hand.
 - **The stylist line is the one text field a piece has** (owner, 2026-09-18).
   Edit and Bulk Add write `stylist_line`, capped at `CURATED_NOTES_MAX`;
   nothing writes `notes` any more (the column is an archive). Prompts read
