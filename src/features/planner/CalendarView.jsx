@@ -22,6 +22,7 @@ import { resolveItemIds } from "../../utils/item-helpers.js";
 import { restoreScroll } from "../../utils/restoreScroll.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { logAiError } from "../../lib/ai/logError.js";
+import { homeClosetFor, poolForTripDay } from "./tripPools.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
@@ -1023,7 +1024,10 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
   // (home) closet items, preferring pieces already at the destination —
   // packing cost zero (tripPacker's preferItemIds). Without one: the scoped
   // `items` prop, no preference (pre-Phase-B behavior).
-  const homeClosetId = activeCloset?.id || DEFAULT_CLOSET_ID;
+  // With a destination, home is the closet she leaves from — the one that is
+  // NOT the destination (planning an Arizona trip from the Arizona chip still
+  // packs from NYC). Without one, wherever she is standing.
+  const homeClosetId = destClosetId ? homeClosetFor(closets, destClosetId) : (activeCloset?.id || DEFAULT_CLOSET_ID);
   // Pins ride INSIDE the pool, not alongside it. A pinned piece that the
   // closet scoping leaves out (she pinned from a different closet, or switched
   // the destination after pinning) would otherwise be invisible in the sheet —
@@ -1155,7 +1159,14 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
     const prevDayIds = dayIdx != null && dayIdx > 0
       ? (dayLooks?.[dayIdx - 1] || []).flatMap(o => (o.items || []).map(it => it.id))
       : [];
-    const single = buildDailyOutfits(tripPool, [perDayHigh(dayIso)], {
+    // A Travel Day on the first or last day builds from HOME (she starts and
+    // ends there); every other day from the trip's pool. tripPools.js.
+    const dayPool = poolForTripDay({
+      pool: tripPool, wardrobe: Array.isArray(wardrobe) && wardrobe.length ? wardrobe : available,
+      homeClosetId, destClosetId: destClosetId || null, pins: mustIncludeIds,
+      occasion, dayIdx: dayIdx ?? 0, dayCount, mode: "pack",
+    });
+    const single = buildDailyOutfits(dayPool, [perDayHigh(dayIso)], {
       occasions: [occasion],
       activities: [dayAct],
       priorUse: usageExcluding(dayIdx, excludeOutfitIdx),

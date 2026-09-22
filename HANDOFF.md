@@ -1,12 +1,27 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-22**, after the trip-planner fix, Most worn by room, and the photo-cache fix. The session log below
+Refreshed **2026-09-22**, after the trip-planner fix, Most worn by room, the photo-cache fix, and the trip-day pool rule. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-22 · A trip day's pool in one place: Travel Days start and end at home; an edited trip look offers the destination and the suitcase only
+
+**Owner:** *"When I select travel day … take items from my nyc closet … unless it's in the middle of a trip. When I edit a look within an Arizona vacation, only Arizona closet + anything I packed should be included."* CHANGELOG has the detail. To carry:
+
+1. **`features/planner/tripPools.js` answers "what may this trip day pick from"** — `poolForTripDay` with `mode: "pack"` (a build: the wide pool, it decides what to bring) or `"edit"` (a look she changes: destination ∪ suitcase ∪ the look ∪ pins), and the travel-day rule on top of both (first/last day + Travel Day → home closet). Every surface that builds or edits a trip day calls it: the sheet's single-day builds, the trip screen's Generate/Generate all, ⊞ Build. A new surface calls it too; a hand-rolled pool is the regression.
+2. **App's `builderPool` takes a trip day's `poolIds` as the pool**, not as a widening of the active closet. A calendar day without a trip still edits from the active closet ∪ the look.
+3. **Home = `homeClosetFor(closets, destClosetId)`** — the closet that is not the destination — in the sheet (when a destination closet is set) and on the trip screen.
+
+**Watch-items:**
+- **Her next trip with Travel Day on day one:** the sheet rebuilds that look from NYC when she picks the occasion; the preview's DEFAULT occasions never include Travel Day (she selects it), so nothing changes until she does. If she wants day one and the last day to default to Travel Day, `tripDayOccasions` in tripPacker.js is the place — one line, but it changes the capsule she tuned by hand.
+- **⊞ Build on an Arizona day before anything is packed:** the pool is Arizona + the look's own pieces only. That is her rule; if a day needs a NYC piece she has not packed, the route is the packing tab (pack it) or Generate (a packing decision, wide pool), not the builder.
+- **Leave-behind restyle (`regenPool`)** still ignores the travel-day rule: closing the suitcase without a piece restyles a last-day Travel Day look from destination + suitcase. Rare; the lever is one `poolForTripDay` call in `buildReplacementItems`.
+
+**Verified before push:** `npm test` (44 suites), `npm run build`, `npm run smoke` green (32 walk steps).
 
 ### 2026-09-22 · "Nothing is really loading here": photos were served no-cache since March; a failed trip save now says so
 

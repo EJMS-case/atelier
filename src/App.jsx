@@ -437,13 +437,17 @@ export default function App() {
   // The look being edited therefore brings its own pieces in, and a trip look
   // brings the trip's pool. This widens what the canvas can HOLD; it is still
   // an "available", so it also decides what the swap sheet may offer.
+  //
+  // A TRIP day hands the builder its whole pool (`poolIds`, from
+  // features/planner/tripPools.js: destination ∪ suitcase ∪ the look's own
+  // pieces, or the home closet on a first/last Travel Day) and the active
+  // closet is NOT unioned in — editing an Arizona day from the NYC chip used
+  // to offer every NYC piece as if it were coming along (owner, 2026-09-22).
   const builderPool = useMemo(() => {
     const editedIds = editingPlan ? (editingPlan.plan?.items || []) : (builderSeed?.garment_ids || []);
-    const widen = [
-      ...editedIds.map(it => (typeof it === "object" && it !== null ? it.id : it)),
-      ...(editingPlan?.poolIds || []),
-    ];
-    return poolIncluding(available, wardrobe, widen);
+    const own = editedIds.map(it => (typeof it === "object" && it !== null ? it.id : it));
+    if (editingPlan?.poolIds) return poolIncluding([], wardrobe, [...own, ...editingPlan.poolIds]);
+    return poolIncluding(available, wardrobe, own);
   }, [available, wardrobe, editingPlan, builderSeed]);
 
   // Suitcase pieces during an ACTIVE trip (wave 2 — packed-item marker). The
@@ -2419,11 +2423,10 @@ export default function App() {
               // trip view doesn't read from when outfits[] is present).
               // newOutfitLabel rides along when the calendar appends a fresh
               // look ("Day"/"Evening") so the save path can stamp it.
-              // poolIds rides along from the trip detail view: a trip's pool is
-              // destination ∪ home ∪ whatever the trip already holds, which is
-              // wider than any one closet. Without it the swap sheet would
-              // offer only the active closet while editing a look that is
-              // cross-closet by construction.
+              // poolIds rides along from the trip detail view and IS the
+              // builder's pool for that day (tripPools.js): destination ∪
+              // suitcase ∪ the look's own pieces, or home on a first/last
+              // Travel Day. Not widened by the active closet — see builderPool.
               setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx, newOutfitLabel, poolIds });
               setBuilderReturnView(viewRef.current);
               setManualBuilderOpen(true);

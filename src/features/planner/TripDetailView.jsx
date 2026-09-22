@@ -23,6 +23,7 @@ import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
+import { homeClosetFor, poolForTripDay } from "./tripPools.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 
@@ -258,6 +259,9 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     forecast?.[iso]?.high ?? brief?.tempHighF ?? null;
 
   const destClosetId = trip.destination_closet_id || null;
+  // Home = the closet that is not the destination (tripPools.js): a Travel
+  // Day on the first or last day builds from it.
+  const homeClosetId = useMemo(() => homeClosetFor(closets, destClosetId), [closets, destClosetId]);
 
   // FULL-wardrobe lookup — the packing checklist + reconcile must see every
   // item regardless of the current pool scoping (during an ACTIVE trip the
@@ -316,6 +320,24 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [available, wardrobe, destClosetId, committedIds]);
+
+  // What she is carrying: every packed + suggested row. With the destination
+  // closet, this is ALL an edited look may draw on (owner, 2026-09-22: "only
+  // Arizona closet + anything I packed").
+  const suitcaseIds = useMemo(
+    () => tripItems.filter(r => r.status === "packed" || r.status === "suggested").map(r => r.item_id),
+    [tripItems],
+  );
+  // The pool for ONE day of this trip — tripPools.js decides. "pack" keeps
+  // the wide pool for a build (Generate suggests what to bring); "edit" is
+  // destination ∪ suitcase ∪ the look's own pieces; a Travel Day on the first
+  // or last day is the home closet either way.
+  const poolForDay = (iso, occasion, { mode = "pack", lookIds = [] } = {}) => poolForTripDay({
+    pool: tripPool, wardrobe, homeClosetId, destClosetId, suitcaseIds,
+    lookIds, pins: mustIncludeIds, occasion,
+    dayIdx: days.indexOf(iso), dayCount: days.length, mode,
+  });
+  const editPoolIds = (iso, occasion, lookIds) => poolForDay(iso, occasion, { mode: "edit", lookIds }).map(it => it.id);
 
   // ── Trip_items reconcile (wave 2 — B4) ────────────────────────────────────
   // ONE reconcile site for the whole view (per the handoff warning about the
@@ -822,7 +844,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
       const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
       const skipOutfitId = outfitIdx === "append" ? null
         : (outfitIdx == null ? existing[0]?.id : existing[outfitIdx]?.id) || null;
-      const look = await generateTripDayLook(tripPool, occasion, weather, trip.destination, apiKey, {
+      const look = await generateTripDayLook(poolForDay(iso, occasion), occasion, weather, trip.destination, apiKey, {
         priorDays, brief, activity, preferItemIds,
         mustIncludeIds: unplacedPins(plans, skipOutfitId),
       });
@@ -867,7 +889,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
         const weather   = weatherForDay(iso);
         const priorDays = buildPriorDays(iso, running);
         const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
-        const look = await generateTripDayLook(tripPool, occasion, weather, trip.destination, apiKey, {
+        const look = await generateTripDayLook(poolForDay(iso, occasion), occasion, weather, trip.destination, apiKey, {
           priorDays, brief, activity, preferItemIds,
           // `running` grows as days are generated, so each day is told about
           // only the pins the earlier days didn't already use.
@@ -1123,7 +1145,6 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
   // Handed to the ⊞ Build canvas so editing a trip look offers the TRIP's
   // pool rather than whichever closet the chip happens to be on — the look is
   // cross-closet by construction, so a closet-scoped swap sheet is wrong.
-  const tripPoolIds = useMemo(() => tripPool.map(it => it.id), [tripPool]);
 
   const plannedCount = days.filter(iso => outfitsOf(plans[iso]).length > 0).length;
   const weatherBucket = brief ? bucketFromHigh(brief.tempHighF) : null;
@@ -1415,7 +1436,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                         ✦ Generate
                       </button>
                       {onBuildDay && (
-                        <button onClick={() => onBuildDay(iso, [], null, null, tripPoolIds)}
+                        <button onClick={() => onBuildDay(iso, [], null, null, editPoolIds(iso, dayOccasion[iso] || "Casual", []))}
                           style={{ padding: "7px 12px", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                           ⊞ Build
                         </button>
@@ -1489,7 +1510,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                               {outfitItems.length > 0 ? "↺ Regenerate" : "✦ Generate"}
                             </button>
                             {onBuildDay && (
-                              <button onClick={() => onBuildDay(iso, outfit.items || [], outfitIdx, null, tripPoolIds)}
+                              <button onClick={() => onBuildDay(iso, outfit.items || [], outfitIdx, null, editPoolIds(iso, outfit.occasion, outfit.items || []))}
                                 style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                                 ⊞ Build
                               </button>

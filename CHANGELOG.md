@@ -2,6 +2,42 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A trip day's pool, in one place: Travel Days start and end at home; an edited trip look offers the destination and the suitcase only — 2026-09-22
+
+### Why
+
+Owner, three lines: *"When I select travel day on the planner page, take items from my nyc closet to build because those are days I start and end in nyc. Unless it's in the middle of a trip. When I edit a look within an Arizona vacation, only Arizona closet + anything I packed should be included."* And a question: whether the sheet suggests what to bring from the occasion and the weather (it does — see below).
+
+Every surface answered "what may this trip day pick from" on its own. The sheet's preview and the trip screen's Generate offered destination ∪ home, which is right for a build (that is how the app suggests what to bring). But ⊞ Build on a trip day handed the builder the same union AND App unioned the active closet in on top, so an Arizona day edited from the NYC chip offered every NYC piece as if it were coming along. And nothing anywhere knew that a Travel Day on the first or last day is a New York day.
+
+### Changed
+
+- **`features/planner/tripPools.js` is the one reader.** `poolForTripDay({ pool, wardrobe, homeClosetId, destClosetId, suitcaseIds, lookIds, pins, occasion, dayIdx, dayCount, mode })`:
+  - a **Travel Day on the trip's first or last day** (a one-day trip is both) builds from the **home closet** — plus what she packed, her pins, and the look's own pieces. A Travel Day mid-trip is an ordinary trip day. Home is the closet that is not the destination (`homeClosetFor`), so planning an Arizona trip from the Arizona chip still packs from NYC.
+  - **mode `edit`** (⊞ Build on a trip day) with a destination closet: **destination ∪ suitcase (packed + suggested rows) ∪ the look's own pieces ∪ pins.** Never the rest of home. Without a destination closet the surface's own pool stands.
+  - **mode `pack`** (the sheet's preview and single-day rebuilds, Generate, Generate all): the wide pool stands — a build is a packing decision — with the travel-day rule on top.
+  - Misc never enters, whichever closet slice is handed in.
+- **Plan a trip sheet**: every single-day build (shuffle, change occasion, add outfit, change activity) goes through it, so picking Travel Day on day one or the last day rebuilds that look from NYC. Home is `homeClosetFor` when a destination closet is set.
+- **Trip screen**: Generate and Generate all build from `poolForDay(iso, occasion)`; ⊞ Build hands the builder `editPoolIds(iso, occasion, look)`.
+- **App's builder pool**: a trip day's `poolIds` IS the pool (plus the look's own pieces); the active closet is no longer unioned in. A calendar day without a trip is unchanged (active closet ∪ the look).
+
+### Does the sheet suggest what to bring from the occasion and the weather?
+
+Yes, per day. Each day card builds from that day's occasion (the packer's default rhythm — Casual days with dinner nights for a relaxed destination — or whatever she picks on the look), that day's high (the real forecast within sixteen days, else the destination brief's typical high, else the season), the day's activity filter, and prefers pieces already at the destination. "N ITEMS TO PACK" is exactly the pieces on those looks that are not at the destination; "already at destination" the ones that are. Changing an occasion, an activity or the climate rebuilds the affected looks and the list with them.
+
+### Tests
+
+- `test:trippool` +20 (37): home closet for each destination, first/last/middle/one-day travel days and the legacy "Travel" label, the pack pool standing, the travel-day pool (home + suitcase + pins), the edit pool (destination + suitcase + look + pins, and a NYC piece that is neither is NOT offered), a trip without a destination closet, Misc refused, empty inputs.
+- Render walk +1 (32 steps): ⊞ Build from a trip day opens the builder with the day's look on the canvas — the pool the builder is handed must still land the look (#217's blank-canvas class).
+
+### Downstream, four ways
+
+*Efficiency* — no new fetch; the pool is computed from rows the screen holds. The AI day-look prompt gets a SMALLER inventory on a home travel day. *Effectiveness* — the three rules hold on every surface that builds or edits a trip day, from one module; a fourth surface calls `poolForTripDay` and inherits them. *Speed* — nothing on a tap path. *Education* — none new; her instruction is now code, not a preference the stylist has to be told.
+
+### Verified
+
+`npm test` (44 suites), `npm run build`, `npm run smoke` (32 walk steps) green.
+
 ## [Unreleased] — "Nothing is really loading here": every photo was served no-cache; a trip that fails to save now says so — 2026-09-22
 
 ### Why
