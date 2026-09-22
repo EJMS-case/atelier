@@ -247,6 +247,16 @@ const tab = (label) => () => clickText("nav button", label);
 // ATELIER is home; the closet chip's NAME is the closet (owner, 2026-09-17).
 const brandHome = () => page.evaluate(() => document.querySelector('button[aria-label="Go home"]')?.click());
 await check("Home (the ATELIER brand)", brandHome);
+// Most worn reads by room (owner, 2026-09-22): Work / Work Dinner / Casual /
+// Dinner strips, swim, gym and lounge never ranked. The fixture's two worn
+// looks are a Work day and a Casual day, so both rooms must be on screen.
+await check("Home → Most worn is split by room", async () => {
+  await page.waitForTimeout(900);
+  const text = await page.evaluate(() => document.querySelector('[aria-label="Most worn"]')?.innerText || "");
+  if (!text) throw new Error("the Most worn section did not render");
+  if (!/^WORK$/m.test(text) || !/^CASUAL$/m.test(text)) throw new Error("Most worn is not split into its rooms");
+  if (/swim/i.test(text)) throw new Error("a swim piece ranks as most worn");
+});
 await check("Closet grid (the closet chip)", async () => {
   await page.evaluate(() => document.querySelector('button[aria-label="Go to closet"]')?.click());
 });

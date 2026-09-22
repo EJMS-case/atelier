@@ -2,6 +2,39 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Most worn reads by room: Work / Work Dinner / Casual / Dinner, swim never ranked — 2026-09-22
+
+### Why
+
+Owner: *"Most worn isn't accurate and shouldn't include swim - I'd rather it be separated by work / work dinner and casual and dinners only please. Everything else doesn't matter as much."*
+
+Checked the rows first. The app has two "most worn" readings and both were built to count everything: Home's strip ranked every piece by distinct days across all occasions, so her top five were four bags and a pump (19, 14, 14, 13, 12 days) — true, and useless as a read of her style; and the Look-Back card's "top pieces" for the period excluded shoes and bags but not swim, so her Arizona week (a pool look on every day of the trip) put a swimsuit at the top of September. Neither said which room a piece was worn in, which is the only question she was asking.
+
+### Changed
+
+- **Four rooms, one reader.** `WEAR_ROOMS` in `features/wear/wearApi.js` is `Work · Work Dinner · Casual · Dinner`; `wearRoomsOf()` reads the room(s) off a wear record — the single `occasion`, the multi-tag `occasions[]` a day or log may carry (a "Work, Work Dinner" day counts in both), and her legacy labels through the taxonomy's aliases (Executive → Work; Daytime, Lunch/Brunch → Casual). Active, Lounge, Occasion and the travel days still count toward a piece's total and cost per wear; they never count toward a room.
+- **`deriveWearStats` counts distinct days per room** alongside the total, and `applyWearStats` attaches it as `wear_rooms`. `mostWornByRoom(items, n)` returns the top-N per room ranked by that room's days (ties: most recent wear, then name), and leaves out a room nothing was worn in. `mostWornItems` is gone — nothing read it once Home switched.
+- **`wearEligible(item)`**: swim, gym and lounge never rank as most worn — the same three categories `coverageEligible` keeps out of her numbers (its metal-jewellery clause is about colour, so a gold choker she reaches for still ranks). Applied to Home's Most worn, the Look-Back card's top pieces and "leaned on", and the Style Profile's wardrobe anchors, so a pool suit anchors nothing anywhere.
+- **Home**: MOST WORN is one strip per room, in her order, each piece with its days in that room, ranked against the **wardrobe** (both closets) — a wear is a record, so the sandal she reached for all of an Arizona week still ranks while she stands in NYC (it did not before: the strip read the active closet). Back in Rotation stays on `available`, what she can wear this week. The section carries `aria-label="Most worn"` so the walk can read it.
+- **Look-Back card**: the period's top pieces are one row per room (`periodStats.topByRoom`), garments only as before.
+
+### Verified against her live rows
+
+The built app on a read-only dump of her tables: Home's Most worn now reads Work → the Hazel slingback, the Rhea bag, the Whipstitch heel …; Casual → the heeled thong sandal, the Elsa slide …; Dinner and Work Dinner each their own strip; no swim, gym or lounge piece anywhere on it.
+
+### Tests
+
+- `scripts/wear-stats.test.mjs` (`test:wear`, new, in `npm test`): the four rooms; eligibility; `wearRoomsOf` on single, multi-tag, aliased and non-room labels; `deriveWearStats` distinct days, future plans excluded, same-day mirror counted once, rooms per day; `applyWearStats` overlay; `mostWornByRoom` ranking, swim and gym out, cache-only pieces unranked, empty rooms omitted, per-room cap.
+- Render walk +1 (31 steps): Home's Most worn section renders both fixture rooms (Work, Casual) and no swim piece.
+
+### Downstream, four ways
+
+*Efficiency* — no new fetch: the rooms are read off rows Home already holds; one pass over plans and logs as before. No prompt change. *Effectiveness* — the reading answers the question she asks ("what do I reach for at work?"), and every most-worn surface uses the same eligibility, so no surface can rank a swimsuit again. *Speed* — nothing on a tap path. *Education* — none new: the stylist's occasion memory already reads her wears per occasion; this brings what she SEES in line with what the stylist already knows.
+
+### Verified
+
+`npm test` (43 suites; `test:wear` new), `npm run build`, `npm run smoke` (31 walk steps) green. Live replay above.
+
 ## [Unreleased] — "My trip planner stopped working!": the Plan a trip sheet threw on open, and the check for that whole class — 2026-09-22
 
 ### Why

@@ -168,17 +168,20 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
               Color story: {periodStats.colorFamilies.slice(0, 5).map(c => c.family).join(" · ")}
             </div>
           )}
-          {periodStats.topPieces.length > 0 && (
-            <div style={{ display: "flex", gap: 6, marginTop: 8, overflowX: "auto", paddingBottom: 2 }}>
-              {periodStats.topPieces.map(({ item, wears }) => (
-                <button key={item.id} onClick={() => onEditItem?.(item)}
-                  style={{ flexShrink: 0, width: 52, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
-                  <Img it={item} size={52}/>
-                  <div style={{ fontSize: 9, color: PALETTE.muted, marginTop: 2 }}>{wears}×</div>
-                </button>
-              ))}
+          {periodStats.topByRoom.map(({ room, pieces }) => (
+            <div key={room} style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted }}>{room.toUpperCase()}</div>
+              <div style={{ display: "flex", gap: 6, marginTop: 4, overflowX: "auto", paddingBottom: 2 }}>
+                {pieces.map(({ item, wears }) => (
+                  <button key={item.id} onClick={() => onEditItem?.(item)}
+                    style={{ flexShrink: 0, width: 52, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
+                    <Img it={item} size={52}/>
+                    <div style={{ fontSize: 9, color: PALETTE.muted, marginTop: 2 }}>{wears}×</div>
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+          ))}
         </div>
       )}
 
