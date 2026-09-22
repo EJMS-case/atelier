@@ -2,6 +2,40 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — "Nothing is really loading here": every photo was served no-cache; a trip that fails to save now says so — 2026-09-22
+
+### Why
+
+Owner, from the Plan a trip sheet the night the sheet came back (#246), with a screenshot: every tile on every day blank, only the pool suits drawn. *"Nothing is really loading here :-/"*
+
+Rows and logs first. Every photo exists in the bucket with bytes. Her edge logs for those ten minutes show the same photo requested six to nine times inside a minute — the Britten tote six times in fifteen seconds, the Vivienne tote nine times — every one a 200. The bucket's metadata explained it: **all 1,129 objects (photos, thumbs, inspiration) carried `cacheControl: no-cache`**, since the first upload in March. The app uploads through the raw storage REST API and never sent a Cache-Control header; `no-cache` is that API's default, and storage-api serves the stored value as the response header. So every `<img>` mount re-downloaded the full 200–400 kB photo. The trip sheet re-renders on every tap and on every app-focus refetch (the planner refetches plans on `focus` and `visibilitychange`); each render re-fetched all ~28 tiles from the network, and on a phone the loads never finished. The pool suits drew because TrimmedImage had already cropped them for the Saved tab earlier in the session and holds that crop in memory. The thumbnail cache's own header (2026-09-11) had recorded the symptom without the cause: "Supabase edge logs showed the same image URLs fetched 5–9× an hour."
+
+The same session had a second silent failure: Save trip wrote three calendar days (Sep 25–27, "Juliette's birthday") and no trip row, and told her nothing. `saveTrip` was wrapped in `catch { /* non-fatal */ }`; the days went in without a trip to open them from.
+
+### Changed
+
+- **Every upload sends `Cache-Control: max-age=31536000`** (`PHOTO_CACHE_CONTROL` in `lib/supabase.js`, on `uploadImage`, `uploadThumb`, `uploadInspirationImage`). A year is safe because the URL is the cache key and the URL changes when the bytes do: `uploadImage` stamps `?v=<now>` on every upload and `thumbUrl` hashes the photo URL into its own `?v=`.
+- **Migration 0037 backfilled the bucket** — `storage.objects.metadata.cacheControl` set on all 1,129 objects, applied live 2026-09-22 and verified (1,129 rows at `max-age=31536000`, 0 at `no-cache`). Break-glass rollback at the top of the file. From now on a photo downloads once per device and every surface that mounts one — the builder, every collage, the trip sheet, the packing list, the closet grid's fallback — reads it from the browser cache.
+- **A trip that fails to save is said, logged, and not half-pinned.** `handleAssign` now treats "no trip row came back" as failure: nothing is pinned, the message sits beside the Save button (a message at the top of the sheet is off-screen when she taps at the bottom), and the failure is recorded in `ai_errors` as `trip_save` with the destination, dates, closet and pin count, so the next session can read why. The packing-row write stays best-effort.
+- **The render walk serves a real transparent cutout for every photo** (`scripts/fixtures/cutout-png.mjs`, registered after the storage catch-all — Playwright matches the newest route first), cacheable and CORS-open the way the bucket is now, so `TrimmedImage`'s real path runs: the CORS `Image` load, the alpha bounding box, the canvas crop, the data URL. The Preview step then asserts **every tile on the day cards has painted its photo**, polling up to six seconds. An empty 200 (the old mock) turned every photo into an onerror fallback, so a tile that never painted was indistinguishable from one that did. The mock's trips POST now returns a row, as the live API does, so the Save step asserts what really happens: the new trip's screen opens, and Back to Calendar returns to the month.
+
+### Tests
+
+- `scripts/storage-cache.test.mjs` (`test:storage`, new, in `npm test`): every storage upload the client makes sends `PHOTO_CACHE_CONTROL`, `uploadImage` returns a `?v=`-stamped URL, and a new upload path added without the header fails the suite.
+- Render walk: the Plan a trip Preview step asserts every piece tile painted (31 steps, one strengthened).
+
+### Downstream, four ways
+
+*Efficiency* — the big one: a photo is fetched once per device instead of once per mount. Her session that night pulled ~300 full-size photo requests in twelve minutes for a handful of screens; the same session now costs the first load of each and nothing after. Egress falls with it. *Effectiveness* — the trip sheet shows its pieces; a trip that did not save cannot pass for one that did. *Speed* — every screen that draws photos (builder, collages, Saved, Planner, trips) paints from cache after first sight; the trip sheet's re-renders are free. *Education* — `trip_save` rows in `ai_errors` say why a save failed, so the next fix starts from evidence rather than a screenshot.
+
+### Open
+
+- Why that save produced no trips request at all is not established — no POST reached Supabase, so the fetch failed before leaving the phone, and the swallowed error is gone. The `trip_save` row will say next time. Her three orphan days (Sep 25–27, source `trip`, notes "Juliette's birthday") are hers to keep or clear; the app did not touch them.
+
+### Verified
+
+`npm test` (44 suites; `test:storage` new), `npm run build`, `npm run smoke` (31 walk steps, every trip tile painted) green. Live: 1,129 objects at `max-age=31536000`.
+
 ## [Unreleased] — Most worn reads by room: Work / Work Dinner / Casual / Dinner, swim never ranked — 2026-09-22
 
 ### Why
