@@ -2,6 +2,39 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — "It keeps showing the wrong one": a room's keyword ban read her stylist line as substrings, and the request box now reads back the piece it resolved to — 2026-09-24
+
+### Why
+
+Owner: *"I'm trying to have Atelier style a Theory dress but it keeps showing the wrong one in Style Me."* Rows first: she owns three Theory dresses — the **Eano Sleeveless Dress** (NYC, line *"work, dinners, semiformal"*), the **Sheath Dress** (NYC, *"work or evening"*) and the magenta Sleeveless House Dress (Arizona). Her log shows five Work · Cool taps in four minutes on the 24th. Replaying the sampler against her real rows: **neither NYC dress reached a Work pool for any phrasing, the spark button's literal name included.** Work's banned keywords (`evening`, `formal`, …) were tested as raw substrings of `name + classifierNotes`: *"semiformal"* contains *"formal"*, *"work or evening"* contains *"evening"*. The named piece was gone before force-include ran, nothing was forced, and the model built around whichever dress it liked — the same one, tap after tap.
+
+The family, on her live rows: **23 NYC pieces whose line says "work" or "office" first never reached a Work pool** — all three Theory Staple blazers (*"work, evening, travel"*), the Terena wool pants (*"work and evening"* — the 2026-08-19 fix rescued them from the weather gate; the keyword gate still took them), both Ripley Rader ponte pencil skirts, the Dayna satin pants, four silk blouses, the Kawait necklace. Her own **"formality 3"** notation read as *"formal"* (Margot Jeans, the T Tahari ponte skirt). And **every pair of tights** (*"…and polished evenings"*) was out of Work in Cool — the 3a hosiery boost that exists to keep skirts winter-viable had nothing to boost.
+
+### Changed
+
+- **Rooms, in her own words** (`closet-sampler.js`): `ROOM_WORDS` is the one vocabulary for reading a room off her line, positive and negative. `noteNamesOccasion` (*"work"* names Work) and `noteVetoesOccasion` (*"not for work"*, now also *"non-work"* and *"not regular dinners"*) read the same words. The veto still wins.
+- **One room-keyword gate**, at step 1, over `OCCASION_SLOTS.banned.keywords ∪ OCCASION_PREFILTERS.removeKeywords` (the two lists were applied at two steps with two rescues; step 1b no longer re-applies them). Whole words, plural allowed — *"semiformal"* and *"formality 3"* are not *"formal"*. Three yields, each an existing principle: **she named the piece** this tap; **her line names this room** (a cross-room piece is hers to wear here — the model reads the line and decides, which is what a preference is); **hosiery** (a layer under the skirt, never a room piece). A line that says only *"for evening"* stays out of Work as before.
+- **Specificity at force-include** (`utils/free-text-match.js`, new — the matchers moved out of the sampler so the panel can read them from the boot chunk): a generous match now carries a score (distinct request tokens landed, notes and fields counted together), and only the best-scoring pieces are forced. *"eano dress"* is the Eano alone; *"theory dress"* is a tie and keeps both. Quotes no longer break a token (`"Eano` used to match nothing).
+- **Alternates take turns**: tied force-includes are ordered least-recently-suggested first, and the single-look prompt builds around the FIRST when they are alternates for one slot, leaving the others for her next tap. The model no longer re-picks its favourite.
+- **The request box reads back what Atelier read** (`App.jsx`): under *Anything specific?*, one resolved piece shows *"Building around …"*; a tie shows chips — *"Atelier reads this as 2 pieces — tap the one you mean, or leave it and they take turns"* — and a tap rewrites the request to that piece's full name (`requestForPiece`, the same line the spark button writes). Same reader (`resolveRequestedPieces`), same pool (`available`), so the line is the truth, not a paraphrase.
+- Stale comment in `constants/styling.js` corrected: the validator never re-checks `banned.keywords`.
+
+No row was changed. Her lines were right; the reader was wrong.
+
+### Tests
+
+- `test:rooms` (new, 13, in `npm test` — 45 suites): her verbatim lines as fixtures — the four Work pieces reach the pool; *"formality 3"*; tights in Work · Cool; *"for evening"* alone stays out; *"non-work"* / *"not for work"* / *"not regular dinners"* veto; *"workout"* is not *"work"*; a named piece clears the keyword gate; the spark's request pins exactly the tapped dress; specificity and turn-taking; the panel's read; a quoted name still counts.
+- `test:freetext` (14) unchanged and green through the move.
+- Render walk +1 (33 steps): the request box reads a named fixture piece back as *"Building around …"*.
+
+### Downstream, four ways
+
+*Efficiency* — no new call, no new import in the boot chunk beyond a ~5 kB pure module (`item-helpers` was already there); the read-back is string tests over ~350 pieces per keystroke, memoised on the pool and the text; the prompt change rides the uncached body. *Effectiveness* — the fix is in the sampler, so every surface that samples a pool inherits it: Style Me, the trip packer, ⊞ Build, the builder's picker pools; and the piece she asks for is now the piece that is forced. *Speed* — a Work pool is ~23 pieces wider; the model was already reading 170–200. *Education* — Atelier now reads her lines the way she writes them (rooms, listed), and she sees what it read before she taps; a wrong read is one tap to correct, and the correction is her own words on the piece.
+
+### Verified
+
+`npm test` (45 suites), `npm run build`, `npm run smoke` (33 walk steps) green. Live, read-only: the 23-piece list above is the query in the PR; the sampler replay against her three Theory rows (scratchpad, not committed) forces the Eano for its spark request, both black dresses for *"theory dress"*, and the Eano alone for *"eano dress"*.
+
 ## [Unreleased] — The first and last day of a trip default to Travel Day — 2026-09-22
 
 ### Why

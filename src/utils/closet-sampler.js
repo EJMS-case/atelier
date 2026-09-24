@@ -10,6 +10,7 @@ import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
 import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
+import { namedExplicitly, matchesFreeText, freeTextScore } from "./free-text-match.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -47,6 +48,10 @@ function seededShuffle(arr, rng) {
 
 // ── Occasion pre-filter rules ────────────────────────────────────────────────
 // Items clearly incompatible with the occasion are removed before sampling.
+// removeKeywords are read by the step-1 room gate together with the
+// occasion's OCCASION_SLOTS banned.keywords (one gate, one rule — whole words,
+// her line naming the room wins, a literal name wins, hosiery exempt); the
+// other fields are applied at step 1b.
 const OCCASION_PREFILTERS = {
   Lounge: {
     // Lounge is now explicitly athleisure-led — strip everything structured/
@@ -177,32 +182,80 @@ export function noteSaysOccasion(item, occasion) {
   return rx.test(((item.name || "") + " " + classifierNotes(item)).toLowerCase());
 }
 
+// ── Rooms, in her own words ──────────────────────────────────────────────────
+// Her stylist line lists the ROOMS a piece goes to ("work, dinners,
+// semiformal"; "work or evening"). ROOM_WORDS is the one vocabulary for
+// reading a room off that line, positive and negative alike:
+//   · noteNamesOccasion — "work" names Work; the room's keyword ban yields
+//     to it (below), because a line that lists this room AND another is a
+//     cross-room piece she wears here, not an evening-only piece that
+//     happens to mention work.
+//   · noteVetoesOccasion — "not for work" / "non-work" / "not regular
+//     dinners" keeps the piece OUT of that room outright.
+// One map, so a room she can name is exactly a room she can veto. (The
+// comfort rooms' broader OCCASION_NOTE_HINTS stay a RESCUE — noteSaysOccasion
+// — not a room name: "everyday" on a blazer vouches it past the dressiness
+// gate, it does not make "structured" a Lounge word.)
+const ROOM_WORDS = {
+  Work: "work|office|boardroom",
+  "Work Dinner": "work|office|boardroom",
+  Casual: "casual|weekend|everyday|brunch|errands?",
+  Dinner: "dinner|date.?night|drinks",
+  Occasion: "occasion|event|wedding|gala|black.?tie",
+  Lounge: "loung(?:e|ing)|home",
+  Active: "gym|active|work.?out|training",
+  "Travel Day": "travel|airport|flight",
+  Vacation: "vacation|resort|beach",
+};
+const roomWordsRe = {};
+const roomVetoRe = {};
+// True when her own line or the name says this piece goes to this room.
+export function noteNamesOccasion(item, occasion) {
+  const words = ROOM_WORDS[occasion];
+  if (!words) return false;
+  const rx = roomWordsRe[occasion] ||= new RegExp(`\\b(?:${words})s?\\b`, "i");
+  return rx.test((item.name || "") + " " + classifierNotes(item));
+}
+
 // ── Negative occasion notes ("NOT FOR WORK") ─────────────────────────────────
-// The mirror image of noteSaysOccasion: her own note can veto a piece OUT of
+// The mirror image of noteNamesOccasion: her own note can veto a piece OUT of
 // an occasion outright (owner report 2026-08-19: a shoe whose note read
 // "NOT FOR WORK" was styled into a Work look — the note reached the prompt
 // as context but nothing enforced it). Recognized shapes: "not for work",
-// "no work", "never for work" (any casing; a preposition between is
-// optional). Per the owner, "work" covers BOTH Work and Work Dinner. Curated
-// notes only (NOTES POLICY) — product copy can't veto. Only literally NAMING
-// the piece in the request box overrides: that's a per-tap instruction
-// outranking a standing note.
-const OCCASION_VETO_ALIASES = {
-  Work: "work|office",
-  "Work Dinner": "work|office",
-  Casual: "casual",
-  Dinner: "dinner|date.?night",
-  Occasion: "occasion|event|wedding|gala",
-  Lounge: "loung(?:e|ing)",
-  Active: "gym|active|workout",
-  "Travel Day": "travel",
-  Vacation: "vacation",
-};
+// "no work", "never for work", "non-work", "not regular dinners" (any casing;
+// a preposition or one qualifying word between is optional). Per the owner,
+// "work" covers BOTH Work and Work Dinner. Curated notes only (NOTES POLICY)
+// — product copy can't veto. Only literally NAMING the piece in the request
+// box overrides: that's a per-tap instruction outranking a standing note.
 export function noteVetoesOccasion(item, occasion) {
-  const aliases = OCCASION_VETO_ALIASES[occasion];
-  if (!aliases) return false;
-  const rx = new RegExp(`\\b(?:not?|never)\\s+(?:for|at|to|in|on)?\\s*(?:the\\s+)?(?:${aliases})\\b`, "i");
+  const words = ROOM_WORDS[occasion];
+  if (!words) return false;
+  const rx = roomVetoRe[occasion] ||= new RegExp(
+    `\\b(?:not?|never|non)(?:[-\\s]+(?:for|at|to|in|on|regular|the|a|your|my))*[-\\s]+(?:${words})s?\\b`, "i");
   return rx.test((item.name || "") + " " + classifierNotes(item));
+}
+
+// ── Room keyword bans ────────────────────────────────────────────────────────
+// A room's banned keywords ("evening", "formal" for Work) are read against her
+// line as WHOLE WORDS, plural allowed. Until 2026-09-24 they were substrings:
+// "semiformal" and her own "formality 3" both read as "formal", so the Eano
+// Sleeveless Dress ("work, dinners, semiformal"), the Sheath Dress ("work or
+// evening"), all three Theory Staple blazers, the Terena wool pants, both
+// ponte pencil skirts and four silk blouses never reached a Work pool — 23
+// pieces whose line says "work" first — and a request that named one styled
+// without it ("it keeps showing the wrong one").
+const keywordRe = new Map();
+function hasRoomKeyword(text, keywords) {
+  for (const kw of keywords) {
+    let rx = keywordRe.get(kw);
+    if (!rx) {
+      const esc = kw.trim().toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+      rx = new RegExp(`\\b${esc}s?\\b`, "i");
+      keywordRe.set(kw, rx);
+    }
+    if (rx.test(text)) return true;
+  }
+  return false;
 }
 
 // Garments (not shoes/bags/accessories — a leather sneaker is fine for Lounge)
@@ -253,139 +306,6 @@ const BUCKET_TARGETS = {
 // counts keep the shuffle meaningful within each tier — total determinism
 // would freeze the inventory order between taps.
 const freshnessBand = (count) => count <= 0 ? 0 : count <= 2 ? 1 : count <= 6 ? 2 : 3;
-
-/**
- * Fuzzy-match the free-text request against item fields to find force-include items.
- * Returns true if the item is likely referenced by the user's request.
- */
-// Stop words that should never count as a match on their own — they appear in
-// everyday phrasing ("my red blazer", "with the satin top") and would flag
-// random items if treated as content tokens.
-const FREE_TEXT_STOPWORDS = new Set([
-  "the","a","an","my","with","and","or","of","in","on","at","for","to","that","this",
-  "is","it","be","as","by","i","me","include","use","wear","style","please","want","need",
-]);
-
-/**
- * Multi-field free-text matcher. Checks fields in priority order:
- *   1. NOTES — if notes describe the piece the user wants, that's the
- *      strongest signal (the user authored the notes themselves).
- *   2. BRAND
- *   3. COLOR
- *   4. MATERIAL
- *   plus opportunistic checks on name / subcategory / category / pattern.
- *
- * "Favorite Daughter blue blazer" should match an item where brand=Favorite
- * Daughter + color=blue + subcategory=Blazers. "satin blouse" should match
- * material=satin + subcategory=Blouses.
- *
- * Returns true if the item is likely referenced by the user's request.
- */
-// Did the user name this exact piece? True only when the request literally
-// contains the item's own name — "include my Navy Jumpsuit \"Sienna Jumpsuit\""
-// against an item named "Sienna Jumpsuit". This is the strong signal that
-// separates an explicit request from the incidental matches matchesFreeText
-// also accepts (a bare "black" hitting every black item's color field).
-//
-// Only strong matches are allowed to override an occasion ban, so naming a
-// piece works while a stray colour word still can't drag a cocktail dress into
-// Work. The name must carry at least two ≥3-char tokens: generic one-word
-// names ("Heels", "Tops") would otherwise rescue themselves off any request
-// that happened to use the word.
-function namedExplicitly(item, freeText) {
-  if (!freeText) return false;
-  const name = String(item.name || "").toLowerCase().trim();
-  if (name.length < 6) return false;
-  const nameTokens = name.split(/[\s,;.!?/-]+/).filter(t => t.length >= 3);
-  if (nameTokens.length < 2) return false;
-  return String(freeText).toLowerCase().includes(name);
-}
-
-function matchesFreeText(item, freeText) {
-  if (!freeText) return false;
-  const req = String(freeText).toLowerCase().trim();
-  if (!req) return false;
-
-  const tokens = req.split(/[\s,;.!?]+/)
-    .filter(t => t.length >= 2 && !FREE_TEXT_STOPWORDS.has(t));
-  if (tokens.length === 0) return false;
-
-  const fields = {
-    // Curated notes only (NOTES POLICY): the priority-1 rationale — "the user
-    // authored the notes themselves" — is false for pasted product copy, and
-    // 900 chars of copy turns every second word into an accidental
-    // force-include (the "navy tights" trap, amplified). Copy-described pieces
-    // still match via name/brand/color/material/subcategory below.
-    notes:       classifierNotes(item).toLowerCase(),
-    name:        (item.name || "").toLowerCase(),
-    brand:       (item.brand || "").toLowerCase(),
-    color:       (item.color || "").toLowerCase(),
-    subcategory: (item.subcategory || "").toLowerCase(),
-    category:    (item.category || "").toLowerCase(),
-    material:    (item.material || "").toLowerCase(),
-    pattern:     (item.pattern || "").toLowerCase(),
-  };
-
-  // Priority 1: NOTES. If notes are present and resolve the request, we don't
-  // need to check anything else — that's what the user told us about the
-  // piece in their own words.
-  if (fields.notes) {
-    if (fields.notes.includes(req)) return true; // full phrase in notes
-    const noteHits = tokens.filter(t => fields.notes.includes(t)).length;
-    if (noteHits >= 2) return true;              // 2+ tokens land in notes
-    if (noteHits >= 1 && tokens.length === 1) return true; // single-token query
-  }
-
-  // Priorities 2-4 + opportunistic. Count distinct FIELDS hit by any token —
-  // brand + color + subcategory is the canonical multi-field signal for
-  // "Favorite Daughter blue blazer". Each field can only score once per query
-  // so spamming the same word across fields doesn't inflate the count.
-  const fieldsHit = new Set();
-  const tokensHit = new Set();
-  for (const token of tokens) {
-    // Plural→singular fallback: "theory pants" must land on an item NAMED
-    // "Marcee Pant" (substring matching already covers the reverse direction).
-    // Stems only for ≥4-char tokens so a bare "is"/"as" can't stem to noise.
-    const stem = token.length >= 4 && token.endsWith("s") ? token.slice(0, -1) : token;
-    const hit = (field) => field.includes(token) || (stem !== token && field.includes(stem));
-    if (fields.brand       && hit(fields.brand))       { fieldsHit.add("brand");       tokensHit.add(token); }
-    if (fields.color       && hit(fields.color))       { fieldsHit.add("color");       tokensHit.add(token); }
-    if (fields.material    && hit(fields.material))    { fieldsHit.add("material");    tokensHit.add(token); }
-    if (fields.subcategory && hit(fields.subcategory)) { fieldsHit.add("subcategory"); tokensHit.add(token); }
-    if (fields.category    && hit(fields.category))    { fieldsHit.add("category");    tokensHit.add(token); }
-    if (fields.pattern     && hit(fields.pattern))     { fieldsHit.add("pattern");     tokensHit.add(token); }
-    if (fields.name        && hit(fields.name))        { fieldsHit.add("name");        tokensHit.add(token); }
-  }
-
-  // Single-token query (e.g. "blazer" or "navy") needs one field hit.
-  // Multi-token query needs at least two distinct fields hit — BY at least
-  // two distinct tokens: a lone garment noun landing in both subcategory and
-  // name (which naturally repeat each other — "Trousers" / "Wide Trouser")
-  // must not read as the multi-field signal that "brand + color +
-  // subcategory" carries.
-  if (tokens.length === 1 && fieldsHit.size >= 1) return true;
-  if (tokens.length >= 2 && fieldsHit.size >= 2 && tokensHit.size >= 2) return true;
-
-  // Brand-anchored fallback: when the full brand name appears verbatim in the
-  // request (e.g. "Favorite Daughter"), one additional field hit is enough
-  // because the brand alone is a very strong signal. "Additional" must mean
-  // a hit BEYOND brand: the brand token itself lands in fieldsHit, so a bare
-  // `size >= 1` was satisfied by every item of that brand — "theory trousers"
-  // force-included all ten of her Theory pieces, the model satisfied the
-  // "at least one must appear" rule with a Theory blazer, and three taps in a
-  // row produced zero trousers (owner report 2026-08-19).
-  if (fields.brand && req.includes(fields.brand)) {
-    let nonBrandHits = 0;
-    for (const f of fieldsHit) if (f !== "brand") nonBrandHits++;
-    if (nonBrandHits >= 1) return true;
-    // A request that is essentially JUST the brand ("style me in favorite
-    // daughter") legitimately means "anything of theirs" — every non-stopword
-    // token is part of the brand name, so the whole label matches.
-    if (fieldsHit.has("brand") && tokens.every(t => fields.brand.includes(t))) return true;
-  }
-
-  return false;
-}
 
 /**
  * Main sampling function.
@@ -484,7 +404,27 @@ export function sampleClosetItems({
   const slots = occasionSlots || {};
   const bannedCats = new Set(slots.banned?.categories || []);
   const bannedSubs = new Set(slots.banned?.subcategories || []);
-  const bannedKeywords = slots.banned?.keywords || [];
+  // The room's keyword ban — OCCASION_SLOTS banned.keywords ∪ the prefilter's
+  // removeKeywords, one gate — with three yields, each an existing principle:
+  //   · she NAMED the piece this tap (nameRescueIds: a literal name clears
+  //     every ban here, as it clears the category and weather gates);
+  //   · her line NAMES THIS ROOM (noteNamesOccasion: "work, dinners,
+  //     semiformal" is a Work piece that also goes to dinner — the model
+  //     reads the line and decides, which is what a preference is);
+  //   · hosiery (a layer under the skirt, never a room piece: "polished
+  //     evenings" on every pair of tights emptied legwear out of Work in
+  //     Cool, undoing the 3a boost that exists to keep skirts winter-viable).
+  // The veto above still wins: "not for work" is her decision, not a hint.
+  const preFilter = OCCASION_PREFILTERS[occasion];
+  const roomKeywords = [...new Set([...(slots.banned?.keywords || []), ...(preFilter?.removeKeywords || [])])];
+  const roomBanned = (it) => {
+    if (roomKeywords.length === 0) return false;
+    if (nameRescueIds.has(it.id) || isHosieryItem(it)) return false;
+    // classifierNotes: "sporty edge" / "casual Friday" in product copy must
+    // not ban a piece the way her own "casual only" tag deliberately does.
+    if (!hasRoomKeyword((it.name || "") + " " + classifierNotes(it), roomKeywords)) return false;
+    return !noteNamesOccasion(it, occasion);
+  };
 
   // Shared matcher from style-filters.js — same subcategory + name/notes
   // denim test the "No/Only Jeans" chips use, so the two can't drift.
@@ -507,17 +447,13 @@ export function sampleClosetItems({
     // Her own note vetoes this piece for this occasion outright ("NOT FOR
     // WORK") — see noteVetoesOccasion above. Only literal naming overrides.
     if (noteVetoesOccasion(it, occasion) && !nameRescueIds.has(it.id)) return false;
-    if (bannedKeywords.length > 0) {
-      // classifierNotes: "sporty edge" / "casual Friday" in product copy must
-      // not ban a piece the way her own "casual only" tag deliberately does.
-      const text = ((it.name || "") + " " + classifierNotes(it)).toLowerCase();
-      if (bannedKeywords.some(kw => text.includes(kw.toLowerCase()))) return false;
-    }
+    if (roomBanned(it)) return false;
     return true;
   });
 
   // ── 1b. Pre-filter by occasion-specific incompatibilities ──
-  const preFilter = OCCASION_PREFILTERS[occasion];
+  // (removeKeywords ran in step 1's room gate; category and subcategory
+  // removals and the keep gate apply here.)
   if (preFilter) {
     pool = pool.filter(it => {
       if (freeTextOverrideIds.has(it.id)) return true;
@@ -528,10 +464,6 @@ export function sampleClosetItems({
       if (preFilter.keepCategories && !preFilter.keepCategories.has(it.category) && !catRescued(it)) return false;
       if (preFilter.removeCategories.has(it.category) && !catRescued(it)) return false;
       if (preFilter.removeSubcategories.has(it.subcategory) && !onlyRescueIds.has(it.id)) return false;
-      if (preFilter.removeKeywords.length > 0) {
-        const text = ((it.name || "") + " " + classifierNotes(it)).toLowerCase();
-        if (preFilter.removeKeywords.some(kw => text.includes(kw))) return false;
-      }
       // Optional category-specific keep gate (e.g. Occasion: dresses must be
       // Occasionwear-category or have evening/cocktail keywords in notes).
       if (typeof preFilter.keep === "function" && !preFilter.keep(it)) return false;
@@ -841,12 +773,31 @@ export function sampleClosetItems({
   // report 2026-08-02 — tights turned up beside tailored trousers in a Work
   // look, unmentioned by the rationale, because the model had been told to use
   // them). An adjective describing the named piece is not a second request.
-  // With no explicit name anywhere, the generous match still applies.
-  const forceInclude = freeTextRequest
-    ? (nameRescueIds.size > 0
-        ? pool.filter(it => nameRescueIds.has(it.id))
-        : pool.filter(it => matchesFreeText(it, freeTextRequest)))
-    : [];
+  // With no explicit name anywhere, the generous match still applies — at
+  // its highest SPECIFICITY only (freeTextScore, 2026-09-24): "theory
+  // sleeveless dress" lands three tokens on the Eano Sleeveless Dress and two
+  // on the Sheath Dress, so the Eano is the request. A tie ("theory dress")
+  // keeps every tied piece, ordered least-recently-suggested first: the
+  // prompt builds a single look around the FIRST, so alternates for one slot
+  // rotate across her taps instead of the model re-picking its favourite.
+  let forceInclude = [];
+  if (freeTextRequest) {
+    if (nameRescueIds.size > 0) {
+      forceInclude = pool.filter(it => nameRescueIds.has(it.id));
+    } else {
+      let best = 0;
+      const scored = [];
+      for (const it of pool) {
+        const score = freeTextScore(it, freeTextRequest);
+        if (score <= 0) continue;
+        scored.push([it, score]);
+        if (score > best) best = score;
+      }
+      forceInclude = scored.filter(([, score]) => score === best).map(([it]) => it);
+    }
+    const ago = (it) => recencyRank[it.id] ?? Number.MAX_SAFE_INTEGER;
+    forceInclude.sort((a, b) => ago(b) - ago(a));
+  }
   const forceIds = new Set(forceInclude.map(it => it.id));
 
   // ── 5. Bucket remaining pool ──

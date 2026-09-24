@@ -70,8 +70,11 @@ export const STYLE_PREFS = {
 };
 
 // Consumed fields ONLY (verified against every caller):
-//   · banned.categories / banned.subcategories / banned.keywords — read by the
-//     closet-sampler's pre-filter and the validator's checkOccasion.
+//   · banned.categories / banned.subcategories — read by the closet-sampler's
+//     pre-filter and the validator's checkOccasion.
+//   · banned.keywords — read by the sampler's step-1 room gate only (whole
+//     words against her stylist line; a line that names the room wins — see
+//     closet-sampler.js). The validator never re-checks keywords.
 //   · banned.sandalForms — form-aware sandal ban (shared isSandalFormItem):
 //     also drops open sandal-form shoes FILED elsewhere (her heeled thongs
 //     live under Kitten/Block, so the literal "Sandals" subcategory ban

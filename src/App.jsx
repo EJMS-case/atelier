@@ -14,6 +14,7 @@ import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches, MISC_CATEGORY } from "./constants/taxonomy.js";
 import { defaultSortComparator, matchesColorFilter, mergeItems, slotForItem } from "./utils/item-helpers.js";
 import { computeFilterChips } from "./utils/style-filters.js";
+import { resolveRequestedPieces, requestForPiece } from "./utils/free-text-match.js";
 import { autoColorPairs } from "./utils/wardrobe-coverage.js";
 import {
   RECENT_LOOKS_KEY,
@@ -1029,11 +1030,21 @@ export default function App() {
   // Pre-fill the Style Me request with a phrasing the sampler / validator
   // can recognize, then jump to the panel. Used by ItemCard's spark button.
   const styleWithItem = useCallback((it) => {
-    const desc = `${it.color ? it.color + " " : ""}${it.subcategory || it.category}`.trim();
-    setRequest(`include my ${desc} "${it.name}"`);
+    setRequest(requestForPiece(it));
     setView("style");
     setStylePanelOpen(true);
   }, [setView]);
+
+  // What the sampler will read the request as — the same reader it uses
+  // (resolveRequestedPieces), over the same pool (`available`), so the line
+  // under the request box is the truth, not a paraphrase. When it resolves
+  // to several pieces for one slot (two Theory dresses), she taps the one she
+  // means and the request becomes that piece's name (owner, 2026-09-24: "it
+  // keeps showing the wrong one"). ~350 pieces × string tests per keystroke.
+  const requestReadAs = useMemo(
+    () => (request.trim() ? resolveRequestedPieces(available, request) : null),
+    [available, request],
+  );
 
   // "Build a similar look" from a saved log. Seeds Style Me with the original
   // look's silhouette description + its occasion / weather, then opens
@@ -1617,11 +1628,35 @@ export default function App() {
           <input placeholder="Anything specific? (e.g. 'include my red blazer', 'all black', 'navy and brown')"
             value={request} onChange={e=>setRequest(e.target.value)}
             style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
-          {request && (
-            <div style={{fontSize:10, color:"var(--color-text-muted)", marginTop:-4, marginBottom:8, fontStyle:"italic"}}>
-              ✦ Applied as the theme for every look you generate. Named pieces are force-included.
-            </div>
-          )}
+          {/* What Atelier read: the pieces the request resolves to, from the
+              same reader the sampler force-includes with. One piece → it is
+              the anchor. Several → chips; a tap rewrites the request to that
+              piece's full name, which every reader takes as exactly it. */}
+          {request && (() => {
+            const hint = {fontSize:10, color:"var(--color-text-muted)", marginTop:-4, marginBottom:8, fontStyle:"italic"};
+            const pieces = requestReadAs?.pieces || [];
+            if (pieces.length === 0) {
+              return <div style={hint}>✦ Applied as the theme for every look you generate. Name a piece to build around it.</div>;
+            }
+            if (pieces.length === 1 || requestReadAs.named.length > 0) {
+              return <div style={hint}>✦ Building around <b>{pieces.map(p => p.name).join(" · ")}</b>.</div>;
+            }
+            const shown = pieces.slice(0, 6);
+            return (
+              <div style={hint}>
+                <div>✦ Atelier reads this as {pieces.length} pieces — tap the one you mean, or leave it and they take turns:</div>
+                <div style={{display:"flex", flexWrap:"wrap", gap:6, marginTop:6}}>
+                  {shown.map(p => (
+                    <button key={p.id} type="button" onClick={() => setRequest(requestForPiece(p))}
+                      style={{...s.chip, fontSize:11, padding:"5px 11px", fontStyle:"normal"}}>
+                      {p.name}
+                    </button>
+                  ))}
+                  {pieces.length > shown.length && <span style={{alignSelf:"center"}}>+{pieces.length - shown.length} more</span>}
+                </div>
+              </div>
+            );
+          })()}
 
           {styleErr && <p style={s.err}>{styleErr}</p>}
           <button style={{...s.btnPrimary, width:"100%"}}

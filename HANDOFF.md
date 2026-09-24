@@ -1,12 +1,28 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-22**, after the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-09-24**, after the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-24 · "It keeps showing the wrong one": Work's keyword ban read her lines as substrings; the request box now reads back the piece it resolved to
+
+**Owner, one line from her phone:** *"I'm trying to have Atelier style a Theory dress but it keeps showing the wrong one in Style Me."* Rows first, then a replay of the real sampler against them: neither black Theory dress ever reached a Work pool — *"work, dinners, **semiformal**"* and *"work or **evening**"* tripped Work's banned keywords as raw substrings, so nothing was forced and the model chose. 23 NYC pieces whose line says *work* first were hidden from Work the same way (three Theory blazers, the Terena pants, both ponte pencil skirts, four silk blouses), *"formality 3"* read as *formal*, and every pair of tights was out of Work in Cool. CHANGELOG has the detail. To carry:
+
+1. **`ROOM_WORDS` in `closet-sampler.js` is the one vocabulary for reading a room off her stylist line**, positive (`noteNamesOccasion`) and negative (`noteVetoesOccasion`). The room-keyword gate runs once, at step 1, as whole words, and yields to a literal name, to a line that names the room, and to hosiery. A new room word goes in that map, once.
+2. **`utils/free-text-match.js` is the one reader for "which pieces does this request name"** — the sampler forces what it returns (best specificity only, least-recently-suggested first) and the Style Me panel shows the same answer under the box. `requestForPiece` is the line the spark and a chip tap both write. Don't grow a second matcher.
+3. **The single-look prompt builds around the FIRST listed alternate** when several tied pieces fill one slot, so *"theory dress"* alternates across taps. Multi-look generation still rotates within the set as before.
+
+**Watch-items:**
+- **Her next Style Me with a Theory dress**: the spark on either black dress pins exactly that dress; *"theory dress"* shows two chips. If a look still comes back without the piece, that is the model past the validator's ≥1 check — `ai_errors` `stylist_outfit:*` for that minute, and `requested_items` in the retry log, are the tell.
+- **Work pools are ~23 pieces wider** (the list is in the PR). If a dinner-leaning piece she filed as *"work, evening"* now reads as too much for the office, the lever is her line, not a keyword: *"evening only"* or *"not for work"* keeps it out. That is the design — a preference in her words, not a rule in ours.
+- **`"work events"`** (Virgo Sweater Dress) now names Work by the whole-word read. Her word; the model sees the line. If she disagrees, the same lever.
+- **Arizona's magenta House Dress** is unreachable from the NYC closet by design (`available` is the active closet). A request for it from NYC resolves to nothing and the panel says so ("Applied as the theme…"). If she wants a cross-closet nudge there, the read-back is the place.
+
+**Verified before push:** `npm test` (45 suites), `npm run build`, `npm run smoke` green (33 walk steps).
 
 ### 2026-09-22 · The first and last day of a trip default to Travel Day
 

@@ -523,6 +523,18 @@ await check("Saved → Inspo tab (folded in from the nav, 2026-09-17)", async ()
   if (!/inspiration|Upload|Inspo/i.test(text)) throw new Error("the Inspo tab did not render");
 });
 await check("Style Me", tab("Style Me"));
+// The request box reads back which piece it resolved to (2026-09-24: two
+// Theory dresses, "it keeps showing the wrong one"). A named piece must
+// surface as "Building around …" from the same reader the sampler uses.
+await check("Style Me → 'Anything specific?' reads back the piece she named", async () => {
+  const input = 'input[placeholder^="Anything specific"]';
+  if (!(await page.$(input))) throw new Error("the Style Me request box is not on screen");
+  await page.fill(input, `include my "${wardrobe[0].name}"`);
+  await page.waitForTimeout(300);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Building around/.test(text)) throw new Error("the panel did not read the named piece back");
+  await page.fill(input, "");
+});
 // Opening a trip is what dereferences `available` down the planner chain. The
 // walk missed it once and a prop rename shipped an `undefined` straight
 // through PlannerWrapper — build green, twelve unit suites green, caught by
