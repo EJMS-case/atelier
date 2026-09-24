@@ -101,6 +101,17 @@ Conventions worth knowing:
   does not carry, through `notesBeyondLine()` — the same helper the Edit
   screen uses to quote that note to her. Don't read `item.notes` in the AI
   path any other way: what the app reads must be what she can see.
+- **Her stylist line lists ROOMS, and a room she names is a room she wears
+  the piece to** (owner, 2026-09-24). `ROOM_WORDS` in `closet-sampler.js` is
+  the one vocabulary: `noteNamesOccasion` reads "work" as Work,
+  `noteVetoesOccasion` reads "not for work" / "non-work" as never Work. A
+  room's keyword ban (`banned.keywords` ∪ `removeKeywords`) runs once, as
+  whole words, and yields to a literal name, to a line that names the room,
+  and to hosiery. "semiformal" is not "formal" and "work or evening" is a
+  Work piece — reading her lines as substrings hid 23 work pieces from Work.
+  **Which pieces a request names is answered by `utils/free-text-match.js`**
+  — the sampler forces what it returns and the Style Me panel shows her the
+  same answer; don't write a second matcher.
 - **Structured AI output goes through tool-use + Zod**, not JSON parsing — see
   `src/lib/ai/schemas.js` and `src/lib/ai/toolUse.js`.
 - **Every surface that gives her an OPINION on a look composes in
