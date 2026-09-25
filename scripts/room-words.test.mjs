@@ -20,7 +20,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sampleClosetItems, noteNamesOccasion, noteVetoesOccasion } from "../src/utils/closet-sampler.js";
 import { OCCASION_SLOTS } from "../src/constants/styling.js";
-import { resolveRequestedPieces, freeTextScore, requestForPiece } from "../src/utils/free-text-match.js";
+import { resolveRequestedPieces, freeTextScore, requestForPiece, distinguishingLabel } from "../src/utils/free-text-match.js";
 
 // Her lines, verbatim from the live rows (2026-09-24).
 const EANO   = { id: "eano",   name: "Eano Sleeveless Dress", brand: "Theory", category: "Dresses", subcategory: "Midi", color: "black", material: "triacetate", stylist_line: "Black fitted dress, sleeveless, princess seams, lined; work, dinners, semiformal; all seasons" };
@@ -126,4 +126,34 @@ test("resolveRequestedPieces is the panel's read: a name is exact, a tie is the 
 
 test("a quoted name still counts for the generous match", () => {
   assert.ok(freeTextScore({ id: "x", name: "Eano Sleeveless Dress", category: "Dresses" }, '"Eano Sleeveless Dress"') >= 2);
+});
+
+// ── Two pieces, one name (owner screenshot 2026-09-25) ───────────────────────
+// 'include my Teal Ponte "Ponte Knit Pant"' styled the NAVY Ponte Knit Pant:
+// both rows share the name, the name reader pinned both, and the single-look
+// prompt built around the first listed. 68 names in her closet are shared by
+// pieces that differ only in colour, so the rest of her words must decide.
+const PONTE_NAVY = { id: "pk-navy", name: "Ponte Knit Pant", brand: "Ripley Rader", category: "Bottoms", subcategory: "Ponte", color: "Navy", material: "Ponte Knit", stylist_line: "Navy ponte knit wide-leg pants, high-waisted, sculpting stretch; work, meetings, dinners; year-round" };
+const PONTE_TEAL = { id: "pk-teal", name: "Ponte Knit Pant", brand: "Ripley Rader", category: "Bottoms", subcategory: "Ponte", color: "Teal", material: "Ponte Knit", stylist_line: "Deep teal ponte knit wide-leg pants, high-waisted, sculpting stretch; work, dinners, travel; year-round" };
+const PONTE_ITEMS = [PONTE_NAVY, PONTE_TEAL, ...FILL];
+const ponte = (freeTextRequest, extra = {}) => sampleClosetItems({
+  items: PONTE_ITEMS, occasion: "Work", occasionSlots: OCCASION_SLOTS.Work, weather: "Mild (55-69°F)", freeTextRequest, ...extra,
+});
+
+test("a shared name: the colour in the spark's request picks the one she tapped", () => {
+  assert.equal(requestForPiece(PONTE_TEAL), 'include my Teal Ponte "Ponte Knit Pant"');
+  assert.deepEqual(ponte(requestForPiece(PONTE_TEAL)).forceIncludeIds, ["pk-teal"]);
+  assert.deepEqual(ponte(requestForPiece(PONTE_NAVY)).forceIncludeIds, ["pk-navy"]);
+  // …even when the navy pair is the one she has seen least recently.
+  assert.deepEqual(ponte(requestForPiece(PONTE_TEAL), { recentlySuggestedItems: ["pk-teal"], recencyRank: { "pk-teal": 0 } }).forceIncludeIds, ["pk-teal"]);
+});
+
+test("a bare shared name keeps both, and the read-back tells them apart by colour", () => {
+  const r = resolveRequestedPieces(PONTE_ITEMS, 'include my "Ponte Knit Pant"');
+  assert.deepEqual(r.pieces.map(p => p.id).sort(), ["pk-navy", "pk-teal"]);
+  assert.equal(distinguishingLabel(PONTE_TEAL, r.pieces), "Teal Ponte Knit Pant");
+  assert.equal(distinguishingLabel(EANO, [EANO, SHEATH]), "Eano Sleeveless Dress", "a unique name stays bare");
+  const one = resolveRequestedPieces(PONTE_ITEMS, requestForPiece(PONTE_TEAL));
+  assert.deepEqual(one.pieces.map(p => p.id), ["pk-teal"]);
+  assert.equal(one.named.length, 1);
 });

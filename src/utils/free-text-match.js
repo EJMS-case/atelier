@@ -170,24 +170,41 @@ export function matchesFreeText(item, freeText) {
  *   named   — pieces whose full name is in the request (the strong signal;
  *             when any exist they ARE the request, nothing else rides along)
  *   matched — otherwise, the generous matches at the highest specificity
- * `pieces` is whichever of the two applies. Order is the caller's (`items`).
+ * `pieces` is whichever of the two applies, at its highest specificity: 68
+ * names in her closet belong to two or more pieces that differ only in
+ * colour (two "Ponte Knit Pant", Navy and Teal), so among pieces sharing a
+ * name the REST of her words decide — 'include my Teal Ponte "Ponte Knit
+ * Pant"' is the teal pair, not both (owner screenshot 2026-09-25: the navy
+ * pair, "it keeps showing the wrong one"). Order is the caller's (`items`).
  */
 export function resolveRequestedPieces(items, freeText) {
   const req = String(freeText || "").trim();
   if (!req) return { named: [], matched: [], pieces: [] };
   const list = items || [];
-  const named = list.filter(it => namedExplicitly(it, req));
+  const named = mostSpecific(list.filter(it => namedExplicitly(it, req)), req);
   if (named.length > 0) return { named, matched: [], pieces: named };
+  const matched = mostSpecific(list, req);
+  return { named, matched, pieces: matched };
+}
+
+// The pieces of `list` the request refers to, keeping only the top score.
+function mostSpecific(list, req) {
   let best = 0;
   const scored = [];
   for (const it of list) {
-    const s = freeTextScore(it, req);
-    if (s <= 0) continue;
-    scored.push([it, s]);
-    if (s > best) best = s;
+    const score = freeTextScore(it, req);
+    if (score <= 0) continue;
+    scored.push([it, score]);
+    if (score > best) best = score;
   }
-  const matched = scored.filter(([, s]) => s === best).map(([it]) => it);
-  return { named, matched, pieces: matched };
+  return scored.filter(([, score]) => score === best).map(([it]) => it);
+}
+
+// How to name a piece among `pieces` so she can tell it apart: the name,
+// with the colour in front when another piece in the list shares the name.
+export function distinguishingLabel(piece, pieces) {
+  const twins = (pieces || []).filter(p => p !== piece && (p.name || "") === (piece.name || ""));
+  return twins.length > 0 && piece.color ? `${piece.color} ${piece.name}` : (piece.name || "");
 }
 
 // The request the spark button writes for a piece — the one phrasing every

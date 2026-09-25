@@ -529,7 +529,12 @@ await check("Style Me", tab("Style Me"));
 await check("Style Me → 'Anything specific?' reads back the piece she named", async () => {
   const input = 'input[placeholder^="Anything specific"]';
   if (!(await page.$(input))) throw new Error("the Style Me request box is not on screen");
-  await page.fill(input, `include my "${wardrobe[0].name}"`);
+  // A name shared by two NYC pieces would read back as chips, not an anchor
+  // — pick one that is unique in the closet she is standing in.
+  const nyc = wardrobe.filter(it => it.closet_id === NYC_CLOSET);
+  const unique = nyc.find(it => nyc.filter(o => o.name === it.name).length === 1);
+  if (!unique) throw new Error("no uniquely named NYC fixture piece");
+  await page.fill(input, `include my "${unique.name}"`);
   await page.waitForTimeout(300);
   const text = await page.evaluate(() => document.body.innerText);
   if (!/Building around/.test(text)) throw new Error("the panel did not read the named piece back");
