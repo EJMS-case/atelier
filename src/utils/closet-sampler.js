@@ -10,7 +10,7 @@ import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
 import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
-import { namedExplicitly, matchesFreeText, freeTextScore } from "./free-text-match.js";
+import { namedExplicitly, matchesFreeText, resolveRequestedPieces } from "./free-text-match.js";
 
 /**
  * Seeded pseudo-random number generator (mulberry32).
@@ -773,31 +773,18 @@ export function sampleClosetItems({
   // report 2026-08-02 — tights turned up beside tailored trousers in a Work
   // look, unmentioned by the rationale, because the model had been told to use
   // them). An adjective describing the named piece is not a second request.
-  // With no explicit name anywhere, the generous match still applies — at
-  // its highest SPECIFICITY only (freeTextScore, 2026-09-24): "theory
-  // sleeveless dress" lands three tokens on the Eano Sleeveless Dress and two
-  // on the Sheath Dress, so the Eano is the request. A tie ("theory dress")
-  // keeps every tied piece, ordered least-recently-suggested first: the
-  // prompt builds a single look around the FIRST, so alternates for one slot
-  // rotate across her taps instead of the model re-picking its favourite.
-  let forceInclude = [];
-  if (freeTextRequest) {
-    if (nameRescueIds.size > 0) {
-      forceInclude = pool.filter(it => nameRescueIds.has(it.id));
-    } else {
-      let best = 0;
-      const scored = [];
-      for (const it of pool) {
-        const score = freeTextScore(it, freeTextRequest);
-        if (score <= 0) continue;
-        scored.push([it, score]);
-        if (score > best) best = score;
-      }
-      forceInclude = scored.filter(([, score]) => score === best).map(([it]) => it);
-    }
-    const ago = (it) => recencyRank[it.id] ?? Number.MAX_SAFE_INTEGER;
-    forceInclude.sort((a, b) => ago(b) - ago(a));
-  }
+  // resolveRequestedPieces is the one reader — the panel shows her the same
+  // answer under the request box. It keeps the most SPECIFIC pieces only:
+  // among pieces sharing a name the rest of her words decide ("Teal" picks
+  // the teal Ponte Knit Pant, not both); with no name, "eano dress" is the
+  // Eano alone and "theory dress" is a tie that keeps both. A tie is ordered
+  // least-recently-suggested first: the single-look prompt builds around the
+  // FIRST, so alternates for one slot rotate across her taps instead of the
+  // model re-picking its favourite.
+  const ago = (it) => recencyRank[it.id] ?? Number.MAX_SAFE_INTEGER;
+  const forceInclude = freeTextRequest
+    ? resolveRequestedPieces(pool, freeTextRequest).pieces.sort((a, b) => ago(b) - ago(a))
+    : [];
   const forceIds = new Set(forceInclude.map(it => it.id));
 
   // ── 5. Bucket remaining pool ──

@@ -1,12 +1,25 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-24**, after the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-09-25**, after the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-09-25 · Two pieces, one name: the rest of her words pick the one she meant
+
+**Owner, screenshot after #251:** *"This is still not correct."* `include my Teal Ponte "Ponte Knit Pant"` built around the **navy** Ponte Knit Pant. She owns two (Navy, Teal), and **68 names in her closet are shared by pieces that differ only in colour.** The name reader pinned both and #251's "build around the first listed" line sent the model to the navy pair. CHANGELOG has the detail. To carry:
+
+1. **`resolveRequestedPieces` keeps the most specific pieces at both levels** — among name matches too. The colour/shelf words the spark writes are what separate twins; a bare shared name keeps both and they take turns. The sampler's step 4 calls this reader; there is no second copy.
+2. **`RequestReadBack.jsx`** is the line under the request box; twins are labelled by colour (`distinguishingLabel`). Two or more pieces always show as chips.
+
+**Watch-items:**
+- **Her next spark on a twin** (either Ponte Knit Pant, either Cece Blouse) reads back *"Building around <name>"* and the look carries that colour. If a twin still slips, `test:rooms`' PONTE fixtures are the place to reproduce it — her rows verbatim.
+- **Two rows that are true duplicates** (same name, same colour — e.g. "Camden Hoodie (Norwegian Woods)" ×2 Army Green, "501 Shorts" ×2) still tie and read back as two identical chips. Those are hers to merge (Closet → Duplicate) or leave; the app does not decide.
+
+**Verified before push:** `npm test` (45 suites), `npm run build`, `npm run smoke` green (33 walk steps).
 
 ### 2026-09-24 · "It keeps showing the wrong one": Work's keyword ban read her lines as substrings; the request box now reads back the piece it resolved to
 

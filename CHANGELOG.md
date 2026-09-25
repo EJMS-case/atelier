@@ -2,6 +2,32 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Two pieces, one name: the rest of her words pick the one she meant; the read-back becomes a component — 2026-09-25
+
+### Why
+
+Owner, screenshot after #251: *"This is still not correct. It seemed to be working ok before."* The request box read `include my Teal Ponte "Ponte Knit Pant"`, the read-back said *"Building around Ponte Knit Pant · Ponte Knit Pant"*, and the look was built around the **navy** pair. Rows first: she owns two Ripley Rader Ponte Knit Pants, Navy and Teal, and **68 names in her closet belong to two or more pieces that differ only in colour** (Cece Blouse ×4, Folded Sleeve Sweater ×4, both Nap Dresses, both Staple blazers, …). The name reader pinned every piece with the name and ignored the colour the spark button writes for exactly this case; #251's single-look line then told the model to build around the first listed, which was the navy pair. Before #251 the model happened to read "Teal" from the request text; the read was never right, the guess was.
+
+### Changed
+
+- **A shared name narrows by the rest of the request** (`resolveRequestedPieces`): among pieces whose name is in the request, only the most specific stay — *"Teal"* keeps the teal pair alone, whatever the rotation order. A bare shared name (`include my "Ponte Knit Pant"`) keeps both, and they take turns.
+- **The sampler's step 4 calls the same reader** it used to mirror. One reader, one answer, under the box and in the pool.
+- **Read-back chips tell twins apart by colour** (`distinguishingLabel`): *Navy Ponte Knit Pant · Teal Ponte Knit Pant*. Two pieces always show as chips now, named or not; one piece is *"Building around …"*.
+- **Clean-up**: the read-back is `features/stylist/RequestReadBack.jsx` (props `read`, `onPick`, `chipStyle`), not an inline block in `App.jsx`; the sampler's duplicated scoring loop is gone.
+
+### Tests
+
+- `test:rooms` +2 (15): the spark's request for each twin pins that twin, even when the other is the one she has seen least recently; a bare shared name keeps both and the labels differ.
+- Render walk: the read-back step names a fixture piece whose name is unique in the closet she stands in (a shared fixture name would read back as chips).
+
+### Downstream, four ways
+
+*Efficiency* — same call count; the pool-side selection is one pass instead of two. *Effectiveness* — the colour, fabric or shelf she gives with a name now reaches force-include, on every surface that samples. *Speed* — unchanged. *Education* — twins read back apart, so what she sees is what will be forced.
+
+### Verified
+
+`npm test` (45 suites), `npm run build`, `npm run smoke` (33 walk steps) green.
+
 ## [Unreleased] — "It keeps showing the wrong one": a room's keyword ban read her stylist line as substrings, and the request box now reads back the piece it resolved to — 2026-09-24
 
 ### Why
