@@ -397,3 +397,8 @@ Still open, deliberately:
 `.claude/hooks/session-start.sh` runs `npm install` at the start of every remote
 session (Claude Code on the web / Cowork) so tests and builds work immediately.
 It is a no-op on local checkouts. Registered in `.claude/settings.json`.
+
+The same file sets `permissions.defaultMode` to `bypassPermissions` with an
+allow list for every tool the session uses (owner, 2026-10-01: *"allow all,
+do not ask again"*). A session runs without approval prompts; the owner's
+standing instructions above are the guardrails, not the prompts.

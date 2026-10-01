@@ -1,4 +1,21 @@
 {
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash",
+      "Edit",
+      "Read",
+      "Write",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "mcp__github",
+      "mcp__Supabase",
+      "mcp__claude-code-remote"
+    ]
+  },
+  "skipDangerousModePermissionPrompt": true,
   "hooks": {
     "SessionStart": [
       {
