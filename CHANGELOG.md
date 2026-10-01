@@ -2,6 +2,40 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Favorites is a ♥ on Saved; the current models, shaped in one place; the look-back judge reads; Casual stops dressing for the office — 2026-10-01
+
+### Why
+
+Owner, four questions and an error, then *"run as a project manager … so I can go to sleep."*
+
+1. *"What's the difference between 'saved' and 'favorites'? Why can't I edit 'favorites'?"* Rows first: the `favorites` table had **0 rows** ever; the Favorites tab was showing her 23 Style Me ♥ loves, which are feedback rows (ids + occasion, no layout, no date) with no saved look behind them, rendered on a card with no actions. Nothing there could be edited because nothing there was a look.
+2. *"Could not read the stylist's picks — try again."* The look-back judge parsed a prose reply with a greedy bracket regex; the reply carries its own `[❤ hearted]` and `[trip]` flags.
+3. *"I want to ensure the models used are accurate throughout."* The tiers were Opus 4.8 / Sonnet 5 / Sonnet 4.6 / a dated Haiku id. Opus 5.5 is cheaper than Opus 4.8 and Sonnet 5.5 cheaper than Sonnet 4.6, and both are the current generation — but that generation rejects forced `tool_choice`, the sampling params and disabled thinking, which every structured call in the app sent.
+4. *"The casual selection … continues to suggest blazers … every option shouldn't be trousers and blazers."* Three carriers, each measured in the code: the creative briefs are written tailored ("oversized blazer", "bold trouser", "Coat/blazer") and were handed to every room; the Casual brief never said tailoring was the exception; and the inventory led with the blazers and wool trousers, and the model reads list order as salience.
+
+### Changed
+
+- **Favorites folded into Saved → All.** The tab is gone; a `♥ Favorites` status chip sits beside Ready to wear / Worn. A favorite is a saved look with a heart, so it has the full action row — Edit included. **A Style Me ♥ now saves the look** (`source: style_me`, layout and weather carried) **and hearts it**, still recording the feedback row that teaches; a look already saved with the same pieces is hearted, not saved twice. `FavoritesView.jsx` and `sb.deleteLookFeedback` deleted; `SavedView` no longer takes `favorites`.
+- **Backfill, live, additive** (the PR lists every row): her 23 loves → 19 new `outfit_logs` rows (`source: style_me`, the love's date, occasion normalised: Daytime → Casual, Dinner Party → Dinner; 4 loves already matched a saved look by piece set) and 23 `favorites` rows. Nothing deleted; the feedback rows stay as the taste signal.
+- **Model tiers**: `MODEL_TOP` claude-opus-5-5, `MODEL_STRONG` and `MODEL_STANDARD` claude-sonnet-5-5, `MODEL_FAST` claude-haiku-4-5. **One request shaper** (`prepareRequest`, applied inside `anthropicFetch` to every body the app sends) reads `MODEL_RULES` in `models.js`: on the thinking generation it drops the sampling params, a `thinking` block the model rejects and forced `tool_choice` (the tool is steered from a one-line prompt instruction; the callers' existing "no tool block → retry" branches are the check), defaults `effort` to `low` where a site chose none, and grows `max_tokens` by `THINKING_HEADROOM` so thinking cannot eat a cap sized for the reply. Haiku keeps the previous shape. The stylist's attempt 0 runs `low` (the call she waits on), retries `medium`; the chat, Evaluate and the gap analysis keep `medium`. Web search moved to `web_search_20260209`. Every stale "Opus 4.8 / Sonnet 5" comment rewritten.
+- **Look-back judge** on `invokeTool` + `StylishPicksSchema` (schemas.js §8); a parse failure now lands in `ai_errors` with the payload. Settings' orphan-photo re-identification — the same bracket-regex parse and a second copy of the category list — now calls the shared `autoDetectItem` on the top tier.
+- **Casual**: the preamble's THIRD PIECE and THE STANDARD's line 5 say the third piece belongs to the room (a blazer or knit at Work; a denim or leather jacket, an overshirt, a cardigan, a scarf or jewelry at Casual); the Casual brief says what the room IS (denim-led, current, easy) and that tailoring is the exception — a blazer or tailored trouser in at most one look, never together; `STYLING_STRATEGIES.occasion.Casual` gives Casual its own hero and proportion briefs through `strategiesFor(occasion)`; the sampler trails tailoring (`readsAsOffice`: the shared blazer predicate, her f5+ formality, trouser words) by two bands at Casual — an ordering, never a removal.
+
+### Tests
+
+- New `test:models` (5): the tiers are bare current ids; the request shape per generation; a model id outside `models.js` fails.
+- New `test:casual` (4): the briefs per room; the brief and the standard's wording; `readsAsOffice`; the sampler trails tailoring at Casual and keeps every piece.
+- `test:watchdog` assertions moved to the new shape (auto tool choice + steer line, effort per attempt).
+- Render walk +1 (34 steps): the ♥ Favorites chip narrows to the hearted look, the card still has Edit, and the status chip's "All" restores the list.
+
+### Downstream, four ways
+
+*Efficiency* — the top tier is 20% cheaper per token and STANDARD a third cheaper; the cached preamble changed once (the THIRD PIECE line) so one cache write; the steer line rides the end of the body. *Effectiveness* — a love is a look she can edit; the Casual read reaches Style Me (brief, briefs, inventory order), the chat and Evaluate (the standard), and the packer reads the same `OCCASION_SLOTS` note. *Speed* — attempt 0 at `low` effort keeps first token in seconds; the headroom is tokens she never waits on unless used. *Education* — a Style Me ♥ now lands in `outfit_logs` as well as `look_feedback`, so occasion memory, the built/loved lines and the recap all see it.
+
+### Verified
+
+`npm test` (47 suites), `npm run build`, `npm run smoke` (34 walk steps) green.
+
 ## [Unreleased] — Two pieces, one name: the rest of her words pick the one she meant; the read-back becomes a component — 2026-09-25
 
 ### Why

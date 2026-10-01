@@ -111,9 +111,9 @@ export async function generateBrandDiscovery({ items, apiKey, excludeBrands = []
   // AND the final JSON. The first production run died at max_tokens 3000
   // with only its opening sentence emitted (ai_errors 2026-08-20 06:20) —
   // hence 8000 here, searches capped at 4, and two recovery paths below.
-  const TOOLS = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
-  // 10000: search results AND Sonnet 5's default adaptive thinking both ride
-  // the output budget alongside the final JSON.
+  const TOOLS = [{ type: "web_search_20260209", name: "web_search", max_uses: 4 }];
+  // 10000: search results AND the model's adaptive thinking both ride the
+  // output budget alongside the final JSON.
   const baseBody = { model: MODEL_STRONG, max_tokens: 10000 };
   let messages = [{ role: "user", content: prompt }];
 

@@ -354,3 +354,39 @@ export const StylistLineTool = {
     required: ["line"],
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. judgeMostStylish — the look-back's "most stylish this month" judge
+//    (features/recap/recapAI.js). Was a prose reply parsed with a bracket
+//    regex; the reply carried "[trip]" / "[❤ hearted]" flags of its own and
+//    the parse failed on her phone ("Could not read the stylist's picks").
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const StylishPicksSchema = z.object({
+  picks: z.array(z.object({
+    index: z.coerce.number().int(),
+    why: z.string().default(""),
+  })),
+});
+
+export const StylishPicksTool = {
+  name: "rank_most_stylish",
+  description: "Return the most stylish looks she wore, highest first, each with one short reason written to her.",
+  input_schema: {
+    type: "object",
+    properties: {
+      picks: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            index: { type: "integer", description: "The # of the look from the list." },
+            why:   { type: "string", description: "One short clause (≤14 words) naming what makes it work, written to her." },
+          },
+          required: ["index", "why"],
+        },
+      },
+    },
+    required: ["picks"],
+  },
+};

@@ -123,7 +123,13 @@ export const OCCASION_SLOTS = {
     // pass will surface shorts only when it's warm). The banned list is
     // intentionally minimal — only occasionwear-formal stuff is out.
     banned: { categories: ["Occasionwear","Swim"], subcategories: ["Cocktail Dresses","Gowns","Formal Separates","Stiletto"], keywords: ["cocktail only","evening only","boardroom only"] },
-    promptNote: "CASUAL: Daytime out — brunch, lunch, friends, errands, weekend wandering; every look needs a top + bottom (or a dress). Polished but never trying: one piece a little elevated (a sharp flat or great sandal, one real accessory, a structured bag, an interesting texture) while the rest stays easy — save the good knits and low boots for cooler days. Denim — pants AND shorts — fully welcome, and athleisure and lounge pieces (hoodies, joggers, sport tops paired with denim) work great here; skirts and shorts surface naturally in warm weather. The vibe is real life, not a costume.",
+    // Owner, 2026-10-01: "it continues to suggest blazers … every option
+    // shouldn't be trousers and blazers — those are worn clothes." The brief
+    // now says what Casual IS (denim-led, current, easy) and names tailoring
+    // as the exception, not the default; the creative briefs (STYLING_
+    // STRATEGIES.occasion.Casual) and the sampler's Casual ordering carry
+    // the same read, so the model's salient options are the right ones.
+    promptNote: "CASUAL: Daytime out — brunch, lunch, friends, errands, weekend wandering; every look needs a top + bottom (or a dress). This is her off-duty register and it should read CURRENT and easy, never like the office with the blazer left on: denim leads (a great jean, a denim skirt, shorts in the heat), with a tee, a tank, a knit, a shirt worn open, a slip dress, a sundress. The third piece here is a denim or leather jacket, an overshirt, a cardigan, a scarf, or one real piece of jewelry. Tailoring is the exception, not the default — a blazer or a tailored trouser appears in at most ONE of the looks, only over something plainly casual (a tee, a tank, jeans), and never blazer + tailored trousers together; that is her Work look. Polished but never trying: one piece a little elevated (a sharp flat or great sandal, a loafer, one real accessory, a structured bag, an interesting texture) while the rest stays easy — save the good knits and low boots for cooler days. Athleisure and lounge pieces (hoodies, joggers, sport tops paired with denim) work here; skirts and shorts surface naturally in warm weather. The vibe is real life, not a costume.",
   },
   Active: {
     // Athleisure + sneakers only. The OCCASION_PREFILTERS.Active keepCategories
@@ -195,4 +201,39 @@ export const STYLING_STRATEGIES = {
     "DRESS HERO: One perfect dress does the work. Outerwear + accessories just frame it.",
     "TEXTURE HERO: Fabric is the star — leather, silk, cashmere, satin. Luxury is tactile.",
   ],
+  // Per-room rewrites of a dimension. The briefs above are written in the
+  // tailored register ("oversized blazer", "bold trouser", "Coat/blazer")
+  // and were handed to EVERY room — which is how a Casual tap kept coming
+  // back as blazer + trousers (owner, 2026-10-01). A room listed here swaps
+  // in its own list for that dimension; dimensions it leaves out keep the
+  // default. Comfort rooms skip the briefs entirely (stylist.js comfortMode).
+  occasion: {
+    Casual: {
+      proportion: [
+        "VOLUME UP TOP: Oversized/relaxed top (a slouchy knit, an oversized shirt, a boxy tee, a denim or leather jacket), fitted or straight below. Ease in the shoulder line.",
+        "VOLUME BELOW: Fitted top (a tank, a slim tee, a cropped knit), wide or fluid below — a wide-leg jean, a long denim skirt, a flowing midi. Movement in the bottom half.",
+        "COLUMN: Slim and streamlined head-to-toe — a straight jean and a fitted knit, or a slip dress. Interest from TEXTURE and COLOR, not volume.",
+        "CONTRAST: One dramatically oversized piece vs one dramatically fitted piece — an oversized shirt over a mini, a cropped tee over a wide jean. The tension IS the look.",
+      ],
+      hero: [
+        "JACKET HERO: A denim, leather, or utility jacket, an overshirt or a great cardigan is the star; everything underneath supports.",
+        "DENIM HERO: The jean, denim skirt, or shorts is the statement — the wash, the cut, the length. Top plays second.",
+        "TOP HERO: A tee, tank, knit, or shirt is the focal point — interesting texture, killer color, a stripe worn well. Bottom quiet.",
+        "DRESS HERO: One easy dress does the work — a slip, a sundress, a knit dress. A jacket + flat sandal or sneaker just frame it.",
+        "SHOE HERO: The sneaker, the loafer, the sandal, the ballet flat is the point — the rest stays quiet so the shoe reads.",
+      ],
+    },
+  },
 };
+
+// The briefs for a room: its own list for a dimension where one exists, the
+// default otherwise. The one reader — stylist.js picks per-look directions
+// from this.
+export function strategiesFor(occasion) {
+  const over = STYLING_STRATEGIES.occasion[occasion] || {};
+  return {
+    color: over.color || STYLING_STRATEGIES.color,
+    proportion: over.proportion || STYLING_STRATEGIES.proportion,
+    hero: over.hero || STYLING_STRATEGIES.hero,
+  };
+}

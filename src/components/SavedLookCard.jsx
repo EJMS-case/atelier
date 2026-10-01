@@ -5,13 +5,13 @@ import ItemDetailSheet from "./ItemDetailSheet.jsx";
 import { tagsFor } from "../lib/multitag.js";
 import { sortByCategoryOrder, resolveItemIds } from "../utils/item-helpers.js";
 
-// Free-text query provided by SavedView's search box. The Looks and Favorites
+// Free-text query provided by SavedView's search box. The Looks
 // lists fetch and render their own data, so search reaches them here at the
 // card level: each card hides itself when it doesn't match. Default "" = no
 // filtering (History runs its own pre-card search and provides nothing).
 export const LookSearchContext = createContext("");
 
-// Shared card layout used by Looks (All), OutfitHistory, and Favorites. Renders
+// Shared card layout used by Looks (All) and OutfitHistory. Renders
 // the outfit as the SAME styled editorial collage used for freshly generated
 // looks and the planner — so a saved/worn/favorited outfit is visualized the
 // way it actually looks, not as a loose grid of item thumbnails. Tapping a

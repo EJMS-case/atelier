@@ -1,17 +1,17 @@
 // ── LOOK SCOPE — "all my looks" vs "what I can wear from here" ────────────────
-// Saved shows looks on THREE surfaces (All, History, Favorites) and every one
-// of them asks the same two questions of the same rows:
+// Saved shows looks on TWO surfaces (All — hearts included — and History)
+// and both ask the same two questions of the same rows:
 //
 //   "what have I saved / worn / loved?"   → every look, both closets
 //   "what can I actually wear right now?" → only looks whose every piece is in
 //                                           `available`
 //
-// PR #222 answered that on ONE of the three. Standing in NYC the owner still
-// met Arizona looks in History and Favorites with nothing to narrow them —
-// the same "the fix stopped at the screen she screenshotted" shape this repo
-// has now hit five times. The scope rule lives here so all three surfaces get
-// it from one place, and a fourth surface gets it by importing rather than by
-// reimplementing.
+// PR #222 answered that on ONE of what were then three (Favorites folded into
+// All on 2026-10-01). Standing in NYC the owner still met Arizona looks in
+// History and Favorites with nothing to narrow them — the same "the fix
+// stopped at the screen she screenshotted" shape this repo has now hit five
+// times. The scope rule lives here so every surface gets it from one place,
+// and a new surface gets it by importing rather than by reimplementing.
 //
 // Everything here is pure: `scripts/look-scope.test.mjs` runs it directly.
 
@@ -46,8 +46,8 @@ export function countScopes(rows, availableIds, idsOf = idsOfLook) {
  * seeing many Arizona outfits."*
  *
  * ── Which surfaces may narrow themselves ─────────────────────────────────────
- * The ones she uses to CHOOSE something to wear — Saved → All, Favorites — do,
- * because a look she cannot put on today is noise there.
+ * The one she uses to CHOOSE something to wear — Saved → All — does, because
+ * a look she cannot put on today is noise there.
  *
  * **History does not, and must not.** It is a record of what she actually wore,
  * and she wore those looks: 16 of the 19 the NYC scope drops are New York

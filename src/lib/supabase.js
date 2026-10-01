@@ -316,7 +316,7 @@ export const sb = {
   // SavedLookCard rebuilds every collage from garment_ids + layout_data, and
   // the only readers of collage_url (LooksView / OutfitHistory parseMeta) want
   // the small {mood, styling} JSON that newer saves store there. Ten call
-  // sites fetch this table — App load, Style Me's learning path, Favorites,
+  // sites fetch this table — App load, Style Me's learning path, Saved,
   // Planner, Insights, Style Profile — so every one of them was paying 2.2 MB
   // on her phone (owner report 2026-09-10: Style Me "really really long to
   // load"). Two parallel requests: every column EXCEPT collage_url, plus the
@@ -329,7 +329,7 @@ export const sb = {
   // newest column); a new column that readers need must be added here.
   //
   // The collage-meta sidecar is OPT-IN (`withCollageMeta`): only the three
-  // screens whose parseMeta reads it (Saved, History, Favorites) ask for it.
+  // screens whose parseMeta reads it (Saved, History) ask for it.
   // App's mount, the planner, Insights, Style Profile and the learning path
   // never read collage_url, and were paying the second request — the
   // unindexed `not.like.data:*` scan — on every one of their fetches. Without
@@ -931,10 +931,10 @@ export const sb = {
     return scores;
   },
 
-  // Loved looks — every thumbs-up she's given in Style Me, newest first. The
-  // Favorites tab renders these directly: the thumbs-up IS her favorite signal
-  // (the heart-driven `favorites` table went untouched for weeks while
-  // look_feedback accumulated 20+ loves).
+  // Loved looks — every ♥ she's given in Style Me, newest first. Read by the
+  // learning path (occasion memory, Style Me's loved-looks block). Since
+  // 2026-10-01 a love also SAVES the look and hearts it (App's onRate), so
+  // the saved list carries her favorites; this stays the taste signal.
   async fetchLovedLooks() {
     try {
       const res = await fetch(
@@ -944,17 +944,6 @@ export const sb = {
       if (!res.ok) return [];
       return (await res.json().catch(() => [])) || [];
     } catch { return []; }
-  },
-
-  // Un-love from the Favorites tab. Deletes the feedback row outright, which
-  // also removes its (decayed) influence on stylist item scores — coherent:
-  // the thumbs-up is the favorite, so removing one removes the other.
-  async deleteLookFeedback(id) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/look_feedback?id=eq.${id}`, {
-      method: "DELETE",
-      headers: sbHeaders(),
-    });
-    if (!res.ok) throw new Error("Remove loved look failed");
   },
 
   // Recent looks she rated with a thumbs down — { item_ids, occasion }. Used to

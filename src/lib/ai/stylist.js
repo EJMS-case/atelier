@@ -4,7 +4,7 @@
 // Each function returns parsed JSON (or a string for streamStyleProfile).
 // Callers are responsible for UI state.
 
-import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, STYLING_STRATEGIES, OCCASION_SLOTS } from "../../constants/styling.js";
+import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, strategiesFor, OCCASION_SLOTS } from "../../constants/styling.js";
 import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { weatherAdjustedSlots } from "../../features/stylist/standard.js";
 import { learnedForStyleMe, describeDateContext } from "../../features/stylist/learning.js";
@@ -133,11 +133,14 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const skirtDressAvailable = skirtCount + dressCount > 0;
   const availabilityNote = `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants/leggings, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the looks should use a skirt or dress (not pants)." : "Only pants/leggings available, so build the lower half from those."}`;
 
-  // `shuffle` already clones internally; pass the array directly.
+  // `shuffle` already clones internally; pass the array directly. The briefs
+  // are the ROOM's (strategiesFor): Casual gets denim-and-jacket briefs, not
+  // the tailored defaults that kept handing it blazer + trousers.
   const pickRandom = (arr) => shuffle(arr);
-  const colorStrategies = pickRandom(STYLING_STRATEGIES.color);
-  const proportionStrategies = pickRandom(STYLING_STRATEGIES.proportion);
-  const heroStrategies = pickRandom(STYLING_STRATEGIES.hero);
+  const strategies = strategiesFor(occasion);
+  const colorStrategies = pickRandom(strategies.color);
+  const proportionStrategies = pickRandom(strategies.proportion);
+  const heroStrategies = pickRandom(strategies.hero);
   // One direction per look. Single-look generation only ships one direction.
   const stylingDirections = Array.from({ length: lookCount }, (_, i) => ({
     color: colorStrategies[i % colorStrategies.length],
@@ -541,7 +544,7 @@ WHAT SHE'S DRAWN TO (when listed) is the best gap signal you have: a mood, silho
     return invokeShoppingTool({
       apiKey,
       model: MODEL_STRONG,
-      // Sonnet 5 thinks adaptively by default and thinking tokens ride
+      // This generation thinks by default and thinking tokens ride
       // max_tokens — headroom above the ~1200-token gaps JSON or the tool
       // input truncates and the empty-retry wrapper burns a second call.
       maxTokens: 5000,

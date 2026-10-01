@@ -22,12 +22,13 @@ import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
 // that failed a per-look check and returns whatever survives.
 const MAX_RETRIES = 2;
 
-// The styling brain runs on Opus 4.8 for the strongest outfit judgment, but Opus
-// is also the most in-demand model and 529s ("Overloaded") during peak hours.
-// When a whole attempt fails on a transient/overload error, the next attempt
-// drops to Sonnet 5 — far less contended and still excellent for styling — so a
-// generation succeeds instead of surfacing an error. Opus stays primary; the
-// fallback only kicks in when Opus can't be reached.
+// The styling brain runs on the top tier (constants/models.js) for the
+// strongest outfit judgment, but Opus is also the most in-demand model and
+// 529s ("Overloaded") during peak hours. When a whole attempt fails on a
+// transient/overload error, the next attempt drops to the strong tier — far
+// less contended and still excellent for styling — so a generation succeeds
+// instead of surfacing an error. Opus stays primary; the fallback only kicks
+// in when Opus can't be reached.
 const PRIMARY_MODEL = MODEL_TOP;
 const FALLBACK_MODEL = MODEL_STRONG;
 const TRANSIENT_STATUS = new Set([408, 409, 429, 500, 502, 503, 529]);
@@ -1754,14 +1755,17 @@ async function runValidatedLooks({
         ({ toolBlock, raw, stalled, ...streamResult } = await invokeToolStream(
           {
             apiKey,
-            // Opus 4.8 for stronger outfit judgment. (Opus 4.8 removed the
-            // sampling params — passing `temperature` now 400s. Look-to-look
+            // The top tier for the strongest outfit judgment. Look-to-look
             // variety comes from the per-look creative briefs and the random
-            // Seed line in the dynamic body.) No `thinking` here on purpose:
-            // on Opus 4.8 omitting it means no thinking, and this is the call
-            // she is waiting on — first token in seconds, not after a think.
+            // Seed line in the dynamic body (no sampling params — the current
+            // generation rejects them). This generation always thinks; this
+            // is the call she is waiting on, so effort stays `low` — short
+            // thinking, first token in seconds — and the cap carries that
+            // thinking on top of the ~2.5k-token three-look JSON. `medium`
+            // is the lever if the looks need more judgment than speed.
             model,
-            maxTokens: 5000,
+            maxTokens: 6000,
+            outputConfig: { effort: "low" },
             content: messageContent,
             tool: LooksTool,
             kind: "stylist_outfit",
@@ -1841,21 +1845,18 @@ async function runValidatedLooks({
           // Attempt 0 (single-look, no streaming) stays on Opus; any RETRY runs
           // on the fallback model, which also covers the "Opus overloaded" case.
           model,
-          maxTokens: 5000,
+          maxTokens: 6000,
           content: messageContent,
           tool: LooksTool,
           kind: "stylist_outfit",
           totalMs: watchdog.totalMs,
-          // Sonnet 5 thinks adaptively by default at effort `high`, which is
-          // why the retry used to be the SLOW half of a slow tap. Adaptive is
-          // its only on-mode (budget_tokens is a 400 there), so the lever is
-          // effort: `medium` keeps enough reasoning to act on a failure list
-          // without the long pause. Left off attempt 0 on Opus 4.8 on purpose
-          // — see the streaming call above. Caches are model-scoped, so the
-          // extra body keys cost nothing the model switch hadn't already.
-          ...(model === FALLBACK_MODEL
-            ? { thinking: { type: "adaptive" }, outputConfig: { effort: "medium" } }
-            : {}),
+          // A retry carries a failure list to act on, so it thinks a notch
+          // harder than attempt 0: `medium` keeps enough reasoning for the
+          // corrections without the long pause `high` (Sonnet's own default)
+          // used to add — the retry was once the SLOW half of a slow tap.
+          // Attempt 0 (single-look, no streaming) stays `low` like the
+          // streamed attempt 0 above: the same call she waits on.
+          outputConfig: { effort: attempt === 0 ? "low" : "medium" },
         });
         ({ toolBlock, raw } = rawResult);
         Object.assign(rec, { usage: rawResult.usage, stopReason: rawResult.stopReason, ...(rawResult.timing || {}) });
@@ -1883,9 +1884,10 @@ async function runValidatedLooks({
     rec.totalMs = rec.totalMs ?? (Date.now() - attemptStarted);
 
     if (!toolBlock) {
-      // tool_choice is already forced — no need to echo an error on retry.
-      // Clean attempt on the next round avoids confusing the model with a
-      // "you didn't call the tool" message when it already has to call it.
+      // The tool is already steered (forced where the model allows it, the
+      // TOOL_STEER line where it does not) — no need to echo an error on
+      // retry. A clean attempt on the next round avoids confusing the model
+      // with a "you didn't call the tool" message when it already has to.
       lastFailures = [];
       if (stalled) {
         // The stream watchdog gave up (idle or total) and toolUse already

@@ -170,9 +170,9 @@ export async function sendBuilderMessage({ messages, assembledItems, available, 
       : { role: m.role, content: m.content }
   );
 
-  // Adaptive thinking at medium effort: Opus runs WITHOUT thinking when the
-  // parameter is omitted, and a chat that has to weigh a look against the
-  // standard and hold a position under pushback needs the room. Thinking tokens
+  // Adaptive thinking at medium effort (above the app-wide `low`): a chat
+  // that has to weigh a look against the standard and hold a position under
+  // pushback needs the room. Thinking tokens
   // count against max_tokens even though they never render (the 2026-08-20
   // "every bubble cut off" bug was exactly that), so the cap leaves headroom
   // for both. The stream reader only accumulates text deltas, so the thinking

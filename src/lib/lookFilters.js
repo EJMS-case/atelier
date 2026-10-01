@@ -38,7 +38,7 @@ export function rowMatchesWeather(row, short) {
 }
 
 // ── Shared row-rendering helpers ─────────────────────────────────────────────
-// One implementation for the Looks / History / Favorites cards (previously
+// One implementation for the Looks / History cards (previously
 // copy-pasted in each view).
 
 // Meta blob stashed in `collage_url` as JSON ({ mood, styling }). `|| {}`

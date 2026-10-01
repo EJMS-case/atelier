@@ -32,12 +32,14 @@ The register is quiet luxury on a Dark Winter palette (The Row, Totême, Khaite;
 
 | Tier | Model | Used for |
 |---|---|---|
-| `MODEL_TOP` | claude-opus-4-8 | Style Me first attempt, builder chat, Evaluate look, photo re-identification |
-| `MODEL_STRONG` | claude-sonnet-5 | Style Me retries and overload fallback, shopping ideas, Brand Atlas scout, trend-brief research |
-| `MODEL_STANDARD` | claude-sonnet-4-6 | Most text and vision helpers: fingerprint, stylist-line writer, vision enrichment, colour analysis, monthly profile, trip-day looks, inspiration notes |
+| `MODEL_TOP` | claude-opus-5-5 | Style Me first attempt, builder chat, Evaluate look, photo re-identification |
+| `MODEL_STRONG` | claude-sonnet-5-5 | Style Me retries and overload fallback, shopping ideas, Brand Atlas scout, trend-brief research |
+| `MODEL_STANDARD` | claude-sonnet-5-5 | Most text and vision helpers: fingerprint, stylist-line writer, vision enrichment, colour analysis, monthly profile, trip-day looks, inspiration notes, the look-back judge |
 | `MODEL_FAST` | claude-haiku-4-5 | Photo auto-detect on upload, chat-lesson distillation, trip destination brief |
 
-**Structured AI output** always goes through forced tool-use validated by paired Zod and JSON schemas, never free-form JSON parsing. A pure repair module (`coerce-shapes.js`) recovers the malformed shapes seen in production; every failure logs to an `ai_errors` table, which is the first place to look when generation misbehaves.
+The 5.5 generation thinks by default and the one lever is `effort`: every call runs at `low` unless its site asks for more (the stylist's retries, the chat, Evaluate and the gap analysis run `medium`), and every cap carries headroom for the thinking. One function (`prepareRequest`) shapes every request for its model — sampling params, forced tool choice and disabled thinking are dropped where a model rejects them — so a tier change is one edit.
+
+**Structured AI output** always goes through tool-use validated by paired Zod and JSON schemas, never free-form JSON parsing (the model is steered to the tool from the prompt; the callers retry when no tool call comes back). A pure repair module (`coerce-shapes.js`) recovers the malformed shapes seen in production; every failure logs to an `ai_errors` table, which is the first place to look when generation misbehaves.
 
 **Long AI calls** run in `src/lib/backgroundRun.js`, never in a screen's state: she can leave the screen, the run keeps going, the last result persists per device, and Home shows a pulsing dot while it runs.
 
@@ -92,9 +94,9 @@ A stream watchdog (45 s idle, 180 s total) turns a stalled phone connection into
 - **Trip status** (planning / active / complete) is load-bearing: while a trip is active her styling pool becomes the destination closet plus what she is carrying (packed or pinned). Every status is reachable from every other, because a one-way "complete" once stranded her mid-trip.
 
 ### Saved
-Four tabs: **All** (saved looks, with occasion, weather and ready-to-wear filters and search), **History** (the worn record, with wear-again, unlog, delete), **Favorites** (hearted saves merged with looks she loved in Style Me), and **Inspo**.
+Three tabs: **All** (saved looks, with ♥ Favorites / Ready to wear / Worn, occasion and weather filters, and search), **History** (the worn record, with wear-again, unlog, delete), and **Inspo**. A favorite is a saved look with a heart: the ♥ on a card here or in History hearts it, and the ♥ on a Style Me look saves it and hearts it (it still teaches the stylist). Every favorite therefore has the full action row — Edit, Log as worn, Build similar, Remove. (Until 2026-10-01 Favorites was a fourth tab that showed loves with no saved look behind them, and nothing there could be edited.)
 
-Every surface resolves a saved look's pieces against the whole wardrobe, so a look holding an Arizona piece is never reported as "pieces gone" from New York. All and Favorites narrow themselves to **"Wearable now"** (every piece available in the closet she is standing in) when something would otherwise be hidden, with counts and a sentence saying how many are hidden and why. **History never narrows itself**: it is a record of what she wore. Tapping Edit on any saved look opens the builder pre-filled, with the pool widened to include the look's own out-of-closet pieces.
+Every surface resolves a saved look's pieces against the whole wardrobe, so a look holding an Arizona piece is never reported as "pieces gone" from New York. All narrows itself to **"Wearable now"** (every piece available in the closet she is standing in) when something would otherwise be hidden, with counts and a sentence saying how many are hidden and why. **History never narrows itself**: it is a record of what she wore. Tapping Edit on any saved look opens the builder pre-filled, with the pool widened to include the look's own out-of-closet pieces.
 
 ### Inspiration (Saved → Inspo)
 She uploads reference photos tagged with an occasion and weather. One model call writes a two- to three-sentence **vibe note** (silhouette, colour story, texture, mood; no brands, no shopping). The note, not the image, is what the stylist reads when the occasion and weather match, so it steers taste without tempting the model to substitute pieces she does not own.

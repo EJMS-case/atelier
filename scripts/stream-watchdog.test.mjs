@@ -164,9 +164,12 @@ test("stream: a normal stream returns the tool block with usage and timing", asy
   assert.ok(!logged.some(r => r.kind.endsWith(":stalled")), "nothing logged on the happy path");
   const body = requests[0];
   assert.equal(body.stream, true);
-  assert.equal(body.thinking, undefined, "no thinking on the primary (Opus 4.8) call");
+  assert.equal(body.thinking, undefined, "the primary call does not send a thinking block — this generation thinks by default");
+  assert.deepEqual(body.output_config, { effort: "low" }, "attempt 0 is the call she waits on: short thinking");
   assert.equal(body.temperature, undefined, "no sampling params");
-  assert.deepEqual(body.tool_choice, { type: "tool", name: "return_looks" });
+  assert.deepEqual(body.tool_choice, { type: "auto" }, "forced tool choice is a 400 on this generation — the tool is steered from the prompt");
+  const steer = body.messages[0].content;
+  assert.match(typeof steer === "string" ? steer : steer.at(-1).text, /return_looks/, "the prompt names the tool");
 });
 
 test("stream: a caller abort still throws (and is not reported as a stall)", async () => {
@@ -328,8 +331,7 @@ test("generate: a dropped stream (Safari 'Load failed') falls through to a non-s
     assert.equal(requests[0].thinking, undefined);
     assert.equal(requests[1].model, MODEL_STRONG, "the retry runs on the fallback model");
     assert.equal(requests[1].stream, undefined, "non-streaming");
-    assert.deepEqual(requests[1].thinking, { type: "adaptive" });
-    assert.deepEqual(requests[1].output_config, { effort: "medium" });
+    assert.deepEqual(requests[1].output_config, { effort: "medium" }, "a retry thinks a notch harder than attempt 0");
     assert.equal(requests[1].temperature, undefined);
     assert.deepEqual(steps.map(s => s.step), ["stylist", "retry", "stylist", "validating"]);
     assert.equal(steps[1].detail.reason, "no looks came back");
@@ -368,7 +370,7 @@ test("generate: a STALLED stream is recorded on the attempt, reported as a step,
   assert.deepEqual(steps[2].detail, { attempt: 0, model: MODEL_TOP, stalled: "idle" });
   assert.equal(steps[3].detail.reason, "the stylist stalled");
   assert.equal(requests[1].model, MODEL_STRONG);
-  assert.deepEqual(requests[1].thinking, { type: "adaptive" });
+  assert.deepEqual(requests[1].output_config, { effort: "medium" });
   const stalledRows = logged.filter(r => r.kind === "stylist_outfit:stalled");
   assert.equal(stalledRows.length, 1, "one :stalled row, written by toolUse (the validator must not double-log it)");
   assert.equal(logged.filter(r => r.kind === "stylist_outfit:no_tool_use").length, 0, "a stall is not logged as no_tool_use");
@@ -427,6 +429,6 @@ test("generate: a thrown ValidationError still writes the timing row with outcom
   assert.equal(rows[0].payload.outcome, "validation_failed");
   assert.equal(rows[0].payload.attempts.length, 3);
   assert.ok(rows[0].payload.attempts.every(a => a.outcome === "hard_fail"));
-  assert.ok(requests.slice(1).every(r => r.model === MODEL_STRONG && r.thinking?.type === "adaptive"), "every retry carries adaptive thinking on the fallback model");
-  assert.equal(requests[0].thinking, undefined, "attempt 0 (non-streaming, Opus) still has no thinking");
+  assert.ok(requests.slice(1).every(r => r.model === MODEL_STRONG && r.output_config?.effort === "medium"), "every retry runs at medium effort on the fallback model");
+  assert.deepEqual(requests[0].output_config, { effort: "low" }, "attempt 0 (non-streaming, Opus) stays at low effort");
 });

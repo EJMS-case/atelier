@@ -111,8 +111,8 @@ export async function evaluateLook(items, apiKey, opts = {}) {
     inspirations,
   });
 
-  // Adaptive thinking (Opus runs without it when the parameter is omitted) at
-  // medium effort. Thinking tokens count against max_tokens even though they
+  // Adaptive thinking at medium effort — an opinion on a look earns more
+  // than the app-wide `low`. Thinking tokens count against max_tokens even though they
   // never render — the 900→1400 truncation saga (2026-08-19) was that in
   // disguise — so the cap leaves headroom for the ~900-token JSON. No sampling
   // params: `temperature` is a hard 400 on these models. The system block is
