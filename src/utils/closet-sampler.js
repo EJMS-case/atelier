@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 import { namedExplicitly, matchesFreeText, resolveRequestedPieces } from "./free-text-match.js";
@@ -269,6 +269,21 @@ function tooDressyForComfort(item, occasion) {
   if (DRESSY_COMFORT_SUBS.has(item.subcategory)) return true;
   const text = ((item.name || "") + " " + classifierNotes(item) + " " + (item.material || "")).toLowerCase();
   return DRESSY_COMFORT_MATERIAL.test(text);
+}
+
+// ── Tailoring in the off-duty room ───────────────────────────────────────────
+// At Casual a blazer or a tailored trouser is the exception, not the default
+// (the brief in OCCASION_SLOTS.Casual says so in words); here the same read
+// orders the inventory so the easy pieces lead and the office pieces trail.
+// Read from what she gave: the blazer predicate every surface shares, her
+// curated formality (f5 Business Casual and up), and the trouser words in a
+// name or subcategory. A pool is never emptied by this — it is an ordering.
+const TROUSER_RE = /\b(trousers?|slacks|suit pants?|dress pants?)\b/i;
+export function readsAsOffice(item, occasion) {
+  if (occasion !== "Casual") return false;
+  if (isBlazerItem(item)) return true;
+  if (Number.isFinite(item.formality) && item.formality >= 5) return true;
+  return slotForItem(item) === "bottom" && TROUSER_RE.test(`${item.name || ""} ${item.subcategory || ""}`);
 }
 
 // ── Category bucketing ───────────────────────────────────────────────────────
@@ -816,8 +831,13 @@ export function sampleClosetItems({
   // Band from the FAMILY's max lifetime count (see famCount above): a
   // rarely-suggested twin of a hero piece sorts with the hero instead of
   // leading the bucket as if it were new. Feedback and hearts stay per-item.
+  // A piece that is tailoring in a room where tailoring is the exception
+  // (readsAsOffice: Casual) trails its bucket by two bands — position only,
+  // never removed: the model reads list order as salience, and a Casual
+  // inventory that led with the Theory blazers and the wool trousers kept
+  // coming back as the office uniform (owner, 2026-10-01).
   const bandOf = (it) =>
-    Math.max(0, freshnessBand(famCount[famOf(it)] ?? (itemSuggestionCounts[it.id] || 0)) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0);
+    Math.max(0, freshnessBand(famCount[famOf(it)] ?? (itemSuggestionCounts[it.id] || 0)) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0) + (readsAsOffice(it, occasion) ? 2 : 0);
   for (const key of Object.keys(buckets)) {
     buckets[key] = seededShuffle(buckets[key], rng);
     // Precompute each item's band once — recomputing inside the comparator

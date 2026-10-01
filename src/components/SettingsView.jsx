@@ -8,7 +8,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 // vision prompt nor its category picker may offer the "Misc" holding room.
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { MODEL_TOP } from "../constants/models.js";
-import { anthropicFetch } from "../lib/ai/toolUse.js";
+import { autoDetectItem } from "../lib/anthropic.js";
 import AccountPanel from "./AccountPanel.jsx";
 
 export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = [], onUpdateItem, onAddItems, onForceSync }) {
@@ -94,44 +94,27 @@ export default function SettingsView({ apiKey, rmbgKey, onSave, onBack, items = 
     for (const imageId of orphans) {
       const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/wardrobe-images/${imageId}`;
       try {
-        let base64 = null;
+        let dataUrl = null;
         try {
           // Shared helper (utils/images.js) — the old inline FileReader had no
           // onerror handler, so a failed read hung the Promise forever.
-          const dataUrl = await imageToBase64(imageUrl);
-          base64 = dataUrl ? dataUrl.split(",")[1] : null;
+          dataUrl = await imageToBase64(imageUrl);
         } catch { /* skip if image can't be fetched */ }
-        if (!base64) continue;
-        const aiRes = await anthropicFetch({
-          model: MODEL_TOP,
-          max_tokens: 256,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-              // Category list is built from the canonical taxonomy so this
-              // prompt can't drift (a hand-copied clone here was missing
-              // Swim/Bags/Belts and re-tagged bags as Accessories). The bag/
-              // belt instruction mirrors src/lib/anthropic.js's DETECT_PROMPT.
-              { type: "text", text: `Look at this clothing item photo. Return JSON with: name (descriptive name), category (one of: ${STYLING_CATEGORY_ORDER.join("/")}), subcategory (specific type), color_family (main color). If it's a bag (any shape), use category "Bags" (not "Accessories"). Belts use "Belts". Shoes use "Shoes". Return only valid JSON.` },
-            ],
-          }],
-        }, { apiKey: key });
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          const text = aiData.content?.[0]?.text || "";
-          const match = text.match(/\{[\s\S]*\}/);
-          if (match) {
-            try {
-              const parsed = JSON.parse(match[0]);
-              setOrphanMeta(prev => ({ ...prev, [imageId]: {
-                name: parsed.name || "Item",
-                category: parsed.category || "Tops",
-                subcategory: parsed.subcategory || "",
-                color_family: parsed.color_family || "",
-              }}));
-            } catch { /* bad JSON, skip */ }
-          }
+        if (!dataUrl) continue;
+        // One photo reader (lib/anthropic.js autoDetectItem — tool-use +
+        // Zod, the same call Bulk Add makes), on the top tier here because a
+        // re-identification is a one-off she asked for. This block used to
+        // carry its own prompt and a bracket-regex JSON parse — the same
+        // class of bug the recap judge had — and a second copy of the
+        // category list.
+        const detected = await autoDetectItem(dataUrl, key, { model: MODEL_TOP });
+        if (detected) {
+          setOrphanMeta(prev => ({ ...prev, [imageId]: {
+            name: detected.name || "Item",
+            category: detected.category || "Tops",
+            subcategory: detected.subcategory || "",
+            color_family: detected.primary_color || "",
+          }}));
         }
       } catch(e) {
         console.error("AI categorize failed for", imageId, e);

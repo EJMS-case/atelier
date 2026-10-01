@@ -1,12 +1,28 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-09-25**, after the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-01**, after the Favorites fold, the model-generation move, the look-back fix and the Casual rework; before that the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-01 · Favorites is a ♥ on Saved; the current models, shaped in one place; Casual stops dressing for the office
+
+**Owner, from her phone before bed:** *"What's the difference between 'saved' and 'favorites'? Why can't I edit 'favorites'?"*, the look-back's *"Could not read the stylist's picks"*, *"ensure the models used are accurate throughout"*, and *"the casual selection … continues to suggest blazers."* CHANGELOG has the detail. To carry:
+
+1. **A favorite is a saved look with a heart.** Saved → All has a `♥ Favorites` chip; a Style Me ♥ saves + hearts (App's `onRate`); the 23 old loves were backfilled as saved, hearted looks (19 new rows). `look_feedback` stays the taste signal; `favorites` is the list.
+2. **`constants/models.js` says what each model ACCEPTS** (`MODEL_RULES`) and `prepareRequest` in `toolUse.js` shapes every body `anthropicFetch` sends. A call site never carries a per-model branch; `test:models` fails a model id anywhere else.
+3. **Casual is denim-led in three places that must agree**: the brief (`OCCASION_SLOTS.Casual`), the room's own creative briefs (`strategiesFor`), and the inventory order (`readsAsOffice` in the sampler). The standard's line 5 carries the same read to the chat and Evaluate.
+
+**Watch-items:**
+- **Her first Style Me taps on the new models.** Attempt 0 is Opus 5.5 at `low` effort with `tool_choice: auto` + a steer line. If `ai_errors` shows `stylist_outfit:no_tool_use` rows where the model wrote prose instead of calling the tool, the lever is the steer line in `toolBody` (or `strict: true` on `LooksTool` once its schema sets `additionalProperties: false`). If looks read less considered than before, `effort: "medium"` on attempt 0 is the one-line trade of seconds for judgment.
+- **Her next Casual tap**: denim or an easy dress should lead and a blazer should be the exception. If a blazer + trouser look still comes back, check the `[JUST SHOWN]` and freshness ordering first — the trailing is two bands, which a very fresh blazer can still beat; three bands is the next notch.
+- **The look-back judge**: "Show my most stylish looks" should return picks; a failure now writes `recap_judge:*` to `ai_errors`.
+- **Hearted PIECES** (`favorites` type `piece`): 0 rows ever; the closet-grid heart still writes them and the sampler still reads them (−0.25 within a band). No surface lists them any more — if she wants one, a chip on the closet grid is the place, not a tab.
+
+**Verified before push:** `npm test` (47 suites), `npm run build`, `npm run smoke` green (34 walk steps).
 
 ### 2026-09-25 · Two pieces, one name: the rest of her words pick the one she meant
 

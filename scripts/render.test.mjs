@@ -119,7 +119,10 @@ const TABLE = {
     garment_ids: [wardrobe[0].id, wardrobe[5].id],
     layout_data: null,
   }],
-  look_edits: [], look_feedback: [], favorites: [], sets: [],
+  // The NYC look is hearted: Favorites is a ♥ chip on Saved → All since
+  // 2026-10-01, and the walk taps it.
+  look_edits: [], look_feedback: [], sets: [],
+  favorites: [{ id: "fav-1", type: "outfit", reference_id: "log-nyc", created_at: "2026-08-02T00:00:00Z" }],
   user_settings: [], inspiration_images: [], shopping_collages: [], ai_errors: [],
 };
 
@@ -441,6 +444,30 @@ await check("Saved: All looks brings the Arizona look back, with its pieces", as
   if (/looks? (is|are) hidden/.test(text)) {
     throw new Error('"All looks" still claims to be hiding something — the tap did not stick');
   }
+});
+
+// Favorites folded into All (2026-10-01): the ♥ chip narrows the list to the
+// hearted looks, and the card keeps its action row — Edit included — which is
+// the whole reason the tab went away ("Why can't I edit favorites?").
+await check("Saved → ♥ Favorites chip narrows to the hearted look, with Edit on it", async () => {
+  await clickText("button", "♥ Favorites");
+  await page.waitForTimeout(500);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Work/.test(text)) throw new Error("the hearted NYC look is not listed under ♥ Favorites");
+  if (await pieceOnScreen(AZ_LOOK_PIECE)) throw new Error("an unhearted look survived the ♥ Favorites chip");
+  if (!/\bEdit\b/.test(text)) throw new Error("a favorite has no Edit — the fold lost the action row");
+  // Five buttons read "All…" on this screen (the Saved tab, the "All looks"
+  // scope chip, and the first chip of the status, occasion and weather rows);
+  // the status row's "All" is the chip right before "♥ Favorites".
+  const restored = await page.evaluate(() => {
+    const fav = [...document.querySelectorAll("button")].find(b => (b.textContent || "").trim() === "♥ Favorites");
+    const el = fav?.previousElementSibling;
+    if (!el || (el.textContent || "").trim() !== "All") return false;
+    el.click(); return true;
+  });
+  if (!restored) throw new Error("no status chip reading All");
+  await page.waitForTimeout(400);
+  if (!(await pieceOnScreen(AZ_LOOK_PIECE))) throw new Error("tapping All did not bring the list back");
 });
 
 // ── The builder, opened from Saved ───────────────────────────────────────────

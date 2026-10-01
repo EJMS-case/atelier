@@ -19,6 +19,10 @@ import ScopeChips from "./ScopeChips.jsx";
 // opened, even if the user never tapped "Build a Look".
 const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuilder.jsx"));
 
+// The hearted-looks chip label; one constant so the filter, the row and the
+// empty state cannot drift (the render walk taps it by this text).
+export const FAVORITES_CHIP = "♥ Favorites";
+
 // Status chip shown in the card header for worn/scheduled looks — muted,
 // letter-spaced small caps, matching the app's chip design language.
 const badgeStyle = {
@@ -35,8 +39,12 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
   const [dateById,  setDateById]  = useState({});
   const [filterOcc, setFilterOcc] = useState("All");
   const [filterWx,  setFilterWx]  = useState("All");
-  // Worn-status chip: "Ready to wear" restores the old save-for-later view
-  // (unworn + unscheduled) with one tap; "Worn" shows only worn looks.
+  // Status chip: "♥ Favorites" is the looks she hearted — here, in History,
+  // or with the ♥ in Style Me (a love saves and hearts, see App's onRate);
+  // "Ready to wear" restores the old save-for-later view (unworn +
+  // unscheduled) with one tap; "Worn" shows only worn looks. Favorites was
+  // its own tab until 2026-10-01, with cards that had no actions; one list,
+  // one card, one action row is what lets her edit a favorite.
   const [filterStatus, setFilterStatus] = useState("All");
   // Where she is standing. Saved looks are a HISTORY — both closets, always,
   // because a look RESOLVES against the wardrobe — but the list conflates
@@ -97,6 +105,7 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
   const occasions = occasionChipsFor(visibleLogs);
   const weathers  = weatherChipsFor(visibleLogs);
   const matchesStatus = (l) => {
+    if (filterStatus === FAVORITES_CHIP) return isFav("outfit", l.id);
     if (filterStatus === "Ready to wear") return !l.date_worn && !isScheduled(l);
     if (filterStatus === "Worn") return !!l.date_worn;
     return true;
@@ -131,7 +140,7 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
   const outOfScopeCount = scopeCounts.outOfScope;
   const displayed = filterToScope(filteredLogs, scope, availableIds);
   // Only offer the status chips when they'd actually split the list.
-  const hasWornOrScheduled = logs.some(l => l.date_worn || isScheduled(l));
+  const hasStatusSplit = logs.some(l => l.date_worn || isScheduled(l) || isFav("outfit", l.id));
 
   const today = nyToday(); // NYC date — UTC would roll to tomorrow from ~8pm ET
 
@@ -193,9 +202,9 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
       {!loading && logs.length > 0 && (
         <ScopeChips scope={scope} counts={scopeCounts} onChange={setFilterScope}/>
       )}
-      {!loading && logs.length > 0 && hasWornOrScheduled && (
+      {!loading && logs.length > 0 && hasStatusSplit && (
         <div style={{...s.filterRow, marginBottom: 8}}>
-          {["All", "Ready to wear", "Worn"].map(st => (
+          {["All", FAVORITES_CHIP, "Ready to wear", "Worn"].map(st => (
             <button key={st} onClick={() => setFilterStatus(st)}
               style={{...s.chip, ...(filterStatus === st ? s.chipActive : {})}}>{st}</button>
           ))}
@@ -227,6 +236,8 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
         <div style={s.empty}><div style={s.emptyMark}>✦</div><p style={s.emptyText}>
           {filterStatus === "Ready to wear" && filterOcc === "All" && filterWx === "All"
             ? "Every saved look is already worn or scheduled."
+            : filterStatus === FAVORITES_CHIP && filterOcc === "All" && filterWx === "All"
+            ? "Nothing hearted yet — tap ♥ on a look here, in History, or in Style Me."
             : scope === "Wearable now"
               ? `Nothing here is wearable from where you are right now — tap "All looks" to see the other ${outOfScopeCount}.`
               : "No saved looks match these filters."}

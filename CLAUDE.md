@@ -78,7 +78,14 @@ Conventions worth knowing:
 - **Anthropic model IDs live only in `src/constants/models.js`.** Call sites
   import a tier (`MODEL_TOP`, `MODEL_STRONG`, `MODEL_STANDARD`, `MODEL_FAST`);
   changing a tier there moves every call site at once. Don't hardcode a model
-  ID anywhere else.
+  ID anywhere else (`test:models` fails one). **What a model accepts lives
+  there too** (`MODEL_RULES`), and `prepareRequest` in `lib/ai/toolUse.js`
+  applies it to every body `anthropicFetch` sends: the 5.5 generation thinks
+  by default (effort is the lever; `DEFAULT_EFFORT` is `low`, a site that
+  needs more says so), rejects the sampling params, disabled thinking and
+  forced `tool_choice` (the tool is steered from the prompt instead), and
+  thinking rides `max_tokens` (`THINKING_HEADROOM`). A site never carries a
+  per-model branch of its own.
 - **Two words for a set of clothes, and only two.** `wardrobe` = everything she
   owns that can be styled (Misc excluded) — use it to RESOLVE something already
   committed (a saved look's ids, a suitcase, a set's members). `available` =
@@ -113,7 +120,9 @@ Conventions worth knowing:
   — the sampler forces what it returns and the Style Me panel shows her the
   same answer; don't write a second matcher.
 - **Structured AI output goes through tool-use + Zod**, not JSON parsing — see
-  `src/lib/ai/schemas.js` and `src/lib/ai/toolUse.js`.
+  `src/lib/ai/schemas.js` and `src/lib/ai/toolUse.js`. A bracket-regex parse
+  of a prose reply is how the look-back judge broke on her phone (the reply
+  carried its own "[❤ hearted]" flags, 2026-10-01); `invokeTool` is the path.
 - **Every surface that gives her an OPINION on a look composes in
   `src/features/stylist/standard.js`** — the persona, THE STANDARD, the
   opinion rules, the occasion + weather briefs, and `readLook()` (the app's
@@ -124,7 +133,9 @@ Conventions worth knowing:
 - **Navigation is fixed (owner, 2026-09-17): ATELIER = Home; the closet
   chip's NAME opens the closet grid and the ▼ beside it opens the switcher;
   every top-level Back lands on Home.** The nav is Style Me · Planner ·
-  Saved · ⚙; Inspo is Saved's fourth tab. Settings holds plumbing only
+  Saved · ⚙; Inspo is Saved's third tab (All · History · Inspo — Favorites
+  is the ♥ chip on All since 2026-10-01: a favorite is a saved look with a
+  heart, and a Style Me ♥ saves + hearts). Settings holds plumbing only
   (account, keys, photo tools, sync). Anything else she uses — Style Profile,
   Style Intelligence, Color Advisor, Visual AI, Brand Atlas, Shopping — is a
   row on Home. Don't add a pointer card to Settings again.

@@ -1,13 +1,16 @@
 // ── ANTHROPIC TOOL-USE HELPER ────────────────────────────────────────────────
 // Every structured AI call in Atelier goes through this. The caller hands over
-// the prompt, the tool definition, and the Zod schema; we force the model into
-// single-tool output, read `input` from the tool_use content block, and hand
-// back a Zod-validated object. Parse failures and API errors get logged to
-// `ai_errors` via logAiError so they can be inspected later.
+// the prompt, the tool definition, and the Zod schema; we steer the model into
+// single-tool output (forced where the model still allows it, `auto` plus a
+// one-line instruction where it does not — see toolBody), read `input` from
+// the tool_use content block, and hand back a Zod-validated object. Parse
+// failures and API errors get logged to `ai_errors` via logAiError so they
+// can be inspected later. `prepareRequest` shapes every body for its model.
 
 import { logAiError } from "./logError.js";
 import { parseLooseJson } from "../../utils/coerce-shapes.js";
 import { readSSEEvents } from "./sse.js";
+import { modelRules, DEFAULT_EFFORT, THINKING_HEADROOM } from "../../constants/models.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 
@@ -105,14 +108,21 @@ function pickUsage(u) {
   };
 }
 
+// The one line that replaces forced tool choice on the models that no longer
+// accept it (constants/models.js MODEL_RULES): the expectation goes in the
+// prompt, `tool_choice` stays `auto`, and the callers' existing "no tool_use
+// block → next attempt" branches are the check that the call was made.
+const TOOL_STEER = (name) => `Answer by calling the \`${name}\` tool exactly once — no prose before or after the call.`;
+
 // The request body every variant sends. `thinking` / `outputConfig` ride
-// through untouched so a call site can turn adaptive thinking on for one
-// attempt (the validator's Sonnet 5 retry) without this file knowing the
-// per-model rules — those live at the call site next to the model choice.
-// No `temperature` is added here: the 4.7+ models reject the sampling params
-// (anthropicFetch still strips them on a 400 for the older call sites that
-// pass one).
+// through as the call site set them; `prepareRequest` (below, applied in
+// anthropicFetch to EVERY body the app sends) reconciles them with what the
+// model accepts, so a site only states what it wants.
 function toolBody({ model, maxTokens, temperature, content, tool, thinking, outputConfig, stream }) {
+  const forced = modelRules(model).forcedTool;
+  const steered = forced ? content
+    : typeof content === "string" ? `${content}\n\n${TOOL_STEER(tool.name)}`
+    : [...content, { type: "text", text: TOOL_STEER(tool.name) }];
   return {
     model,
     max_tokens: maxTokens,
@@ -120,10 +130,48 @@ function toolBody({ model, maxTokens, temperature, content, tool, thinking, outp
     ...(thinking ? { thinking } : {}),
     ...(outputConfig ? { output_config: outputConfig } : {}),
     ...(stream ? { stream: true } : {}),
-    messages: [{ role: "user", content }],
+    messages: [{ role: "user", content: steered }],
     tools: [tool],
-    tool_choice: { type: "tool", name: tool.name },
+    tool_choice: forced ? { type: "tool", name: tool.name } : { type: "auto" },
   };
+}
+
+/**
+ * Reconcile a request body with what its model accepts. Pure; returns a new
+ * body. Applied inside anthropicFetch so every call site — the tool-use
+ * helpers here, the raw text and streaming calls, the web-search turns —
+ * gets the same treatment without each one knowing the generation's rules:
+ *   · a model that thinks by default runs at DEFAULT_EFFORT unless the site
+ *     chose one, and its `max_tokens` grows by THINKING_HEADROOM so the
+ *     thinking cannot eat a cap that was sized for the reply;
+ *   · a `thinking` block the model rejects (disabled / budget on the 5.5
+ *     generation, adaptive on Haiku 4.5) is dropped, never sent to 400;
+ *   · the sampling params and forced tool choice are removed where rejected
+ *     — `auto` plus the TOOL_STEER line is what toolBody sends instead;
+ *   · `output_config.effort` is dropped for a model that rejects it.
+ * Exported for the tests (scripts/model-rules.test.mjs).
+ */
+export function prepareRequest(body) {
+  const rules = modelRules(body.model);
+  const out = { ...body };
+  if (!rules.sampling) for (const p of SAMPLING_PARAMS) delete out[p];
+  if (out.thinking) {
+    const t = out.thinking.type;
+    if (rules.thinks ? t !== "adaptive" : t === "adaptive") delete out.thinking;
+  }
+  if (rules.thinks) {
+    out.output_config = { ...(out.output_config || {}) };
+    if (!out.output_config.effort) out.output_config.effort = DEFAULT_EFFORT;
+    if (Number.isFinite(out.max_tokens)) out.max_tokens += THINKING_HEADROOM;
+  } else if (out.output_config && "effort" in out.output_config) {
+    const { effort, ...rest } = out.output_config;
+    void effort;
+    if (Object.keys(rest).length) out.output_config = rest; else delete out.output_config;
+  }
+  if (!rules.forcedTool && out.tool_choice && (out.tool_choice.type === "tool" || out.tool_choice.type === "any")) {
+    out.tool_choice = { type: "auto" };
+  }
+  return out;
 }
 
 // Turn a raw API error into something the user can act on instead of a bare
@@ -144,7 +192,7 @@ const SAMPLING_PARAMS = ["temperature", "top_p", "top_k"];
 
 export async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = {}) {
   const delays = [600, 1500, 3200];
-  body = { ...body }; // local copy — the sampling-param rescue below may mutate it
+  body = prepareRequest(body); // a copy, shaped for its model — the rescue below may mutate it
   let samplingStripped = false;
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -169,10 +217,10 @@ export async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = 
     }
     const err = await res.json().catch(() => ({}));
     const raw = err?.error?.message || `API error ${res.status}`;
-    // Newer models (Sonnet 5, Opus 4.7+) removed the sampling params — a 400
-    // naming one means this call's model no longer accepts it. Strip them and
-    // retry instead of surfacing an error the user can't act on. Covers any
-    // call site the next model bump would otherwise break.
+    // prepareRequest already strips the sampling params for the models that
+    // reject them; this is the safety net for a model MODEL_RULES has wrong
+    // (a 400 naming one means the table needs a row). Strip and retry rather
+    // than surface an error she can't act on.
     if (
       res.status === 400 &&
       !samplingStripped &&
@@ -207,8 +255,8 @@ export async function anthropicFetch(body, { apiKey, signal, maxRetries = 3 } = 
  * @param {string}   opts.kind          - tag used when logging failures
  * @param {AbortSignal} [opts.signal]
  * @param {Function} [opts.coerce]      - optional pre-parse normalization: (input) => input
- * @param {Object}   [opts.thinking]    - e.g. { type: "adaptive" }; omitted = no thinking on Opus 4.8
- * @param {Object}   [opts.outputConfig] - e.g. { effort: "medium" }
+ * @param {Object}   [opts.thinking]    - e.g. { type: "adaptive" }; prepareRequest drops it where the model rejects it
+ * @param {Object}   [opts.outputConfig] - e.g. { effort: "medium" }; omitted = DEFAULT_EFFORT on a thinking model
  * @param {number}   [opts.totalMs]     - watchdog ceiling (default TOTAL_MS)
  * @returns {Promise<any>} validated tool input
  */

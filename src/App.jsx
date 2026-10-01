@@ -68,7 +68,7 @@ const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView
 const BrandDiscoveryView = lazy(() => import("./features/discovery/BrandDiscoveryView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
-import { unionTags, outfitsOf, buildPlanPayload, newOutfitId, appendOutfit } from "./features/planner/outfits.js";
+import { unionTags, outfitsOf, buildPlanPayload, newOutfitId, appendOutfit, sigOf } from "./features/planner/outfits.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -2317,8 +2317,8 @@ export default function App() {
                 setManualBuilderOpen(true);
               }}
               onRate={async (lk, rating) => {
+                const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
                 try {
-                  const itemIds = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
                   // Mood feature removed — lookHash treats a missing mood as ""
                   // so new hashes stay stable, and legacy hashes (which baked a
                   // mood in) simply never collide with new ones.
@@ -2333,6 +2333,35 @@ export default function App() {
                   if (scores) setFeedbackScores(scores);
                 } catch (err) {
                   console.warn("[F2] saveLookFeedback failed:", err);
+                }
+                if (rating !== 1) return;
+                // A love is a save (owner, 2026-10-01: "Why can't I edit
+                // favorites?"). The loves used to live only as feedback rows
+                // — a list of ids with no layout, no date, nothing to edit —
+                // so the ♥ now saves the look the way the Save button does
+                // (source style_me) and hearts it; the feedback row above
+                // still teaches. A look she already saved with the same
+                // pieces is hearted, not saved twice.
+                try {
+                  const sig = sigOf(itemIds);
+                  let log = (wearData.logs || []).find(l => sigOf(l.garment_ids) === sig);
+                  if (!log) {
+                    const result = await sb.saveOutfitLog({
+                      source: "style_me",
+                      garment_ids: itemIds,
+                      occasion: lk.occasion || occasion,
+                      weather: lk.weather || null,
+                      weathers: lk.weathers || null,
+                      layout_data: Array.isArray(lk.layout_data) ? lk.layout_data : null,
+                      collage_url: JSON.stringify({ mood: lk.mood, styling: lk.styling || lk.why }),
+                    });
+                    log = Array.isArray(result) ? result[0] : result;
+                    refreshWearData();
+                  }
+                  if (log?.id && !isFav("outfit", log.id)) await toggleFav("outfit", log.id);
+                  flashSync("synced");
+                } catch (err) {
+                  console.warn("[Atelier] love → save failed:", err);
                 }
               }}
               onSaveLook={async (log) => {
@@ -2447,7 +2476,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── SAVED (Looks / History / Favorites) ── */}
+      {/* ── SAVED (All / History / Inspo) ── */}
       {view === "favorites" && (
         <SavedView
           wardrobe={wardrobe}
@@ -2456,7 +2485,6 @@ export default function App() {
           apiKey={apiKey}
           inspirations={inspirations}
           setInspirations={setInspirations}
-          favorites={favorites}
           toggleFav={toggleFav}
           isFav={isFav}
           focusLookId={savedFocusLook}

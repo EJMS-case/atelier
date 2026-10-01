@@ -3,7 +3,8 @@
 // the most stylish, with a one-line reason each. Hearted looks are flagged so
 // the model can boost them, per the user's choice ("AI-judged, hearts boosted").
 
-import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { invokeTool } from "../../lib/ai/toolUse.js";
+import { StylishPicksSchema, StylishPicksTool } from "../../lib/ai/schemas.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
 
 // A year of daily looks can be hundreds of candidates — cap the lines sent to
@@ -82,35 +83,36 @@ Rules:
 EVERYTHING THE APP KNOWS ABOUT HER (judge against her taste, not a generic one):
 ${fp}` : ""}
 
-Return ONLY a JSON array, no prose, highest first:
-[{"index": <the # of the look>, "why": "<one short reason>"}]
+Return your picks through the rank_most_stylish tool, highest first.
 
 Outfits (# — date · occasion · weather · where · flags — pieces):
 ${lines}`;
 
-  const res = await anthropicFetch({
-    model: MODEL_STANDARD,
-    max_tokens: 900,
-    messages: [{ role: "user", content: prompt }],
-  }, { apiKey });
-  const data = await res.json();
-  const text = (data.content || []).map(b => b.text || "").join("").trim();
-
-  // Defensive parse — the model is told to return bare JSON, but strip any
-  // stray fences / prose and grab the first array.
+  // Tool-use + Zod, like every structured call (CLAUDE.md): the old prose
+  // reply was parsed with a greedy bracket regex, and the model's own
+  // "[❤ hearted]" / "[trip]" flags inside the reply broke it — "Could not read
+  // the stylist's picks" on her phone, 2026-10-01. A parse failure now lands
+  // in ai_errors with the payload, and the message to her is the tool's.
   let parsed;
   try {
-    const match = text.match(/\[[\s\S]*\]/);
-    parsed = JSON.parse(match ? match[0] : text);
-  } catch {
+    parsed = await invokeTool({
+      apiKey,
+      model: MODEL_STANDARD,
+      maxTokens: 900,
+      content: prompt,
+      tool: StylishPicksTool,
+      schema: StylishPicksSchema,
+      kind: "recap_judge",
+    });
+  } catch (e) {
+    if (e?.status) throw e; // an API error already reads well
     throw new Error("Could not read the stylist's picks — try again.");
   }
-  if (!Array.isArray(parsed)) return [];
 
   // Map back to real looks, drop anything out of range, keep order.
   const byIndex = new Map(candidates.map(c => [c.i, c.l]));
-  return parsed
-    .map(p => ({ look: byIndex.get(Number(p.index)), why: String(p.why || "").trim() }))
+  return parsed.picks
+    .map(p => ({ look: byIndex.get(p.index), why: String(p.why || "").trim() }))
     .filter(x => x.look)
     .slice(0, n);
 }

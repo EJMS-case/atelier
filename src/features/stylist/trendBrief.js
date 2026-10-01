@@ -95,7 +95,7 @@ Use web search to verify against at least two current, credible fashion sources 
 
   // Two searches satisfy the "at least two sources" the prompt asks for; four
   // made the call long enough to die on a phone before the brief was written.
-  const TOOLS = [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }];
+  const TOOLS = [{ type: "web_search_20260209", name: "web_search", max_uses: 2 }];
   const baseBody = { model: MODEL_STRONG, max_tokens: 8000 };
   let messages = [{ role: "user", content: prompt }];
   let body = null;
