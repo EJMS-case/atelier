@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A piece sent behind every other piece painted under the canvas — 2026-10-02
+
+### Why
+
+Owner, screenshot from the builder on her phone: *"There are 2 shoes selected here but I can't see the second pair (navy pumps)."* The chip read `SHOES ×2`; the canvas drew the flats only. Rows first: the pumps (Whipstitch Pointed Toe Heel, Navy, Brooks Brothers) are in NYC with a photo, and the planned look for 2026-10-01 holds both pairs with a saved layout in which the pumps sit at `z: -1` — one ↓ Back past the lowest piece. The builder's canvas is `position: relative` with no stacking context of its own, so a child with a negative z-index paints BENEATH the canvas's white background: present in the DOM, counted on the chip, drawn nowhere. The collage that re-renders a saved layout on a card (`collageCanvas`) has the same shape and would have hidden the same pair on the planner.
+
+### Changed
+
+- **`isolation: isolate`** on the builder canvas and on `collageCanvas` (ui/styles.js): each is now its own stacking context, so a negative z stays inside it and paints above its background. ↓ Back keeps producing `min − 1`; any value is now safe.
+- **Render walk +1 (35 steps)**: in the builder opened from Saved, select a piece, tap ↓ Back until its computed z-index is negative, and read `elementsFromPoint` at its centre — the piece must come before the canvas in paint order. Verified to fail on the old canvas (`piece #6, canvas #0`) and pass with the fix.
+
+### Downstream, four ways
+
+*Efficiency* — one CSS property on two containers; no bundle or token change. *Effectiveness* — every surface that renders a builder layout (the canvas, the saved card, the planner cell) now honours the z she set, including the ones below zero. *Speed* — none. *Education* — none; a layout is hers, not a signal.
+
+### Verified
+
+`npm test` (47 suites), `npm run build`, `npm run smoke` (35 walk steps) green.
+
 ## [Unreleased] — The evaluation card says what each section is, and every move shows the piece it means — 2026-10-02
 
 ### Why
