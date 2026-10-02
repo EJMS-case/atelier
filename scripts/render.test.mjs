@@ -494,6 +494,55 @@ await check("Saved → Edit opens the builder ON the look, not on a blank canvas
   if (state.onCanvas < 1) throw new Error("the canvas holds no pieces — the look opened blank");
 });
 
+// Her report of 2026-10-02: "There are 2 shoes selected here but I can't see
+// the second pair." The pumps had been sent ↓ Back past every other piece,
+// which gives them a negative z-index; a positioned parent that is not a
+// stacking context paints a negative child BENEATH its own background, so
+// the pumps counted on the chip and painted under the white canvas. This
+// step pushes a piece behind everything and reads the real paint order:
+// elementsFromPoint lists top→bottom, and the piece must come before the
+// canvas, never after it.
+await check("Builder → a piece sent behind every other piece still paints on the canvas", async () => {
+  const target = await page.evaluate(() => {
+    const handle = document.querySelector("[data-resize]");
+    const box = handle?.parentElement;
+    if (!box) return null;
+    window.__atelierBox = box;
+    const r = box.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  if (!target) throw new Error("no piece on the canvas to select");
+  // A pointerdown on the piece selects it and opens the Front/Back toolbar.
+  await page.mouse.click(target.x, target.y);
+  await page.waitForTimeout(300);
+  let z = 0;
+  for (let i = 0; i < 8 && z >= 0; i++) {
+    await clickText("button", "↓ Back");
+    await page.waitForTimeout(150);
+    z = await page.evaluate(() => {
+      const active = [...document.querySelectorAll("[data-resize]")].map(h => h.parentElement)
+        .find(b => getComputedStyle(b).outlineStyle === "dashed");
+      return active ? Number(getComputedStyle(active).zIndex) : NaN;
+    });
+    if (Number.isNaN(z)) throw new Error("the tap did not select a piece — no dashed outline on the canvas");
+  }
+  if (z >= 0) throw new Error(`↓ Back never produced a negative z-index (ended at ${z})`);
+  const order = await page.evaluate(() => {
+    const active = [...document.querySelectorAll("[data-resize]")].map(h => h.parentElement)
+      .find(b => getComputedStyle(b).outlineStyle === "dashed");
+    const canvas = active.parentElement;
+    const r = active.getBoundingClientRect();
+    const stack = document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const pieceAt = stack.findIndex(el => el === active || active.contains(el));
+    const canvasAt = stack.indexOf(canvas);
+    return { pieceAt, canvasAt, isolation: getComputedStyle(canvas).isolation };
+  });
+  if (order.pieceAt === -1) throw new Error("the piece is not under its own centre at all");
+  if (order.canvasAt !== -1 && order.pieceAt > order.canvasAt) {
+    throw new Error(`the piece paints BENEATH the canvas background (piece #${order.pieceAt}, canvas #${order.canvasAt}, isolation=${order.isolation}) — a negative z-index needs the canvas to be a stacking context`);
+  }
+});
+
 await check("Saved → the builder's picker offers the wardrobe, the look's own piece included", async () => {
   const opened = await page.evaluate(() => {
     const chip = [...document.querySelectorAll("button")]

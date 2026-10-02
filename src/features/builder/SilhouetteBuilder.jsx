@@ -913,8 +913,16 @@ export default function SilhouetteBuilder({
 
       {/* Canvas area — plain white, draggable items.
           Default stacking order (back→front) is the module-level DEFAULT_Z;
-          zOrders[slot] overrides it when the user uses the Front/Back controls. */}
-      <div ref={canvasRef} style={{ position: "relative", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 6, overflow: "hidden", touchAction: "none" }}>
+          zOrders[slot] overrides it when the user uses the Front/Back controls.
+          `isolation: isolate` makes the canvas its own stacking context: a
+          piece sent ↓ Back past every other piece carries a NEGATIVE z-index,
+          and without a stacking context a negative child paints BENEATH its
+          parent's background — her navy pumps at z −1 vanished under the white
+          canvas, counted on the chip and drawn nowhere (owner screenshot,
+          2026-10-02). The collage that re-renders a saved layout isolates the
+          same way (ui/styles.js collageCanvas); the render walk checks the
+          paint order. */}
+      <div ref={canvasRef} style={{ position: "relative", isolation: "isolate", width: "100%", aspectRatio: "3/4", background: "#FFFFFF", borderRadius: 10, marginBottom: 6, overflow: "hidden", touchAction: "none" }}>
         {pickedItems.map(({ slot, item }) => {
           const key = posKey(slot, item.id);
           const pos = positions[key] || defaultPosFor(slot, item.id);

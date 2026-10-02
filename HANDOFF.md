@@ -1,12 +1,22 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-02**, after the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-02**, after the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-02 · A piece sent behind everything painted under the canvas
+
+**Owner, screenshot:** *"There are 2 shoes selected here but I can't see the second pair (navy pumps)."* Her planned look's layout held the pumps at `z: -1`; the canvas was not a stacking context, so the negative child painted beneath the white background. `isolation: isolate` on the builder canvas and `collageCanvas`; the render walk now pushes a piece to a negative z and reads the paint order (35 steps). CHANGELOG has the detail.
+
+**Watch-items:**
+- **Her planned look for 2026-10-01** keeps `z: -1` on the pumps and now renders them behind the dress at the lower left; ↑ Front on the pumps brings them forward. Nothing in her data was changed.
+- **Any other container that positions layout children by a saved z** must isolate the same way; the two known ones are done. If a third renderer lands, the walk step is the pattern to copy.
+
+**Verified before push:** `npm test` (47 suites), `npm run build`, `npm run smoke` green (35 walk steps).
 
 ### 2026-10-02 · The evaluation card says what each section is; every move is the piece she owns
 
