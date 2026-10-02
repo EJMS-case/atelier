@@ -2,6 +2,37 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The evaluation card says what each section is, and every move shows the piece it means — 2026-10-02
+
+### Why
+
+Owner, screenshot of an Evaluate card from her phone: *"I'm not sure what my ai is referencing here. Can we use more descriptive words or ways to understand the intent?"* The card read `WORKING`, then `SWAP Margot Jeans → Wide-leg Pants`, then three unlabelled bullets. Three things were wrong with it, measured in the code:
+
+1. **The swap named a piece by its closet name only.** "Wide-leg Pants" is a name 68 of her names share with a colour twin, and the card showed neither colour, brand nor photo; the model's own *why* ("your heavier black tailored wide-legs") knew which pair. Apply then matched that name with the builder's own substring matcher — a second copy of the piece reader CLAUDE.md says never to write — and took the first hit.
+2. **Adds had no home in the contract.** The office layer ("throw your burgundy Theory blazer on open") and the jewellery arrived as *tips*, prose with nothing to tap, beside a swap with a button. The one move the office asks for most was the one she had to do by hand.
+3. **The labels were tags, not sentences.** `WORKING` and `SWAP` at 9px said nothing about what the section was for, and the tips had no label at all.
+
+### Changed
+
+- **The contract gains `adds`** (0–2, `in` / `in_color` / `in_brand` / `why`) and every move carries `in_color` + `in_brand` copied from the closet line, so the app can land on the ROW among twins. The task says a piece she should put on is an add, never a tip, and a tip never tells her to add or swap. The system block is untouched, so the chat and Evaluate still share one cache.
+- **`features/builder/evalResolve.js`** (new, pure): each move resolves to her pieces through `resolveRequestedPieces` — the OUT piece among the canvas as it was when she tapped Evaluate, the IN piece among the builder pool — from the request shape the spark writes (`Black Theory "Wide-leg Pants"`). The builder's private `nameMatches` is deleted.
+- **The card**: `WHAT'S WORKING · keep this`; each `SWAP · one piece out, one of yours in` as **TAKE OUT** / **PUT IN** rows, each row the resolved piece with its thumb and `name · colour · brand`; each `ADD · bring this in, nothing comes out`; `HOW TO WEAR IT · adjustments to what stays`; `WEATHER NOTE (not part of the score)`. Twins her words don't separate show as chips she taps (the Style Me read-back pattern); a piece that resolves to nothing says *not found in your closet* and Apply stays off. One Apply per move, swap or add; an applied add records a `look_edits` row like a swap does.
+- **`resolveRequestedPieces`**: a literal name whose words land only in the name field (`"Wide-leg Pants"` on a Trousers shelf) scored nothing with the generous reader and was dropped even though the full name was in the request. The literal matches now stand when the rest of the words decide nothing. Style Me's spark line always carried a colour and shelf, so it never hit this; the evaluator's moves are the bare quoted name.
+
+### Tests
+
+- `test:evalparse` +6: adds parse with their fields and cap; the salvage path carries none; the move request's shape; a swap resolves its out piece on the canvas and its in piece among twins by colour; a bare shared name keeps both and an unknown name resolves to nothing; the card's label.
+- `test:rooms`: the literal-name case above, both bare and with colour.
+- `test:standard`: the prompt carries `in_color`, `adds` and the tips-never-add line; the swap shape.
+
+### Downstream, four ways
+
+*Efficiency* — the cached system block is byte-identical; the contract grows by ~120 tokens in the uncached task and the reply by one small array; the resolver runs on the pool once per evaluation, memoised. *Effectiveness* — a move now reaches the canvas as the row she owns, and the office layer has a button; the resolver is the same reader Style Me and the sampler use, so a fix there reaches here. *Speed* — no extra call; the thumbs are the cached photos. *Education* — an applied add writes `look_edits` like a swap, so the lessons the evaluator produces double.
+
+### Verified
+
+`npm test` (47 suites), `npm run build`, `npm run smoke` (34 walk steps) green.
+
 ## [Unreleased] — Favorites is a ♥ on Saved; the current models, shaped in one place; the look-back judge reads; Casual stops dressing for the office — 2026-10-01
 
 ### Why

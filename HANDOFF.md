@@ -1,12 +1,26 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-01**, after the Favorites fold, the model-generation move, the look-back fix and the Casual rework; before that the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-02**, after the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-02 · The evaluation card says what each section is; every move is the piece she owns
+
+**Owner, screenshot from her phone:** *"I'm not sure what my ai is referencing here. Can we use more descriptive words or ways to understand the intent?"* The card read `WORKING`, `SWAP Margot Jeans → Wide-leg Pants`, three bare bullets. CHANGELOG has the detail. To carry:
+
+1. **A move is resolved, never matched by hand.** `features/builder/evalResolve.js` turns each swap and add into her rows through `resolveRequestedPieces` (the one reader), from the spark's request shape; the builder's own substring matcher is gone. Twins show as chips; nothing found says so.
+2. **Adds are a contract field** (`adds`, ≤2) with a button, and the task tells the model a piece to put on is never a tip. Every move carries `in_color` + `in_brand` from the closet line.
+3. **Section labels are sentences**: WHAT'S WORKING · SWAP (TAKE OUT / PUT IN) · ADD · HOW TO WEAR IT · WEATHER NOTE, each with a note on what it is for.
+
+**Watch-items:**
+- **Her next Evaluate tap**: the blazer-over-bodysuit move should arrive as an ADD with Apply, and a swap's PUT IN row should show the photo and `name · colour · brand`. If a move still shows *not found in your closet*, the model wrote a name that isn't the closet line's — `ai_errors` has nothing for this yet; the resolver test fixtures in `eval-parse.test.mjs` are where to reproduce it with the row verbatim.
+- **Tips that still say "add your …"**: the task now forbids it, but the model may lean on habit for a turn. If it persists, the lever is moving that line up beside the `adds` definition, not a post-parse filter.
+
+**Verified before push:** `npm test` (47 suites), `npm run build`, `npm run smoke` green (34 walk steps).
 
 ### 2026-10-01 · Favorites is a ♥ on Saved; the current models, shaped in one place; Casual stops dressing for the office
 

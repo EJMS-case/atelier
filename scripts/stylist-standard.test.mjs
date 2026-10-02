@@ -453,7 +453,13 @@ test("the standard speaks in preferences, in the second person, and never button
   assert.match(STANDING_PREFERENCES.join("\n"), /blazer open — never buttoned/);
   for (const line of STANDING_PREFERENCES) assert.doesNotMatch(line, /\bshe\b|\bher\b/i, `seed speaks about her, not to her: ${line}`);
   assert.ok(composeSystemBlock({ available: [] }).includes(VOICE_RULES));
-  assert.match(composeEvalPrompt({ items: [blouse(), trouser(), pump()] }), /Write every field TO her/);
+  const evalPrompt = composeEvalPrompt({ items: [blouse(), trouser(), pump()] });
+  assert.match(evalPrompt, /Write every field TO her/);
+  // A move names its piece three ways so the app can land on the row among
+  // twins, and a piece to put on is an ADD (a button), never a tip.
+  assert.match(evalPrompt, /"in_color"/);
+  assert.match(evalPrompt, /"adds"/);
+  assert.match(evalPrompt, /A tip never tells her to add or swap a piece/);
 });
 
 test("a blazer on the canvas gets the open-blazer note, with the belt placed under it", () => {
@@ -472,7 +478,7 @@ test("the evaluator's swaps parse, and are dropped rather than half-shown on a t
   const full = `{"score": 6, "headline": "Safe.", "works": "The column.", "swaps": [{"out": "Black Tote", "in": "Cognac Shoulder Bag", "why": "Pulls the brown shoe into a story."}], "tips": ["Half-tuck the blouse."], "weather": null}`;
   const { parsed } = parseEvalResponse(full);
   assert.equal(parsed.swaps.length, 1);
-  assert.deepEqual(parsed.swaps[0], { out: "Black Tote", in: "Cognac Shoulder Bag", why: "Pulls the brown shoe into a story." });
+  assert.deepEqual(parsed.swaps[0], { out: "Black Tote", in: "Cognac Shoulder Bag", inColor: "", inBrand: "", why: "Pulls the brown shoe into a story." });
   const cut = `{"score": 6, "headline": "Safe.", "works": "The column.", "swaps": [{"out": "Black Tote", "in": "Cog`;
   const salvaged = parseEvalResponse(cut);
   assert.equal(salvaged.parsed.score, 6);

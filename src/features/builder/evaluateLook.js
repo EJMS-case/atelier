@@ -1,7 +1,16 @@
 // ── F4 — AI LOOK EVALUATION ──────────────────────────────────────────────────
 // Sends the manually-built look to Claude for a stylist's read: a 1-10 score,
-// what's working, what to SWAP (piece out → closet piece in, and why), and ≤3
-// adjustments to how she wears what stays.
+// what's working, what to SWAP (piece out → closet piece in, and why), what
+// to ADD (a closet piece in, nothing out), and ≤3 adjustments to how she
+// wears what stays.
+//
+// A move names its closet piece three ways — name, colour, brand — so the
+// app can resolve it to the ROW she owns (evalResolve.js, through the one
+// piece reader in utils/free-text-match.js) and show her that piece, not a
+// name: 68 names in her closet are shared by colour twins, and "Wide-leg
+// Pants" told her nothing (owner, 2026-10-02: "I'm not sure what my ai is
+// referencing here"). Adds were tips before that — "throw your blazer on" with
+// nothing to tap — so the one move the office asks for most had no button.
 //
 // Reworked 2026-09-10 with the builder chat (owner: "It's not telling me what
 // to swap or how to fix the outfit. The evaluator should be very chic and
@@ -37,8 +46,9 @@ WORK NOTE: when the occasion is Work, the bag is a commute piece — she carries
 
 Then give:
 - "works": one specific line on the strongest thing the look is already doing — name the actual pieces and the move, not a compliment.
-- "swaps": 0–3 swaps that would lift the look — each names a piece ON THE CANVAS to take out ("out"), the piece from HER CLOSET to put in its place ("in" — the exact name from the closet list), and "why" in one sentence that says what it fixes and what it costs. A swap is the strongest thing you can give her; if none would help, return an empty array and say so in a tip. Never invent a piece, never suggest a purchase.
-- "tips": up to 3 adjustments to how she wears what stays — concrete and chic, the kind a stylist makes on a client in the fitting room: a half-tuck, a cuff or sleeve push, a different layer order, letting a different piece lead, dropping something so one gesture reads, adding hosiery, belting the trouser under the open blazer. Each tip is one complete, specific sentence that says why. One sharp tip beats three reaches.
+- "swaps": 0–3 swaps that would lift the look — each names a piece ON THE CANVAS to take out ("out" — its exact name from the canvas list) and the piece from HER CLOSET to put in its place ("in" — the exact name from the closet list, with its "in_color" and "in_brand" copied from that same closet line, so the app can tell twins apart: she owns two Ponte Knit Pants), and "why" in one sentence that says what it fixes and what it costs. A swap is the strongest thing you can give her; if none would help, return an empty array and say so in a tip. Never invent a piece, never suggest a purchase.
+- "adds": 0–2 pieces from HER CLOSET to bring in with nothing taken out — the layer the room asks for, the one piece of jewellery the look is missing — each as "in" / "in_color" / "in_brand" from the closet line and "why". A piece she should put on goes HERE, never in a tip: the app gives an add a button and a tip none.
+- "tips": up to 3 adjustments to how she wears what STAYS — concrete and chic, the kind a stylist makes on a client in the fitting room: a half-tuck, a cuff or sleeve push, a different layer order, letting a different piece lead, dropping something so one gesture reads, belting the trouser under the open blazer. Each tip is one complete, specific sentence that says why. A tip never tells her to add or swap a piece — those are moves above. One sharp tip beats three reaches.
 
 Write every field TO her — "you", "your" — never "she" or "her".
 
@@ -48,7 +58,10 @@ Respond in strict JSON, no prose, no code fences:
   "headline": "one-line read on the look, a stylist's card voice, addressed to her — complete the thought, don't trail off",
   "works": "the one thing it's doing best",
   "swaps": [
-    { "out": "piece on the canvas", "in": "exact closet piece", "why": "what it fixes and what it costs" }
+    { "out": "exact canvas piece", "in": "exact closet piece", "in_color": "its colour from the closet line", "in_brand": "its brand from the closet line", "why": "what it fixes and what it costs" }
+  ],
+  "adds": [
+    { "in": "exact closet piece", "in_color": "its colour", "in_brand": "its brand", "why": "what it brings" }
   ],
   "tips": [
     "one complete, specific styling adjustment"
