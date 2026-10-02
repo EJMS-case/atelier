@@ -1,12 +1,27 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-02**, after the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-02**, after the look-back judge rebuild (every look read as itself, against the standard, across the whole window, in the background), the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-02 · The look-back judge reads every look as itself, across the whole window
+
+**Owner:** *"Most stylish looks aren't working … seem to show the same with no genuine thought behind the outfits. If we can't make this work, remove it."* Kept and rebuilt: the judge sent "colour + category" words, cut the year to its 80 most recent looks, carried its own rubric, and lived in the card's state. CHANGELOG has the detail. To carry:
+
+1. **`recapAI.js` is pure composers + one call**: `selectCandidates` (dedupe to one candidate per outfit with `[worn N×]`, hearted kept, even sampling across the window), `composeJudgePrompt` (persona + standard + voice from standard.js, her grounding, the task), `pickFromParsed`. `MODEL_TOP` at `medium`, `MODEL_STRONG` fallback.
+2. **The run is `recap:stylish:<period>` in `backgroundRun.js`**; the card re-resolves stored picks by (plan, outfit). *re-judge* clears and reruns.
+3. **The contract**: `stylist-standard.test.mjs` has a *judges* list; a new judging surface goes there.
+
+**Watch-items:**
+- **Her first tap on each window** is the live check (no key here). Month, quarter and year should now differ where her looks do, each reason should name the pieces, and the summary line should say something about the period. If the picks still read generic, the levers in order: `effort: "high"` on the call; the task's "a reason that could describe any outfit is a failure" line moved beside the tool description; the grounding cap (`fingerprintMax: 900`).
+- **If a tap errors**, `ai_errors` has `recap_judge:*` rows with the payload; a `no_tool_use` row means the steer line in `toolBody` is the lever (same as Style Me's watch-item).
+- **"Week"** in her message: there is no Week window on the look-back; Home's Most worn has one. If she wants a week here, `PERIODS` is the one place, but seven days is ~6 looks — a ranking of six is thin.
+
+**Verified before push:** `npm test` (48 suites), `npm run build`, `npm run smoke` green (35 walk steps).
 
 ### 2026-10-02 · A piece sent behind everything painted under the canvas
 

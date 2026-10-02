@@ -7,13 +7,17 @@
 //
 // judgeMostStylish is DYNAMICALLY imported inside the tap handler — its
 // anthropicFetch → toolUse → coerce-shapes chain (~640 lines) has no business
-// in the cold-start chunk for a button she may never tap.
+// in the cold-start chunk for a button she may never tap. The run itself
+// lives in lib/backgroundRun.js, one per window, so leaving Home mid-judge
+// loses nothing and the last picks are still here tomorrow (owner,
+// 2026-10-02: the picks vanished and read the same in every window).
 
 import { useMemo, useState } from "react";
 import { buildRecap, monthWindow } from "./recapData.js";
 import { nyToday, friendlyDate } from "../../lib/time.js";
 import { PALETTE } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
+import { RUN_KEYS, startRun, useRun, clearRun } from "../../lib/backgroundRun.js";
 
 const PERIODS = {
   month:   { days: 30,  chip: "Month",   judgeLabel: "month",   topN: 4 },
@@ -43,15 +47,16 @@ function monthLabel(startIso, endIso) {
 export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, plans: allPlans, onEditItem, onStyleItem }) {
   const todayIso = nyToday();
   const [period, setPeriod] = useState("month");
-  const [stylish, setStylish] = useState(null);
-  const [judging, setJudging] = useState(false);
-  const [judgeErr, setJudgeErr] = useState("");
+  const [localErr, setLocalErr] = useState("");
   const { days, judgeLabel, topN } = PERIODS[period];
+  const runKey = `${RUN_KEYS.recapStylish}:${period}`;
+  const run = useRun(runKey);
+  const judging = run.status === "running";
+  const judgeErr = localErr || (run.status === "error" ? run.error : "");
 
   const pickPeriod = (p) => {
     setPeriod(p);
-    setStylish(null);
-    setJudgeErr("");
+    setLocalErr("");
   };
 
   // The recap's window comes out of the shared planner rows App fetched
@@ -109,24 +114,42 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
   const topOcc = glance.occasions[0];
   const topWx = glance.weathers[0];
 
-  const runJudge = async () => {
-    if (!apiKey) { setJudgeErr("Add your Anthropic API key in Settings."); return; }
-    setJudging(true); setJudgeErr("");
-    try {
-      // Lazy chunk: the judge's AI plumbing loads on first tap, not cold start.
-      const { judgeMostStylish } = await import("./recapAI.js");
-      const picks = await judgeMostStylish({ looks: recap.looks, items, apiKey, topN, periodLabel: judgeLabel });
-      setStylish(picks);
-    } catch (e) {
-      setJudgeErr(e.message || "Couldn't rank looks — try again.");
-    } finally {
-      setJudging(false);
-    }
-  };
-
   // A past look is a record — resolve it against everything she owns, so a
   // piece from the other closet reads as itself rather than as missing.
-  const piecesOf = (look) => resolveItemIds(wardrobe?.length ? wardrobe : items, look.itemIds);
+  const owned = wardrobe?.length ? wardrobe : items;
+  const piecesOf = (look) => resolveItemIds(owned, look.itemIds);
+
+  const runJudge = () => {
+    if (!apiKey) { setLocalErr("Add your Anthropic API key in Settings."); return; }
+    setLocalErr("");
+    const looks = recap.looks;
+    startRun(runKey, async () => {
+      // Lazy chunk: the judge's AI plumbing loads on first tap, not cold start.
+      const { judgeMostStylish } = await import("./recapAI.js");
+      const { picks, summary } = await judgeMostStylish({ looks, items: owned, apiKey, topN, periodLabel: judgeLabel });
+      // Stored by (plan, outfit) so the picks re-resolve against today's
+      // calendar on the next visit, and drop out if she unpins a day.
+      return {
+        summary,
+        window: recap.window,
+        picks: picks.map(p => ({ planId: p.look.planId, idx: p.look.idx, why: p.why, repeats: p.repeats })),
+      };
+    });
+  };
+
+  // The stored run names looks by (plan, outfit); re-resolve them against the
+  // looks in the window now. A pick whose day is gone simply drops.
+  const stylish = useMemo(() => {
+    if (run.status !== "done" || !run.result) return null;
+    const byKey = new Map(recap.looks.map(l => [`${l.planId}:${l.idx}`, l]));
+    return {
+      summary: run.result.summary || "",
+      finishedAt: run.finishedAt,
+      picks: (run.result.picks || [])
+        .map(p => ({ look: byKey.get(`${p.planId}:${p.idx}`), why: p.why, repeats: p.repeats || 1 }))
+        .filter(p => p.look),
+    };
+  }, [run, recap.looks]);
 
   return (
     <section style={card}>
@@ -185,21 +208,30 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
         </div>
       )}
 
-      {/* Most stylish — AI, on demand, judged against her fingerprint */}
+      {/* Most stylish — the stylist's call on the window, judged against THE
+          STANDARD and her taste; runs in the background, kept per window. */}
       <div style={{ marginTop: 14 }}>
-        <div style={label}>MOST STYLISH THIS {PERIODS[period].chip.toUpperCase()}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div style={label}>MOST STYLISH THIS {PERIODS[period].chip.toUpperCase()}</div>
+          {stylish && !judging && (
+            <button onClick={() => { clearRun(runKey); runJudge(); }}
+              style={{ background: "none", border: "none", padding: 0, fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
+              judged {stylish.finishedAt ? new Date(stylish.finishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "earlier"} · re-judge
+            </button>
+          )}
+        </div>
         {!stylish && (
           <button onClick={runJudge} disabled={judging}
             style={{ width: "100%", padding: "10px 12px", background: PALETTE.ink, color: PALETTE.cream, border: "none", borderRadius: 8, fontSize: 12, letterSpacing: "0.06em", cursor: judging ? "default" : "pointer" }}>
-            {judging ? `Reviewing your ${judgeLabel}…` : "✦ Show my most stylish looks"}
+            {judging ? `Reviewing every look from your ${judgeLabel}… (keeps running if you leave)` : "✦ Show my most stylish looks"}
           </button>
         )}
         {judgeErr && <div style={{ fontSize: 11, color: "var(--color-danger)", marginTop: 6 }}>{judgeErr}</div>}
-        {stylish && stylish.length === 0 && (
+        {stylish && stylish.picks.length === 0 && (
           <div style={{ fontSize: 12, color: PALETTE.muted }}>Not enough full outfits to rank yet.</div>
         )}
-        {stylish && stylish.map(({ look, why }, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: i < stylish.length - 1 ? `1px solid ${PALETTE.soft_line}` : "none" }}>
+        {stylish && stylish.picks.map(({ look, why, repeats }, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${PALETTE.soft_line}` }}>
             <div style={{ display: "flex", gap: 3 }}>
               {piecesOf(look).slice(0, 4).map(it => (
                 <button key={it.id} onClick={() => onEditItem?.(it)} style={{ padding: 0, border: "none", background: "none", cursor: "pointer" }}>
@@ -209,14 +241,22 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, color: PALETTE.ink }}>
+                <span style={{ color: PALETTE.muted, marginRight: 4 }}>{i + 1}.</span>
                 {look.hearted ? "❤ " : ""}{look.occasion || "—"}
                 {look.where && <span style={{ color: PALETTE.muted }}> · {look.where}</span>}
+                {repeats > 1 && <span style={{ color: PALETTE.muted }}> · worn {repeats}×</span>}
               </div>
               <div style={{ fontSize: 11, color: PALETTE.soft, fontStyle: "italic", marginTop: 2, lineHeight: 1.35 }}>{why}</div>
               <div style={{ fontSize: 9, color: PALETTE.muted, marginTop: 2 }}>{friendlyDate(look.date)}{look.isTrip ? " · trip" : ""}</div>
             </div>
           </div>
         ))}
+        {stylish && stylish.summary && (
+          <div style={{ fontSize: 12, color: PALETTE.ink, lineHeight: 1.5, marginTop: 10 }}>
+            <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>THE {PERIODS[period].chip.toUpperCase()} IN ONE LINE</span>
+            {stylish.summary}
+          </div>
+        )}
       </div>
 
       {/* Retrospective + forward sections */}
