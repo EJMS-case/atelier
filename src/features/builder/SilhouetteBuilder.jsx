@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
+import { resolveEvalMoves, pieceLabel } from "./evalResolve.js";
 import { sendBuilderMessage, rememberChat } from "./builderChat.js";
 import { sb } from "../../lib/supabase.js";
 import MarkdownLite from "../../components/MarkdownLite.jsx";
@@ -76,6 +77,93 @@ const posKey = (slot, itemId) => `${slot}__${itemId}`;
 // like a dress (full-body base layer), so they take the dress z. Unknown
 // slots fall back to 3 at each use site.
 const DEFAULT_Z = { outerwear: 1, dress: 2, set: 2, swim: 2, top: 3, bottom: 2, belt: 4, bag: 4, shoes: 5, accessory: 6 };
+
+// ── The evaluation card's parts ─────────────────────────────────────────────
+// A section label that says what the section IS, in words, beside the tag.
+function EvalLabel({ title, note }) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 3 }}>
+      <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted }}>{title}</span>
+      {note && <span style={{ fontSize: 10, color: PALETTE.muted, fontStyle: "italic" }}>{note}</span>}
+    </div>
+  );
+}
+
+// One side of a move — "Take out" or "Put in" — as the PIECE it resolved to:
+// a thumb and "name · colour · brand". Several candidates (twins her words
+// don't separate) show as chips she taps; none found says so, with the
+// model's words, so she can pick it from the slot herself.
+function EvalPiece({ verb, text, pieces, chosenId, onChoose }) {
+  const piece = pieces.length === 1 ? pieces[0] : pieces.find(p => p.id === chosenId) || null;
+  const verbStyle = { fontSize: 9, letterSpacing: "0.12em", color: PALETTE.muted, width: 52, flexShrink: 0, paddingTop: 3 };
+  if (piece) {
+    return (
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
+        <span style={verbStyle}>{verb}</span>
+        {piece.image && <img src={piece.image} alt="" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0, background: "#fff", borderRadius: 4, border: `1px solid ${PALETTE.line}` }}/>}
+        <div style={{ fontSize: 12, color: PALETTE.ink, lineHeight: 1.4 }}>
+          <strong>{pieceLabel(piece)}</strong>
+          {pieces.length > 1 && (
+            <button type="button" onClick={() => onChoose(null)}
+              style={{ marginLeft: 6, fontSize: 10, background: "none", border: "none", padding: 0, color: PALETTE.muted, cursor: "pointer", textDecoration: "underline" }}>change</button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (pieces.length > 1) {
+    return (
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
+        <span style={verbStyle}>{verb}</span>
+        <div style={{ fontSize: 11, color: PALETTE.soft, lineHeight: 1.4 }}>
+          <div style={{ fontStyle: "italic" }}>"{text}" could be {pieces.length} of your pieces — tap the one you mean:</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 4 }}>
+            {pieces.slice(0, 6).map(p => (
+              <button key={p.id} type="button" onClick={() => onChoose(p.id)}
+                style={{ fontSize: 11, padding: "4px 10px", borderRadius: 12, border: `1px solid ${PALETTE.line}`, background: "transparent", color: PALETTE.ink, cursor: "pointer" }}>
+                {pieceLabel(p)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
+      <span style={verbStyle}>{verb}</span>
+      <div style={{ fontSize: 12, color: PALETTE.ink, lineHeight: 1.4 }}>
+        <strong>{text || "—"}</strong>
+        <span style={{ fontSize: 10, color: PALETTE.muted, fontStyle: "italic", marginLeft: 6 }}>not found in your closet</span>
+      </div>
+    </div>
+  );
+}
+
+// A swap (out → in) or an add (in only), with its why and one Apply.
+function EvalMove({ moveKey, move, title, note, applied, choice, onChoose, onApply }) {
+  const inSettled = move.inPieces.length === 1 || !!choice[`${moveKey}:in`];
+  const outSettled = move.out === undefined || move.outPieces.length <= 1 || !!choice[`${moveKey}:out`];
+  const ready = applied || (inSettled && outSettled);
+  return (
+    <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: `1px dashed ${PALETTE.line}` }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <EvalLabel title={title} note={note} />
+          {move.out !== undefined && (
+            <EvalPiece verb="TAKE OUT" text={move.out} pieces={move.outPieces} chosenId={choice[`${moveKey}:out`]} onChoose={(id) => onChoose("out", id)} />
+          )}
+          <EvalPiece verb="PUT IN" text={move.in} pieces={move.inPieces} chosenId={choice[`${moveKey}:in`]} onChoose={(id) => onChoose("in", id)} />
+        </div>
+        <button onClick={onApply} disabled={applied || !ready || move.inPieces.length === 0}
+          style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 12, border: `1px solid ${PALETTE.line}`, background: applied ? PALETTE.line : "transparent", color: PALETTE.ink, fontSize: 11, cursor: applied || !ready ? "default" : "pointer", opacity: !applied && (!ready || move.inPieces.length === 0) ? 0.5 : 1 }}>
+          {applied ? "✓ Applied" : "Apply"}
+        </button>
+      </div>
+      {move.why && <div style={{ fontSize: 12, color: PALETTE.soft, lineHeight: 1.5, marginTop: 2 }}>{move.why}</div>}
+    </div>
+  );
+}
 
 // Item-label format under each picker thumb: "{brand} {color} {name}" all
 // lowercased. Empty parts are skipped, so an item with no brand still reads
@@ -742,20 +830,36 @@ export default function SilhouetteBuilder({
     } catch { /* a missed lesson costs nothing */ }
   }
 
-  // Apply one of the evaluator's swaps to the canvas (2026-09-10: "It's not
-  // telling me what to swap" — now it does, and one tap does it). The swap
-  // names pieces by their closet names; the OUT piece is matched among what
-  // is on the canvas, the IN piece among everything she may pick from.
-  const [appliedSwaps, setAppliedSwaps] = useState(new Set());
-  const normName = (n) => String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const nameMatches = (item, name) => {
-    const a = normName(item?.name), b = normName(name);
-    return !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+  // Apply one of the evaluator's moves to the canvas (2026-09-10: "It's not
+  // telling me what to swap" — now it does, and one tap does it). A move
+  // names pieces in words; evalResolve.js turns them into her rows (the OUT
+  // piece among what is on the canvas, the IN piece among everything she may
+  // pick from) through the one reader every request uses. When her words
+  // leave twins, the card shows chips and `moveChoice` holds the one she
+  // tapped; a move is applied once, by its key.
+  const [appliedMoves, setAppliedMoves] = useState(new Set());
+  const [moveChoice, setMoveChoice] = useState({});
+  // The canvas the evaluation was of: an applied swap takes its OUT piece off
+  // the canvas, and the card must keep showing which piece that was.
+  const [evalCanvas, setEvalCanvas] = useState([]);
+  const evalMoves = useMemo(
+    () => evaluation ? resolveEvalMoves(evaluation, { canvas: evalCanvas, available: builderPool || [] }) : null,
+    [evaluation, evalCanvas, builderPool],
+  );
+  const chosenPiece = (move, key, side) => {
+    const pieces = side === "in" ? move.inPieces : move.outPieces;
+    if (pieces.length <= 1) return pieces[0] || null;
+    const id = moveChoice[`${key}:${side}`];
+    return pieces.find(p => p.id === id) || null;
   };
-  function applySwap(sw, idx) {
-    const outEntry = sw.out ? pickedItems.find(p => nameMatches(p.item, sw.out)) : null;
-    const inItem = sw.in ? (builderPool || []).find(it => nameMatches(it, sw.in)) : null;
-    if (!inItem) { setEvalErr(`Couldn't find "${sw.in}" in your closet — pick it from the slot instead.`); return; }
+  function applyMove(move, key) {
+    const inItem = chosenPiece(move, key, "in");
+    if (!inItem) {
+      setEvalErr(move.inPieces.length > 1 ? "Tap the piece you mean first." : `Couldn't find "${move.in}" in your closet — pick it from the slot instead.`);
+      return;
+    }
+    const outItem = move.out ? chosenPiece(move, key, "out") : null;
+    const outEntry = outItem ? pickedItems.find(p => p.item.id === outItem.id) : null;
     const inSlot = inItem.category === "Belts" ? "belt" : slotForItem(inItem);
     setSelections(prev => {
       const next = { ...prev };
@@ -767,9 +871,9 @@ export default function SilhouetteBuilder({
       if (!cur.includes(inItem.id)) next[inSlot] = MULTI_SLOTS.has(inSlot) ? [...cur, inItem.id] : [inItem.id];
       return next;
     });
-    setAppliedSwaps(prev => new Set([...prev, idx]));
+    setAppliedMoves(prev => new Set([...prev, key]));
     setEvalErr("");
-    // An applied swap is the strongest lesson the evaluator can produce.
+    // An applied move is the strongest lesson the evaluator can produce.
     sb.saveLookEdit({
       action: outEntry ? "swap" : "add",
       occasion: asArray(occasions)[0] || null,
@@ -782,7 +886,8 @@ export default function SilhouetteBuilder({
   async function handleEvaluate() {
     if (pickedItems.length < 2) { setEvalErr("Pick at least 2 items first."); return; }
     if (!apiKey) { setEvalErr("Add your Anthropic API key in Settings."); return; }
-    setEvaluating(true); setEvalErr(""); setEvaluation(null); setAppliedSwaps(new Set());
+    setEvaluating(true); setEvalErr(""); setEvaluation(null); setAppliedMoves(new Set()); setMoveChoice({});
+    setEvalCanvas(pickedItems.map(p => p.item));
     try {
       // The occasion/weather chips she's tagged the look with double as the
       // evaluation brief — the stylist judges fitness-for-purpose, not just
@@ -1221,42 +1326,46 @@ export default function SilhouetteBuilder({
             )}
             <div style={{ fontSize: 13, color: PALETTE.soft, fontStyle: "italic" }}>{evaluation.headline}</div>
           </div>
+          {/* Every section says what it IS before what it says (owner,
+              2026-10-02: "I'm not sure what my ai is referencing here … more
+              descriptive words or ways to understand the intent"). A move
+              shows the PIECE it resolved to — thumb, colour, brand — not the
+              name the model wrote. */}
           {evaluation.works && (
-            <div style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 8 }}>
-              <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>WORKING</span>
+            <div style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 10, lineHeight: 1.5 }}>
+              <EvalLabel title="WHAT'S WORKING" note="keep this" />
               {evaluation.works}
             </div>
           )}
-          {/* Swaps — the "what to change" she asked for (2026-09-10): a piece on
-              the canvas → the closet piece that replaces it, and why. */}
-          {(evaluation.swaps || []).length > 0 && (
-            <div style={{ marginBottom: 8 }}>
-              {evaluation.swaps.map((sw, i) => (
-                <div key={i} style={{ fontSize: 12, color: PALETTE.ink, marginBottom: 6, lineHeight: 1.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <div style={{ flex: 1 }}>
-                    <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>SWAP</span>
-                    <strong>{sw.out || "—"}</strong> → <strong>{sw.in || "—"}</strong>
-                    {sw.why && <span style={{ color: PALETTE.soft }}> — {sw.why}</span>}
-                  </div>
-                  <button onClick={() => applySwap(sw, i)} disabled={appliedSwaps.has(i)}
-                    style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 12, border: `1px solid ${PALETTE.line}`, background: appliedSwaps.has(i) ? PALETTE.line : "transparent", color: PALETTE.ink, fontSize: 11, cursor: appliedSwaps.has(i) ? "default" : "pointer" }}>
-                    {appliedSwaps.has(i) ? "✓ Applied" : "Apply"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          {evalMoves.swaps.map((sw, i) => (
+            <EvalMove key={`swap:${i}`} moveKey={`swap:${i}`} move={sw}
+              title="SWAP" note="one piece out, one of yours in"
+              applied={appliedMoves.has(`swap:${i}`)} choice={moveChoice}
+              onChoose={(side, id) => setMoveChoice(prev => ({ ...prev, [`swap:${i}:${side}`]: id }))}
+              onApply={() => applyMove(sw, `swap:${i}`)} />
+          ))}
+          {evalMoves.adds.map((ad, i) => (
+            <EvalMove key={`add:${i}`} moveKey={`add:${i}`} move={ad}
+              title="ADD" note="bring this in, nothing comes out"
+              applied={appliedMoves.has(`add:${i}`)} choice={moveChoice}
+              onChoose={(side, id) => setMoveChoice(prev => ({ ...prev, [`add:${i}:${side}`]: id }))}
+              onApply={() => applyMove(ad, `add:${i}`)} />
+          ))}
           {evaluation.tips.length > 0 && (
-            <ul style={{ paddingLeft: 18, fontSize: 12, color: PALETTE.soft, lineHeight: 1.5 }}>
-              {evaluation.tips.map((t, i) => <li key={i} style={{ marginBottom: 4 }}>{t}</li>)}
-            </ul>
+            <div style={{ marginBottom: 4 }}>
+              <EvalLabel title="HOW TO WEAR IT" note="adjustments to what stays — nothing to tap, just how you put it on" />
+              <ul style={{ paddingLeft: 18, margin: "4px 0 0", fontSize: 12, color: PALETTE.soft, lineHeight: 1.5 }}>
+                {evaluation.tips.map((t, i) => <li key={i} style={{ marginBottom: 4 }}>{t}</li>)}
+              </ul>
+            </div>
           )}
           {/* Weather is deliberately NOT part of the score (owner request
               2026-08-19) — it renders as its own light aside when the stylist
               has something to say about the forecast. */}
           {evaluation.weather && (
             <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${PALETTE.line}`, fontSize: 12, color: PALETTE.muted, fontStyle: "italic" }}>
-              <span style={{ fontSize: 9, letterSpacing: "0.14em", fontStyle: "normal", marginRight: 6 }}>WEATHER</span>
+              <span style={{ fontSize: 9, letterSpacing: "0.14em", fontStyle: "normal", marginRight: 6 }}>WEATHER NOTE</span>
+              <span style={{ fontSize: 10, fontStyle: "normal", marginRight: 6 }}>(not part of the score)</span>
               {evaluation.weather}
             </div>
           )}

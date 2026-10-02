@@ -59,6 +59,7 @@ function extractTips(text) {
  * @param {string} text - raw model text (may include fences, prose, truncation)
  * @returns {{ parsed: null | {
  *   score: number|null, headline: string, works: string,
+ *   swaps: {out,in,inColor,inBrand,why}[], adds: {in,inColor,inBrand,why}[],
  *   tips: string[], weather: string|null,
  * }, salvaged: boolean }}
  */
@@ -89,20 +90,29 @@ export function parseEvalResponse(text) {
     salvaged = true;
   }
 
-  // Swaps (2026-09-10, owner: "It's not telling me what to swap"): up to three
-  // {out, in, why} objects naming a piece on the canvas and the closet piece
-  // that replaces it. Only the structured path carries them — a truncated
-  // response loses its swaps rather than showing half of one.
-  const swaps = Array.isArray(obj.swaps)
-    ? obj.swaps
-        .filter(sw => sw && typeof sw === "object" && (sw.in || sw.out))
-        .slice(0, 3)
-        .map(sw => ({
-          out: String(sw.out || "").trim().slice(0, 200),
-          in: String(sw.in || "").trim().slice(0, 200),
-          why: String(sw.why || "").trim().slice(0, 400),
-        }))
+  // Moves. Swaps (2026-09-10, owner: "It's not telling me what to swap"): up
+  // to three {out, in, why} objects naming a piece on the canvas and the
+  // closet piece that replaces it. Adds (2026-10-02): up to two {in, why}
+  // with nothing out — the blazer the office asks for used to arrive as a
+  // tip she could not tap. `inColor` / `inBrand` are the model's copy of the
+  // closet line, read by evalResolve.js to land on the ROW among twins. Only
+  // the structured path carries moves — a truncated response loses them
+  // rather than showing half of one.
+  const move = (m, withOut) => ({
+    ...(withOut ? { out: String(m.out || "").trim().slice(0, 200) } : {}),
+    in: String(m.in || "").trim().slice(0, 200),
+    inColor: String(m.in_color || m.inColor || "").trim().slice(0, 60),
+    inBrand: String(m.in_brand || m.inBrand || "").trim().slice(0, 80),
+    why: String(m.why || "").trim().slice(0, 400),
+  });
+  const moves = (list, cap, withOut) => Array.isArray(list)
+    ? list
+        .filter(m => m && typeof m === "object" && (m.in || (withOut && m.out)))
+        .slice(0, cap)
+        .map(m => move(m, withOut))
     : [];
+  const swaps = moves(obj.swaps, 3, true);
+  const adds = moves(obj.adds, 2, false);
 
   return {
     parsed: {
@@ -110,6 +120,7 @@ export function parseEvalResponse(text) {
         ? Math.max(1, Math.min(10, Math.round(obj.score)))
         : null,
       swaps,
+      adds,
       // Caps are generous safety rails against runaway output, NOT formatting —
       // the old 120/160-char slices were truncating her evaluations
       // mid-sentence (owner report 2026-08-19).

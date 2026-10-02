@@ -181,10 +181,19 @@ export function resolveRequestedPieces(items, freeText) {
   const req = String(freeText || "").trim();
   if (!req) return { named: [], matched: [], pieces: [] };
   const list = items || [];
-  const named = mostSpecific(list.filter(it => namedExplicitly(it, req)), req);
-  if (named.length > 0) return { named, matched: [], pieces: named };
+  const literal = list.filter(it => namedExplicitly(it, req));
+  if (literal.length > 0) {
+    // Among pieces whose full name is in the request, the rest of her words
+    // decide; when they decide nothing, the literal name already has (a name
+    // whose words land only in the name field — '"Wide-leg Pants"' over a
+    // Trousers shelf — scores nothing with the generous reader, and the
+    // evaluator's moves arrive as exactly that line, 2026-10-02).
+    const named = mostSpecific(literal, req);
+    const pieces = named.length > 0 ? named : literal;
+    return { named: pieces, matched: [], pieces };
+  }
   const matched = mostSpecific(list, req);
-  return { named, matched, pieces: matched };
+  return { named: [], matched, pieces: matched };
 }
 
 // The pieces of `list` the request refers to, keeping only the top score.

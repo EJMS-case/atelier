@@ -156,4 +156,10 @@ test("a bare shared name keeps both, and the read-back tells them apart by colou
   const one = resolveRequestedPieces(PONTE_ITEMS, requestForPiece(PONTE_TEAL));
   assert.deepEqual(one.pieces.map(p => p.id), ["pk-teal"]);
   assert.equal(one.named.length, 1);
+  // A literal name whose words land only in the name field still names the
+  // piece (the evaluator's moves arrive as the bare quoted name, 2026-10-02).
+  const wide = [{ id: "wl-black", name: "Wide-leg Pants", brand: "Theory", category: "Bottoms", subcategory: "Trousers", color: "Black" },
+                { id: "wl-navy", name: "Wide-leg Pants", brand: "Theory", category: "Bottoms", subcategory: "Trousers", color: "Navy" }, ...FILL];
+  assert.deepEqual(resolveRequestedPieces(wide, '"Wide-leg Pants"').pieces.map(p => p.id).sort(), ["wl-black", "wl-navy"]);
+  assert.deepEqual(resolveRequestedPieces(wide, 'Black Theory "Wide-leg Pants"').pieces.map(p => p.id), ["wl-black"]);
 });
