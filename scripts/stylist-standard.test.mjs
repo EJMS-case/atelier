@@ -426,8 +426,20 @@ test("every advisory surface imports the standard (source contract)", () => {
       assert.ok(src.includes(sym), `${rel} does not use ${sym}`);
     }
   }
+  // The look-back judge ranks looks she WORE: it composes the persona, the
+  // standard and the voice from standard.js and reads her grounding, but
+  // judges a window of looks, not one look on a canvas — so no readLook or
+  // briefs. A judge with a rubric of its own is the 2026-10-02 bug.
+  const judges = ["src/features/recap/recapAI.js"];
+  for (const rel of judges) {
+    const src = readFileSync(join(ROOT, rel), "utf8");
+    assert.match(src, /from "\.\.\/stylist\/standard\.js"/, `${rel} does not import the standard`);
+    for (const sym of ["STYLIST_PERSONA", "STYLIST_STANDARD", "VOICE_RULES", "personalGrounding"]) {
+      assert.ok(src.includes(sym), `${rel} does not use ${sym}`);
+    }
+  }
   // …and no advisory surface keeps a private copy of the persona.
-  for (const rel of surfaces) {
+  for (const rel of [...surfaces, ...judges]) {
     const src = readFileSync(join(ROOT, rel), "utf8");
     assert.doesNotMatch(src, /You are Elyce's personal stylist/, `${rel} carries its own persona copy`);
   }

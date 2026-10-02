@@ -21,6 +21,8 @@ export const RUN_KEYS = {
   shoppingComplete: "shopping:complete",
   insightsProfile: "insights:profile",
   brandScout: "discovery:scout",
+  // The look-back judge, one run per window: `${recapStylish}:${period}`.
+  recapStylish: "recap:stylish",
 };
 
 const STORAGE_PREFIX = "atelier:run:";

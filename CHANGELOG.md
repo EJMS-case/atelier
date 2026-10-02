@@ -2,6 +2,41 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The look-back judge reads every look as itself, against the standard, across the whole window — 2026-10-02
+
+### Why
+
+Owner: *"Most stylish looks aren't working. Week, month, quarter, year seem to show the same with no genuine thought behind the outfits. If we can't make this work, remove it and all associated code."* Rows first: 25 looks in the month, 67 in the quarter, 115 in the year, every one a distinct outfit, none hearted. Then the judge, measured against them:
+
+1. **It never saw the clothes.** Each look went to the model as "Navy Trousers, Black Blazer" — colour + category — so two blazer-and-trouser days were indistinguishable and the reason could only be generic.
+2. **The year was the quarter again.** Candidates were capped at the 80 MOST RECENT, so the year window ranked the last ~80 days plus nothing older, and the month sat inside both; the same recent looks won everywhere.
+3. **It carried a rubric of its own**, four bullets, instead of THE STANDARD every other opinion surface composes from (CLAUDE.md), on the standard tier at default effort, with a reason capped at a ≤14-word clause.
+4. **It lived in the card's state**: leaving Home mid-judge lost the run, and the next visit started from nothing.
+
+### Changed
+
+- **`recapAI.js` rebuilt around pure composers.** `describeLookPiece` describes a piece as itself (colour, shelf when the name doesn't say it, formality, name, brand, material). `selectCandidates` keeps looks with ≥2 pieces she still owns, folds an outfit worn more than once into one candidate with `[worn N×]` (a heart on any wearing marks it), keeps every hearted look, and when the cap binds (now 160) samples EVENLY across the window by date, never the recent end. `composeJudgePrompt` composes `STYLIST_PERSONA` + `STYLIST_STANDARD` + `VOICE_RULES` from standard.js, her grounding (`personalGrounding`), and a task that asks for a read of every outfit, a one-sentence reason (≤30 words) that names the pieces and the move, range across rooms and heroes, spread across the window, and a one-line summary of the period. `pickFromParsed` maps the tool's picks back without duplicates. `MODEL_TOP` at `medium` effort with a `MODEL_STRONG` fallback, like Evaluate.
+- **`StylishPicksSchema` / tool** gain `summary`; the `why` description asks for the sentence.
+- **The card runs the judge in `lib/backgroundRun.js`**, one run per window (`recap:stylish:<period>`): leaving Home loses nothing, the last picks are still there tomorrow with the date they were judged and a *re-judge* link, and a stored pick re-resolves by (plan, outfit) so an unpinned day drops out. Picks are numbered, a uniform shows *worn N×*, and the period's one-liner closes the section.
+- The stylist-standard source contract gains a *judges* list: `recapAI.js` must import the persona, the standard, the voice and the grounding from standard.js and carry no persona copy.
+
+### Not changed
+
+There is no Week window on this card and there never was (Home's *Most worn* has one); the three windows stay Month / Quarter / Year.
+
+### Tests
+
+- New `test:recap` (5): the piece line; dedupe with count and the heart carried; even sampling across a 300-day window with hearted kept; the prompt's composition and task lines; pick mapping.
+- `test:standard`: the judges contract.
+
+### Downstream, four ways
+
+*Efficiency* — the judge is still its own lazy chunk (5.3 kB) and the boot chunk is byte-identical; a year costs one call of ~10k input tokens on the top tier, tapped a few times a season. *Effectiveness* — the judge now reads the same standard and grounding as the chat and Evaluate, so what it calls stylish is what the rest of the app would. *Speed* — slower per tap (top tier, medium) but off-screen: she can leave and come back. *Education* — none new; a pick is the stylist's read, not a signal. Not verified live: the run needs her key; her first tap on each window is the check.
+
+### Verified
+
+`npm test` (48 suites), `npm run build`, `npm run smoke` (35 walk steps) green.
+
 ## [Unreleased] — A piece sent behind every other piece painted under the canvas — 2026-10-02
 
 ### Why

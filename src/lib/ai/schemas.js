@@ -367,6 +367,7 @@ export const StylishPicksSchema = z.object({
     index: z.coerce.number().int(),
     why: z.string().default(""),
   })),
+  summary: z.string().default(""),
 });
 
 export const StylishPicksTool = {
@@ -381,12 +382,13 @@ export const StylishPicksTool = {
           type: "object",
           properties: {
             index: { type: "integer", description: "The # of the look from the list." },
-            why:   { type: "string", description: "One short clause (≤14 words) naming what makes it work, written to her." },
+            why:   { type: "string", description: "One sentence (≤30 words) naming the pieces and the move that makes the look work, written to her." },
           },
           required: ["index", "why"],
         },
       },
+      summary: { type: "string", description: "One line on the period as a whole, written to her: the thread through her best looks and the one thing to push on next." },
     },
-    required: ["picks"],
+    required: ["picks", "summary"],
   },
 };
