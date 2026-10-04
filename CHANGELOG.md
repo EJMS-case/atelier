@@ -2,6 +2,45 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Planner squares show the look as she built it; months browse as one; filters by room and weather; the evaluator scores on two clocks and runs in the background — 2026-10-04
+
+### Why
+
+Owner, after the planner speed-up: *"would it take too much code or make it too heavy to simply keep the format I have saved in the builder on the individual calendar squares as well? That shows the outfit as an outfit rather than individual items."* · *"When I browse past looks, I meant in the calendar / planner view. Can you update that to be more seamless between months? Would it be too much to filter by occasion and/or weather?"* · *"The evaluator is extremely slow … I think the ranking I get may be based on hard rules rather than this season's style and timeless trends."* Rows first:
+
+1. **Her arrangement is already on the row.** 100 of her 117 planned days carry `layout_data` (her builder placement); 4 point at a saved look's; 13 (Feb–Mar, the earliest) have none. The square was ignoring all of it and drawing a 2–3 column grid of six tiles with a `+N`. The day view already drew the saved arrangement; the square did not.
+2. **Browsing stopped at the month.** Each ‹ › flip refetched the month and repainted from nothing; the day view's ‹ › walked only the visible month's days, so reviewing September from October meant close, flip, reopen. Her whole planner is 117 rows over nine months — one request.
+3. **The evaluator's score WAS the validator's.** `EVAL_TASK` told the model that anything in LOOK FACTS "counts heavily against the score": the soft checks (statement count, hosiery, tank layering, the room's keyword bans) were setting the number, and *current* was one word in a list of nine with no pointer to the researched brief that sits in the same prompt. It also ran Opus at `medium` effort (tens of seconds of thinking before the first byte) and lived in the builder's state, so leaving the screen lost it — the one thing `CLAUDE.md` says a long call must never do.
+
+### Changed
+
+- **`EditorialCollage` gains `tile`**: the composed look in a box the caller sizes — her saved arrangement when the row has one (`layoutOverride`), the dense portrait recipe otherwise — with every piece drawn from its 256px thumb (`TrimmedImage item`). The planner square is a `tile` at the builder's 3:4 under the date; the `compact` grid stays for the trip screen's day cards, where the pieces matter more than the arrangement. A plan that points at a saved look's layout reads it through `sb.fetchOutfitLogLayouts(ids)` (two columns, those ids only), and the day view reads the same resolved layout, so square and sheet always agree.
+- **The planner keeps every month it has loaded** in a session store (`planStore`, module-level like the remembered month): the first paint still asks for the visible month alone, then the whole history lands once in the background (`fetchAllPlans` + trips as one wide range, 10-minute TTL), after which flipping months and stepping through days never touch the network. A mount re-pulls the visible month quietly (a look scheduled from the builder lands through App); focus re-pulls it too; a write updates the store in place. Adjacent-month days in the 42-cell grid now show their looks, dimmed.
+- **‹ › in the day view cross month ends** and the grid follows, so closing lands on the month she reached. **Swipe the grid** to flip the month.
+- **Filter by occasion and/or weather** — two selects under the month name (`features/planner/planFilters.js`, pure). A planned day outside the pick fades to 0.22; a line counts the days inside it, this month and *in all*; the day view's ‹ › step through matching days only; *Clear* resets. A row's rooms are read three ways (legacy `occasion`, `occasions`, each outfit's own) and its weather two, every label folded to the canonical word, so a Date Night or a "Warm (70-84°F)" row is found. The filter survives the day → builder → back remount.
+- **The evaluator scores on two clocks.** `EVAL_TASK`: *CURRENT* (does it read now — judged against WHAT READS CURRENT, the researched brief in the system block) and *TIMELESS* (would it still read in five years); LOOK FACTS are "notes for you … NEVER arithmetic: nothing listed there moves the score by itself", weighed and spoken as taste. Her two fixed points (office dress, the open blazer) remain the only verdicts a preference decides, in a stylist's words. The old "counts heavily against the score" line is gone and the test asserts its absence.
+- **The evaluator is a background run** (`RUN_KEYS.builderEvaluate`): `startRun` in the builder, `useRun` to render; the card persists per device with an *EVALUATED 12 MIN AGO* line. The builder shows the run's card once *bound* to it — it started the run, or it mounted on exactly the canvas the card was written for — so a card never appears over a different look, and a card she is applying moves from stays while the canvas drifts a piece at a time. While it runs: *"keep arranging, or step away; the card lands here."*
+- **Evaluate runs at `low` effort, `max_tokens` 4000** (was `medium`, 6000). On this generation `low` still outreasons the no-thinking call the surface ran on until October; the rubric, not the thinking budget, is what makes the read sharp.
+- **The leave-behind restyle goes through `poolForTripDay`** (the handoff's open item since 2026-09-22): closing the suitcase without a piece rebuilds each affected day from destination ∪ suitcase ∪ what the look keeps, and a Travel Day at either end from home.
+
+### Downstream, four ways
+
+- **Efficiency.** Planner: one extra background request per mount per 10 min (~117 rows, ~40 kB gzipped) buys zero requests on every flip and every ‹ ›; the 4 log-linked layouts are one two-column request. Squares draw the same thumbs the compact grid did — a composed look of six is six thumbs either way. Evaluate: `medium` → `low` cuts thinking tokens on every tap (the billed part that never renders); the system block is byte-identical so the cache shared with the chat is untouched; the task text changed, which rides the uncached user turn. Bundle: planner chunk 75 → 80 kB (filters, store); builder 49 → 51 kB.
+- **Effectiveness.** The score now answers her question — how the look reads this season and whether it lasts — and the trend brief she pays to research is named as the yardstick for *current*. The preference checks still reach the evaluator (as notes) and still reach generation through completion; nothing about what a look IS changed. Filters read every way a row ever named its room, so no planned day hides from a filter because of how it was saved.
+- **Speed.** A month flip and a ‹ › step paint from memory. Evaluate's first byte arrives after a short think instead of a long one, and she no longer waits on the screen for it. Squares are taller (3:4 under the date), so a month is ~45% taller on the phone — the trade for seeing each look as a look.
+- **Education.** None to add: applied moves still teach (`saveLookEdit`), the run result carries the brief it was judged under.
+
+### Tests
+
+- New `test:planner-filters` (5): legacy labels fold, a two-look day answers to either room, no filters = every planned day, an untagged day sits outside a weather filter, month count vs. all-months walk.
+- Render walk +3 (39 steps): *a planned square draws the look as composed* (two positioned pieces), *the occasion filter fades the days outside it and counts the ones inside* (opacity, the count line, Clear), *‹ in the day view crosses into the previous month* (the grid follows; the day opens as WORN). The fixture gains a Work day in the previous month with a saved layout. The planner's filter selects sit inside `<label>`s, which is also how the trip sheet's walk tells its day-card selects apart.
+- `stylist-standard`: the evaluator's prompt must carry *CURRENT: does it read now?*, *TIMELESS*, and *nothing listed there moves the score by itself*, and must not carry *counts heavily against the score*.
+
+### Data
+
+Nothing written.
+
+
 ## [Unreleased] — The planner paints from thumbs; the collage draws every piece; Saved is paged; a new builder piece lands on top — 2026-10-04
 
 ### Why

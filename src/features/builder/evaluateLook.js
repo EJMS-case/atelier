@@ -26,6 +26,16 @@
 //   · It wrote about her in the third person. VOICE_RULES: second person.
 // The JSON contract gains `swaps`; the weather-aside and Work-bag rules stay.
 // MODEL_TOP with adaptive thinking, same fallback as the chat.
+//
+// 2026-10-04 (owner: "the ranking I get may be based on hard rules rather
+// than this season's style and timeless trends"): the task used to tell the
+// model that every LOOK FACTS line "counts heavily against the score" — the
+// validator's soft checks were setting the number. The score is now a
+// stylist's, on two clocks (current, against the researched trend brief;
+// timeless), and LOOK FACTS inform the read without moving the number. Her
+// two fixed points (office dress, the open blazer) are the only verdicts a
+// preference decides. The call runs in the background (backgroundRun.js, key
+// builder:evaluate) so leaving the builder no longer loses it.
 
 import { anthropicFetch } from "../../lib/ai/toolUse.js";
 import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
@@ -36,9 +46,9 @@ import {
 } from "../stylist/standard.js";
 import { composeSystemBlock } from "./builderChat.js";
 
-const EVAL_TASK = `She built this outfit herself from her own wardrobe and tapped Evaluate. SCORE the look 1-10 on styling merit against THE STANDARD — hero, colour, silhouette, texture, the third piece, tension, finish, register, current — and, when an occasion is given, fitness for that room: a beautiful look that's wrong for the room is not a 9. A safe look is not an 8: say it is safe and show her the braver version from her closet.
+const EVAL_TASK = `She built this outfit herself from her own wardrobe and tapped Evaluate. SCORE the look 1-10 as a stylist scores it: on what it IS, this season — hero, colour, silhouette, texture, the third piece, tension, finish, register — and on two clocks at once. CURRENT: does it read now? WHAT READS CURRENT in your context is the season as researched; judge against it, not against a memory of last year. TIMELESS: would this still read in five years — proportion, quality, restraint, nothing that dates it to a trend cycle? A look that is current AND timeless is the 9; a look that is only one of them says which in the headline. When an occasion is given, fitness for that room is part of the merit: a beautiful look that's wrong for the room is not a 9. A safe look is not an 8: say it is safe and show her the braver version from her closet.
 
-LOOK FACTS below are computed by the app from her closet data and her own preferences — notes for you, never text to quote. Anything listed as running against how she has asked to be dressed for this room counts heavily against the score unless the departure earns its place — say which, in a stylist's words (what the look is doing and the move that fixes it), never as a rule broken or a line cited. Her two fixed points are her office dress and the open blazer; everything else is taste, and you speak it as taste. "Still open" items are a work in progress, not faults: score what is on the canvas and let a swap or a tip name the missing piece if it matters.
+LOOK FACTS below are computed by the app from her closet data and her own preferences — notes for you, never text to quote, and NEVER arithmetic: nothing listed there moves the score by itself. Read each line as a stylist reads a client's own words — weigh it, say it as taste (what the look is doing and the move that fixes it), and let the look's merit decide the number. The two places her preference IS the verdict: her office is business professional (a long sleeve stands alone; short sleeves or a tank take a knit or blazer over them), and a blazer is worn open — a Work look that ignores the first, or any look that buttons or belts the second, is not one of your high scores, and you say why as a stylist, never as a rule broken or a line cited. Everything else is taste, and you speak it as taste. "Still open" items are a work in progress, not faults: score what is on the canvas and let a swap or a tip name the missing piece if it matters.
 
 WEATHER IS NOT A RATING FACTOR. Never move the score for the forecast. If the look reads seasonally off for the stated weather, say so ONLY in the separate "weather" field — one light, knowing aside ("the suede and the dark palette read a little wintery for this heat"). If the look sits fine in the weather, set "weather" to null.
 
@@ -124,17 +134,22 @@ export async function evaluateLook(items, apiKey, opts = {}) {
     inspirations,
   });
 
-  // Adaptive thinking at medium effort — an opinion on a look earns more
-  // than the app-wide `low`. Thinking tokens count against max_tokens even though they
-  // never render — the 900→1400 truncation saga (2026-08-19) was that in
-  // disguise — so the cap leaves headroom for the ~900-token JSON. No sampling
-  // params: `temperature` is a hard 400 on these models. The system block is
-  // the chat's, cache_control and all, so the two surfaces share one cache.
+  // Adaptive thinking at `low` effort (owner, 2026-10-04: "The evaluator is
+  // extremely slow"). This generation's low still outreasons the no-thinking
+  // call this surface ran on until October, and the time she waits is mostly
+  // thinking: medium was spending tens of seconds deliberating before the
+  // first byte of the card. The rubric above, not the thinking budget, is
+  // what makes the read sharp. Thinking tokens count against max_tokens even
+  // though they never render — the 900→1400 truncation saga (2026-08-19) was
+  // that in disguise — so the cap leaves headroom over the ~900-token JSON.
+  // No sampling params: `temperature` is a hard 400 on these models. The
+  // system block is the chat's, cache_control and all, so the two surfaces
+  // share one cache.
   const request = (model) => anthropicFetch({
     model,
-    max_tokens: 6000,
+    max_tokens: 4000,
     thinking: { type: "adaptive" },
-    output_config: { effort: "medium" },
+    output_config: { effort: "low" },
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   }, { apiKey, signal: opts.signal });

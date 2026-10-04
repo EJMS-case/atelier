@@ -24,10 +24,10 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (49 suites, no network)
+npm test           # full suite (50 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (36 steps, headless, mocked REST)
+npm run test:render     # just the render walk (39 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -181,6 +181,21 @@ Conventions worth knowing:
 - **A list of look cards is paged** (`components/ShowMore.jsx`, twelve at a
   time) and searched at the LIST, through `lookMatchesSearch` in
   `lib/lookFilters.js`, before paging — a card never filters itself.
+- **A planner square draws the day's look as she built it** (owner,
+  2026-10-04): `<EditorialCollage tile layoutOverride={layoutFor(plan)}>` —
+  her saved arrangement, every piece from its thumb, the portrait recipe when
+  a row has none. `compact` (the grid of tiles) is for the trip screen's day
+  cards only. **The planner keeps every month it has loaded** (`planStore` in
+  `CalendarView.jsx`): the visible month paints first, the history lands once
+  in the background, and a flip or a ‹ › step never refetches. Which days
+  match an occasion / weather pick is one reader, `planFilters.js`.
+- **The evaluator's score is a stylist's, on two clocks** — current, judged
+  against the researched trend brief, and timeless — and the app's LOOK FACTS
+  are notes that never move the number by themselves (owner, 2026-10-04:
+  "the ranking I get may be based on hard rules"). Her two fixed points are
+  the only preferences that are verdicts. It runs as `RUN_KEYS.builderEvaluate`
+  at `low` effort; a surface that shows its card binds to the run first
+  (`canvasKey`), so a card never appears over a different look.
 - **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
   state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last
   result persists per device. A run she can navigate away from and lose is

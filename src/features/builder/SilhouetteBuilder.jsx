@@ -13,7 +13,8 @@ import { sendBuilderMessage, rememberChat } from "./builderChat.js";
 import { sb } from "../../lib/supabase.js";
 import MarkdownLite from "../../components/MarkdownLite.jsx";
 import { OCCASIONS, WEATHER_SHORTS, getL3Options, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
-import { slotForItem, itemIdIndex } from "../../utils/item-helpers.js";
+import { slotForItem, itemIdIndex, resolveItemIds } from "../../utils/item-helpers.js";
+import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
@@ -80,6 +81,16 @@ const posKey = (slot, itemId) => `${slot}__${itemId}`;
 const DEFAULT_Z = { outerwear: 1, dress: 2, set: 2, swim: 2, top: 3, bottom: 2, belt: 4, bag: 4, shoes: 5, accessory: 6 };
 
 // ── The evaluation card's parts ─────────────────────────────────────────────
+// "JUST NOW" / "12 MIN AGO" / "2 H AGO" / "3 D AGO" — the card is kept per
+// device, so it says how old it is.
+function agoLabel(ts) {
+  const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (mins < 1) return "JUST NOW";
+  if (mins < 60) return `${mins} MIN AGO`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} H AGO`;
+  return `${Math.round(hours / 24)} D AGO`;
+}
 // A section label that says what the section IS, in words, beside the tag.
 function EvalLabel({ title, note }) {
   return (
@@ -307,8 +318,15 @@ export default function SilhouetteBuilder({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
   const [saveErr, setSaveErr] = useState("");
-  const [evaluation, setEvaluation] = useState(null);
-  const [evaluating, setEvaluating] = useState(false);
+  // Evaluate look is a BACKGROUND RUN (lib/backgroundRun.js): the call lives
+  // outside this component, so leaving the builder mid-evaluation no longer
+  // loses it, and the last card is kept per device. This instance shows the
+  // run's card once it is BOUND to it — it started the run, or it mounted on
+  // exactly the canvas the stored card was written for (she reopened the
+  // same look). A card for some other look never shows here; a card she is
+  // applying moves from stays while the canvas drifts one piece at a time.
+  const evalRun = useRun(RUN_KEYS.builderEvaluate);
+  const [evalBound, setEvalBound] = useState(false);
   const [evalErr, setEvalErr] = useState("");
   const [search, setSearch] = useState("");
   const [subcatFilter, setSubcatFilter] = useState("");
@@ -867,9 +885,20 @@ export default function SilhouetteBuilder({
   // tapped; a move is applied once, by its key.
   const [appliedMoves, setAppliedMoves] = useState(new Set());
   const [moveChoice, setMoveChoice] = useState({});
+  const canvasKey = pickedItems.map(p => p.item.id).sort().join("|");
+  useEffect(() => {
+    if (evalBound || evalRun.status !== "done" || !evalRun.result) return;
+    if (canvasKey && evalRun.result.canvasKey === canvasKey) setEvalBound(true);
+  }, [evalRun, canvasKey, evalBound]);
+  const evaluating = evalBound && evalRun.status === "running";
+  const evaluation = evalBound && evalRun.status === "done" ? evalRun.result?.evaluation || null : null;
+  const runErr = evalBound && evalRun.status === "error" ? evalRun.error : "";
   // The canvas the evaluation was of: an applied swap takes its OUT piece off
   // the canvas, and the card must keep showing which piece that was.
-  const [evalCanvas, setEvalCanvas] = useState([]);
+  const evalCanvas = useMemo(
+    () => evaluation ? resolveItemIds(builderPool || [], evalRun.result?.canvasIds || []) : [],
+    [evaluation, evalRun.result, builderPool],
+  );
   const evalMoves = useMemo(
     () => evaluation ? resolveEvalMoves(evaluation, { canvas: evalCanvas, available: builderPool || [] }) : null,
     [evaluation, evalCanvas, builderPool],
@@ -911,24 +940,21 @@ export default function SilhouetteBuilder({
     });
   }
 
-  async function handleEvaluate() {
+  function handleEvaluate() {
     if (pickedItems.length < 2) { setEvalErr("Pick at least 2 items first."); return; }
     if (!apiKey) { setEvalErr("Add your Anthropic API key in Settings."); return; }
-    setEvaluating(true); setEvalErr(""); setEvaluation(null); setAppliedMoves(new Set()); setMoveChoice({});
-    setEvalCanvas(pickedItems.map(p => p.item));
-    try {
-      // The occasion/weather chips she's tagged the look with double as the
-      // evaluation brief — the stylist judges fitness-for-purpose, not just
-      // abstract prettiness.
-      const result = await evaluateLook(pickedItems.map(p => p.item), apiKey, {
-        occasions: asArray(occasions),
-        weathers: asArray(weathers),
-        available: builderPool,
-      });
-      setEvaluation(result);
-    } catch (err) {
-      setEvalErr(err.message || "Evaluation failed.");
-    } finally { setEvaluating(false); }
+    setEvalErr(""); setAppliedMoves(new Set()); setMoveChoice({});
+    setEvalBound(true);
+    const items = pickedItems.map(p => p.item);
+    const canvasIds = items.map(it => it.id);
+    // The occasion/weather chips she's tagged the look with double as the
+    // evaluation brief — the stylist judges fitness-for-purpose, not just
+    // abstract prettiness. Errors land in the run's state (runErr above).
+    const brief = { occasions: asArray(occasions), weathers: asArray(weathers), available: builderPool };
+    startRun(RUN_KEYS.builderEvaluate, async () => {
+      const evaluation = await evaluateLook(items, apiKey, brief);
+      return { evaluation, canvasIds, canvasKey: [...canvasIds].sort().join("|"), occasions: brief.occasions, weathers: brief.weathers };
+    });
   }
 
   return (
@@ -1355,7 +1381,10 @@ export default function SilhouetteBuilder({
 
       {saved && <p style={{ fontSize: 12, color: "var(--color-success)", marginBottom: 8 }}>✓ {saved}</p>}
       {saveErr && <p style={{ fontSize: 12, color: PALETTE.accent, marginBottom: 8 }}>{saveErr}</p>}
-      {evalErr && <p style={{ fontSize: 12, color: PALETTE.accent }}>{evalErr}</p>}
+      {(evalErr || runErr) && <p style={{ fontSize: 12, color: PALETTE.accent }}>{evalErr || runErr}</p>}
+      {evaluating && (
+        <p style={{ fontSize: 11, color: PALETTE.muted, marginBottom: 8 }}>Your stylist is reading the look — keep arranging, or step away; the card lands here.</p>
+      )}
       {evaluation && (
         <div style={{ background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 }}>
@@ -1364,6 +1393,9 @@ export default function SilhouetteBuilder({
             )}
             <div style={{ fontSize: 13, color: PALETTE.soft, fontStyle: "italic" }}>{evaluation.headline}</div>
           </div>
+          {evalRun.finishedAt && (
+            <div style={{ fontSize: 9, letterSpacing: "0.12em", color: PALETTE.muted, marginBottom: 8 }}>EVALUATED {agoLabel(evalRun.finishedAt)}</div>
+          )}
           {/* Every section says what it IS before what it says (owner,
               2026-10-02: "I'm not sure what my ai is referencing here … more
               descriptive words or ways to understand the intent"). A move

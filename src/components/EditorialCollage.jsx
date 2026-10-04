@@ -41,18 +41,26 @@ function useIsMobileCollage() {
 // Layout: clothing anchored left/center, shoes bottom-left, bag bottom-right, accessories scattered
 //
 // `compact` switches to a tight flex grid — items sized equally, no recipes,
-// no white-space gaps. Use for tiny canvases (calendar tiles) and for views
-// where the user wants pieces grouped tightly rather than scattered across
-// a tall portrait canvas.
-export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride, compact = false }) {
-  const isMobile = useIsMobileCollage();
+// no white-space gaps. The trip screen's day cards use it: a packing view
+// where the pieces matter more than the arrangement. The planner's squares
+// used to as well; they are `tile`s now (below).
+export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride, compact = false, tile = false }) {
+  const viewportMobile = useIsMobileCollage();
+  // A TILE is a small portrait box the caller sizes (a planner square): it
+  // keeps the composed look — her saved arrangement, or the dense portrait
+  // recipe — and paints every piece from its 256px thumb (CLAUDE.md: a small
+  // picture of a piece names the piece, never the photo). Owner, 2026-10-04:
+  // "keep the format I have saved in the builder on the individual calendar
+  // squares … that shows the outfit as an outfit rather than individual
+  // items." The portrait recipes are the right shape for the box on every
+  // viewport, so a tile reads as mobile whatever the screen.
+  const isMobile = tile || viewportMobile;
   const sorted = sortByCategoryOrder(lookItems);
 
   if (compact) {
     const visible = sorted.slice(0, 6);
-    // A tile shows six at most; past that it SAYS how many more rather than
-    // dropping them silently (the planner cell is the only place a look of
-    // seven reads as a look of six).
+    // A compact card shows six at most; past that it SAYS how many more
+    // rather than dropping them silently.
     const hidden = sorted.length - visible.length;
     // Cell scaling: 1 → 1 col, 2 → 2 cols, 3-4 → 2 cols, 5-6 → 3 cols. Keeps
     // each thumb roughly square at common canvas widths.
@@ -120,7 +128,11 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
     ? buildFromLayout(sorted, layoutOverride, isMobile)
     : buildCollageLayout(sorted, isMobile);
 
-  const mobileCanvas = isMobile ? { paddingBottom: useOverride ? "133.33%" : "125%" } : null;
+  // The caller sizes a tile's box; a card sizes itself (manual layouts at the
+  // builder's 3:4, recipes at their 4:5).
+  const mobileCanvas = tile
+    ? { paddingBottom: 0, position: "absolute", inset: 0 }
+    : isMobile ? { paddingBottom: useOverride ? "133.33%" : "125%" } : null;
 
   return (
     <div style={{ ...s.collageCanvas, ...mobileCanvas, ...canvasStyle }}>
@@ -144,8 +156,13 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
             // fills the slot tightly instead of floating in empty space. Big
             // visual win for Style Me looks where the slot is small and the
             // PNG's transparent halo would otherwise dominate.
-            <TrimmedImage src={slot.image} alt={slot.name}
-              style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
+            tile ? (
+              <TrimmedImage item={slot} alt={slot.name}
+                style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
+            ) : (
+              <TrimmedImage src={slot.image} alt={slot.name}
+                style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
+            )
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
               <span style={s.collageCat}>{slot.category?.[0]}</span>

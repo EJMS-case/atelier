@@ -398,7 +398,13 @@ test("the evaluator's prompt carries the standard, the brief, and the facts", ()
   });
   assert.ok(prompt.includes(STYLIST_STANDARD));
   assert.ok(prompt.includes(OPINION_RULES));
-  assert.match(prompt, /counts heavily against the score/);
+  // The score is a stylist's, on two clocks; the app's computed facts inform
+  // it and never set it (owner, 2026-10-04: "the ranking I get may be based on
+  // hard rules rather than this season's style and timeless trends").
+  assert.match(prompt, /CURRENT: does it read now\?/);
+  assert.match(prompt, /TIMELESS: would this still read in five years/);
+  assert.match(prompt, /nothing listed there moves the score by itself/);
+  assert.doesNotMatch(prompt, /counts heavily against the score/);
   assert.doesNotMatch(prompt, /line of the standard/);
   assert.match(prompt, /never as a rule broken or a line cited/);
   assert.match(prompt, /WORK BRIEF/);
