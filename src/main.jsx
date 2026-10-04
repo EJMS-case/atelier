@@ -25,6 +25,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 // this a last resort rather than the normal path.
 window.addEventListener("vite:preloadError", (event) => {
   event.preventDefault();
+  // Recorded so a deploy that strands an open page is told apart from a
+  // render error in the table (both end at the same "Something hiccuped").
+  import("./lib/ai/logError.js").then(({ logAiError }) => logAiError("chunk:preload", { href: location.href }, event?.payload || event?.reason || "preload error")).catch(() => {});
   let last = 0;
   try { last = Number(sessionStorage.getItem("atelier:chunkReloadAt")) || 0; } catch { /* private mode */ }
   if (Date.now() - last < 120000) return;
