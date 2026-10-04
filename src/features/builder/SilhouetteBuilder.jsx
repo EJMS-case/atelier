@@ -20,6 +20,7 @@ import { asArray, tagsFor } from "../../lib/multitag.js";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { normalizeBoxToContent, aspectLockedResize } from "./boxMath.js";
 import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
+import Thumb from "../../components/Thumb.jsx";
 
 const WEATHERS = WEATHER_SHORTS;
 
@@ -100,7 +101,7 @@ function EvalPiece({ verb, text, pieces, chosenId, onChoose }) {
     return (
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
         <span style={verbStyle}>{verb}</span>
-        {piece.image && <img src={piece.image} alt="" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0, background: "#fff", borderRadius: 4, border: `1px solid ${PALETTE.line}` }}/>}
+        {piece.image && <Thumb item={piece} alt="" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0, background: "#fff", borderRadius: 4, border: `1px solid ${PALETTE.line}` }}/>}
         <div style={{ fontSize: 12, color: PALETTE.ink, lineHeight: 1.4 }}>
           <strong>{pieceLabel(piece)}</strong>
           {pieces.length > 1 && (
@@ -574,6 +575,33 @@ export default function SilhouetteBuilder({
         .filter(x => x.item)
     );
   }, [selections, builderPool]);
+
+  // A piece that has just arrived on the canvas — from the slot picker, a
+  // set, an evaluator move — lands ON TOP of everything and becomes the
+  // active piece, so she sees it where it dropped with the Front/Back/Remove
+  // row already open (owner, 2026-10-04: "put it on top as I have to move
+  // things around to find it"). Diffing the canvas keys here catches every
+  // way in with one rule; the slot's default z still orders a restored or
+  // untouched look. First render seeds the set so a reopened layout keeps its
+  // saved stacking; a pool that fills in after mount (every key arriving at
+  // once onto an empty canvas) is read the same way.
+  const seenKeysRef = useRef(null);
+  useEffect(() => {
+    const keys = pickedItems.map(p => posKey(p.slot, p.item.id));
+    const seen = seenKeysRef.current;
+    const fresh = seen ? keys.filter(k => !seen.has(k)) : keys;
+    seenKeysRef.current = new Set(keys);
+    if (!seen || !fresh.length) return;
+    if (seen.size === 0 && fresh.length === keys.length && keys.length > 1) return;
+    setZOrders(prev => {
+      const zOf = (k) => prev[k] ?? DEFAULT_Z[pickedItems.find(p => posKey(p.slot, p.item.id) === k)?.slot] ?? 3;
+      let top = Math.max(0, ...keys.filter(k => !fresh.includes(k)).map(zOf));
+      const next = { ...prev };
+      for (const k of fresh) next[k] = ++top;
+      return next;
+    });
+    setActiveCanvasKey(fresh[fresh.length - 1]);
+  }, [pickedItems]);
 
   // Toggle helper. Multi-slots accumulate; single-slots replace.
   const togglePick = (slot, id) => {
@@ -1175,7 +1203,9 @@ export default function SilhouetteBuilder({
                     <button key={entry.key} onClick={() => toggleSet(entry)}
                       style={{ background: state === "full" ? PALETTE.ink : "#fff", border: `2px solid ${on ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: state === "full" ? PALETTE.bg : PALETTE.soft, textAlign: "left", position: "relative" }}>
                       <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4, position: "relative" }}>
-                        {entry.image && <img src={entry.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {entry.kind === "single"
+                          ? <Thumb item={entry.item} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+                          : entry.image && <img src={entry.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                         {entry.kind === "coord" && (
                           <span style={{ position: "absolute", top: 3, right: 3, fontSize: 8, fontWeight: 600, letterSpacing: "0.04em", background: "rgba(28,24,20,0.82)", color: "#fff", borderRadius: 8, padding: "1px 5px" }}>
                             {entry.members.length} pcs{state === "partial" ? " ·" : ""}
@@ -1196,7 +1226,7 @@ export default function SilhouetteBuilder({
                     <button key={it.id} onClick={() => togglePick(activeSlot, it.id)}
                       style={{ background: isPicked ? PALETTE.ink : "#fff", border: `2px solid ${isPicked ? PALETTE.ink : PALETTE.line}`, borderRadius: 8, padding: 5, cursor: "pointer", color: isPicked ? PALETTE.bg : PALETTE.soft, textAlign: "left" }}>
                       <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {it.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                       </div>
                       <div style={{ fontSize: 9, lineHeight: 1.2, textAlign: "center", overflow: "hidden", maxHeight: 22 }}>
                         {pickerLabel(it)}

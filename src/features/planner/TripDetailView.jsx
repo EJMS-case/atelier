@@ -1290,7 +1290,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                     <div key={it.id} title={it.name}
                       style={{ position: "relative", flexShrink: 0, width: 46, height: 46, padding: 2, background: "#fff", border: `1px solid ${PALETTE.ink}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                       {it.image
-                        ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                        ? <TrimmedImage item={it} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
                         : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.name?.slice(0, 8)}</span>}
                     </div>
                   ))}
@@ -1692,7 +1692,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                     )}
                     <div style={{ width: 44, height: 52, flexShrink: 0, borderRadius: 4, overflow: "hidden", background: "#fff", border: `1px solid ${PALETTE.line}` }}>
                       {item.image
-                        ? <TrimmedImage src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                        ? <TrimmedImage item={item} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                         : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: PALETTE.muted }}>{category[0]}</div>
                       }
                     </div>
@@ -1788,7 +1788,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                       style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: staying ? `${PALETTE.accent}12` : "#fff", border: staying ? `1px solid ${PALETTE.accent}` : `1px solid ${PALETTE.line}`, borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
                       <div style={{ width: 40, height: 48, flexShrink: 0, borderRadius: 4, overflow: "hidden", background: PALETTE.cream, border: `1px solid ${PALETTE.line}` }}>
                         {item.image
-                          ? <TrimmedImage src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                          ? <TrimmedImage item={item} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
                           : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: PALETTE.muted }}>{item.category?.[0] || "?"}</div>}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>

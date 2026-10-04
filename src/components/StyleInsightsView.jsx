@@ -8,6 +8,7 @@ import { wearEligible } from "../features/wear/wearApi.js";
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import { loadInsightsDismissed, saveInsightsDismissed } from "../utils/storage.js";
 import { useRun, startRun, RUN_KEYS } from "../lib/backgroundRun.js";
+import Thumb from "./Thumb.jsx";
 
 // ── STYLE INSIGHTS ANALYSIS ──────────────────────────────────────────────────
 function analyzeWardrobe(items, outfitLogs) {
@@ -170,7 +171,7 @@ export default function StyleInsightsView({ items, wardrobe, apiKey, onBack }) {
           {analysis.underutilized.map(item => {
             const days = item.last_worn ? Math.floor((Date.now() - new Date(item.last_worn).getTime()) / 86400000) : null;
             return (<div key={item.id} style={si.underutilCard}><div style={si.underutilImg}>
-              {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{color:"var(--color-border-muted)",fontSize:22}}>{item.category?.[0]}</span>}
+              {item.image ? <Thumb item={item} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{color:"var(--color-border-muted)",fontSize:22}}>{item.category?.[0]}</span>}
             </div><div style={si.underutilMeta}><div style={{fontSize:10,letterSpacing:"0.1em",color:"var(--color-text-muted)"}}>{item.category}</div>
               <div style={{fontSize:12,marginTop:2}}>{item.name}</div>
               <div style={{fontSize:10,color:"var(--color-accent)",marginTop:3}}>{days ? `${days} days ago` : "Never worn"}</div>

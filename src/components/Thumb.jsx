@@ -12,7 +12,11 @@
 //   · Self-healing & zero user action — which items have a thumb is tracked in
 //     localStorage, so subsequent loads (this device) use the small version.
 //
-// Collages keep using TrimmedImage (which alpha-crops and is separately cached).
+// TrimmedImage (the alpha-cropping renderer behind every collage and tile)
+// reads the SAME thumb registry through thumbSourceFor / ensureThumb below,
+// so a tile that trims its piece still starts from the 256px thumb, not the
+// full photo. There is one answer to "does this piece have a small picture?"
+// and it lives here.
 
 import { useEffect, useState } from "react";
 import { sb, thumbUrl } from "../lib/supabase.js";
@@ -55,7 +59,17 @@ export function forgetThumb(id) {
   persist();
 }
 
-function ensureThumb(item) {
+// The small picture for a piece, if THIS device knows the server holds one;
+// null otherwise (the caller renders the full photo and asks ensureThumb to
+// build the thumb for next time). Null, never a guess: a 404 probe per tile is
+// the first-load regression this file was written to avoid.
+export function thumbSourceFor(item) {
+  const id = item?.id;
+  if (!id || !item?.image || !known.has(id)) return null;
+  return thumbUrl(id, item.image);
+}
+
+export function ensureThumb(item) {
   const id = item?.id;
   if (!id || known.has(id) || attempted.has(id)) return;
   if (!item.image || item.image.startsWith("data:")) return; // not yet uploaded
@@ -78,7 +92,7 @@ function ensureThumb(item) {
   pump();
 }
 
-export default function Thumb({ item, alt, style }) {
+export default function Thumb({ item, alt, title, style }) {
   const id = item?.id;
   const [src, setSrc] = useState(() => (id && known.has(id) ? thumbUrl(id, item?.image) : item?.image));
 
@@ -97,6 +111,7 @@ export default function Thumb({ item, alt, style }) {
     <img
       src={src || item?.image}
       alt={alt}
+      title={title}
       loading="lazy"
       decoding="async"
       style={style}

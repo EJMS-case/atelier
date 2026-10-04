@@ -2,7 +2,7 @@
 // Mobile-first month grid. Tap a day to assign/clear a planned look. The
 // Trip modal lives in this file too.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
@@ -15,7 +15,8 @@ import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../..
 import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
-import TripDetailView from "./TripDetailView.jsx";
+import RouteFallback from "../../components/RouteFallback.jsx";
+import { sb } from "../../lib/supabase.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
@@ -23,6 +24,12 @@ import { restoreScroll } from "../../utils/restoreScroll.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { logAiError } from "../../lib/ai/logError.js";
 import { homeClosetFor, poolForTripDay } from "./tripPools.js";
+
+// The trip screen is a second tap from the month grid, and it is half the
+// planner's bytes (TripDetailView + its packing tabs). It loads when a trip
+// opens, so the calendar she asked for paints first (2026-10-04).
+const TripDetailView = lazy(() => import("./TripDetailView.jsx"));
+import Thumb from "../../components/Thumb.jsx";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
@@ -70,7 +77,6 @@ const btnSecondary = {
 /**
  * @param {Object} props
  * @param {Object[]} props.items
- * @param {Object[]} props.outfitLogs   - saved outfits for the "pick saved" picker
  * @param {() => void} props.onGoToStyleMe
  */
 // Remember the month the user was viewing so returning to the planner — after
@@ -100,7 +106,7 @@ let lastTripScrollY = 0;
 // activation / suitcase-close flows call it after flipping trip status.
 // `onItemsClosetChanged` patches App's local items after the trip-complete
 // flow reassigns left-behind pieces to the destination closet (B5).
-export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, outfitLogs, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed }) {
+export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed }) {
   // `focusDay` (iso) opens the planner ON that day — the way in from a
   // garment's "In Your Looks" row. It wins over the remembered month and the
   // remembered trip, is consumed once on mount (so a later plain open of the
@@ -119,6 +125,19 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
   const [plans, setPlans] = useState({});     // { iso: plan }
   const [activeDay, setActiveDay] = useState(null); // iso string
+  // Her saved looks, for the day modal's "pick a saved look" tab and for a
+  // plan that points at a log's layout. Fetched the first time a day opens,
+  // not at mount: the month grid needs plans and trips, and the 150-row logs
+  // request was riding the same first paint (2026-10-04, "the planner runs
+  // extremely slow"). `null` = not asked yet; the modal reads [] until then.
+  const [outfitLogs, setOutfitLogs] = useState(null);
+  useEffect(() => {
+    if (!activeDay || outfitLogs !== null) return;
+    let cancelled = false;
+    sb.fetchOutfitLogs().then(rows => { if (!cancelled) setOutfitLogs(rows || []); }).catch(() => { if (!cancelled) setOutfitLogs([]); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDay]);
   const [showTrip, setShowTrip] = useState(false);
   const [trips, setTrips] = useState([]);
   // Saved plans and outfit logs name their pieces by id, and those ids don't
@@ -388,17 +407,19 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // When a trip chip is tapped, render TripDetailView instead of the calendar
   if (activeTrip) {
     return (
-      <TripDetailView
-        trip={activeTrip}
-        available={available}
-        wardrobe={wardrobe}
-        closets={closets}
-        apiKey={apiKey}
-        onBack={() => { setActiveTrip(null); refreshPlans(); }}
-        onBuildDay={onBuildDay}
-        onRefreshActiveTrip={onRefreshActiveTrip}
-        onItemsClosetChanged={onItemsClosetChanged}
-      />
+      <Suspense fallback={<RouteFallback/>}>
+        <TripDetailView
+          trip={activeTrip}
+          available={available}
+          wardrobe={wardrobe}
+          closets={closets}
+          apiKey={apiKey}
+          onBack={() => { setActiveTrip(null); refreshPlans(); }}
+          onBuildDay={onBuildDay}
+          onRefreshActiveTrip={onRefreshActiveTrip}
+          onItemsClosetChanged={onItemsClosetChanged}
+        />
+      </Suspense>
     );
   }
 
@@ -847,7 +868,7 @@ function DayModal({ iso, plan, available, wardrobe: wardrobeProp, outfitLogs, fo
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             {matching.length === 0 && (
               <div style={{ padding: 24, textAlign: "center", color: PALETTE.muted }}>
-                {(outfitLogs || []).length === 0 ? "No saved looks yet." : `No saved looks tagged ${pickedWeather}.`}
+                {outfitLogs === null ? "Loading your looks…" : (outfitLogs || []).length === 0 ? "No saved looks yet." : `No saved looks tagged ${pickedWeather}.`}
               </div>
             )}
             {matching.map(log => {
@@ -858,7 +879,7 @@ function DayModal({ iso, plan, available, wardrobe: wardrobeProp, outfitLogs, fo
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, width: 56, height: 56, flexShrink: 0 }}>
                     {logItems.map(it => (
                       <div key={it.id} style={{ background: PALETTE.cream, overflow: "hidden", borderRadius: 2 }}>
-                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {it.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                       </div>
                     ))}
                   </div>
@@ -1592,7 +1613,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
                     }}
                     style={pinThumb}>
                     {it.image
-                      ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                      ? <TrimmedImage item={it} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
                       : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.name?.slice(0, 8)}</span>}
                     <span style={pinThumbX}>×</span>
                   </button>
@@ -1770,7 +1791,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
                                     borderRadius: 4, overflow: "hidden", cursor: "pointer",
                                   }}>
                                   {it.image
-                                    ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                                    ? <TrimmedImage item={it} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
                                     : <span style={{ fontSize: 9, color: PALETTE.muted }}>{it.category?.[0]}</span>}
                                 </button>
                                 <button onClick={() => removeItem(dayIdx, outfitIdx, it.id)}
@@ -1835,7 +1856,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, maxHeight: 160, overflowY: "auto" }}>
                     {packingList.map(it => (
                       <div key={it.id} title={it.name} style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", border: `1px solid ${PALETTE.line}` }}>
-                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {it.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                       </div>
                     ))}
                   </div>
@@ -1917,7 +1938,7 @@ function SwapPicker({ target, items, preferItemIds, currentDayItems, weather, oc
               <button key={it.id} onClick={() => onPick(it)}
                 style={{ padding: 6, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, cursor: "pointer", textAlign: "left" }}>
                 <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                  {it.image && <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>}
+                  {it.image && <TrimmedImage item={it} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>}
                 </div>
                 <div style={{ fontSize: 10, color: PALETTE.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</div>
                 <div style={{ fontSize: 9, color: PALETTE.muted, marginTop: 1 }}>{it.subcategory || it.category}</div>

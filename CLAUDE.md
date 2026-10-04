@@ -24,10 +24,10 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (44 suites, no network)
+npm test           # full suite (49 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (32 steps, headless, mocked REST)
+npm run test:render     # just the render walk (36 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -161,6 +161,26 @@ Conventions worth knowing:
   (gym, lounge, swim and metal-coloured jewellery out) — and says the count
   it rests on; "zero charcoal" to a woman with three charcoal sweatpants is
   how "What the numbers say" read as wrong (2026-09-17).
+- **A small picture of a piece names the PIECE, never the photo** (owner,
+  2026-10-04: "the planner runs extremely slow to load"). Every tile under
+  ~100px — a calendar cell, a packing row, a picker card, a Home strip — is
+  `<Thumb item={it}>` (a cover tile) or `<TrimmedImage item={it}>` (a tile
+  that trims its piece); both read the 256px thumb the bucket holds through
+  the one registry in `components/Thumb.jsx` and fall back to the photo only
+  while a thumb does not exist yet. `<TrimmedImage src={…}>` with the full
+  photo is for a composite that fills the screen (the builder canvas, a saved
+  look's collage). A raw `<img src={it.image}>` on a tile is the regression:
+  the month grid was downloading ~160 full photos and alpha-scanning each on
+  the main thread to paint 20px squares.
+- **The collage never drops a piece.** `components/collageLayout.js` is the
+  pure engine behind every look card; recipes place the first of each role
+  and `placeOverflow` places the rest. There is no per-role cap: three
+  one-exception fixes (second layer, loungewear halves, a bikini) each left
+  the next case to be found on her phone as "some pieces are missing".
+  `test:collage` holds the contract — every id in, one slot out.
+- **A list of look cards is paged** (`components/ShowMore.jsx`, twelve at a
+  time) and searched at the LIST, through `lookMatchesSearch` in
+  `lib/lookFilters.js`, before paging — a card never filters itself.
 - **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
   state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last
   result persists per device. A run she can navigate away from and lose is

@@ -4,7 +4,6 @@ import LooksView from "./LooksView.jsx";
 import OutfitHistory from "./OutfitHistory.jsx";
 import InspirationView from "../features/inspiration/InspirationView.jsx";
 import SearchInput from "./SearchInput.jsx";
-import { LookSearchContext } from "./SavedLookCard.jsx";
 
 export default function SavedView({ wardrobe, available, setsMeta, toggleFav, onEditItem, onWearAgain, onDeleteLog, onUnlog, onLogAsWorn, isFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onBuildSimilar, inspirations, setInspirations, focusLookId, onFocusLookConsumed }) {
   // The Wear tab and its metrics (most-worn / neglected / cost-per-wear) moved
@@ -31,16 +30,14 @@ export default function SavedView({ wardrobe, available, setsMeta, toggleFav, on
             style={{...s.chip, ...(tab === key ? s.chipActive : {})}}>{label}</button>
         ))}
       </div>
-      {/* Same free-text search as Outfit History, applied to the All list via
-          LookSearchContext (cards hide themselves when they don't match).
-          History brings its own search box, so ours is hidden there and the
-          context is fed "" to avoid double-filtering. */}
+      {/* The same free-text search History runs (lookMatchesSearch): All
+          filters its list with it before paging, so a search and "Show more"
+          agree. History brings its own search box. */}
       {tab === "looks" && (
         <SearchInput value={searchQ} onChange={setSearchQ} placeholder="Search wardrobe, occasion, notes…"/>
       )}
-      <LookSearchContext.Provider value={tab === "looks" ? searchQ : ""}>
       {tab === "looks" && (
-        <LooksView wardrobe={wardrobe} available={available} setsMeta={setsMeta} apiKey={apiKey} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar} focusLookId={focusLookId} onFocusLookConsumed={onFocusLookConsumed}/>
+        <LooksView wardrobe={wardrobe} available={available} setsMeta={setsMeta} apiKey={apiKey} searchQ={searchQ} onDelete={onDeleteLog} onLogAsWorn={onLogAsWorn} isFav={isFav} toggleFav={toggleFav} onSaveLook={onSaveLook} onFavoriteLook={onFavoriteLook} onSchedule={onSchedule} onEditItem={onEditItem} onBuildSimilar={onBuildSimilar} focusLookId={focusLookId} onFocusLookConsumed={onFocusLookConsumed}/>
       )}
       {tab === "history" && (
         <OutfitHistory
@@ -63,7 +60,6 @@ export default function SavedView({ wardrobe, available, setsMeta, toggleFav, on
       {tab === "inspo" && (
         <InspirationView apiKey={apiKey} items={inspirations || []} setItems={setInspirations}/>
       )}
-      </LookSearchContext.Provider>
     </div>
   );
 }

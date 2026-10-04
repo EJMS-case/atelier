@@ -1,15 +1,8 @@
-import { createContext, useContext, useState } from "react";
+import { useState } from "react";
 import { s } from "../ui/styles.js";
 import EditorialCollage from "./EditorialCollage.jsx";
 import ItemDetailSheet from "./ItemDetailSheet.jsx";
-import { tagsFor } from "../lib/multitag.js";
 import { sortByCategoryOrder, resolveItemIds } from "../utils/item-helpers.js";
-
-// Free-text query provided by SavedView's search box. The Looks
-// lists fetch and render their own data, so search reaches them here at the
-// card level: each card hides itself when it doesn't match. Default "" = no
-// filtering (History runs its own pre-card search and provides nothing).
-export const LookSearchContext = createContext("");
 
 // Shared card layout used by Looks (All) and OutfitHistory. Renders
 // the outfit as the SAME styled editorial collage used for freshly generated
@@ -27,7 +20,6 @@ export const LookSearchContext = createContext("");
 // garment's "In Your Looks" row (LooksView scrolls to `#look-<id>`).
 export default function SavedLookCard({ log, wardrobe, subtitle, headerRight, notes, actions, onEditItem, highlight }) {
   const [detailItem, setDetailItem] = useState(null);
-  const searchQ = useContext(LookSearchContext);
 
 // A saved look is a RECORD of what she wore, and it can hold a piece from
 // either room. So it resolves against the wardrobe, never against what's
@@ -36,18 +28,6 @@ export default function SavedLookCard({ log, wardrobe, subtitle, headerRight, no
 // in saved outfits from Arizona and marking them as nonexistent."
 // See the vocabulary in features/closet/useVisibleWardrobe.js.
   const logItems = sortByCategoryOrder(resolveItemIds(wardrobe, log.garment_ids));
-
-  // Mirror OutfitHistory's search semantics: case-insensitive substring match
-  // over constituent item names, occasion tags, and notes.
-  const q = (searchQ || "").trim().toLowerCase();
-  if (q) {
-    const hay = [
-      ...logItems.map(i => i.name || ""),
-      ...tagsFor(log, "occasions", "occasion"),
-      notes || log.notes || "",
-    ].join(" ").toLowerCase();
-    if (!hay.includes(q)) return null;
-  }
 
   return (
     <div id={`look-${log.id}`} style={highlight ? { ...s.histCard, outline: "2px solid var(--color-ink)", outlineOffset: 2 } : s.histCard}>

@@ -18,6 +18,7 @@ import { nyToday, friendlyDate } from "../../lib/time.js";
 import { PALETTE } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { RUN_KEYS, startRun, useRun, clearRun } from "../../lib/backgroundRun.js";
+import Thumb from "../../components/Thumb.jsx";
 
 const PERIODS = {
   month:   { days: 30,  chip: "Month",   judgeLabel: "month",   topN: 4 },
@@ -31,7 +32,7 @@ const label = { fontSize: 9, letterSpacing: "0.2em", color: PALETTE.muted, margi
 const thumb = { flexShrink: 0, background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 4, overflow: "hidden" };
 const Img = ({ it, size }) => (
   <div style={{ ...thumb, width: size, height: size }}>
-    {it?.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+    {it?.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
   </div>
 );
 

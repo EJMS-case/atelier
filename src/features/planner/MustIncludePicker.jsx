@@ -131,7 +131,7 @@ export default function MustIncludePicker({
                   style={{ ...card, ...(on ? cardOn : null) }}>
                   <div style={thumb}>
                     {it.image
-                      ? <TrimmedImage src={it.image} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
+                      ? <TrimmedImage item={it} alt={it.name} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
                       : <span style={{ color: PALETTE.line, fontSize: 18 }}>{it.category?.[0] || "?"}</span>}
                     {on && <div style={tick}>✓</div>}
                   </div>

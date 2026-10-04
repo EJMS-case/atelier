@@ -1,4 +1,5 @@
 import { ss } from "../ui/styles.js";
+import Thumb from "./Thumb.jsx";
 
 // `isSplit` (wave 2 — B6): the set's pieces span more than one closet. Surface
 // only — a visible, non-blocking flag; nothing is auto-fixed.
@@ -21,7 +22,7 @@ export default function SetCard({ group, index, isSplit, onEdit }) {
                 { width: "50%", height: "50%" }),
           }}>
             {it.image
-              ? <img src={it.image} alt={it.name} style={ss.collageImg}/>
+              ? <Thumb item={it} alt={it.name} style={ss.collageImg}/>
               : <div style={ss.collagePlaceholder}>{(it.category || "?")[0]}</div>}
           </div>
         ))}

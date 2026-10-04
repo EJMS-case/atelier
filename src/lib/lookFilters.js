@@ -65,3 +65,26 @@ export const formatWornDate = (d) => {
     return dt.toLocaleDateString("en-US", opts);
   } catch { return d; }
 };
+
+/** id → name over the wardrobe, built once per list for lookMatchesSearch. */
+export function pieceNamesById(wardrobe) {
+  const m = {};
+  (wardrobe || []).forEach(it => { m[it.id] = it.name || ""; });
+  return m;
+}
+
+// Free-text search over a look row: the names of its pieces, its occasion
+// tags, its notes. Case-insensitive substring. ONE reader for Saved → All and
+// History, so what a query finds does not depend on the tab (the card used
+// to run its own copy for All through a React context; History ran this one).
+// `nameById` is built once per list from the wardrobe, not per row.
+export function lookMatchesSearch(row, nameById, query) {
+  const q = (query || "").trim().toLowerCase();
+  if (!q) return true;
+  const hay = [
+    ...(row.garment_ids || []).map(id => nameById[id] || ""),
+    ...tagsFor(row, "occasions", "occasion"),
+    row.notes || "",
+  ].join(" ").toLowerCase();
+  return hay.includes(q);
+}

@@ -20,6 +20,7 @@ import { isResurfaceCandidate } from "../recap/recapData.js";
 import { resolveItemIds, filterByWeather } from "../../utils/item-helpers.js";
 import { autoColorPairs, rotateDaily, hexForColorLabel, seasonalBucketForDate } from "../../utils/wardrobe-coverage.js";
 import { PALETTE } from "../../constants/palette.js";
+import Thumb from "../../components/Thumb.jsx";
 
 
 export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop, onNavigate }) {
@@ -184,7 +185,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
           <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
             {todayPlanItems.slice(0, 6).map(it => (
               <div key={it.id} style={{ flexShrink: 0, width: 56, height: 56, background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 4, overflow: "hidden" }}>
-                {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                {it.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
               </div>
             ))}
           </div>
@@ -259,7 +260,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
                   <div style={{ display: "flex", gap: 4, overflow: "hidden", flex: 1 }}>
                     {planItems.slice(0, 5).map(it => (
                       <div key={it.id} style={{ flexShrink: 0, width: 40, height: 40, background: PALETTE.cream, border: `1px solid ${PALETTE.soft_line}`, borderRadius: 3, overflow: "hidden" }}>
-                        {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                        {it.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                       </div>
                     ))}
                   </div>
@@ -290,7 +291,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
                   <button key={it.id} onClick={() => onEditItem?.(it)}
                     style={{ flexShrink: 0, width: 96, background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
                     <div style={{ position: "relative", aspectRatio: "1", background: PALETTE.cream, borderRadius: 6, overflow: "hidden", border: `1px solid ${PALETTE.soft_line}` }}>
-                      {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                      {it.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                       <div style={{ position: "absolute", top: 4, left: 4, background: PALETTE.ink, color: PALETTE.cream, fontSize: 9, padding: "2px 6px", borderRadius: 10 }}>#{i + 1}</div>
                     </div>
                     <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 4 }}>{wears} wear{wears === 1 ? "" : "s"}</div>
@@ -333,7 +334,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
               title={`Style ${it.name}`}
               style={{ flexShrink: 0, width: 88, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
               <div style={{ width: 88, height: 88, background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 6, overflow: "hidden", position: "relative" }}>
-                {it.image && <img src={it.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                {it.image && <Thumb item={it} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                 <div style={{ position: "absolute", bottom: 3, right: 3, background: PALETTE.ink, color: PALETTE.cream, fontSize: 9, lineHeight: 1, padding: "3px 5px", borderRadius: 8 }}>✦</div>
               </div>
               <div style={{ fontSize: 10, color: PALETTE.soft, marginTop: 3, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{it.name}</div>

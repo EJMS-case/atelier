@@ -13,6 +13,7 @@ import {
   closetColorProfile, colorCategoryCoverage, pairUnlocks, textureInventory,
   seasonForDate, hexForColorLabel, unlockNeedPhrase,
 } from "../utils/wardrobe-coverage.js";
+import Thumb from "./Thumb.jsx";
 
 const label = { fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)" };
 const chip = (on) => ({ ...s.btnSecondary, fontSize: 10, padding: "4px 8px", ...(on ? { background: "var(--color-ink)", color: "var(--color-surface)", borderColor: "var(--color-ink)" } : {}) });
@@ -373,7 +374,7 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
               <div key={item.id} style={{...s.card, border: selectedIds.includes(item.id) ? "2px solid var(--color-ink)" : "1px solid var(--color-border)", cursor:"pointer"}}
                 onClick={() => toggleItem(item.id)}>
                 <div style={{...s.cardImg, height:120}}>
-                  <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.cardPhoto}/>
+                  <Thumb item={item} alt={item.name} style={s.cardPhoto}/>
                   {selectedIds.includes(item.id) && (
                     <div style={{position:"absolute",top:6,right:6,background:"var(--color-ink)",color:"var(--color-surface)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>✓</div>
                   )}

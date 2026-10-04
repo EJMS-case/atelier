@@ -4,6 +4,7 @@ import { icons, Icon } from "../ui/icons.jsx";
 import { analyzeColorAI } from "../lib/ai/stylist.js";
 import ColorResultCard from "./ColorResultCard.jsx";
 import ShoppingDimensionsCard from "./ShoppingDimensionsCard.jsx";
+import Thumb from "./Thumb.jsx";
 
 export default function ColorAdvisorView({ items, apiKey, onBack }) {
   const [mode, setMode]           = useState("analyze");
@@ -127,7 +128,7 @@ export default function ColorAdvisorView({ items, apiKey, onBack }) {
                   return (
                     <div key={id} style={s.pairingItem}>
                       {item.image
-                        ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.pairingThumb}/>
+                        ? <Thumb item={item} alt={item.name} style={s.pairingThumb}/>
                         : <div style={{...s.pairingThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-text-muted)"}}>{item.category?.[0]}</div>}
                       <div style={s.pairingName}>{item.name}</div>
                     </div>
@@ -179,7 +180,7 @@ export default function ColorAdvisorView({ items, apiKey, onBack }) {
                 {group.map(item => (
                   <div key={item.id} style={s.auditRow}>
                     {item.image
-                      ? <img src={item.image} alt={item.name} loading="lazy" decoding="async" style={s.auditThumb}/>
+                      ? <Thumb item={item} alt={item.name} style={s.auditThumb}/>
                       : <div style={{...s.auditThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-border-muted)"}}>{item.category?.[0]}</div>}
                     <div style={s.auditInfo}>
                       <div style={s.auditName}>{item.name}</div>
