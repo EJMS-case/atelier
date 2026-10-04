@@ -208,10 +208,14 @@ function applyFilters(rows, url) {
   return out;
 }
 
+// Every REST read, in order — the planner steps assert WHAT the planner
+// fetched, not only what it drew.
+const restReads = [];
 await page.route("**/rest/v1/**", route => {
   const url = new URL(route.request().url());
   const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0];
   const method = route.request().method();
+  if (method === "GET") restReads.push(url.pathname.split("/rest/v1/")[1] + url.search);
   if (method !== "GET") {
     // A trip save must come back as a ROW: the sheet refuses to pin days under
     // a trip that did not save (2026-09-22), so an empty 201 here would read
@@ -408,6 +412,26 @@ await check("Settings (plumbing only)", async () => {
   if (/More Tools|Open Style Profile/.test(text)) throw new Error("Settings still carries the tools that moved to Home");
 });
 await check("Planner (calendar month grid)", tab("Planner"));
+// Owner, 2026-10-04: "just the month I'm on and, if it doesn't cost too much,
+// the month prior so I can toggle in the early weeks of the month." A visit
+// reads the visible month's grid range and then warms the month before it
+// as its own grid range — never anything wider (the whole history is a
+// filter's question). The earliest month this walk ever shows is August
+// 2026 (the Edit → worn-date step above), so a range holding the WHOLE of
+// July 2026 can only have come from the warm-up; the whole-history read
+// is checked from this tab's open, since Home reads the table whole for
+// Today / Coming up.
+const plannerOpenedAt = restReads.length;
+await check("Planner (calendar month grid)", tab("Planner"));
+await check("Planner → the month before the visible one is warmed after the grid, and nothing wider", async () => {
+  await page.waitForTimeout(500);
+  const wide = restReads.slice(plannerOpenedAt).find(u => u.startsWith("planned_outfits?") && !/date=gte\./.test(u));
+  if (wide) throw new Error("the planner read the whole history on a visit: " + wide);
+  const ranges = restReads.filter(u => u.startsWith("planned_outfits?") && /date=gte\./.test(u))
+    .map(u => u.match(/date=gte\.(\d{4}-\d{2}-\d{2})&date=lte\.(\d{4}-\d{2}-\d{2})/)).filter(Boolean);
+  const holdsJuly = ranges.some(m => m[1] <= "2026-07-01" && m[2] >= "2026-07-31");
+  if (!holdsJuly) throw new Error("the month before the first visible month was not warmed; ranges read: " + ranges.map(m => m[1] + "…" + m[2]).join(" | "));
+});
 await check("Planner → day modal", async () => {
   // Any day cell — the modal is where saved looks resolve, which is the code
   // the pool vocabulary runs through.
@@ -478,8 +502,9 @@ await check("Planner → ‹ in the day view crosses into the previous month", a
   await page.waitForTimeout(300);
   const prev = await page.evaluate(() => { const b = document.querySelector('button[aria-label="Previous outfit"]'); if (!b || b.disabled) return false; b.click(); return true; });
   if (!prev) throw new Error("‹ is not offered although a planned day exists in the previous month");
-  // The previous month is fetched on the way when the grid did not show it.
-  await page.waitForTimeout(700);
+  // The previous month was warmed after the grid painted, so this is a
+  // store walk, not a fetch; the wait covers the grid's flip.
+  await page.waitForTimeout(400);
   const text = await page.evaluate(() => document.body.innerText);
   if (!text.includes(monthLabelOf(PREV_MONTH_DAY))) throw new Error("the grid did not follow the day view into the previous month");
   if (!/WORN/.test(text)) throw new Error("the previous month's day did not open as a worn day");

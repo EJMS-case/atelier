@@ -98,6 +98,10 @@ let lastAnchorTime = null;
 // in the day view walks into it (owner, 2026-10-04: "I don't need the whole
 // history to load until I select that month … when I hit the next button,
 // I'd like it to go into the next month without having to close it out").
+// The month BEFORE the visible one is warmed quietly once the visible month
+// has landed (owner, 2026-10-04: "just the month I'm on and, if it doesn't
+// cost too much, the month prior so I can toggle in the early weeks of the
+// month" — the first week of October against the last week of September).
 // The one time the whole history lands is a filter: "every Work look" is a
 // question about every month. A write updates the store in place; focus
 // re-pulls the visible range, so cross-device edits still show up.
@@ -243,9 +247,11 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // the 42-cell grid shows, so a September page draws its three August days
   // and two October days as looks, not blanks. `quiet` keeps the spinner off
   // when the range is already painted from the store and this is a
-  // background re-pull. Resolves to the rows it merged (the ‹ › probe reads
-  // them before the store has re-rendered); null on failure.
-  const loadMonth = async (monthStart, { quiet = false } = {}) => {
+  // background re-pull; `soft` keeps the error line off too, for a warm-up
+  // of a month she is not looking at (the visible month's own pull reports).
+  // Resolves to the rows it merged (the ‹ › probe reads them before the
+  // store has re-rendered); null on failure.
+  const loadMonth = async (monthStart, { quiet = false, soft = false } = {}) => {
     if (!quiet) setRefreshing(true);
     try {
       const grid = monthGridDays(monthStart);
@@ -256,14 +262,29 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         fetchTripsBetween(startIso, endIso).catch(() => null),
       ]);
       mergeRange(monthStart, startIso, endIso, rows, tripRows);
-      setSyncError("");
+      if (!soft) setSyncError("");
       return rows || [];
     } catch (e) {
-      setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
+      if (!soft) setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
       return null;
     } finally {
       if (!quiet) setRefreshing(false);
     }
+  };
+
+  // The month before the visible one, warmed after the visible month has
+  // landed so it never competes with the paint: the flip back she makes in
+  // the first week of a month ("do this week's work outfits mirror the last
+  // week of September?") is then instant, and ‹ in the day view walks back
+  // without a fetch. One grid request (~35 rows), once per session per
+  // month; skipped while a filter holds the whole history. Not the next
+  // month: its first week already draws in this grid's spill-over row, and
+  // › fetches the rest on the way (`stepBeyond`).
+  const warmPriorMonth = (monthStart) => {
+    if (Date.now() - allLoadedAtRef.current < PLAN_STORE_TTL_MS) return;
+    const prev = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
+    if (monthsLoadedRef.current.has(monthKey(prev))) return;
+    loadMonth(prev, { quiet: true, soft: true });
   };
 
   // The whole history, once per TTL — only while a filter is on, because a
@@ -305,9 +326,9 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   };
 
   // The visible month: painted from the store at once when it is there, and
-  // fetched (with the spinner) when it is not. The tab regaining focus
-  // re-pulls the visible range so cross-device edits show up without a
-  // manual reload.
+  // fetched (with the spinner) when it is not; the month before it warmed
+  // once that has landed. The tab regaining focus re-pulls the visible
+  // range so cross-device edits show up without a manual reload.
   const mountedRef = useRef(false);
   useEffect(() => {
     const known = monthsLoadedRef.current.has(monthKey(anchor));
@@ -317,10 +338,12 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       // A mount re-pulls the visible month even when the store has it — a
       // look scheduled from the builder lands through App, not through here —
       // quietly when the month is already painted.
-      if (known) loadMonth(anchor, { quiet: true }); else refreshPlans();
+      (known ? loadMonth(anchor, { quiet: true }) : refreshPlans()).then(() => warmPriorMonth(anchor));
       if (known && pendingFocusRef.current) { setActiveDay(pendingFocusRef.current); pendingFocusRef.current = null; }
     } else if (!known) {
-      refreshPlans();
+      refreshPlans().then(() => warmPriorMonth(anchor));
+    } else {
+      warmPriorMonth(anchor);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);

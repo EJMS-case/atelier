@@ -2,6 +2,33 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The planner warms the month before the one she is on — 2026-10-04
+
+### Why
+
+Owner, on the planner: *"I don't need the whole year loading, just the month I'm on and, if it doesn't cost too much, the month prior so I can toggle in the early weeks of the month. For example, it's the first week of October and I want to make sure my work outfits for this week don't mirror that of what I wore the last week of September."* The spill-over days (Sept 27–30 in October's grid) already drew; the flip back to September itself still waited on a fetch.
+
+### Changed
+
+- **The month before the visible one is warmed after the visible month lands** (`warmPriorMonth` in `CalendarView.jsx`): one quiet grid request, after the paint so it never competes with it, once per session per month, and skipped while a filter already holds the whole history. September is in the store by the time she has read October, so ‹ in the grid and ‹ in the day view both walk back without a wait. A warm-up that fails says nothing (`soft`); the visible month's own pull reports the sync error.
+- **Not the next month, on purpose.** Its first week already draws in the grid's last row, and › in the day view fetches the rest on the way (`stepBeyond`), so a second warm-up would be a request she rarely needs. Her words were "the month prior"; this does that and no more.
+
+### Downstream, four ways
+
+- **Efficiency.** A planner open is now two grid requests (~35 rows each) instead of one — the second after the first has landed. Still no whole-history read on a visit; the render walk asserts both (a range holding the whole of the month before the first visible month, and no unbounded read since the tab opened).
+- **Effectiveness.** The early-week comparison she described is one tap with no spinner.
+- **Speed.** The visible month paints exactly as before; the warm-up rides behind it.
+- **Education.** Unchanged.
+
+### Tests
+
+- Render walk (40 steps): a new step reads the REST log — the planner reads ranges only on a visit, and the month before the first month shown was warmed.
+
+### Data
+
+Nothing written.
+
+
 ## [Unreleased] — The planner loads what the grid shows and fetches the next month from ‹ ›; the stylist's reads are deliberate again — 2026-10-04
 
 ### Why

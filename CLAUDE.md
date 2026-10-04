@@ -27,7 +27,7 @@ npm run build      # production build + service-worker cache stamp
 npm test           # full suite (51 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (39 steps, headless, mocked REST)
+npm run test:render     # just the render walk (40 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
@@ -187,11 +187,14 @@ Conventions worth knowing:
   a row has none. `compact` (the grid of tiles) is for the trip screen's day
   cards only. **The planner loads what the grid shows and keeps it**
   (`planStore` in `CalendarView.jsx`): a visit fetches the month's 42-cell
-  grid (the month plus its spill-over days), a month she has not opened is
-  not fetched until she does, and ‹ › in the day view fetch the next month
-  on the way (`stepBeyond`) rather than dead-ending (owner, 2026-10-04: "I
-  don't need the whole history to load until I select that month"). A
-  filter is the one thing that loads the whole history. Which days match an
+  grid (the month plus its spill-over days), then warms the month before it
+  once that has landed (`warmPriorMonth` — owner, 2026-10-04: "the month
+  prior so I can toggle in the early weeks of the month"); a month further
+  off is not fetched until she opens it, and ‹ › in the day view fetch the
+  next month on the way (`stepBeyond`) rather than dead-ending ("I don't
+  need the whole history to load until I select that month"). A filter is
+  the one thing that loads the whole history; the walk reads the REST log
+  to hold that a visit reads ranges only. Which days match an
   occasion / weather pick is one reader, `planFilters.js`.
 - **A piece's formality is read through `formalityOf()`** (`utils/item-helpers.js`):
   null, undefined and "" are *unknown*, never f0. `Number(null)` is `0`, and
