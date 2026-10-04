@@ -5,6 +5,7 @@
 // dependency) so the fallback still renders even if something upstream is broken.
 
 import { Component } from "react";
+import { logAiError } from "../lib/ai/logError.js";
 
 const btn = { padding: "9px 16px", borderRadius: 8, border: "1px solid #d8cfc6", background: "transparent", color: "#3a3330", fontSize: 13, cursor: "pointer" };
 const btnPrimary = { padding: "9px 16px", borderRadius: 8, border: "none", background: "#2f5a44", color: "#fff", fontSize: 13, cursor: "pointer" };
@@ -12,7 +13,22 @@ const btnPrimary = { padding: "9px 16px", borderRadius: 8, border: "none", backg
 export default class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error, info) { console.error("[Atelier] render error caught by boundary:", error, info?.componentStack); }
+  componentDidCatch(error, info) {
+    console.error("[Atelier] render error caught by boundary:", error, info?.componentStack);
+    // The protocol needs payloads (owner, "Something hiccuped" on her phone,
+    // 2026-10-04, with nothing in any table to say which screen or why): the
+    // error, the view, the component stack and the build id land in
+    // `ai_errors` as `render:<scope>`, the same row every AI failure writes.
+    // Fire-and-forget; a signed-out root boundary simply fails the insert.
+    try {
+      logAiError(`render:${this.props.scope || "root"}`, {
+        view: this.props.view || null,
+        path: typeof location !== "undefined" ? location.pathname : null,
+        componentStack: String(info?.componentStack || "").slice(0, 1500),
+        ua: typeof navigator !== "undefined" ? navigator.userAgent : null,
+      }, error);
+    } catch { /* never let the logger take the fallback down */ }
+  }
   reset = () => this.setState({ error: null });
 
   render() {

@@ -1835,7 +1835,7 @@ export default function App() {
       </header>
 
       <Suspense fallback={<RouteFallback/>}>
-      <ErrorBoundary scope="view" key={view} onReset={() => setView("home")}>
+      <ErrorBoundary scope="view" view={view} key={view} onReset={() => setView("home")}>
       {/* ── CLOSET ── */}
       {view === "home" && (
         <div style={s.page}>
