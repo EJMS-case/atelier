@@ -2,6 +2,7 @@
 // Used by both LookCard (generated looks) and SavedLookCard (saved / worn /
 // favorited outfits) so tapping a piece behaves identically everywhere.
 import { pieceLine } from "../utils/item-helpers.js";
+import Thumb from "./Thumb.jsx";
 
 export default function ItemDetailSheet({ item, onClose, onEditItem, onStyleItem }) {
   if (!item) return null;
@@ -12,7 +13,7 @@ export default function ItemDetailSheet({ item, onClose, onEditItem, onStyleItem
         onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", gap: 14, marginBottom: 14 }}>
           {item.image && (
-            <img src={item.image} alt="" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: 8, background: "var(--color-surface)", flexShrink: 0 }}/>
+            <Thumb item={item} alt="" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: 8, background: "var(--color-surface)", flexShrink: 0 }}/>
           )}
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 16, marginBottom: 4, color: "var(--color-ink)" }}>{item.name}</div>

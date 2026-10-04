@@ -16,9 +16,26 @@
 //
 // CORS-tainted images (rare with Supabase Storage but possible) fall back to
 // the original <img> source so the piece still renders, just not trimmed.
+//
+// TWO WAYS TO NAME THE SOURCE (2026-10-04, "the planner runs extremely slow"):
+//   · `src`  — the photo itself. For a composite that fills the screen (the
+//     builder canvas, a saved look's collage) the full photo is the right
+//     source: it is what she is looking at.
+//   · `item` — the piece. For a TILE (a calendar cell, a packing row, a
+//     picker card, anything under ~100px) the right source is the 256px thumb
+//     the bucket already holds for the piece (Thumb.jsx builds and remembers
+//     them). The month grid was mounting up to six FULL photos per planned
+//     day — ~160 downloads of ~260 kB each for one month, every one scanned
+//     pixel by pixel on the main thread — to paint 20px squares. The thumb is
+//     a fifth of the bytes and a fifteenth of the pixels, and the registry
+//     is shared with the closet grid, so a piece she has scrolled past there
+//     is already cheap here. A piece without a known thumb renders the full
+//     photo exactly as before and gets its thumb built for next time; a thumb
+//     that fails to load drops back to the photo and forgets the thumb.
 
 import { useEffect, useRef, useState } from "react";
 import { getAlphaBbox, PHOTO_MAX_DIM } from "../utils/images.js";
+import { thumbSourceFor, ensureThumb, forgetThumb } from "./Thumb.jsx";
 
 // Cropped transparent PNGs are cached as data URLs; cap their dimension so a
 // 2000px source doesn't sit in memory at full size (collage slots are ≤ ~300px).
@@ -86,31 +103,48 @@ function loadTrimmed(src) {
   return p;
 }
 
-export default function TrimmedImage({ src, alt, style, onLoad }) {
+export default function TrimmedImage({ src, item, alt, style, onLoad }) {
+  // A tile hands us the piece; a composite hands us the photo. `thumbFailed`
+  // flips once when a remembered thumb 404s, so the piece falls back to its
+  // photo for this mount and the registry forgets the thumb.
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const full = item ? item.image : src;
+  const thumb = item && !thumbFailed ? thumbSourceFor(item) : null;
+  const source = thumb || full || null;
   // Seed from cache synchronously so a re-mount of an already-trimmed image
   // paints immediately with no flash and no recompute.
-  const [url, setUrl] = useState(() => (src ? cache.get(src)?.url || null : null));
+  const [url, setUrl] = useState(() => (source ? cache.get(source)?.url || null : null));
   // Keep onLoad in a ref so a caller passing an inline arrow (e.g. the builder's
   // fitBoxToImage) doesn't retrigger the decode effect on every render.
   const onLoadRef = useRef(onLoad);
   onLoadRef.current = onLoad;
 
   useEffect(() => {
-    if (!src) { setUrl(null); return; }
+    if (!source) { setUrl(null); return; }
+    // A tile whose piece has no thumb yet: paint the photo now, build the
+    // thumb in the background so the next mount is cheap (Thumb.jsx's queue).
+    if (item && !thumb) ensureThumb(item);
     let cancelled = false;
-    loadTrimmed(src).then(val => {
+    loadTrimmed(source).then(val => {
       if (cancelled) return;
+      if (thumb && val.nw === 0) {
+        // The remembered thumb is gone from the server — fall back to the
+        // photo and let the registry rebuild it.
+        forgetThumb(item.id);
+        setThumbFailed(true);
+        return;
+      }
       setUrl(val.url);
       onLoadRef.current?.({ naturalWidth: val.nw, naturalHeight: val.nh });
     });
     return () => { cancelled = true; };
-  }, [src]);
+  }, [source]);
 
   // Render the original immediately as a fallback while the crop resolves —
   // keeps layout from popping in.
   return (
     <img
-      src={url || src}
+      src={url || source}
       alt={alt}
       style={style}
       loading="lazy"

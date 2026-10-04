@@ -57,7 +57,7 @@ const SettingsView      = lazy(() => import("./components/SettingsView.jsx"));
 const StyleInsightsView = lazy(() => import("./components/StyleInsightsView.jsx"));
 const ShoppingView      = lazy(() => import("./components/ShoppingView.jsx"));
 const SavedView         = lazy(() => import("./components/SavedView.jsx"));
-const PlannerWrapper    = lazy(() => import("./components/PlannerWrapper.jsx"));
+const CalendarView      = lazy(() => import("./features/planner/CalendarView.jsx"));
 const ColorAdvisorView  = lazy(() => import("./components/ColorAdvisorView.jsx"));
 const SetEditModal      = lazy(() => import("./components/SetEditModal.jsx"));
 const BulkAddView       = lazy(() => import("./components/BulkAddView.jsx"));
@@ -2437,7 +2437,7 @@ export default function App() {
             <button style={s.backBtn} onClick={() => setView("home")}>← Back</button>
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
-          <PlannerWrapper
+          <CalendarView
             available={available}
             wardrobe={wardrobe}
             closets={closets}

@@ -1,12 +1,29 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-02**, after the look-back judge rebuild (every look read as itself, against the standard, across the whole window, in the background), the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-04**, after the planner speed-up (every small tile paints from the piece's 256px thumb, the trip screen and the saved-look picker load on demand), the collage that draws every piece a look holds, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild (every look read as itself, against the standard, across the whole window, in the background), the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-04 · The planner paints from thumbs; the collage draws every piece; Saved is paged; a new builder piece lands on top
+
+**Owner, three asks:** *"the planner runs extremely slow to load"*, *"reviewing my outfits … some pieces are missing it seems"*, *"when I add a new item to the builder canvas, please put it on top"*. Rows first: zero saved looks reference a deleted or Misc piece; the collage's per-role cap was hiding pieces on six of them; the month grid was downloading ~160 full photos to paint 20px squares. CHANGELOG has the detail. To carry:
+
+1. **A tile names the piece.** `<Thumb item>` or `<TrimmedImage item>` for anything under ~100px; `<TrimmedImage src>` only for a composite that fills the screen. `thumbSourceFor` / `ensureThumb` / `forgetThumb` in `components/Thumb.jsx` are the one registry. A raw `<img src={it.image}>` on a tile is the regression; four remain on purpose (Edit preview, Visual AI, Bulk Add staging, inspiration photos).
+2. **`components/collageLayout.js` is the pure engine; there is no cap.** `placeOverflow` places what the recipe has no zone for. `test:collage` is the contract — add a composition there before touching a recipe.
+3. **Saved lists page twelve at a time and search at the list** (`ShowMore.jsx`, `lookMatchesSearch`). The focus path from a garment's *In Your Looks* row shows up to the look or widens the scope to reach it.
+4. **The builder's on-top rule is one effect on `pickedItems`**; every way a piece reaches the canvas goes through it.
+
+**Watch-items:**
+- **Her first planner open on the phone** is the live check: the month should paint in well under a second once the grid's thumbs are cached. A piece without a thumb (6 of 541) still paints the full photo and builds its thumb in the background. If a tile paints BLANK, `TrimmedImage`'s fallback (a thumb that 404s → the photo, `forgetThumb`) is where to look; the walk's trip-sheet tile check exercises it headless.
+- **A collage with overflow pieces** places the second shoe / knit / bag on a ring around the cluster. If a placement reads wrong on a real look, `OVERFLOW_ANCHORS_*` and `OVERFLOW_SIZE` in `collageLayout.js` are the levers; the invariant (every piece placed) is the test, the aesthetics are not.
+- **Twelve cards a page.** If she wants more per page, `LOOKS_PAGE` in `ShowMore.jsx` is the one constant.
+- **The main chunk is 503 kB (150 gz).** Not this session's work, but it is the next bytes to look at if boot feels slow: `standard.js` (87 kB) and the Zod schemas ride it.
+
+**Verified before push:** `npm test` (49 suites), `npm run build`, `npm run smoke` green (36 walk steps).
 
 ### 2026-10-02 · The look-back judge reads every look as itself, across the whole window
 

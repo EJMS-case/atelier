@@ -559,7 +559,35 @@ await check("Saved → the builder's picker offers the wardrobe, the look's own 
   if (!text.toLowerCase().includes(AZ_LOOK_PIECE.toLowerCase())) {
     throw new Error(`"${AZ_LOOK_PIECE}" is missing from its own look's picker — the pool was not widened by the look's ids`);
   }
-  // Leave the builder so the remaining screens start from the Saved list.
+});
+
+// Owner, 2026-10-04: "when I add a new item to the builder canvas, please put
+// it on top as I have to move things around to find it." The picker is still
+// open from the step above: pick a piece that is not on the canvas and read
+// the canvas back — the new piece must carry the highest z of every piece on
+// it and be the active (dashed) one, so the Front/Back row is already hers.
+await check("Builder → a newly picked piece lands on top and is the active piece", async () => {
+  const before = await page.evaluate(() => document.querySelectorAll("[data-resize]").length);
+  const picked = await page.evaluate(() => {
+    const sheet = [...document.querySelectorAll("div")].find(d => d.style.height === "68vh");
+    const card = sheet && [...sheet.querySelectorAll("button")]
+      .find(b => b.querySelector("img") && getComputedStyle(b).backgroundColor === "rgb(255, 255, 255)");
+    if (!card) return false;
+    card.click(); return true;
+  });
+  if (!picked) throw new Error("no unpicked piece in the open picker to add");
+  await page.waitForTimeout(500);
+  const state = await page.evaluate(() => {
+    const boxes = [...document.querySelectorAll("[data-resize]")].map(h => h.parentElement);
+    const zs = boxes.map(b => Number(getComputedStyle(b).zIndex));
+    const active = boxes.find(b => getComputedStyle(b).outlineStyle === "dashed");
+    return { count: boxes.length, max: Math.max(...zs), activeZ: active ? Number(getComputedStyle(active).zIndex) : NaN, ties: zs.filter(z => z === Math.max(...zs)).length };
+  });
+  if (state.count !== before + 1) throw new Error(`the pick did not add a piece to the canvas (${before} → ${state.count})`);
+  if (Number.isNaN(state.activeZ)) throw new Error("the new piece is not the active piece — no dashed outline");
+  if (state.activeZ !== state.max || state.ties !== 1) throw new Error(`the new piece is not alone on top (z ${state.activeZ}, top ${state.max}, ${state.ties} at the top)`);
+  // Close the picker, then leave the builder so the remaining screens start
+  // from the Saved list.
   await page.evaluate(() => {
     [...document.querySelectorAll("button")]
       .filter(b => /^\u2190\s*Back$/.test((b.textContent || "").trim()))
@@ -618,8 +646,8 @@ await check("Style Me → 'Anything specific?' reads back the piece she named", 
 });
 // Opening a trip is what dereferences `available` down the planner chain. The
 // walk missed it once and a prop rename shipped an `undefined` straight
-// through PlannerWrapper — build green, twelve unit suites green, caught by
-// nothing. The check REFUSES TO PASS VACUOUSLY: if it cannot find the trip to
+// through the planner's props — build green, twelve unit suites green, caught
+// by nothing. The check REFUSES TO PASS VACUOUSLY: if it cannot find the trip to
 // open, that is a failure of the itinerary and it says so, rather than
 // quietly clicking nothing and reporting a tick.
 await check("back to Planner", tab("Planner"));

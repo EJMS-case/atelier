@@ -2,6 +2,44 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The planner paints from thumbs; the collage draws every piece; Saved is paged; a new builder piece lands on top — 2026-10-04
+
+### Why
+
+Owner, three asks from her phone: *"the planner runs extremely slow to load"*; *"I really like reviewing my outfits for new ideas. It's a little hard to do that, and some pieces are missing it seems"*; *"when I add a new item to the builder canvas, please put it on top as I have to move things around to find it."* Rows first, then the code:
+
+1. **The planner.** Her month grid holds up to 27 planned days (Sep–Oct 2026) and each cell mounted a `TrimmedImage` per piece, six at most — every one the FULL photo (avg 262 kB), downloaded, decoded, alpha-scanned pixel by pixel on the main thread and re-encoded as a PNG data URL, to paint a ~20px square. ~160 full photos for one month; the trim cache held 150, so a busy month evicted and re-trimmed itself. The bucket already holds a 256px thumb for 535 of 541 pieces (`thumbs/<id>`, built by the closet grid). On top of that, the wrapper fetched every saved look (153 rows) at mount for a picker tab she might never open, and the planner chunk carried the whole trip screen (116 kB) before the month could paint. The same raw `<img src={it.image}>` tile sat on Home's four strips, the day modal's saved-look list, the trip sheet's packing grid, the builder's picker, the look-back card, wear history, Style Intelligence, Color Advisor, Shopping and the set cards — the bug's family, not the screenshot.
+2. **"Some pieces are missing."** Zero saved looks reference a deleted or Misc piece (SQL against `outfit_logs` × `wardrobe_items`). The collage's auto-layout capped pieces per role — `shoes: 1, bag: 1, belt: 1, bottom: 1, dress: 1, layer: 2, hosiery: 1` — and `place()` drew only `g.top[0]`, so a second pair of shoes, a knit over a blouse, a third bag or a fifth accessory was dropped from the card while its id sat in the row. Six of her looks hit it today (two-top looks, a three-bag look, a two-shoe look whose AI layout the phone discards and re-lays out). Three earlier fixes had each added one exception (the second outer layer 2026-08-13, loungewear halves, both halves of a bikini); the cap itself was the bug.
+3. **Hard to review.** Saved → All rendered all 153 cards at once, each a full collage of full photos: ~750 photo decodes before the first card could be read, and the search filter ran INSIDE each card through a React context while History ran its own copy at the list.
+4. **The builder.** A new piece took its slot's default z (`DEFAULT_Z`), so a top (3) dropped under the shoes (5) and bag (4) already on the canvas, and nothing was selected.
+
+### Changed
+
+- **`components/TrimmedImage.jsx` takes `item` as well as `src`.** With `item`, the source is the piece's 256px thumb when this device knows one (`thumbSourceFor`, exported from `Thumb.jsx` — the ONE thumb registry, shared with the closet grid), the full photo otherwise with `ensureThumb` building the thumb for next time, and a thumb that 404s falls back to the photo and is forgotten. `src` stays for composites that fill the screen: the builder canvas and the full collage.
+- **Every garment tile under ~100px names the piece.** The compact collage (calendar cells), the trip sheet's pin strip, day cards and swap picker, `MustIncludePicker`, and the trip screen's pins, packing rows and leave-behind rows pass `item` to `TrimmedImage`; Home's four strips, the day modal's saved-look list, the trip sheet's packing grid, the builder's picker cards, `EvalPiece`, the single-set card, the look-back card, `ItemWearHistory` (gains `title`), Style Intelligence, Color Advisor, Shopping, `SetCard`, `SetPanel`, `SetEditModal` and `ItemDetailSheet` render `<Thumb item>`. Twenty raw `<img src={it.image}>` tiles become zero; the four that remain are the photo itself (Edit preview, Visual AI's cutout audit, Bulk Add's staging rows, an inspiration image).
+- **`CalendarView` fetches saved looks on the first day open**, not at mount (`null` until asked; the picker tab says *Loading your looks…*). `PlannerWrapper.jsx` is deleted — it was a 30-line pass-through whose one job was that fetch — and `App` lazy-loads `CalendarView` directly. `TripDetailView` is lazy inside the calendar: the planner's first chunk is 75 kB (25 gz) and the trip screen 42 kB (13 gz) on its own, down from one 116 kB (36 gz) chunk.
+- **The compact tile says `+N`** when a day holds more than the six pieces it can show.
+- **`components/collageLayout.js`** is the auto-layout engine, moved out of `EditorialCollage.jsx` as a pure module. `ROLE_CAPS` is gone. Every piece lands in `g[role]`; the recipe places the first of each role as before, the second outer layer, hosiery and the four accessory corners keep their zones, and `placeOverflow` places everything left — role-sized boxes on a ring of anchors around the garment cluster (right column, left column, bottom row, top centre), occupancy-tested like the accessories, clamped inside the canvas, and staggered from the corner when the ring is full. **Every id in, one slot out, always.** `buildFromLayout` still appends unplaced pieces through it.
+- **Saved → All and History page twelve cards at a time** (`components/ShowMore.jsx`, *Show 12 more · 41 looks left*), resetting on any filter change. **Search is one reader at the list**: `lookMatchesSearch` + `pieceNamesById` in `lib/lookFilters.js`, run by both tabs before paging; `LookSearchContext` and the card's own copy are deleted. The way in from a garment's *In Your Looks* row now reaches the look wherever it is: a later page (shows up to it) or behind the *Wearable now* default (switches to All looks), then scrolls.
+- **The builder puts a new piece on top and selects it.** One effect diffs the canvas keys after every change to `pickedItems` — the slot picker, a set, an evaluator move, any future way in — and gives each new key the highest z on the canvas + 1 and the active outline. A restored layout keeps its saved stacking (the first render seeds the set; a pool that fills in late reads the same way).
+
+### Downstream, four ways
+
+- **Efficiency.** A month of the planner: ~160 × 262 kB of photos → ~160 × 54 kB of thumbs cold, and the grid has usually cached them already; 1 M-pixel alpha scans → 65 k. One fewer REST request at planner mount (the 153-row logs fetch moves to the first day open). Saved's first paint: 153 collages → 12. Bundle: the planner's first chunk −41 kB; `collageLayout.js` is the same bytes moved; `ShowMore.jsx` +0.4 kB. No prompt or AI call changes; the cached preamble is untouched.
+- **Effectiveness.** A saved look now shows every piece it holds, on every card (Saved, History, Style Me, planner day, trip day, look-back). Search finds the same looks on All and History. Nothing about what a look IS changed — the row, the validator and the stylist read the same ids.
+- **Speed.** The planner paints the month before the trip screen or the picker's rows arrive; a tile paints from a 54 kB thumb the browser has usually cached. Saved opens on twelve cards. A new builder piece is where her thumb is.
+- **Education.** None to add: this is how the app SHOWS her what it knows. The builder's add path still records the lesson it did (`recordSavedLookEdits`, `saveLookEdit` on an applied move).
+
+### Tests
+
+- New `test:collage` (14): every piece placed, once, inside the canvas, both viewports, for twelve compositions (two shoes, three bags, knit over blouse under blazer, three outer layers, seven accessories, two belts + two tights, a twelve-piece look, a bikini, shoes only, one piece, none); the recipe still leads; a partial saved layout renders every piece.
+- Render walk +1 (36 steps): *Builder → a newly picked piece lands on top and is the active piece* — picks an unpicked card from the open picker and reads the canvas back (one more piece, the active one alone at the top z). The trip sheet's existing tile-paint check now exercises the thumb path.
+- `test:props` pairs `App → CalendarView` directly now that the wrapper is gone; `test:undeclared` 134 files.
+
+### Data
+
+Nothing written. The six looks the cap hid pieces from render whole on the next open; the query that found them is in the PR.
+
 ## [Unreleased] — The look-back judge reads every look as itself, against the standard, across the whole window — 2026-10-02
 
 ### Why

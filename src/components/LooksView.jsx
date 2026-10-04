@@ -5,13 +5,14 @@ import { icons, HeartIcon } from "../ui/icons.jsx";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
-import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatWornDate } from "../lib/lookFilters.js";
+import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatWornDate, lookMatchesSearch, pieceNamesById } from "../lib/lookFilters.js";
+import ShowMore, { LOOKS_PAGE } from "./ShowMore.jsx";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
 import ConfirmRemove from "./ConfirmRemove.jsx";
 import { poolIncluding } from "../features/closet/useVisibleWardrobe.js";
-import { countScopes, filterToScope, resolveScope } from "../features/closet/lookScope.js";
+import { SCOPE_ALL, countScopes, filterToScope, resolveScope } from "../features/closet/lookScope.js";
 import ScopeChips from "./ScopeChips.jsx";
 
 // Code-split the builder (same pattern as App.jsx's lazy views) — a static
@@ -31,7 +32,7 @@ const badgeStyle = {
   borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap",
 };
 
-export default function LooksView({ wardrobe, available, setsMeta, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar, focusLookId, onFocusLookConsumed }) {
+export default function LooksView({ wardrobe, available, setsMeta, searchQ, onDelete, onLogAsWorn, isFav, toggleFav, onSaveLook, onFavoriteLook, onSchedule, apiKey, onEditItem, onBuildSimilar, focusLookId, onFocusLookConsumed }) {
   const [logs,      setLogs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loggingId, setLoggingId] = useState(null);
@@ -81,15 +82,16 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
   useEffect(() => { loadLogs(); }, []);
   // The way in from a garment's "In Your Looks" row: once the logs are here,
   // scroll to that look and keep it outlined for this mount. The App-level
-  // focus is consumed straight away so a later plain open of Saved is clean;
-  // the outline survives that because it is captured here at mount.
+  // focus is consumed once the card is on screen so a later plain open of
+  // Saved is clean; the outline survives that because it is captured here at
+  // mount. The effect itself sits below the list maths: the look may be on a
+  // later page (show up to it) or behind the "Wearable now" default (an
+  // Arizona look reached from NYC — switch to All looks), and either way the
+  // next render has the card to scroll to.
   const [highlightId] = useState(focusLookId || null);
-  useEffect(() => {
-    if (loading || !focusLookId) return;
-    document.getElementById(`look-${focusLookId}`)?.scrollIntoView({ block: "start" });
-    onFocusLookConsumed?.();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, focusLookId]);
+  // Cards on screen. Twelve at a time: a card is a full collage of full
+  // photos, and 150 at once is what made the list hard to review.
+  const [shown, setShown] = useState(LOOKS_PAGE);
 
   const isScheduled = (l) => schedSigs.has(sigOf(l.garment_ids));
   // Unworn ("ready to wear") first — newest saved on top — then worn looks,
@@ -130,8 +132,9 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
     () => poolIncluding(available, wardrobe, editingLook?.garment_ids || []),
     [available, wardrobe, editingLook],
   );
+  const nameById = useMemo(() => pieceNamesById(wardrobe), [wardrobe]);
   const matchesFilters = (l) =>
-    matchesStatus(l) && rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx);
+    matchesStatus(l) && rowMatchesOccasion(l, filterOcc) && rowMatchesWeather(l, filterWx) && lookMatchesSearch(l, nameById, searchQ);
   // Counted over the rows that already passed every OTHER filter, so the chip
   // describes the list she is actually looking at.
   const filteredLogs = visibleLogs.filter(matchesFilters);
@@ -139,6 +142,18 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
   const scope = resolveScope(filterScope, scopeCounts.outOfScope);
   const outOfScopeCount = scopeCounts.outOfScope;
   const displayed = filterToScope(filteredLogs, scope, availableIds);
+  // A changed filter starts the paging over; the first page is what she reads.
+  useEffect(() => { setShown(LOOKS_PAGE); }, [filterOcc, filterWx, filterStatus, scope, searchQ]);
+  useEffect(() => {
+    if (loading || !focusLookId) return;
+    const el = document.getElementById(`look-${focusLookId}`);
+    if (el) { el.scrollIntoView({ block: "start" }); onFocusLookConsumed?.(); return; }
+    const idx = displayed.findIndex(l => l.id === focusLookId);
+    if (idx >= shown) { setShown(idx + 1); return; }
+    if (idx === -1 && scope !== SCOPE_ALL && filteredLogs.some(l => l.id === focusLookId)) { setFilterScope(SCOPE_ALL); return; }
+    onFocusLookConsumed?.();   // not in this list at all — nothing to scroll to
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, focusLookId, shown, scope]);
   // Only offer the status chips when they'd actually split the list.
   const hasStatusSplit = logs.some(l => l.date_worn || isScheduled(l) || isFav("outfit", l.id));
 
@@ -243,7 +258,7 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
               : "No saved looks match these filters."}
         </p></div>
       )}
-      {!loading && displayed.map(log => {
+      {!loading && displayed.slice(0, shown).map(log => {
         const meta = parseMeta(log.collage_url);
         const pickedDate = dateById[log.id] || today;
         const occLabel = joinTags(tagsFor(log, "occasions", "occasion"));
@@ -297,6 +312,7 @@ export default function LooksView({ wardrobe, available, setsMeta, onDelete, onL
           />
         );
       })}
+      {!loading && <ShowMore total={displayed.length} shown={shown} onMore={() => setShown(n => n + LOOKS_PAGE)}/>}
     </div>
   );
 }

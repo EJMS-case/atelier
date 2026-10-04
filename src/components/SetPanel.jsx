@@ -1,5 +1,6 @@
 import { s } from "../ui/styles.js";
 import { setMatesOf } from "../features/closet/setType.js";
+import Thumb from "./Thumb.jsx";
 
 export default function SetPanel({ item, wardrobe, onClose }) {
   // `wardrobe` must be the FULL wardrobe: a coord set can span both closets
@@ -15,7 +16,7 @@ export default function SetPanel({ item, wardrobe, onClose }) {
         {[item, ...partners].map(it => (
           <div key={it.id} style={s.setPanelItem}>
             {it.image
-              ? <img src={it.image} alt={it.name} style={s.setPanelThumb}/>
+              ? <Thumb item={it} alt={it.name} style={s.setPanelThumb}/>
               : <div style={{...s.setPanelThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, color:"var(--color-border-muted)"}}>{it.category?.[0]}</div>}
             <div style={s.setPanelName}>{it.name}</div>
             <div style={s.setPanelCat}>{it.category}</div>

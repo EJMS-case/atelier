@@ -17,6 +17,7 @@ import { resolveItemIds, sortByCategoryOrder } from "../utils/item-helpers.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { tagsFor, joinTags } from "../lib/multitag.js";
 import { nyToday, friendlyDate } from "../lib/time.js";
+import Thumb from "./Thumb.jsx";
 
 const PREVIEW_ROWS = 4;
 const MAX_THUMBS = 5;
@@ -80,7 +81,7 @@ function OutfitRow({ entry, item, wardrobe, today, onOpenItem, onOpenDay, onOpen
   const headerStyle = { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6, flexWrap: "wrap", width: "100%" };
 
   const thumb = (it) => it.image ? (
-    <img src={it.image} alt={it.name} title={it.name} loading="lazy"
+    <Thumb item={it} alt={it.name} title={it.name}
       style={{ ...ss.modalItemThumb, background: "#fff" }} />
   ) : (
     <div title={it.name}

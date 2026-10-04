@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { s, ss } from "../ui/styles.js";
 import { SET_TAGS } from "../constants/taxonomy.js";
+import Thumb from "./Thumb.jsx";
 
 export default function SetEditModal({ setId, meta, groupItems, wardrobe, onSave, onDelete, onClose, onEditItem, onAddItem }) {
   const [name, setName] = useState(meta.name || "");
@@ -80,7 +81,7 @@ export default function SetEditModal({ setId, meta, groupItems, wardrobe, onSave
               {groupItems.map(it => (
                 <div key={it.id} style={ss.modalItem} onClick={() => onEditItem(it)}>
                   {it.image
-                    ? <img src={it.image} alt={it.name} style={ss.modalItemThumb}/>
+                    ? <Thumb item={it} alt={it.name} style={ss.modalItemThumb}/>
                     : <div style={{...ss.modalItemThumb, background:"var(--color-surface-3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--color-border-muted)"}}>{(it.category || "?")[0]}</div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
@@ -120,7 +121,7 @@ export default function SetEditModal({ setId, meta, groupItems, wardrobe, onSave
                       }}
                       style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: "#fff", border: "1px solid var(--color-border)", borderRadius: 4, cursor: "pointer", textAlign: "left" }}>
                       {it.image
-                        ? <img src={it.image} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0, background: "var(--color-surface)" }}/>
+                        ? <Thumb item={it} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0, background: "var(--color-surface)" }}/>
                         : <div style={{ width: 32, height: 32, background: "var(--color-surface-3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--color-border-muted)", flexShrink: 0 }}>{(it.category || "?")[0]}</div>}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>

@@ -6,7 +6,8 @@ import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import SearchInput from "./SearchInput.jsx";
 import { tagsFor, joinTags } from "../lib/multitag.js";
-import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatDate } from "../lib/lookFilters.js";
+import { occasionChipsFor, weatherChipsFor, rowMatchesOccasion, rowMatchesWeather, parseMeta, formatDate, lookMatchesSearch, pieceNamesById } from "../lib/lookFilters.js";
+import ShowMore, { LOOKS_PAGE } from "./ShowMore.jsx";
 import { fetchAllPlans } from "../features/planner/plannerApi.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { nyToday } from "../lib/time.js";
@@ -38,6 +39,8 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
   // still offered, because "which of these could I wear again today?" is a
   // real question and every card here carries a "Wear again" button.
   const [filterScope, setFilterScope] = useState(null);
+  // Cards on screen, twelve at a time — see ShowMore.jsx.
+  const [shown, setShown] = useState(LOOKS_PAGE);
 
   const loadLogs = () => {
     sb.fetchOutfitLogs({ withCollageMeta: true })
@@ -80,18 +83,10 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
 
   // Free-text search across item names, occasion tags, and notes — AND'd with
   // the chip filters below so search narrows within the selected occasion/weather.
-  const nameById = {};
-  (wardrobe || []).forEach(it => { nameById[it.id] = it.name || ""; });
+  // The reader is lookMatchesSearch, the same one Saved → All runs.
+  const nameById = useMemo(() => pieceNamesById(wardrobe), [wardrobe]);
   const q = searchQ.trim().toLowerCase();
-  const matchesSearch = (log) => {
-    if (!q) return true;
-    const hay = [
-      ...(log.garment_ids || []).map(id => nameById[id] || ""),
-      ...tagsFor(log, "occasions", "occasion"),
-      log.notes || "",
-    ].join(" ").toLowerCase();
-    return hay.includes(q);
-  };
+  const matchesSearch = (log) => lookMatchesSearch(log, nameById, q);
 
   // Sort merged logs + planner entries by wear date DESC before grouping —
   // the two sources arrive independently ordered, so without this the month
@@ -104,8 +99,10 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
   const scopeCounts = countScopes(beforeScope, availableIds);
   const scope = resolveScope(filterScope, scopeCounts.outOfScope, { autoNarrow: false });
   const filtered = filterToScope(beforeScope, scope, availableIds);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setShown(LOOKS_PAGE); }, [filterOcc, filterWx, scope, q]);
   const grouped = {};
-  filtered.forEach(log => {
+  filtered.slice(0, shown).forEach(log => {
     const d = log.date_worn || log.created_at?.slice(0, 10) || "Unknown";
     const month = d.slice(0, 7);
     if (!grouped[month]) grouped[month] = [];
@@ -260,6 +257,7 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
           })}
         </div>
       ))}
+      {!loading && <ShowMore total={filtered.length} shown={shown} onMore={() => setShown(n => n + LOOKS_PAGE)}/>}
     </div>
   );
 }
