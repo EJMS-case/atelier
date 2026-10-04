@@ -702,6 +702,21 @@ export const sb = {
   },
 
   // ── Planned outfits (calendar) ──
+  // The saved arrangement behind a plan that points at a saved look instead
+  // of carrying its own layout (4 rows, 2026-10-04). The month grid draws
+  // every square as the composed look, so it asks for just these ids and
+  // two columns — never the 150-row logs request the first paint used to
+  // ride.
+  async fetchOutfitLogLayouts(ids) {
+    const list = [...new Set((ids || []).filter(Boolean))];
+    if (list.length === 0) return [];
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/outfit_logs?select=id,layout_data&id=in.(${list.join(",")})`,
+      { headers: sbHeaders() },
+    );
+    if (!res.ok) return [];
+    return res.json().catch(() => []);
+  },
   async fetchPlansBetween(startIso, endIso) {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/planned_outfits?select=*&date=gte.${startIso}&date=lte.${endIso}&order=date.asc`,

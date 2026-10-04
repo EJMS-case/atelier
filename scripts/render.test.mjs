@@ -87,10 +87,23 @@ const TRIPS = [{
   destination_closet_id: AZ_CLOSET, activity: "Casual",
   must_include_ids: [wardrobe[0].id], notes: "",
 }];
+// The first of LAST month, so there is always a planned day in a month the
+// grid is not showing: the day view's ‹ › cross month ends (2026-10-04).
+const PREV_MONTH_DAY = (() => {
+  const d = new Date(); d.setUTCHours(12, 0, 0, 0); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
+  return d.toISOString().slice(0, 10);
+})();
 const PLANS = [{
   date: iso(3), source: "trip", notes: "",
   items: [wardrobe[0].id, wardrobe[5].id],
   outfits: [{ id: "o1", label: "", occasion: "Casual", items: [wardrobe[0].id, wardrobe[5].id] }],
+}, {
+  // A Work day she built herself, with her arrangement saved: the square
+  // must draw THAT arrangement, and the occasion filter must find it.
+  date: PREV_MONTH_DAY, source: "manual", notes: "",
+  items: [wardrobe[0].id, wardrobe[5].id], occasion: "Work", occasions: ["Work"], weather: "Mild", weathers: ["Mild"],
+  outfits: [{ id: "o2", label: "", occasion: "Work", items: [wardrobe[0].id, wardrobe[5].id] }],
+  layout_data: [{ id: wardrobe[0].id, x: 8, y: 4, w: 54, h: 58, z: 2 }, { id: wardrobe[5].id, x: 44, y: 52, w: 44, h: 42, z: 5 }],
 }];
 
 const TABLE = {
@@ -390,6 +403,76 @@ await check("Planner → day modal", async () => {
     cell.click(); return true;
   });
   if (!opened) throw new Error("no day cell found on the month grid");
+});
+const monthLabelOf = (isoDay) => new Date(isoDay + "T12:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+const closeSheet = () => page.evaluate(() => [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "×")?.click());
+const setFilter = async (label, value) => {
+  await page.evaluate(([l, v]) => {
+    const sel = document.querySelector(`select[aria-label="${l}"]`);
+    sel.value = v;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [label, value]);
+  await page.waitForTimeout(150);
+};
+// Owner, 2026-10-04: "keep the format I have saved in the builder on the
+// individual calendar squares … that shows the outfit as an outfit." A planned
+// square draws the composed look — every piece, positioned — from thumbs.
+await check("Planner → a planned square draws the look as composed, not as a grid of tiles", async () => {
+  await closeSheet();
+  await page.waitForTimeout(200);
+  // iso(3) can fall in next month at a month's end; the grid shows that month then.
+  if (!(await page.evaluate(() => document.body.innerText)).includes(monthLabelOf(iso(3)))) {
+    await page.evaluate(() => document.querySelector('button[aria-label="Next month"]')?.click());
+    await page.waitForTimeout(300);
+  }
+  await page.waitForTimeout(400);
+  const r = await page.evaluate((day) => {
+    const cell = document.querySelector(`button[aria-label^="${day},"]`);
+    if (!cell) return { err: `no planned square for ${day}` };
+    const imgs = [...cell.querySelectorAll("img")];
+    return { imgs: imgs.length, positioned: imgs.filter(i => getComputedStyle(i.parentElement).position === "absolute").length };
+  }, iso(3));
+  if (r.err) throw new Error(r.err);
+  if (r.imgs !== 2) throw new Error(`the square shows ${r.imgs} pieces of a two-piece look`);
+  if (r.positioned !== 2) throw new Error("the square's pieces are not composed (not positioned)");
+});
+// "Would it be too much to filter by occasion and/or weather?" — a day outside
+// the pick fades, the line under the filters counts the days inside it, this
+// month and in all, and Clear brings the month back.
+await check("Planner → the occasion filter fades the days outside it and counts the ones inside", async () => {
+  await setFilter("Filter by occasion", "Work");
+  const faded = await page.evaluate((day) => getComputedStyle(document.querySelector(`button[aria-label^="${day},"]`)).opacity, iso(3));
+  if (Number(faded) > 0.3) throw new Error(`a Casual day did not fade under the Work filter (opacity ${faded})`);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/No Work looks? this month/.test(text) && !/1 Work look this month/.test(text)) throw new Error("the filter line does not count this month's matches");
+  if (!/in all/.test(text)) throw new Error("the filter line does not say how many looks match across every month");
+  await setFilter("Filter by occasion", "Casual");
+  const back = await page.evaluate((day) => getComputedStyle(document.querySelector(`button[aria-label^="${day},"]`)).opacity, iso(3));
+  if (Number(back) < 0.9) throw new Error("the Casual day is still faded under the Casual filter");
+  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "Clear")?.click());
+  await page.waitForTimeout(100);
+  if (/looks? this month/.test(await page.evaluate(() => document.body.innerText))) throw new Error("Clear did not clear the filter");
+});
+// "Can you update that to be more seamless between months?" — ‹ in the day
+// view steps to the previous planned day even when it sits in last month, and
+// the grid follows.
+await check("Planner → ‹ in the day view crosses into the previous month", async () => {
+  await page.evaluate((day) => document.querySelector(`button[aria-label^="${day},"]`)?.click(), iso(3));
+  await page.waitForTimeout(300);
+  const prev = await page.evaluate(() => { const b = document.querySelector('button[aria-label="Previous outfit"]'); if (!b || b.disabled) return false; b.click(); return true; });
+  if (!prev) throw new Error("‹ is not offered although a planned day exists in the previous month");
+  await page.waitForTimeout(400);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!text.includes(monthLabelOf(PREV_MONTH_DAY))) throw new Error("the grid did not follow the day view into the previous month");
+  if (!/WORN/.test(text)) throw new Error("the previous month's day did not open as a worn day");
+  await closeSheet();
+  // Back to the current month: the trip steps below find their strip there.
+  const nowLabel = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  for (let i = 0; i < 3; i++) {
+    if ((await page.evaluate(() => document.body.innerText)).includes(nowLabel)) break;
+    await page.evaluate(() => document.querySelector('button[aria-label="Next month"]')?.click());
+    await page.waitForTimeout(200);
+  }
 });
 await check("Saved", tab("Saved"));
 

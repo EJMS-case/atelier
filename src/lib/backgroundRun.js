@@ -21,6 +21,8 @@ export const RUN_KEYS = {
   shoppingComplete: "shopping:complete",
   insightsProfile: "insights:profile",
   brandScout: "discovery:scout",
+  // Evaluate look in the builder: one run, bound to the canvas it read.
+  builderEvaluate: "builder:evaluate",
   // The look-back judge, one run per window: `${recapStylish}:${period}`.
   recapStylish: "recap:stylish",
 };

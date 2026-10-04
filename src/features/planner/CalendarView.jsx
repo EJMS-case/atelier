@@ -3,7 +3,7 @@
 // Trip modal lives in this file too.
 
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { fetchPlansBetween, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
+import { fetchPlansBetween, fetchAllPlans, fetchOutfitLogLayouts, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
@@ -13,6 +13,7 @@ import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
 import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
+import { NO_FILTERS, hasActiveFilters, planMatchesFilters, matchingDays, matchingDaysBetween } from "./planFilters.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import RouteFallback from "../../components/RouteFallback.jsx";
@@ -37,14 +38,18 @@ const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // var() reference can't do.
 const PALETTE = PALETTE_STRONG;
 
+// A square is the date and, under it, the day's look at the builder's 3:4 —
+// her saved arrangement when the row carries one, the portrait recipe when it
+// doesn't (owner, 2026-10-04: "that shows the outfit as an outfit rather than
+// individual items"). The grid's rows take the tallest cell, so an empty day
+// keeps the same box and the month stays a grid.
 const cellStyle = {
   position: "relative",
-  aspectRatio: "1",
   border: `1px solid ${PALETTE.line}`,
   borderRadius: 6,
   display: "flex",
   flexDirection: "column",
-  padding: 4,
+  padding: 3,
   fontSize: 12,
   color: PALETTE.soft,
   background: "#fff",
@@ -85,6 +90,19 @@ const btnSecondary = {
 // scoped (a full page reload sensibly starts back at today).
 let lastAnchorTime = null;
 
+// The occasion / weather she is browsing by, and every planned day the
+// planner has loaded, kept across the remounts a day → builder → back
+// round-trip causes. The first paint still asks for the visible month alone
+// (the request that has to be fast); the rest of her history — 117 rows over
+// nine months, 2026-10-04 — lands once, after that paint, so flipping months
+// and stepping ‹ › through looks never waits on the network again (owner:
+// "more seamless between months"). A write updates the store in place; focus
+// re-pulls the visible month, so cross-device edits still show up.
+let lastFilters = NO_FILTERS;
+let planStore = null; // { byIso, trips, monthsLoaded: Set<"YYYY-MM">, allAt }
+const PLAN_STORE_TTL_MS = 10 * 60 * 1000;
+const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
 // Same idea for the OPEN TRIP, and for one thing lastAnchorTime doesn't need:
 // where you were scrolled inside it.
 //
@@ -123,13 +141,46 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { lastAnchorTime = anchor.getTime(); }, [anchor]);
-  const [plans, setPlans] = useState({});     // { iso: plan }
+  const [plans, setPlans] = useState(() => planStore?.byIso || {});     // { iso: plan } — every loaded month
+  const [trips, setTrips] = useState(() => planStore?.trips || []);     // every loaded trip
+  const monthsLoadedRef = useRef(planStore?.monthsLoaded || new Set());
+  const allLoadedAtRef = useRef(planStore?.allAt || 0);
+  useEffect(() => {
+    planStore = { byIso: plans, trips, monthsLoaded: monthsLoadedRef.current, allAt: allLoadedAtRef.current };
+  }, [plans, trips]);
+  const [filters, setFilters] = useState(() => lastFilters);
+  useEffect(() => { lastFilters = filters; }, [filters]);
+  // The saved arrangement behind a plan that points at a saved look rather
+  // than carrying its own layout — fetched slim (id + layout) for just those
+  // ids, so every square can draw the look as she built it.
+  const [logLayouts, setLogLayouts] = useState({});
+  const layoutFor = (plan) => plan?.layout_data || (plan?.outfit_log_id && logLayouts[plan.outfit_log_id]) || null;
+  useEffect(() => {
+    const need = Object.values(plans)
+      .filter(p => p && !p.layout_data && p.outfit_log_id && !(p.outfit_log_id in logLayouts))
+      .map(p => p.outfit_log_id);
+    if (need.length === 0) return;
+    let cancelled = false;
+    fetchOutfitLogLayouts(need).then(rows => {
+      if (cancelled) return;
+      setLogLayouts(prev => {
+        const next = { ...prev };
+        for (const id of need) next[id] = null; // asked once, even when the log is gone
+        for (const r of rows || []) next[r.id] = r.layout_data || null;
+        return next;
+      });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plans]);
   const [activeDay, setActiveDay] = useState(null); // iso string
-  // Her saved looks, for the day modal's "pick a saved look" tab and for a
-  // plan that points at a log's layout. Fetched the first time a day opens,
-  // not at mount: the month grid needs plans and trips, and the 150-row logs
-  // request was riding the same first paint (2026-10-04, "the planner runs
-  // extremely slow"). `null` = not asked yet; the modal reads [] until then.
+  // Her saved looks, for the day modal's "pick a saved look" tab. Fetched the
+  // first time a day opens, not at mount: the month grid needs plans and
+  // trips, and the 150-row logs request was riding the same first paint
+  // (2026-10-04, "the planner runs extremely slow"). `null` = not asked yet;
+  // the modal reads [] until then. A plan that points at a saved look's
+  // LAYOUT reads it through `logLayouts` below, slim, so the squares never
+  // wait on this.
   const [outfitLogs, setOutfitLogs] = useState(null);
   useEffect(() => {
     if (!activeDay || outfitLogs !== null) return;
@@ -139,7 +190,6 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDay]);
   const [showTrip, setShowTrip] = useState(false);
-  const [trips, setTrips] = useState([]);
   // Saved plans and outfit logs name their pieces by id, and those ids don't
   // belong to the active closet — a look pinned to a day can hold a piece that
   // lives in another room, and every trip day does by construction. So DISPLAY
@@ -167,43 +217,109 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchClosetForecast(activeCloset).then(setForecast); }, [activeCloset?.id]);
 
-  const refreshPlans = async () => {
-    setRefreshing(true);
+  // Merge one month's rows into the store: the month's old entries go, the
+  // fresh ones land, everything outside the month stays.
+  const mergeMonth = (monthStart, rows, tripRows) => {
+    const startIso = isoDate(startOfMonth(monthStart));
+    const endIso = isoDate(endOfMonth(monthStart));
+    setPlans(prev => {
+      const next = {};
+      for (const iso of Object.keys(prev)) if (iso < startIso || iso > endIso) next[iso] = prev[iso];
+      for (const r of rows || []) next[r.date] = r;
+      return next;
+    });
+    if (tripRows) {
+      setTrips(prev => {
+        const overlaps = (t) => t.start_date <= endIso && t.end_date >= startIso;
+        const kept = prev.filter(t => !overlaps(t));
+        return [...kept, ...tripRows].sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
+      });
+    }
+    monthsLoadedRef.current.add(monthKey(monthStart));
+  };
+
+  // One month, from the cloud. `quiet` keeps the spinner off when the month
+  // is already painted from the store and this is a background re-pull.
+  const loadMonth = async (monthStart, { quiet = false } = {}) => {
+    if (!quiet) setRefreshing(true);
     try {
-      const start = startOfMonth(anchor);
-      const end = endOfMonth(anchor);
+      const startIso = isoDate(startOfMonth(monthStart));
+      const endIso = isoDate(endOfMonth(monthStart));
       const [rows, tripRows] = await Promise.all([
-        fetchPlansBetween(isoDate(start), isoDate(end)),
-        fetchTripsBetween(isoDate(start), isoDate(end)).catch(() => []),
+        fetchPlansBetween(startIso, endIso),
+        fetchTripsBetween(startIso, endIso).catch(() => null),
       ]);
-      const map = {};
-      for (const r of rows || []) map[r.date] = r;
-      setPlans(map);
-      setTrips(tripRows || []);
+      mergeMonth(monthStart, rows, tripRows);
       setSyncError("");
     } catch (e) {
       setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
     } finally {
-      setRefreshing(false);
-      // The day she came for opens once the month has settled — after the
-      // plans land, or after the fetch fails (the modal then shows the empty
-      // day and the sync error says why), never on a day about to fill in.
-      if (pendingFocusRef.current) {
-        setActiveDay(pendingFocusRef.current);
-        pendingFocusRef.current = null;
-      }
+      if (!quiet) setRefreshing(false);
     }
   };
 
-  // Fetch plans for the visible month, on mount/month-change AND when the
-  // tab regains focus (so cross-device edits show up without a manual reload).
-  useEffect(() => { refreshPlans(); /* eslint-disable-line */ }, [anchor]);
+  // The rest of her history, once per TTL, after the visible month has
+  // painted. Trips come as one wide range for the same reason.
+  const loadEverything = async () => {
+    if (Date.now() - allLoadedAtRef.current < PLAN_STORE_TTL_MS) return;
+    allLoadedAtRef.current = Date.now(); // claimed; a failure below lets the next mount retry
+    try {
+      const [rows, tripRows] = await Promise.all([
+        fetchAllPlans(),
+        fetchTripsBetween("2000-01-01", "2100-01-01").catch(() => null),
+      ]);
+      if (!Array.isArray(rows)) throw new Error("no rows");
+      setPlans(() => {
+        const next = {};
+        for (const r of rows) next[r.date] = r;
+        return next;
+      });
+      if (Array.isArray(tripRows)) setTrips(tripRows);
+      for (const r of rows) monthsLoadedRef.current.add(r.date.slice(0, 7));
+    } catch {
+      allLoadedAtRef.current = 0;
+    }
+  };
+
+  const refreshPlans = async () => {
+    await loadMonth(anchor);
+    // The day she came for opens once the month has settled — after the
+    // plans land, or after the fetch fails (the modal then shows the empty
+    // day and the sync error says why), never on a day about to fill in.
+    if (pendingFocusRef.current) {
+      setActiveDay(pendingFocusRef.current);
+      pendingFocusRef.current = null;
+    }
+  };
+
+  // The visible month: painted from the store at once when it is there, and
+  // fetched (with the spinner) when it is not; the whole history follows in
+  // the background either way. The tab regaining focus re-pulls the visible
+  // month so cross-device edits show up without a manual reload.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    const known = monthsLoadedRef.current.has(monthKey(anchor));
+    const mounting = !mountedRef.current;
+    mountedRef.current = true;
+    let first;
+    if (mounting) {
+      // A mount re-pulls the visible month even when the store has it — a
+      // look scheduled from the builder lands through App, not through here —
+      // quietly when the month is already painted.
+      first = known ? loadMonth(anchor, { quiet: true }) : refreshPlans();
+      if (known && pendingFocusRef.current) { setActiveDay(pendingFocusRef.current); pendingFocusRef.current = null; }
+    } else {
+      first = known ? Promise.resolve() : refreshPlans();
+    }
+    first.finally(() => { loadEverything(); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor]);
   useEffect(() => {
     // Only refresh when the tab becomes visible / focused — don't fire on
     // the visibilitychange that signals the tab going *hidden* (previously
     // we re-fetched in both directions, doubling the request count).
     const onVisible = () => {
-      if (document.visibilityState === "visible") refreshPlans();
+      if (document.visibilityState === "visible") loadMonth(anchor, { quiet: true });
     };
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
@@ -247,10 +363,30 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
 
   const days = useMemo(() => monthGridDays(anchor), [anchor]);
   const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const monthStartIso = isoDate(startOfMonth(anchor));
+  const monthEndIso = isoDate(endOfMonth(anchor));
+  const monthTrips = useMemo(
+    () => trips.filter(t => t.start_date <= monthEndIso && t.end_date >= monthStartIso),
+    [trips, monthStartIso, monthEndIso],
+  );
+  const filtering = hasActiveFilters(filters);
+  const allMatches = useMemo(() => matchingDays(plans, filters), [plans, filters]);
+  const monthMatches = useMemo(() => matchingDaysBetween(plans, filters, monthStartIso, monthEndIso), [plans, filters, monthStartIso, monthEndIso]);
 
-  // Resolve the freshest known plan row for a day. The component's `plans`
-  // map covers the visible month; the 42-cell grid can also show adjacent-
-  // month days, so fall back to a single-day fetch when the map misses.
+  // Swipe the grid to flip the month — the gesture a phone expects of a
+  // calendar. Mostly-horizontal and long enough to be deliberate.
+  const swipeRef = useRef(null);
+  const onSwipeStart = (e) => { const t = e.touches?.[0]; swipeRef.current = t ? { x: t.clientX, y: t.clientY } : null; };
+  const onSwipeEnd = (e) => {
+    const start = swipeRef.current; swipeRef.current = null;
+    const t = e.changedTouches?.[0];
+    if (!start || !t) return;
+    const dx = t.clientX - start.x, dy = t.clientY - start.y;
+    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.5) setAnchor(a => addMonths(a, dx < 0 ? 1 : -1));
+  };
+
+  // Resolve the freshest known plan row for a day. The store usually has it;
+  // a day in a month that has not landed yet falls back to a one-row fetch.
   async function existingPlanFor(iso) {
     if (plans[iso]) return plans[iso];
     const rows = await fetchPlansBetween(iso, iso).catch(() => []);
@@ -437,16 +573,44 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <button onClick={() => setAnchor(a => addMonths(a, -1))} style={iconButtonStyle}>‹</button>
+        <button onClick={() => setAnchor(a => addMonths(a, -1))} style={iconButtonStyle} aria-label="Previous month">‹</button>
         <div style={{ fontSize: 18, fontFamily: "serif", color: PALETTE.ink, letterSpacing: "0.02em" }}>{monthLabel}</div>
-        <button onClick={() => setAnchor(a => addMonths(a, 1))} style={iconButtonStyle}>›</button>
+        <button onClick={() => setAnchor(a => addMonths(a, 1))} style={iconButtonStyle} aria-label="Next month">›</button>
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <button onClick={refreshPlans} disabled={refreshing}
-          style={{ background: "none", border: "none", fontSize: 11, color: PALETTE.muted, cursor: refreshing ? "default" : "pointer", letterSpacing: "0.06em" }}>
-          {refreshing ? "Refreshing…" : "⟳ Refresh"}
+      {/* Browse by room and weather. A day outside the pick fades; ‹ › in the
+          day view step through the days inside it, across every month. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+        <label style={{ flex: 1, minWidth: 0, display: "flex" }}>
+          <select value={filters.occasion} onChange={e => setFilters(f => ({ ...f, occasion: e.target.value }))} aria-label="Filter by occasion"
+            style={{ ...filterSelectStyle, color: filters.occasion ? PALETTE.ink : PALETTE.muted, borderColor: filters.occasion ? PALETTE.ink : PALETTE.line }}>
+            <option value="">Any occasion</option>
+            {OCCASIONS.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </label>
+        <label style={{ flex: 1, minWidth: 0, display: "flex" }}>
+          <select value={filters.weather} onChange={e => setFilters(f => ({ ...f, weather: e.target.value }))} aria-label="Filter by weather"
+            style={{ ...filterSelectStyle, color: filters.weather ? PALETTE.ink : PALETTE.muted, borderColor: filters.weather ? PALETTE.ink : PALETTE.line }}>
+            <option value="">Any weather</option>
+            {WEATHER_SHORTS.map(w => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </label>
+        <button onClick={refreshPlans} disabled={refreshing} aria-label="Refresh plans"
+          style={{ background: "none", border: "none", fontSize: 11, color: PALETTE.muted, cursor: refreshing ? "default" : "pointer", letterSpacing: "0.06em", padding: "0 2px", flexShrink: 0 }}>
+          {refreshing ? "…" : "⟳"}
         </button>
       </div>
+      {filtering && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, fontSize: 11, color: PALETTE.muted }}>
+          <span>
+            {monthMatches.length === 0 ? "No" : monthMatches.length} {[filters.occasion, filters.weather].filter(Boolean).join(" · ")} look{monthMatches.length === 1 ? "" : "s"} this month
+            {allMatches.length > monthMatches.length ? ` · ${allMatches.length} in all` : ""}
+          </span>
+          <button onClick={() => setFilters(NO_FILTERS)}
+            style={{ background: "none", border: "none", fontSize: 11, color: PALETTE.ink, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+            Clear
+          </button>
+        </div>
+      )}
       {syncError && (
         <div style={{ background: "#FBE9E7", border: `1px solid ${PALETTE.accent}`, color: PALETTE.accent, padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 11, lineHeight: 1.5 }}>
           {syncError}
@@ -455,9 +619,9 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       )}
 
       {/* Trip span bars — one chip per trip overlapping the visible month */}
-      {trips.length > 0 && (
+      {monthTrips.length > 0 && (
         <div style={{ marginBottom: 10 }}>
-          {trips.map(trip => (
+          {monthTrips.map(trip => (
             <button key={trip.id} onClick={() => setActiveTrip(trip)} style={{
               display: "flex", alignItems: "center", gap: 6, width: "100%",
               padding: "5px 10px", marginBottom: 4,
@@ -486,11 +650,13 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}
+        onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
         {days.map(d => {
           const iso = isoDate(d);
           const inMonth = d.getMonth() === anchor.getMonth();
           const plan = plans[iso];
+          const outside = filtering && plan && !planMatchesFilters(plan, filters);
           const tripForDay = trips.find(t => iso >= t.start_date && iso <= t.end_date);
           const isFirstTripDay = tripForDay && (
             iso === tripForDay.start_date ||
@@ -502,9 +668,10 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
           return (
             <button key={iso}
               onClick={() => setActiveDay(iso)}
+              aria-label={`${iso}${planOutfits.length ? `, ${planOutfits.length} look${planOutfits.length === 1 ? "" : "s"}` : ""}`}
               style={{
                 ...cellStyle,
-                opacity: inMonth ? 1 : 0.35,
+                opacity: outside ? 0.22 : inMonth ? 1 : 0.35,
                 borderColor: isToday ? PALETTE.ink : tripForDay ? PALETTE.accent : PALETTE.line,
                 borderWidth: isToday ? 2 : 1,
                 background: tripForDay ? `${PALETTE.accent}08` : "#fff",
@@ -533,14 +700,11 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
                     : `+${planOutfits.length - 1}`}
                 </span>
               )}
-              {planItems.length > 0 && (
-                <div style={{ position: "relative", flex: 1, marginTop: 2 }}>
-                  <EditorialCollage
-                    lookItems={planItems}
-                    compact
-                    canvasStyle={{ position: "absolute", inset: 0 }}/>
-                </div>
-              )}
+              <div style={{ position: "relative", width: "100%", aspectRatio: "3 / 4", marginTop: 2 }}>
+                {planItems.length > 0 && (
+                  <EditorialCollage lookItems={planItems} layoutOverride={layoutFor(plan)} tile/>
+                )}
+              </div>
             </button>
           );
         })}
@@ -552,25 +716,32 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       </button>
 
       {activeDay && (() => {
-        // Days in the visible month that actually have an outfit, sorted — lets
-        // the day view flip prev/next through them without closing + reopening.
-        const outfitDays = Object.keys(plans).filter(d => outfitsOf(plans[d]).length > 0).sort();
-        const idx = outfitDays.indexOf(activeDay);
-        const prevDay = idx > 0 ? outfitDays[idx - 1] : null;
-        const nextDay = idx >= 0 && idx < outfitDays.length - 1 ? outfitDays[idx + 1] : null;
+        // ‹ › step through every planned day the store holds — the whole
+        // history once it has landed — inside the filters she picked, and
+        // across month ends; the grid follows, so closing lands on the month
+        // she reached. A day outside the filter (she tapped it) still steps
+        // to the nearest day inside.
+        const prevDay = [...allMatches].reverse().find(d => d < activeDay) || null;
+        const nextDay = allMatches.find(d => d > activeDay) || null;
+        const goTo = (iso) => {
+          setActiveDay(iso);
+          const m = startOfMonth(new Date(iso + "T12:00:00"));
+          if (m.getTime() !== anchor.getTime()) setAnchor(m);
+        };
         return (
         <DayModal
           key={activeDay}
           iso={activeDay}
           plan={plans[activeDay]}
+          layout={layoutFor(plans[activeDay])}
           available={available}
           wardrobe={wardrobe}
           outfitLogs={outfitLogs}
           forecast={forecast}
           forecastLabel={`${activeCloset?.name || "NYC"} forecast`}
           hasApiKey={!!apiKey}
-          onPrev={prevDay ? () => setActiveDay(prevDay) : undefined}
-          onNext={nextDay ? () => setActiveDay(nextDay) : undefined}
+          onPrev={prevDay ? () => goTo(prevDay) : undefined}
+          onNext={nextDay ? () => goTo(nextDay) : undefined}
           onClose={() => setActiveDay(null)}
           onPickSaved={(log, overrides) => handleAssignSaved(activeDay, log, overrides)}
           onGenerate={(occasion, label) => handleGenerateForDay(activeDay, occasion, label)}
@@ -694,7 +865,7 @@ function GenerateForDay({ iso, isPast, hasExisting, forecast, hasApiKey, onGener
   );
 }
 
-function DayModal({ iso, plan, available, wardrobe: wardrobeProp, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
+function DayModal({ iso, plan, layout, available, wardrobe: wardrobeProp, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
   // Saved looks RESOLVE against the wardrobe, never against what's available —
   // see the vocabulary in features/closet/useVisibleWardrobe.js. `available`
   // stays the picker scope; this is only read to render what a day holds.
@@ -727,9 +898,9 @@ function DayModal({ iso, plan, available, wardrobe: wardrobeProp, outfitLogs, fo
   // Daypart for the NEXT look added — only offered once the day already has
   // one (the second look is usually the evening one, so default there).
   const [daypart, setDaypart] = useState(DAYPART_EVENING);
-  const planLayout = plan?.layout_data
-    || (plan?.outfit_log_id && (outfitLogs || []).find(l => l.id === plan.outfit_log_id)?.layout_data)
-    || null;
+  // The day's saved arrangement — the row's own, or the saved look's it
+  // points at — resolved by the grid, which draws the same one on the square.
+  const planLayout = layout || null;
 
   // Eyebrow for one look's card: "PLANNED LOOK · ☾ EVENING". The daypart /
   // occasion tag only appears when it distinguishes (multiple looks, or a
@@ -1952,6 +2123,18 @@ function SwapPicker({ target, items, preferItemIds, currentDayItems, weather, oc
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
+const filterSelectStyle = {
+  flex: 1,
+  minWidth: 0,
+  padding: "6px 8px",
+  border: `1px solid ${PALETTE.line}`,
+  borderRadius: 6,
+  background: "#fff",
+  fontSize: 11,
+  letterSpacing: "0.04em",
+  fontFamily: "inherit",
+};
+
 const iconButtonStyle = {
   background: "transparent",
   border: `1px solid ${PALETTE.line}`,

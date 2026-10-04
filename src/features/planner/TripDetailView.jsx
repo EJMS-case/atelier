@@ -511,6 +511,11 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
       setTrip(t => ({ ...t, must_include_ids: stillPinned }));
     }
     const pool = regenPool(excluded);
+    // What is still coming, read now — the status flip above has already
+    // landed in the ref, and the pieces being excluded never count.
+    const carried = tripItemsRef.current
+      .filter(r => (r.status === "packed" || r.status === "suggested") && !excluded.has(r.item_id))
+      .map(r => r.item_id);
     const running = { ...plansRef.current };
     for (const iso of days) {
       const existing = outfitsOf(running[iso]);
@@ -525,7 +530,17 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
         const isPool = resolved.length > 0 && resolved.every(it => it.category === "Swim");
         const kept = (o.items || []).filter(id => !excluded.has(id));
         if (isPool) return { ...o, items: kept };
-        const rebuilt = buildReplacementItems(pool, iso, o, running).filter(id => !excluded.has(id));
+        // The day's pool through the one rule every trip surface uses: the
+        // regen base (destination ∪ suitcase) widened by what the look keeps,
+        // and a Travel Day at either end restyled from HOME — until
+        // 2026-10-04 this path alone skipped that rule and dressed a
+        // last-day flight from the destination closet.
+        const dayPool = poolForTripDay({
+          pool, wardrobe, homeClosetId, destClosetId, suitcaseIds: carried,
+          lookIds: kept, pins: stillPinned, occasion: o.occasion,
+          dayIdx: days.indexOf(iso), dayCount: days.length, mode: "edit",
+        }).filter(it => !excluded.has(it.id));
+        const rebuilt = buildReplacementItems(dayPool, iso, o, running).filter(id => !excluded.has(id));
         // Empty rebuild (pool too thin) → keep the outfit minus the piece
         // rather than blanking the day.
         return { ...o, items: rebuilt.length ? rebuilt : kept };

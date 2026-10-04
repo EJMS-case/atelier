@@ -1,12 +1,32 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-04**, after the planner speed-up (every small tile paints from the piece's 256px thumb, the trip screen and the saved-look picker load on demand), the collage that draws every piece a look holds, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild (every look read as itself, against the standard, across the whole window, in the background), the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-04** (second pass), after the planner squares began drawing each day's look as she built it, the months began browsing as one (the whole history cached, swipe, ‹ › across month ends, occasion and weather filters) and the evaluator moved to a two-clock score (current against the researched brief, timeless) at `low` effort in the background; earlier the same day the planner speed-up (every small tile paints from the piece's 256px thumb, the trip screen and the saved-look picker load on demand), the collage that draws every piece a look holds, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild (every look read as itself, against the standard, across the whole window, in the background), the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-04 · Squares show the look as built; months browse as one; filters; the evaluator on two clocks, in the background
+
+**Owner, four asks:** *"keep the format I have saved in the builder on the individual calendar squares"*, *"more seamless between months … filter by occasion and/or weather"*, *"The evaluator is extremely slow … the ranking I get may be based on hard rules rather than this season's style and timeless trends"*, and continue the handoff. Rows first: 100 of 117 planned days already carry her arrangement; the evaluator's task text was telling the model the validator's notes "count heavily against the score". CHANGELOG has the detail. To carry:
+
+1. **A planner square is `<EditorialCollage tile layoutOverride={layoutFor(plan)}>`** at 3:4 under the date; `layoutFor` resolves the row's own layout or the saved look's (fetched slim through `fetchOutfitLogLayouts`). The day view reads the same `layout` prop. `compact` is the trip screen's day cards only.
+2. **`planStore` (module-level in `CalendarView.jsx`) holds every loaded month**; `loadMonth` merges one month, `loadEverything` lands the history once per 10 min after the first paint. Writes update the store in place; mount and focus re-pull the visible month quietly. Don't add a per-month refetch on flip — that is the slowness she reported.
+3. **`features/planner/planFilters.js` is the one reader for "does this day match"** (`planMatchesFilters`, `matchingDays`); the grid dims by it, the day view's ‹ › walk by it. A new way to tag a plan's room or weather goes in `planOccasions` / `planWeathers`, once.
+4. **The evaluator is `RUN_KEYS.builderEvaluate`**; the builder binds to the run it started or to a stored card for exactly its canvas (`canvasKey`). Its score is a stylist's on two clocks; LOOK FACTS never move the number by themselves. `effort: "low"`, `max_tokens: 4000`.
+5. **`regenerateWithout` in `TripDetailView` calls `poolForTripDay`** — the leave-behind restyle respects the travel-day rule now; the 2026-09-22 watch-item is closed.
+
+**Watch-items:**
+- **Her first planner open:** every planned square should read as a miniature of the day view's collage. If a square reads wrong, the lever is the row's `layout_data` (what she saved) — the square draws it 1:1 — not the tile code; a square with no saved layout draws the portrait recipe (`MOBILE_RECIPES`). Squares are taller now; if the month feels long on the phone, `cellStyle` padding and the `aspectRatio: "3 / 4"` box are the two numbers.
+- **Her first Evaluate on the new rubric:** the headline should say whether the look is current, timeless, or both, and the score should move with the look rather than with the facts list. If the read feels thin at `low`, `effort: "medium"` in `evaluateLook.js` is the one-line trade of seconds for deliberation; if it leans on the brief too hard, the *CURRENT* sentence in `EVAL_TASK` is the lever. The card now carries *EVALUATED N MIN AGO*; a card for a different look never shows (the `canvasKey` bind).
+- **Browsing past months:** the first flip after mount may still show a spinner if the history has not landed yet (it loads after the first paint); every flip after that is instant. The 42-cell grid now shows adjacent-month days' looks dimmed — by design.
+- **A weather filter needs a weather on the row**: 16 of her planned days carry none and fade under any weather pick. That is honest, not a bug; tagging them is hers to do from the day view.
+- **The main chunk (503 kB / 150 gz) is React (131 kB), the auth client (103 kB), App.jsx (49 kB) and `ui/styles.js` (27 kB)** — measured by sourcemap this session. The earlier note that `standard.js` and the Zod schemas ride it was wrong: both are already their own chunks. Nothing cheap is left to split; the next bytes would be `fashion-combos.js` + `styling.js` (27 kB) if a boot-time importer can be cut.
+- **Evaluate still parses JSON** (`evalParse.js`, tolerant) rather than going through `invokeTool` + Zod as the convention says. One recovered parse in August, none since; converting is a clean next step, not an urgent one.
+
+**Verified before push:** `npm test` (50 suites), `npm run build`, `npm run smoke` green (39 walk steps).
 
 ### 2026-10-04 · The planner paints from thumbs; the collage draws every piece; Saved is paged; a new builder piece lands on top
 
@@ -21,7 +41,7 @@ it through.
 - **Her first planner open on the phone** is the live check: the month should paint in well under a second once the grid's thumbs are cached. A piece without a thumb (6 of 541) still paints the full photo and builds its thumb in the background. If a tile paints BLANK, `TrimmedImage`'s fallback (a thumb that 404s → the photo, `forgetThumb`) is where to look; the walk's trip-sheet tile check exercises it headless.
 - **A collage with overflow pieces** places the second shoe / knit / bag on a ring around the cluster. If a placement reads wrong on a real look, `OVERFLOW_ANCHORS_*` and `OVERFLOW_SIZE` in `collageLayout.js` are the levers; the invariant (every piece placed) is the test, the aesthetics are not.
 - **Twelve cards a page.** If she wants more per page, `LOOKS_PAGE` in `ShowMore.jsx` is the one constant.
-- **The main chunk is 503 kB (150 gz).** Not this session's work, but it is the next bytes to look at if boot feels slow: `standard.js` (87 kB) and the Zod schemas ride it.
+- **The main chunk is 503 kB (150 gz).** Not this session's work, but it is the next bytes to look at if boot feels slow. *(Corrected later the same day: `standard.js` and the Zod schemas are already separate chunks; the chunk is React, the auth client and App — see the entry above.)*
 
 **Verified before push:** `npm test` (49 suites), `npm run build`, `npm run smoke` green (36 walk steps).
 
