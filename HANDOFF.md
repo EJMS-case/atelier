@@ -1,12 +1,34 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-04** (second pass), after the planner squares began drawing each day's look as she built it, the months began browsing as one (the whole history cached, swipe, ‹ › across month ends, occasion and weather filters) and the evaluator moved to a two-clock score (current against the researched brief, timeless) at `low` effort in the background; earlier the same day the planner speed-up (every small tile paints from the piece's 256px thumb, the trip screen and the saved-look picker load on demand), the collage that draws every piece a look holds, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild (every look read as itself, against the standard, across the whole window, in the background), the canvas stacking fix (a piece sent ↓ Back past everything painted under the canvas) and the evaluation card rework (every section says what it is, every move shows the piece it means); before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-04** (third pass), after Home began reading her way (Most worn by garment in her order with Work Dinner folded into Work; the resting list and the recap's nudges dressed for the colder of the forecast and the month; "try instead" swaps that keep a piece's job and colour; worn looks drawn as outfits that open the whole canvas), the standard was rewritten as taste on two clocks, the chat moved to `low` effort, Style Me began saying how much of the closet it read, and the null-formality reader bug (227 garments hidden from every resting surface) was fixed; earlier the same day the planner squares began drawing each day's look as she built it, the months began browsing as one and the evaluator moved to a two-clock score in the background; before that the planner speed-up, the collage that draws every piece, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild, the canvas stacking fix and the evaluation card rework; before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-04 · Home reads her way; the standard on two clocks; the chat faster; the null-formality bug
+
+**Owner, on the landing page:** Most worn as garments in her order with Work and Work Dinner combined; Back in Rotation for the season ("it is mostly shorts"); "try instead" as reasonable swaps (trousers never jeans, a blue blazer never red, a blue blazer maybe a cardigan); worn looks as outfits she can tap into (one pair of shoes); the evaluator and chat "still using rules"; and *"How do I know that the code is reading my whole relevant wardrobe when I am in style me?"* Rows first: **"mostly shorts" was `Number(null) === 0`** — `isComfortCoded` read every unfiled formality as f0 (lounge), and 227 of her 294 garments are unfiled, so the resting list was the few pieces she HAD filed (the shorts, f3). CHANGELOG has the detail. To carry:
+
+1. **`formalityOf(item)` (`utils/item-helpers.js`) is the reader for the formality column.** Null, undefined and "" are *unknown*. A bare `Number(it.formality)` anywhere in a gate is the bug class; `test:recap-data` holds it.
+2. **`WEAR_ROOMS` is Work / Casual / Dinner; `ROOM_OF` folds Work Dinner into Work for the wear record only.** Style Me's Work Dinner brief is untouched. `wornGroupOf` (tops / layers / pants / skirts / dresses) is the one reader for what Most worn ranks and in what order.
+3. **`resurfaceBucket(forecast)` (`wardrobe-coverage.js`) is the weather every wear-it-this-week nudge dresses for** — Back in Rotation and `buildRecap({ bucket })`. The colder of the forecast and the month. Style Me keeps the live forecast alone.
+4. **`swapShelf` / `swapTier` (`recapData.js`) define a reasonable swap**: same job, same colour (neutral for neutral second), register within a step. A new shelf goes in `swapShelf`, once.
+5. **`components/LookTile.jsx` draws a worn look as an outfit** (her layout, thumbs, `oneShoe`) and opens the day (`onOpenDay`, wired through Home and Edit) or the saved look. The recap's `look.layout` and the history row's `entry.layout` carry the row's own `layout_data`; a log-linked day with no layout of its own (4 of 117) draws the recipe here — the planner fetches the log's layout, Home does not.
+6. **THE STANDARD's line 9 is the two clocks**; the preface says no single line decides a look. `OPINION_RULES` says the numbers in context are description, not arithmetic. The chat runs `low` / 6000.
+7. **Style Me shows *Styled from N of the M pieces in this closet*** (`poolRead` in App, from the sampler's `sheets` progress). The number is the inventory the model read; there is no cap.
+
+**Watch-items:**
+- **Her first Home open:** Back in Rotation should now draw trousers, blouses and cardigans, not shorts (the Cool bucket drops shorts and sandals). Most worn's Work strip should lead with her shirt and blazer. If a strip reads wrong, `wornGroupOf` is the lever; if the resting list is still thin, `isResurfaceCandidate` and `filterByWeather(…, "Cool")` are the two gates, in that order.
+- **Her first chat turn at `low`:** it must still hold its position under pushback. If it starts agreeing reflexively, `output_config.effort` in `builderChat.js` is the one-line way back to `medium`; the opinion rules are the real lever.
+- **Her first Evaluate / chat after deploy** pays one cache write for the new standard — expected.
+- **The 227 unfiled formalities** are hers to file; the AI Readiness audit (`dataAudit.js`) already lists them. Reading them as unknown is right; never backfill from a guess.
+- **"Try instead" can be empty** for a leaned-on piece whose shelf has nothing fresh in its colour this week — honest, by design. If she wants a wider net, the second tier in `swapTier` (neutral for neutral) is where to loosen, never the shelf.
+- **The "Something hiccuped" row** is still the first thing to read on the next report (see the entry below).
+
+**Verified before push:** `npm test` (51 suites), `npm run build`, `npm run smoke` green (39 walk steps).
 
 ### 2026-10-04 · Squares show the look as built; months browse as one; filters; the evaluator on two clocks, in the background
 

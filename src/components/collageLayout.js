@@ -321,3 +321,20 @@ export function buildFromLayout(items, layout, isMobile) {
   }
   return positioned.map((slot, i) => ({ ...slot, id: slot.id || `slot-${i}` }));
 }
+
+// A look she wore, drawn small on Home or in a garment's history, shows ONE
+// pair of shoes (owner, 2026-10-04: "When an outfit has 2 pairs of shoes,
+// show one. That's fine. I'm focused on the garments themselves"). She
+// stages a second pair as an option, not as part of the outfit, so the
+// first pair in the look's order stands for the choice. Caller-side on
+// purpose: the collage itself never drops a piece (test:collage), and the
+// builder, the planner square and a saved look's card still draw both.
+export function oneShoe(items) {
+  let seen = false;
+  return (items || []).filter(it => {
+    if (it?.category !== "Shoes") return true;
+    if (seen) return false;
+    seen = true;
+    return true;
+  });
+}

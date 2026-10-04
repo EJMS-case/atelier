@@ -24,7 +24,7 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (50 suites, no network)
+npm test           # full suite (51 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
 npm run test:render     # just the render walk (39 steps, headless, mocked REST)
@@ -189,12 +189,31 @@ Conventions worth knowing:
   `CalendarView.jsx`): the visible month paints first, the history lands once
   in the background, and a flip or a ‹ › step never refetches. Which days
   match an occasion / weather pick is one reader, `planFilters.js`.
+- **A piece's formality is read through `formalityOf()`** (`utils/item-helpers.js`):
+  null, undefined and "" are *unknown*, never f0. `Number(null)` is `0`, and
+  a bare `Number(it.formality) <= 2` read every unfiled piece as loungewear —
+  227 of her 294 garments — and hid them from every resting surface for
+  weeks ("it is mostly shorts", 2026-10-04). Any gate that reads the column
+  reads it through this.
+- **A wear-it-this-week nudge dresses for `resurfaceBucket()`** — the colder
+  of today's forecast and the month (Back in Rotation, the recap's swaps and
+  challenge). Style Me reads the live forecast alone: a request is one day.
+  **A "try instead" swap keeps the job and the colour** (`swapShelf` /
+  `swapTier` in `recapData.js`): trousers never become jeans, a navy blazer
+  never a red one, a navy blazer may become a navy cardigan. **Most worn
+  ranks garments only, in her order** (`wornGroupOf`): shirts, blazers,
+  pants, skirts, dresses; the wear record's rooms are Work (Work Dinner
+  folded in), Casual, Dinner. **A worn look drawn small is `LookTile`**
+  (her layout, thumbs, one pair of shoes) and opens the whole canvas.
 - **The evaluator's score is a stylist's, on two clocks** — current, judged
   against the researched trend brief, and timeless — and the app's LOOK FACTS
   are notes that never move the number by themselves (owner, 2026-10-04:
   "the ranking I get may be based on hard rules"). Her two fixed points are
-  the only preferences that are verdicts. It runs as `RUN_KEYS.builderEvaluate`
-  at `low` effort; a surface that shows its card binds to the run first
+  the only preferences that are verdicts. THE STANDARD itself (`standard.js`)
+  is written as taste — a preface that no single line decides a look, and
+  line 9 is the two clocks — and every opinion surface composes from it. It
+  runs as `RUN_KEYS.builderEvaluate` at `low` effort (the chat too, since
+  2026-10-04); a surface that shows its card binds to the run first
   (`canvasKey`), so a card never appears over a different look.
 - **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
   state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last

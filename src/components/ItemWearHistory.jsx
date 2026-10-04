@@ -10,17 +10,23 @@
 // date+item-set signature, mirroring OutfitHistory's merge). Future planner
 // pins surface too, flagged PLANNED — "you're already wearing this Friday"
 // is exactly the don't-repeat signal she asked for.
+//
+// Each row draws the look AS AN OUTFIT (LookTile: her saved arrangement, one
+// pair of shoes, every piece from its thumb), this garment included — owner,
+// 2026-10-04: "I want to actually see the outfit … I want to click it and
+// see the whole canvas, not the individual piece. I can click the individual
+// piece from the canvas as needed." The tile and the header both open the
+// day in the Planner (or the look under Saved), where every piece is a tap.
 
 import { useMemo, useState } from "react";
-import { s, ss } from "../ui/styles.js";
-import { resolveItemIds, sortByCategoryOrder } from "../utils/item-helpers.js";
+import { s } from "../ui/styles.js";
+import { resolveItemIds } from "../utils/item-helpers.js";
 import { outfitsOf, sigOf } from "../features/planner/outfits.js";
 import { tagsFor, joinTags } from "../lib/multitag.js";
 import { nyToday, friendlyDate } from "../lib/time.js";
-import Thumb from "./Thumb.jsx";
+import LookTile from "./LookTile.jsx";
 
 const PREVIEW_ROWS = 4;
-const MAX_THUMBS = 5;
 
 // Whole days between an iso date and today (positive = past). Same noon-UTC
 // anchoring as time.js's friendlyDate so travel timezones can't shift it.
@@ -30,6 +36,9 @@ function daysSince(iso, today) {
   return Math.round((now - d) / 86400000);
 }
 
+// A row's saved arrangement, when the row carries one.
+const layoutOf = (layout) => (Array.isArray(layout) && layout.length ? layout : null);
+
 function agoLabel(iso, today) {
   const days = daysSince(iso, today);
   if (days <= 0) return null; // today/future — friendlyDate already says it
@@ -38,20 +47,15 @@ function agoLabel(iso, today) {
   return `${Math.floor(days / 30)} months ago`;
 }
 
-// One outfit row: date/label line + a strip of the OTHER pieces in the look.
-// Every row is a way out (owner, 2026-09-18: "I'd like these outfits to be
-// clickable"): the header opens the day in the Planner (dated wears and
-// pins) or the look under Saved (undated saved looks); each companion thumb
-// opens that garment's own Edit screen. Handlers are optional so the card
-// still renders read-only where a caller has nowhere to send her.
+// One outfit row: the look as a tile beside its date/label line. Every row
+// is a way out (owner, 2026-09-18: "I'd like these outfits to be clickable"):
+// the tile and the header open the day in the Planner (dated wears and pins)
+// or the look under Saved (undated saved looks). Handlers are optional so
+// the card still renders read-only where a caller has nowhere to send her.
 const plainBtn = { background: "none", border: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer", textAlign: "left" };
 
-function OutfitRow({ entry, item, wardrobe, today, onOpenItem, onOpenDay, onOpenLook }) {
-  const companions = sortByCategoryOrder(
-    resolveItemIds(wardrobe, entry.ids).filter(it => it.id !== item.id)
-  );
-  const shown = companions.slice(0, MAX_THUMBS);
-  const extra = companions.length - shown.length;
+function OutfitRow({ entry, wardrobe, today, onOpenDay, onOpenLook }) {
+  const pieces = resolveItemIds(wardrobe, entry.ids);
   const occText = joinTags(tagsFor(entry, "occasions", "occasion"));
   const future = entry.date && entry.date > today;
   const ago = entry.date && !future ? agoLabel(entry.date, today) : null;
@@ -75,42 +79,27 @@ function OutfitRow({ entry, item, wardrobe, today, onOpenItem, onOpenDay, onOpen
       )}
       {ago && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>· {ago}</span>}
       {occText && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>· {occText}</span>}
-      {open && <span style={{ fontSize: 10, color: "var(--color-text-muted)", marginLeft: "auto" }}>{open.where} ›</span>}
+      {open && <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>{open.where} ›</span>}
     </>
   );
-  const headerStyle = { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6, flexWrap: "wrap", width: "100%" };
-
-  const thumb = (it) => it.image ? (
-    <Thumb item={it} alt={it.name} title={it.name}
-      style={{ ...ss.modalItemThumb, background: "#fff" }} />
-  ) : (
-    <div title={it.name}
-      style={{ ...ss.modalItemThumb, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "var(--color-text-muted)", textAlign: "center", overflow: "hidden", padding: 2 }}>
-      {it.name}
-    </div>
-  );
+  const headerStyle = { display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", width: "100%" };
 
   return (
-    <div style={{ padding: "8px 0", borderTop: "1px solid var(--color-border)" }}>
-      {open
-        ? <button type="button" onClick={open.go} aria-label={open.label} style={{ ...plainBtn, ...headerStyle }}>{header}</button>
-        : <div style={headerStyle}>{header}</div>}
-      {shown.length > 0 && (
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {shown.map(it => onOpenItem ? (
-            <button key={it.id} type="button" onClick={() => onOpenItem(it)} aria-label={`Open ${it.name}`}
-              style={{ ...plainBtn, display: "block", lineHeight: 0 }}>
-              {thumb(it)}
-            </button>
-          ) : <span key={it.id} style={{ display: "block", lineHeight: 0 }}>{thumb(it)}</span>)}
-          {extra > 0 && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>+{extra}</span>}
+    <div style={{ padding: "8px 0", borderTop: "1px solid var(--color-border)", display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <LookTile items={pieces} layout={entry.layout} width={72} label={open?.label} onOpen={open?.go}/>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {open
+          ? <button type="button" onClick={open.go} aria-label={open.label} style={{ ...plainBtn, ...headerStyle }}>{header}</button>
+          : <div style={headerStyle}>{header}</div>}
+        <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 4 }}>
+          {pieces.length} piece{pieces.length === 1 ? "" : "s"} · tap to open the whole look
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function Section({ label, entries, item, wardrobe, today, open }) {
+function Section({ label, entries, wardrobe, today, open }) {
   const [expanded, setExpanded] = useState(false);
   if (entries.length === 0) return null;
   const shown = expanded ? entries : entries.slice(0, PREVIEW_ROWS);
@@ -119,7 +108,7 @@ function Section({ label, entries, item, wardrobe, today, open }) {
       <div style={{ fontSize: 10, letterSpacing: "0.14em", color: "var(--color-text-muted)", marginBottom: 2 }}>
         {label} · {entries.length}
       </div>
-      {shown.map(e => <OutfitRow key={e.key} entry={e} item={item} wardrobe={wardrobe} today={today} {...open} />)}
+      {shown.map(e => <OutfitRow key={e.key} entry={e} wardrobe={wardrobe} today={today} {...open} />)}
       {entries.length > PREVIEW_ROWS && (
         <button onClick={() => setExpanded(x => !x)}
           style={{ background: "none", border: "none", padding: "6px 0 0", fontSize: 11, color: "var(--color-text-muted)", textDecoration: "underline", cursor: "pointer" }}>
@@ -130,8 +119,8 @@ function Section({ label, entries, item, wardrobe, today, open }) {
   );
 }
 
-export default function ItemWearHistory({ item, wardrobe, logs, plans, onOpenItem, onOpenDay, onOpenLook }) {
-  const open = { onOpenItem, onOpenDay, onOpenLook };
+export default function ItemWearHistory({ item, wardrobe, logs, plans, onOpenDay, onOpenLook }) {
+  const open = { onOpenDay, onOpenLook };
   const today = nyToday();
 
   const { worn, saved } = useMemo(() => {
@@ -140,7 +129,7 @@ export default function ItemWearHistory({ item, wardrobe, logs, plans, onOpenIte
     // Dated logs featuring the piece.
     const wornLogs = (logs || [])
       .filter(l => l.date_worn && inLook(l.garment_ids))
-      .map(l => ({ key: `log:${l.id}`, date: l.date_worn, ids: l.garment_ids, occasion: l.occasion, occasions: l.occasions }));
+      .map(l => ({ key: `log:${l.id}`, date: l.date_worn, ids: l.garment_ids, occasion: l.occasion, occasions: l.occasions, layout: layoutOf(l.layout_data) }));
 
     // Planner pins featuring the piece (past AND future), deduped against
     // logs by date + item-set signature — a pin and its log are one wear.
@@ -152,7 +141,7 @@ export default function ItemWearHistory({ item, wardrobe, logs, plans, onOpenIte
       outfitsOf(p).forEach((o, idx) => {
         if (!inLook(o.items)) return;
         if (logSigs.has(`${date}|${sigOf(o.items)}`)) return;
-        planEntries.push({ key: `plan:${p.id || date}:${idx}`, date, ids: o.items, occasion: o.occasion, occasions: null });
+        planEntries.push({ key: `plan:${p.id || date}:${idx}`, date, ids: o.items, occasion: o.occasion, occasions: null, layout: idx === 0 ? layoutOf(p.layout_data) : null });
       });
     });
 
@@ -162,7 +151,7 @@ export default function ItemWearHistory({ item, wardrobe, logs, plans, onOpenIte
     // Undated logs = her saved looks (LooksView semantics), newest first.
     const saved = (logs || [])
       .filter(l => !l.date_worn && inLook(l.garment_ids))
-      .map(l => ({ key: `look:${l.id}`, logId: l.id, date: null, created: l.created_at, ids: l.garment_ids, occasion: l.occasion, occasions: l.occasions }))
+      .map(l => ({ key: `look:${l.id}`, logId: l.id, date: null, created: l.created_at, ids: l.garment_ids, occasion: l.occasion, occasions: l.occasions, layout: layoutOf(l.layout_data) }))
       .sort((a, b) => ((a.created || "") < (b.created || "") ? 1 : -1));
 
     return { worn, saved };
@@ -182,8 +171,8 @@ export default function ItemWearHistory({ item, wardrobe, logs, plans, onOpenIte
           ? <>Worn <strong>{wearDays.size}</strong> day{wearDays.size !== 1 ? "s" : ""}{lastWorn ? <> · last {friendlyDate(lastWorn)}{agoLabel(lastWorn, today) ? ` (${agoLabel(lastWorn, today)})` : ""}</> : null}.</>
           : "Not worn yet — it appears in your saved looks below."}
       </p>
-      <Section label="WORN & PLANNED" entries={worn} item={item} wardrobe={wardrobe} today={today} open={open} />
-      <Section label="SAVED LOOKS" entries={saved} item={item} wardrobe={wardrobe} today={today} open={open} />
+      <Section label="WORN & PLANNED" entries={worn} wardrobe={wardrobe} today={today} open={open} />
+      <Section label="SAVED LOOKS" entries={saved} wardrobe={wardrobe} today={today} open={open} />
     </div>
   );
 }

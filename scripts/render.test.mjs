@@ -43,6 +43,9 @@ const { chromium, executablePath: exe } = found;
 // walk. Named here, applied in the map, checked for uniqueness underneath.
 const AZ_LOOK_ITEM = buildWardrobe({ closetId: AZ_CLOSET })[0];
 const AZ_LOOK_ID = `az-${AZ_LOOK_ITEM.id}`;
+// The Arizona look also carries a top: it is the walk's one Casual wear, and
+// Most worn ranks garments only, so the Casual strip needs a garment in it.
+const AZ_TOP_ID = `az-${buildWardrobe({ closetId: AZ_CLOSET }).find(it => it.category === "Tops").id}`;
 const AZ_LOOK_PIECE = "Sedona Sheer Camisole";
 
 const wardrobe = [
@@ -93,16 +96,22 @@ const PREV_MONTH_DAY = (() => {
   const d = new Date(); d.setUTCHours(12, 0, 0, 0); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
   return d.toISOString().slice(0, 10);
 })();
+// Every worn look carries a top and a bottom beside the two accessories the
+// walk's other steps address by index: Most worn ranks garments only (owner,
+// 2026-10-04), so a look of two accessories would leave the strip empty.
+const TOP = wardrobe.find(it => it.category === "Tops");
+const BOTTOM = wardrobe.find(it => it.category === "Bottoms");
+const LOOK_IDS = [wardrobe[0].id, wardrobe[5].id, TOP.id, BOTTOM.id];
 const PLANS = [{
   date: iso(3), source: "trip", notes: "",
-  items: [wardrobe[0].id, wardrobe[5].id],
-  outfits: [{ id: "o1", label: "", occasion: "Casual", items: [wardrobe[0].id, wardrobe[5].id] }],
+  items: LOOK_IDS,
+  outfits: [{ id: "o1", label: "", occasion: "Casual", items: LOOK_IDS }],
 }, {
   // A Work day she built herself, with her arrangement saved: the square
   // must draw THAT arrangement, and the occasion filter must find it.
   date: PREV_MONTH_DAY, source: "manual", notes: "",
-  items: [wardrobe[0].id, wardrobe[5].id], occasion: "Work", occasions: ["Work"], weather: "Mild", weathers: ["Mild"],
-  outfits: [{ id: "o2", label: "", occasion: "Work", items: [wardrobe[0].id, wardrobe[5].id] }],
+  items: LOOK_IDS, occasion: "Work", occasions: ["Work"], weather: "Mild", weathers: ["Mild"],
+  outfits: [{ id: "o2", label: "", occasion: "Work", items: LOOK_IDS }],
   layout_data: [{ id: wardrobe[0].id, x: 8, y: 4, w: 54, h: 58, z: 2 }, { id: wardrobe[5].id, x: 44, y: 52, w: 44, h: 42, z: 5 }],
 }];
 
@@ -125,11 +134,11 @@ const TABLE = {
   // "Edit" click lands on it.
   outfit_logs: [{
     id: "log-az", date_worn: "2026-08-30", occasion: "Casual", notes: "",
-    garment_ids: [AZ_LOOK_ID],
+    garment_ids: [AZ_LOOK_ID, AZ_TOP_ID],
     layout_data: null,
   }, {
     id: "log-nyc", date_worn: "2026-08-01", occasion: "Work", notes: "",
-    garment_ids: [wardrobe[0].id, wardrobe[5].id],
+    garment_ids: LOOK_IDS,
     layout_data: null,
   }],
   // The NYC look is hearted: Favorites is a ♥ chip on Saved → All since
@@ -324,6 +333,12 @@ await check("Closet → a garment's Edit screen: one stylist-line field, no Note
   if (/≤\s*200/.test(text)) throw new Error('the "≤200 chars" instruction is back on the label');
   if (/^Notes$/m.test(text)) throw new Error("the Notes box is back");
   if (!/In Your Looks/.test(text)) throw new Error("In Your Looks did not render for the piece the fixture's look is made of");
+  // Each row draws the look as an outfit (LookTile: a composed collage of
+  // every piece, this garment included) and the tile opens the day — owner,
+  // 2026-10-04: "I want to click it and see the whole canvas".
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('button[aria-label$="in the Planner"]')]
+    .filter(b => b.querySelector("img")).length);
+  if (tiles === 0) throw new Error("no worn-look tile draws the outfit as a collage");
 });
 await check("Edit → a worn date opens that day in the Planner", async () => {
   const clicked = await page.evaluate(() => {
@@ -433,8 +448,8 @@ await check("Planner → a planned square draws the look as composed, not as a g
     return { imgs: imgs.length, positioned: imgs.filter(i => getComputedStyle(i.parentElement).position === "absolute").length };
   }, iso(3));
   if (r.err) throw new Error(r.err);
-  if (r.imgs !== 2) throw new Error(`the square shows ${r.imgs} pieces of a two-piece look`);
-  if (r.positioned !== 2) throw new Error("the square's pieces are not composed (not positioned)");
+  if (r.imgs !== LOOK_IDS.length) throw new Error(`the square shows ${r.imgs} pieces of a ${LOOK_IDS.length}-piece look`);
+  if (r.positioned !== LOOK_IDS.length) throw new Error("the square's pieces are not composed (not positioned)");
 });
 // "Would it be too much to filter by occasion and/or weather?" — a day outside
 // the pick fades, the line under the filters counts the days inside it, this
@@ -627,21 +642,25 @@ await check("Builder → a piece sent behind every other piece still paints on t
 });
 
 await check("Saved → the builder's picker offers the wardrobe, the look's own piece included", async () => {
-  const opened = await page.evaluate(() => {
-    const chip = [...document.querySelectorAll("button")]
-      .find(b => /(\u2713|\u00d7\d+)$/.test((b.textContent || "").trim()));
-    if (!chip) return false;
-    chip.click(); return true;
-  });
-  if (!opened) throw new Error("no filled slot chip to open the picker with");
-  await page.waitForTimeout(700);
-  const text = await page.evaluate(() => document.body.innerText);
-  if (/No items in this category/.test(text)) {
-    throw new Error("the picker is empty — the builder was handed no pool");
+  // The look fills two slots (the camisole's and its top's); open each filled
+  // chip in turn until the picker for the camisole's slot is on screen.
+  const filled = await page.evaluate(() =>
+    [...document.querySelectorAll("button")].filter(b => /(\u2713|\u00d7\d+)$/.test((b.textContent || "").trim())).length);
+  if (!filled) throw new Error("no filled slot chip to open the picker with");
+  let text = "";
+  for (let i = 0; i < filled; i++) {
+    await page.evaluate((idx) => {
+      const chips = [...document.querySelectorAll("button")].filter(b => /(\u2713|\u00d7\d+)$/.test((b.textContent || "").trim()));
+      chips[idx]?.click();
+    }, i);
+    await page.waitForTimeout(700);
+    text = await page.evaluate(() => document.body.innerText);
+    if (/No items in this category/.test(text)) {
+      throw new Error("the picker is empty — the builder was handed no pool");
+    }
+    if (text.toLowerCase().includes(AZ_LOOK_PIECE.toLowerCase())) return;
   }
-  if (!text.toLowerCase().includes(AZ_LOOK_PIECE.toLowerCase())) {
-    throw new Error(`"${AZ_LOOK_PIECE}" is missing from its own look's picker — the pool was not widened by the look's ids`);
-  }
+  throw new Error(`"${AZ_LOOK_PIECE}" is missing from its own look's picker — the pool was not widened by the look's ids`);
 });
 
 // Owner, 2026-10-04: "when I add a new item to the builder canvas, please put

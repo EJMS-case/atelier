@@ -314,6 +314,14 @@ export default function App() {
   // about React.
   const [stylingStage, setStylingStage] = useState(null); // { step, detail } | null
   const [stylingStartedAt, setStylingStartedAt] = useState(0);
+  // How much of the closet the last Style Me tap actually handed the
+  // stylist — { read, total, occasion } — shown over the looks so she can
+  // see it (owner, 2026-10-04: "How do I know that the code is reading my
+  // whole relevant wardrobe when I am in style me?"). `read` is the
+  // sampler's inventory count (every piece that survived the room's bans,
+  // her own vetoes, the chips and the weather gates — there is no cap);
+  // `total` is the closet she styled from.
+  const [poolRead, setPoolRead] = useState(null);
   const [stylingTick, setStylingTick] = useState(0);
   useEffect(() => {
     if (!stylingStartedAt) return undefined;
@@ -1192,7 +1200,12 @@ export default function App() {
     setStylingStage({ step: "sampling" });
     setStylingStartedAt(Date.now());
     try {
-      const onProgress = (stage) => setStylingStage(stage || null);
+      const onProgress = (stage) => {
+        setStylingStage(stage || null);
+        if (stage?.step === "sheets" && Number.isFinite(stage.detail?.items)) {
+          setPoolRead({ read: stage.detail.items, total: itemsForStyling.length, occasion });
+        }
+      };
       const onLook = (look) => {
         const normalized = normalizeLooks([look], occasion);
         streamedCount += normalized.length;
@@ -1852,6 +1865,7 @@ export default function App() {
             wearStats={wearData.stats}
             onRefreshWearData={refreshWearData}
             onOpenPlanner={() => setView("planner")}
+            onOpenDay={(iso) => { setPlannerFocusDay(iso); setView("planner"); }}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onStyleRequest={(req) => { setRequest(req); setView("style"); setStylePanelOpen(true); }}
             brandDiscovery={brandDiscovery}
@@ -2107,7 +2121,6 @@ export default function App() {
           onDelete={() => { deleteItem(editItem.id); setView(editReturnView || "closet"); }}
           onBack={() => setView(editReturnView || "closet")}
           onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}
-          onOpenItem={(it) => { setEditItem(it); window.scrollTo(0, 0); }}
           onOpenDay={(iso) => { setPlannerFocusDay(iso); setView("planner"); }}
           onOpenLook={(id) => { setSavedFocusLook(id); setView("favorites"); }}/>
       )}
@@ -2300,6 +2313,12 @@ export default function App() {
             <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 16px 2px", fontSize:12, color:"var(--color-text-muted)"}}>
               <span style={s.spinner}/>
               Generating more looks…
+            </div>
+          )}
+          {outfits?.length > 0 && poolRead && styling !== true && (
+            <div style={{ padding: "4px 16px 2px", fontSize: 11, color: "var(--color-text-muted)" }}>
+              Styled from {poolRead.read} of the {poolRead.total} pieces in this closet
+              {poolRead.read < poolRead.total ? ` — the rest sit outside ${poolRead.occasion || "this room"}, your chips, or this weather.` : "."}
             </div>
           )}
           {outfits && outfits.map((look, i) => (

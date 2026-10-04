@@ -92,7 +92,7 @@ export function ensureThumb(item) {
   pump();
 }
 
-export default function Thumb({ item, alt, title, style }) {
+export default function Thumb({ item, alt, style }) {
   const id = item?.id;
   const [src, setSrc] = useState(() => (id && known.has(id) ? thumbUrl(id, item?.image) : item?.image));
 
@@ -111,7 +111,6 @@ export default function Thumb({ item, alt, title, style }) {
     <img
       src={src || item?.image}
       alt={alt}
-      title={title}
       loading="lazy"
       decoding="async"
       style={style}

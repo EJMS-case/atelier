@@ -2,6 +2,48 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Home reads her way: Most worn by garment, the resting list for the season, swaps that keep the job and the colour, worn looks as outfits; the standard on two clocks; the chat faster — 2026-10-04
+
+### Why
+
+Owner, on the landing page: *"combine work and work dinner … show me most worn clothing and garments and skip most worn shoes, bags, jewelry … prioritize shirts first, blazers second, pants, skirts, then dresses"* · *"It's chilly now so the suggestion of shorts doesn't work anymore and it is mostly shorts"* · *"I can't swap trousers for jeans. I can't swap a blue blazer for a red one. But perhaps I can swap my blue blazer for a cardigan?"* · *"I want to actually see the outfit that was stylish all together as an outfit. I want to click it and see the whole canvas, not the individual piece"* · *"When an outfit has 2 pairs of shoes, show one"* · *"The evaluator and stylist chat … outside of it being slow, it's still using 'rules'"* · *"How do I know that the code is reading my whole relevant wardrobe when I am in style me?"* Rows first:
+
+1. **"Mostly shorts" was a reader bug, not the weather.** `isComfortCoded` read a piece's formality with `Number(item.formality)`, and `Number(null)` is `0` — so every piece she has not filed a formality on (227 of her 294 garments: all 19 trousers, 29 of 30 blouses, 14 of 15 cardigans, every pullover) counted as "f0, a lounge piece" and was kept out of Back in Rotation, the recap's swaps and challenge, and the colour stories. The shorts are filed f3, so they were the resting list. One reader (`formalityOf`) now says *unknown*, never lounge.
+2. **The forward nudges were dressing for the past.** Back in Rotation read the afternoon's forecast (Mild, on the day she wrote); the recap's swaps and challenge read the WINDOW's dominant weather (Warm — September). Neither read October.
+3. **"Try instead" swapped within Bottoms > Pants**, which holds Trousers, Jeans, Ponte, Satin/Silk and Printed — so a trouser's alternatives were jeans, and a blazer's were any blazer in any colour.
+4. **Her office wears are one room**: 49 Work looks against 4 Work Dinner, the same pieces; a four-wear strip of 1×s said nothing. And Most worn ranked shoes and bags first (Elsa slide 9×, the Rhea bag 7×), which she already knows she repeats.
+5. **A worn look showed as four loose thumbs** (the recap's picks; a garment's *In Your Looks* rows), each tap opening a piece's Edit screen rather than the outfit. 8 of her 93 looks stage two pairs of shoes.
+6. **THE STANDARD read as a checklist** — "exactly ONE hero", "at most 2 non-neutral colours", "Never all-fitted" — numbered absolutes the model was tallying, with *current* one word in nine.
+
+### Changed
+
+- **Most worn** (`wearApi.js`): the rooms are Work (Work Dinner folds in — `ROOM_OF`), Casual, Dinner. A strip shows **garments only** (`wornGroupOf`: shoes, bags, belts and accessories never rank — "the constants of her looks"), up to eight, taken a round at a time across her groups — the top shirt, blazer, trousers, skirt, dress, then the seconds — and shown in that order, so a strip reads as the uniform she reaches for. Pullovers count as tops, cardigans as layers, shorts with pants.
+- **`formalityOf(item)`** in `utils/item-helpers.js` is the reader for the formality column (null / "" → null); `isComfortCoded` and the recap's swap register read it. The resting list on her phone goes from the filed few to the whole closet that is actually resting.
+- **`resurfaceBucket(forecast)`** in `wardrobe-coverage.js`: the colder of today's forecast and the month, for every wear-it-this-week nudge — Back in Rotation's filter and header, the recap's swaps and challenge (`buildRecap({ bucket })`). A mild October afternoon is still October; a failed fetch is still the month. Style Me keeps reading the live forecast alone: a request is one day, a nudge is a week.
+- **"Try instead" is a reasonable swap** (`recapData.js`): `swapShelf` names the job (woven top / sleeveless top / fine knit top / pullover / layer = blazers and cardigans / jacket / coat / trouser / jean / shorts / skirt by length / dress by length / jumpsuit / set) and `swapTier` keeps the colour — the same family first, neutral for neutral second, never a colour for a colour — and the register (within a formality step where both are filed). Trousers → trousers; a navy blazer → a navy cardigan, never the red blazer; a camel blazer may become a black cardigan. Weather is this week's, swaps never repeat across pieces.
+- **A worn look is an outfit** (`components/LookTile.jsx`): the recap's *Most stylish* picks and a garment's *In Your Looks* rows draw the composed look — her saved arrangement from the row (`look.layout` / `entry.layout`), the portrait recipe otherwise, every piece from its thumb — with **one pair of shoes** (`oneShoe`, caller-side so the collage itself still never drops a piece). A tap opens the day in the Planner (`onOpenDay`, now also wired through Home) or the look under Saved, where every piece is its own tap. The recap's per-room thumb rows under the utilisation line are gone — Home's Most worn is the one most-worn strip.
+- **THE STANDARD speaks as taste on two clocks**: a preface that no single line decides a look and a break that wins is called a win; "one hero", "usually two or three colours", "all-fitted reads tight; all-oversized reads lost", a wider formality spread as "a cost to name, and sometimes the high × low that makes the look"; and line 9 is now **CURRENT and TIMELESS judged together** (current against the researched brief, timeless as five-years-on), with the three verdicts named. `OPINION_RULES` gains: numbers in the context are how the app describes a look, what they add up to is the stylist's call. The office and the open blazer stay the two fixed points. Every opinion surface (chat, Evaluate, the look-back judge, trips) composes from this.
+- **The chat runs at `low` effort, `max_tokens` 6000** (was `medium`, 8000), like Evaluate; holding the line under pushback comes from the standard and the opinion rules in the cached block, not from thinking depth.
+- **Style Me says how much of the closet it read**: a line over the looks — *Styled from 212 of the 281 pieces in this closet — the rest sit outside Work, your chips, or this weather.* The number is the sampler's inventory count (there is no cap; `BUCKET_TARGETS` is 9999 per bucket) against the closet it styled from.
+
+### Downstream, four ways
+
+- **Efficiency.** No new requests anywhere: Home's tiles draw the thumbs the strips already drew (a look of six is six thumbs either way); the recap's layouts ride the `select=*` rows Home already holds. Chat: `medium` → `low` cuts the billed thinking on every turn; the system block changed (THE STANDARD), so the first chat or Evaluate after deploy writes a new cache entry — once per session, as before. Bundle: `EditorialCollage` and the layout engine now ride Home's chunk as well as the planner's and Edit's (one shared chunk, loaded once); the swap reader and `LookTile` are ~2 kB.
+- **Effectiveness.** The resting list is finally the resting closet (227 garments were invisible); swaps keep the job and the colour, so every "try instead" is one she could actually make; the nudges dress for the week she is in; the standard's wording reaches every surface that judges a look at once. The Work + Work Dinner fold is a wear-record read only — Style Me's Work Dinner brief (no jeans, one evening cue) is untouched.
+- **Speed.** Chat first byte after a short think instead of a long one. Home does one more pure pass (`swapTier` over the resting garments per leaned-on piece — ~250 × 6 comparisons) that is not measurable on the phone.
+- **Education.** Nothing new to record; the chat still distils lessons every turn, applied swaps still teach.
+
+### Tests
+
+- New `test:recap-data` (6): `swapShelf` (a trouser is never a jean; blazer and cardigan share the layer shelf; a midi is not a mini), `swapTier` (same job + same colour; neutral for neutral second; never a colour for a colour; register within a step), `buildRecap` (trousers → the other trousers; navy blazer → navy cardigan; shorts out of a Cool week's challenge; the layout rides the look; no per-room strip), `resurfaceBucket`, `oneShoe`, and `formalityOf` / `isComfortCoded` (unfiled is unknown, never lounge).
+- `test:wear`: three rooms; a Work + Work Dinner log counts once under Work; `wornGroupOf`; Most worn takes a round across her groups, shoes and bags never, a thin closet fills from one group.
+- Render walk (39 steps): *In Your Looks* now also asserts the row draws a look tile that opens the day.
+
+### Data
+
+Nothing written. The 227 unfiled formalities are hers to file (the Edit screen has the field); the app now reads an unfiled one as unknown.
+
+
 ## [Unreleased] — Planner squares show the look as she built it; months browse as one; filters by room and weather; the evaluator scores on two clocks and runs in the background — 2026-10-04
 
 ### Why
