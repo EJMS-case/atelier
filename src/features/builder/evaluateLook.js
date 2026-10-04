@@ -134,22 +134,23 @@ export async function evaluateLook(items, apiKey, opts = {}) {
     inspirations,
   });
 
-  // Adaptive thinking at `low` effort (owner, 2026-10-04: "The evaluator is
-  // extremely slow"). This generation's low still outreasons the no-thinking
-  // call this surface ran on until October, and the time she waits is mostly
-  // thinking: medium was spending tens of seconds deliberating before the
-  // first byte of the card. The rubric above, not the thinking budget, is
-  // what makes the read sharp. Thinking tokens count against max_tokens even
-  // though they never render — the 900→1400 truncation saga (2026-08-19) was
-  // that in disguise — so the cap leaves headroom over the ~900-token JSON.
+  // Adaptive thinking at `medium` effort. It ran `low` for a few hours on
+  // 2026-10-04 ("The evaluator is extremely slow") and went back the same
+  // day on her call: "I do want the reads to be deliberate. I want my
+  // stylist to be a high end stylist, not just throwing things together."
+  // The run lives in the background now (RUN_KEYS.builderEvaluate), so the
+  // deliberation costs her nothing on screen. Thinking tokens count against
+  // max_tokens even though they never render — the 900→1400 truncation saga
+  // (2026-08-19) was that in disguise — so the cap leaves headroom over the
+  // ~900-token JSON.
   // No sampling params: `temperature` is a hard 400 on these models. The
   // system block is the chat's, cache_control and all, so the two surfaces
   // share one cache.
   const request = (model) => anthropicFetch({
     model,
-    max_tokens: 4000,
+    max_tokens: 6000,
     thinking: { type: "adaptive" },
-    output_config: { effort: "low" },
+    output_config: { effort: "medium" },
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   }, { apiKey, signal: opts.signal });

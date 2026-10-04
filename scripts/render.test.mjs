@@ -456,6 +456,8 @@ await check("Planner → a planned square draws the look as composed, not as a g
 // month and in all, and Clear brings the month back.
 await check("Planner → the occasion filter fades the days outside it and counts the ones inside", async () => {
   await setFilter("Filter by occasion", "Work");
+  // A filter is the one thing that loads the whole history; give it a beat.
+  await page.waitForTimeout(600);
   const faded = await page.evaluate((day) => getComputedStyle(document.querySelector(`button[aria-label^="${day},"]`)).opacity, iso(3));
   if (Number(faded) > 0.3) throw new Error(`a Casual day did not fade under the Work filter (opacity ${faded})`);
   const text = await page.evaluate(() => document.body.innerText);
@@ -469,14 +471,15 @@ await check("Planner → the occasion filter fades the days outside it and count
   if (/looks? this month/.test(await page.evaluate(() => document.body.innerText))) throw new Error("Clear did not clear the filter");
 });
 // "Can you update that to be more seamless between months?" — ‹ in the day
-// view steps to the previous planned day even when it sits in last month, and
-// the grid follows.
+// view steps to the previous planned day even when it sits in last month,
+// fetching that month on the way, and the grid follows.
 await check("Planner → ‹ in the day view crosses into the previous month", async () => {
   await page.evaluate((day) => document.querySelector(`button[aria-label^="${day},"]`)?.click(), iso(3));
   await page.waitForTimeout(300);
   const prev = await page.evaluate(() => { const b = document.querySelector('button[aria-label="Previous outfit"]'); if (!b || b.disabled) return false; b.click(); return true; });
   if (!prev) throw new Error("‹ is not offered although a planned day exists in the previous month");
-  await page.waitForTimeout(400);
+  // The previous month is fetched on the way when the grid did not show it.
+  await page.waitForTimeout(700);
   const text = await page.evaluate(() => document.body.innerText);
   if (!text.includes(monthLabelOf(PREV_MONTH_DAY))) throw new Error("the grid did not follow the day view into the previous month");
   if (!/WORN/.test(text)) throw new Error("the previous month's day did not open as a worn day");
