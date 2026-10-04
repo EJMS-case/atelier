@@ -22,9 +22,9 @@
 //   · The conversation is KEPT (stylist_chats, migration 0035) and every turn
 //     is distilled for a preference she expressed, which becomes a standing
 //     lesson every AI surface reads (learning.js).
-//   · MODEL_TOP with adaptive thinking at low effort (2026-10-04; it was
-//     medium); one fallback to MODEL_STRONG. The closet block is cached, so
-//     a turn costs a few cents.
+//   · MODEL_TOP with adaptive thinking at medium effort (deliberate, by her
+//     call); one fallback to MODEL_STRONG. The closet block is cached, so a
+//     turn costs a few cents.
 //
 // Still true from the 2026-08-20 rework:
 //   · The CURRENT LOOK rides the LAST user message, rebuilt fresh on every
@@ -171,19 +171,19 @@ export async function sendBuilderMessage({ messages, assembledItems, available, 
       : { role: m.role, content: m.content }
   );
 
-  // Adaptive thinking at `low` effort, like Evaluate (owner, 2026-10-04: the
-  // chat is "great but slow"). Holding a position under pushback comes from
-  // the standard and OPINION_RULES in the cached block, not from thinking
-  // depth — the 2026-09-10 fold was a prompt with no standard, at any
-  // effort. Thinking tokens still count against max_tokens even though they
-  // never render (the 2026-08-20 "every bubble cut off" bug), so the cap
-  // leaves headroom for both; the stream reader only accumulates text
-  // deltas, so the thinking never reaches the bubble.
+  // Adaptive thinking at `medium` effort (above the app-wide `low`). It ran
+  // `low` for a few hours on 2026-10-04 for speed; the owner's call, the
+  // same day: "I do want the reads to be deliberate. I want my stylist to
+  // be a high end stylist, not just throwing things together." Thinking
+  // tokens count against max_tokens even though they never render (the
+  // 2026-08-20 "every bubble cut off" bug), so the cap leaves headroom for
+  // both; the stream reader only accumulates text deltas, so the thinking
+  // never reaches the bubble.
   const request = (model) => anthropicFetch({
     model,
-    max_tokens: 6000,
+    max_tokens: 8000,
     thinking: { type: "adaptive" },
-    output_config: { effort: "low" },
+    output_config: { effort: "medium" },
     stream: true,
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: apiMessages,

@@ -92,12 +92,15 @@ let lastAnchorTime = null;
 
 // The occasion / weather she is browsing by, and every planned day the
 // planner has loaded, kept across the remounts a day → builder → back
-// round-trip causes. The first paint still asks for the visible month alone
-// (the request that has to be fast); the rest of her history — 117 rows over
-// nine months, 2026-10-04 — lands once, after that paint, so flipping months
-// and stepping ‹ › through looks never waits on the network again (owner:
-// "more seamless between months"). A write updates the store in place; focus
-// re-pulls the visible month, so cross-device edits still show up.
+// round-trip causes. A visit loads what the grid SHOWS — the month and the
+// spill-over days of its neighbours in the 42-cell grid — and keeps it; a
+// month she has not opened is not fetched until she opens it, or until ‹ ›
+// in the day view walks into it (owner, 2026-10-04: "I don't need the whole
+// history to load until I select that month … when I hit the next button,
+// I'd like it to go into the next month without having to close it out").
+// The one time the whole history lands is a filter: "every Work look" is a
+// question about every month. A write updates the store in place; focus
+// re-pulls the visible range, so cross-device edits still show up.
 let lastFilters = NO_FILTERS;
 let planStore = null; // { byIso, trips, monthsLoaded: Set<"YYYY-MM">, allAt }
 const PLAN_STORE_TTL_MS = 10 * 60 * 1000;
@@ -217,11 +220,9 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchClosetForecast(activeCloset).then(setForecast); }, [activeCloset?.id]);
 
-  // Merge one month's rows into the store: the month's old entries go, the
-  // fresh ones land, everything outside the month stays.
-  const mergeMonth = (monthStart, rows, tripRows) => {
-    const startIso = isoDate(startOfMonth(monthStart));
-    const endIso = isoDate(endOfMonth(monthStart));
+  // Merge one grid's rows into the store: the range's old entries go, the
+  // fresh ones land, everything outside the range stays.
+  const mergeRange = (monthStart, startIso, endIso, rows, tripRows) => {
     setPlans(prev => {
       const next = {};
       for (const iso of Object.keys(prev)) if (iso < startIso || iso > endIso) next[iso] = prev[iso];
@@ -238,31 +239,41 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
     monthsLoadedRef.current.add(monthKey(monthStart));
   };
 
-  // One month, from the cloud. `quiet` keeps the spinner off when the month
-  // is already painted from the store and this is a background re-pull.
+  // One month's GRID, from the cloud — the month plus the neighbouring days
+  // the 42-cell grid shows, so a September page draws its three August days
+  // and two October days as looks, not blanks. `quiet` keeps the spinner off
+  // when the range is already painted from the store and this is a
+  // background re-pull. Resolves to the rows it merged (the ‹ › probe reads
+  // them before the store has re-rendered); null on failure.
   const loadMonth = async (monthStart, { quiet = false } = {}) => {
     if (!quiet) setRefreshing(true);
     try {
-      const startIso = isoDate(startOfMonth(monthStart));
-      const endIso = isoDate(endOfMonth(monthStart));
+      const grid = monthGridDays(monthStart);
+      const startIso = isoDate(grid[0]);
+      const endIso = isoDate(grid[grid.length - 1]);
       const [rows, tripRows] = await Promise.all([
         fetchPlansBetween(startIso, endIso),
         fetchTripsBetween(startIso, endIso).catch(() => null),
       ]);
-      mergeMonth(monthStart, rows, tripRows);
+      mergeRange(monthStart, startIso, endIso, rows, tripRows);
       setSyncError("");
+      return rows || [];
     } catch (e) {
       setSyncError("Couldn't pull the latest plans from the cloud — tap Refresh to retry.");
+      return null;
     } finally {
       if (!quiet) setRefreshing(false);
     }
   };
 
-  // The rest of her history, once per TTL, after the visible month has
-  // painted. Trips come as one wide range for the same reason.
+  // The whole history, once per TTL — only while a filter is on, because a
+  // filter is a question about every month ("every Work look"). Trips come
+  // as one wide range for the same reason. `historyAt` tells the count line
+  // when "in all" is the truth rather than the loaded months alone.
+  const [historyAt, setHistoryAt] = useState(() => planStore?.allAt || 0);
   const loadEverything = async () => {
     if (Date.now() - allLoadedAtRef.current < PLAN_STORE_TTL_MS) return;
-    allLoadedAtRef.current = Date.now(); // claimed; a failure below lets the next mount retry
+    allLoadedAtRef.current = Date.now(); // claimed; a failure below lets the next try retry
     try {
       const [rows, tripRows] = await Promise.all([
         fetchAllPlans(),
@@ -276,6 +287,7 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       });
       if (Array.isArray(tripRows)) setTrips(tripRows);
       for (const r of rows) monthsLoadedRef.current.add(r.date.slice(0, 7));
+      setHistoryAt(allLoadedAtRef.current);
     } catch {
       allLoadedAtRef.current = 0;
     }
@@ -293,27 +305,30 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   };
 
   // The visible month: painted from the store at once when it is there, and
-  // fetched (with the spinner) when it is not; the whole history follows in
-  // the background either way. The tab regaining focus re-pulls the visible
-  // month so cross-device edits show up without a manual reload.
+  // fetched (with the spinner) when it is not. The tab regaining focus
+  // re-pulls the visible range so cross-device edits show up without a
+  // manual reload.
   const mountedRef = useRef(false);
   useEffect(() => {
     const known = monthsLoadedRef.current.has(monthKey(anchor));
     const mounting = !mountedRef.current;
     mountedRef.current = true;
-    let first;
     if (mounting) {
       // A mount re-pulls the visible month even when the store has it — a
       // look scheduled from the builder lands through App, not through here —
       // quietly when the month is already painted.
-      first = known ? loadMonth(anchor, { quiet: true }) : refreshPlans();
+      if (known) loadMonth(anchor, { quiet: true }); else refreshPlans();
       if (known && pendingFocusRef.current) { setActiveDay(pendingFocusRef.current); pendingFocusRef.current = null; }
-    } else {
-      first = known ? Promise.resolve() : refreshPlans();
+    } else if (!known) {
+      refreshPlans();
     }
-    first.finally(() => { loadEverything(); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
+  // A filter asks about every month: the whole history lands once it is on.
+  useEffect(() => {
+    if (hasActiveFilters(filters)) loadEverything();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
   useEffect(() => {
     // Only refresh when the tab becomes visible / focused — don't fire on
     // the visibilitychange that signals the tab going *hidden* (previously
@@ -372,6 +387,37 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   const filtering = hasActiveFilters(filters);
   const allMatches = useMemo(() => matchingDays(plans, filters), [plans, filters]);
   const monthMatches = useMemo(() => matchingDaysBetween(plans, filters, monthStartIso, monthEndIso), [plans, filters, monthStartIso, monthEndIso]);
+
+  // Open a day and bring the grid to its month.
+  const goTo = (iso) => {
+    setActiveDay(iso);
+    const m = startOfMonth(new Date(iso + "T12:00:00"));
+    if (m.getTime() !== anchor.getTime()) setAnchor(m);
+  };
+  // ‹ › past what is loaded: pull the next month's grid (and the one after,
+  // up to three) and step into the first planned day there, so a walk
+  // through September runs on into October without closing the day view.
+  // A probe that finds nothing marks that day's arrow so it greys out.
+  const noMoreRef = useRef(new Set());
+  const [, bumpEdges] = useState(0);
+  const stepBeyond = async (dir) => {
+    const from = activeDay;
+    const base = startOfMonth(new Date(from + "T12:00:00"));
+    const pool = { ...plans };
+    for (let k = 1; k <= 3; k++) {
+      const m = new Date(base.getFullYear(), base.getMonth() + dir * k, 1);
+      if (!monthsLoadedRef.current.has(monthKey(m))) {
+        const rows = await loadMonth(m, { quiet: true });
+        if (!rows) break;
+        for (const r of rows) pool[r.date] = r;
+      }
+      const matches = matchingDays(pool, filters);
+      const hit = dir > 0 ? matches.find(d => d > from) : [...matches].reverse().find(d => d < from);
+      if (hit) { goTo(hit); return; }
+    }
+    noMoreRef.current.add(`${from}:${dir}`);
+    bumpEdges(n => n + 1);
+  };
 
   // Swipe the grid to flip the month — the gesture a phone expects of a
   // calendar. Mostly-horizontal and long enough to be deliberate.
@@ -603,7 +649,7 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, fontSize: 11, color: PALETTE.muted }}>
           <span>
             {monthMatches.length === 0 ? "No" : monthMatches.length} {[filters.occasion, filters.weather].filter(Boolean).join(" · ")} look{monthMatches.length === 1 ? "" : "s"} this month
-            {allMatches.length > monthMatches.length ? ` · ${allMatches.length} in all` : ""}
+            {historyAt ? (allMatches.length > monthMatches.length ? ` · ${allMatches.length} in all` : "") : " · counting the other months…"}
           </span>
           <button onClick={() => setFilters(NO_FILTERS)}
             style={{ background: "none", border: "none", fontSize: 11, color: PALETTE.ink, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
@@ -716,18 +762,17 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       </button>
 
       {activeDay && (() => {
-        // ‹ › step through every planned day the store holds — the whole
-        // history once it has landed — inside the filters she picked, and
-        // across month ends; the grid follows, so closing lands on the month
-        // she reached. A day outside the filter (she tapped it) still steps
-        // to the nearest day inside.
+        // ‹ › step through every planned day the store holds, inside the
+        // filters she picked, and across month ends; the grid follows, so
+        // closing lands on the month she reached. A day outside the filter
+        // (she tapped it) still steps to the nearest day inside. Past the
+        // loaded range the arrow stays live and FETCHES the next month on
+        // the way (stepBeyond), up to three months out; only a probe that
+        // finds nothing greys it, for that day.
         const prevDay = [...allMatches].reverse().find(d => d < activeDay) || null;
         const nextDay = allMatches.find(d => d > activeDay) || null;
-        const goTo = (iso) => {
-          setActiveDay(iso);
-          const m = startOfMonth(new Date(iso + "T12:00:00"));
-          if (m.getTime() !== anchor.getTime()) setAnchor(m);
-        };
+        const prevEdge = noMoreRef.current.has(`${activeDay}:-1`);
+        const nextEdge = noMoreRef.current.has(`${activeDay}:1`);
         return (
         <DayModal
           key={activeDay}
@@ -740,8 +785,8 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
           forecast={forecast}
           forecastLabel={`${activeCloset?.name || "NYC"} forecast`}
           hasApiKey={!!apiKey}
-          onPrev={prevDay ? () => goTo(prevDay) : undefined}
-          onNext={nextDay ? () => goTo(nextDay) : undefined}
+          onPrev={prevDay ? () => goTo(prevDay) : prevEdge ? undefined : () => stepBeyond(-1)}
+          onNext={nextDay ? () => goTo(nextDay) : nextEdge ? undefined : () => stepBeyond(1)}
           onClose={() => setActiveDay(null)}
           onPickSaved={(log, overrides) => handleAssignSaved(activeDay, log, overrides)}
           onGenerate={(occasion, label) => handleGenerateForDay(activeDay, occasion, label)}

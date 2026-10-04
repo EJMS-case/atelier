@@ -185,10 +185,14 @@ Conventions worth knowing:
   2026-10-04): `<EditorialCollage tile layoutOverride={layoutFor(plan)}>` —
   her saved arrangement, every piece from its thumb, the portrait recipe when
   a row has none. `compact` (the grid of tiles) is for the trip screen's day
-  cards only. **The planner keeps every month it has loaded** (`planStore` in
-  `CalendarView.jsx`): the visible month paints first, the history lands once
-  in the background, and a flip or a ‹ › step never refetches. Which days
-  match an occasion / weather pick is one reader, `planFilters.js`.
+  cards only. **The planner loads what the grid shows and keeps it**
+  (`planStore` in `CalendarView.jsx`): a visit fetches the month's 42-cell
+  grid (the month plus its spill-over days), a month she has not opened is
+  not fetched until she does, and ‹ › in the day view fetch the next month
+  on the way (`stepBeyond`) rather than dead-ending (owner, 2026-10-04: "I
+  don't need the whole history to load until I select that month"). A
+  filter is the one thing that loads the whole history. Which days match an
+  occasion / weather pick is one reader, `planFilters.js`.
 - **A piece's formality is read through `formalityOf()`** (`utils/item-helpers.js`):
   null, undefined and "" are *unknown*, never f0. `Number(null)` is `0`, and
   a bare `Number(it.formality) <= 2` read every unfiled piece as loungewear —
@@ -212,9 +216,11 @@ Conventions worth knowing:
   the only preferences that are verdicts. THE STANDARD itself (`standard.js`)
   is written as taste — a preface that no single line decides a look, and
   line 9 is the two clocks — and every opinion surface composes from it. It
-  runs as `RUN_KEYS.builderEvaluate` at `low` effort (the chat too, since
-  2026-10-04); a surface that shows its card binds to the run first
-  (`canvasKey`), so a card never appears over a different look.
+  runs as `RUN_KEYS.builderEvaluate` at `medium` effort, the chat too (owner,
+  2026-10-04: "I do want the reads to be deliberate" — both ran `low` for a
+  few hours and went back on her call; the background run hides the wait); a
+  surface that shows its card binds to the run first (`canvasKey`), so a
+  card never appears over a different look.
 - **A long AI call runs in `src/lib/backgroundRun.js`, never in a screen's
   state.** `startRun(key, task)` once, `useRun(key)` anywhere; the last
   result persists per device. A run she can navigate away from and lose is

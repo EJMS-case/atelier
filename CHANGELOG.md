@@ -2,6 +2,35 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The planner loads what the grid shows and fetches the next month from ‹ ›; the stylist's reads are deliberate again — 2026-10-04
+
+### Why
+
+Owner, after the planner work: *"if the month of September, for example, has 3 days from August and 2 days in October in a calendar view, I want to see those days on the calendar as well. I don't need the whole history to load until I select that month. And when I select an outfit from planner and hit the next button, I'd like it to go into the next month without having to close it out and select again."* And on the chat and evaluator: *"I do want the reads to be deliberate. I want my stylist to give me a high end stylist not just throwing things together."*
+
+### Changed
+
+- **A month visit loads its grid, not its month** (`loadMonth` in `CalendarView.jsx`): the 42-cell range, so a September page draws its August and October spill-over days as looks. Nothing else is fetched until she opens that month — the background whole-history load from earlier today is gone from the mount path.
+- **‹ › in the day view fetch the next month on the way** (`stepBeyond`): past the loaded range the arrow stays live, pulls the next month's grid (up to three months out), and opens the first planned day there; the grid follows. Only a probe that finds nothing greys the arrow, for that day.
+- **A filter still loads the whole history** — "every Work look" is a question about every month — and the count line says *counting the other months…* until it has landed, then *N in all*.
+- **The chat and the evaluator think at `medium` again** (`max_tokens` 8000 / 6000). Both ran `low` for a few hours today for speed; the evaluator runs in the background, so the deliberation costs her nothing on screen, and the chat streams as it thinks.
+
+### Downstream, four ways
+
+- **Efficiency.** A planner open is one grid request (~35 rows) instead of one month plus the whole history (~117 rows + a wide trips range); a walk through ‹ › costs one request per month it enters, once per session. A filter costs what it did.
+- **Effectiveness.** The spill-over days she asked about are drawn; ‹ › never dead-ends at a month boundary.
+- **Speed.** Less on the wire at open; the first ‹ › into an unloaded month waits one short request (cached after). Chat and Evaluate: a longer think before the first byte, by her call.
+- **Education.** Unchanged.
+
+### Tests
+
+- Render walk (39 steps): the filter step waits for the history; the cross-month step waits for the month fetched on the way.
+
+### Data
+
+Nothing written.
+
+
 ## [Unreleased] — Home reads her way: Most worn by garment, the resting list for the season, swaps that keep the job and the colour, worn looks as outfits; the standard on two clocks; the chat faster — 2026-10-04
 
 ### Why

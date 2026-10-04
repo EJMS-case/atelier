@@ -1,12 +1,26 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-04** (third pass), after Home began reading her way (Most worn by garment in her order with Work Dinner folded into Work; the resting list and the recap's nudges dressed for the colder of the forecast and the month; "try instead" swaps that keep a piece's job and colour; worn looks drawn as outfits that open the whole canvas), the standard was rewritten as taste on two clocks, the chat moved to `low` effort, Style Me began saying how much of the closet it read, and the null-formality reader bug (227 garments hidden from every resting surface) was fixed; earlier the same day the planner squares began drawing each day's look as she built it, the months began browsing as one and the evaluator moved to a two-clock score in the background; before that the planner speed-up, the collage that draws every piece, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild, the canvas stacking fix and the evaluation card rework; before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-04** (fourth pass), after the planner moved to loading what the grid shows (the month plus its spill-over days) with ‹ › fetching the next month on the way, and the chat and evaluator went back to deliberate (`medium`) thinking on her call; before that Home began reading her way (Most worn by garment in her order with Work Dinner folded into Work; the resting list and the recap's nudges dressed for the colder of the forecast and the month; "try instead" swaps that keep a piece's job and colour; worn looks drawn as outfits that open the whole canvas), the standard was rewritten as taste on two clocks, the chat moved to `low` effort, Style Me began saying how much of the closet it read, and the null-formality reader bug (227 garments hidden from every resting surface) was fixed; earlier the same day the planner squares began drawing each day's look as she built it, the months began browsing as one and the evaluator moved to a two-clock score in the background; before that the planner speed-up, the collage that draws every piece, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild, the canvas stacking fix and the evaluation card rework; before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-04 · The planner loads the grid, ‹ › fetch the next month; the reads are deliberate again
+
+**Owner:** *"I don't need the whole history to load until I select that month … when I hit the next button, I'd like it to go into the next month without having to close it out."* And: *"I do want the reads to be deliberate."* CHANGELOG has the detail. To carry:
+
+1. **`loadMonth` loads the 42-cell grid range**, and resolves to the rows it merged. There is no whole-history load on mount any more; `loadEverything` runs only while a filter is on (`historyAt` gates the *in all* count).
+2. **`stepBeyond(dir)` is how ‹ › leave the loaded range**: it pulls up to three months' grids and opens the first planned day it finds; `noMoreRef` greys an arrow only after a probe that found nothing. Don't make the arrow depend on the store alone — that is the dead end she reported.
+3. **Chat `medium` / 8000, Evaluate `medium` / 6000** — her call. The evaluator's cost is hidden by the background run; the chat streams. Don't drop them to `low` for speed again without asking.
+
+**Watch-items:**
+- **Her first ‹ › walk across a month end:** the first step into an unloaded month waits one request (quiet, no spinner). If it feels slow on the phone, the lever is to prefetch the adjacent months after the first paint (two quiet `loadMonth` calls) — cheap, and still not "the whole history".
+- **The filter count line** reads *counting the other months…* for a beat before *N in all*; by design.
+
+**Verified before push:** `npm test` (51 suites), `npm run build`, `npm run smoke` green (39 walk steps).
 
 ### 2026-10-04 · Home reads her way; the standard on two clocks; the chat faster; the null-formality bug
 
@@ -35,7 +49,7 @@ it through.
 **Owner, four asks:** *"keep the format I have saved in the builder on the individual calendar squares"*, *"more seamless between months … filter by occasion and/or weather"*, *"The evaluator is extremely slow … the ranking I get may be based on hard rules rather than this season's style and timeless trends"*, and continue the handoff. Rows first: 100 of 117 planned days already carry her arrangement; the evaluator's task text was telling the model the validator's notes "count heavily against the score". CHANGELOG has the detail. To carry:
 
 1. **A planner square is `<EditorialCollage tile layoutOverride={layoutFor(plan)}>`** at 3:4 under the date; `layoutFor` resolves the row's own layout or the saved look's (fetched slim through `fetchOutfitLogLayouts`). The day view reads the same `layout` prop. `compact` is the trip screen's day cards only.
-2. **`planStore` (module-level in `CalendarView.jsx`) holds every loaded month**; `loadMonth` merges one month, `loadEverything` lands the history once per 10 min after the first paint. Writes update the store in place; mount and focus re-pull the visible month quietly. Don't add a per-month refetch on flip — that is the slowness she reported.
+2. **`planStore` (module-level in `CalendarView.jsx`) holds every loaded month**; `loadMonth` merges one month's grid. *(Superseded the same day: the whole-history load on mount is gone — see the entry above; a filter is the one thing that loads it.)* Writes update the store in place; mount and focus re-pull the visible range quietly. Don't add a per-month refetch on flip — that is the slowness she reported.
 3. **`features/planner/planFilters.js` is the one reader for "does this day match"** (`planMatchesFilters`, `matchingDays`); the grid dims by it, the day view's ‹ › walk by it. A new way to tag a plan's room or weather goes in `planOccasions` / `planWeathers`, once.
 4. **The evaluator is `RUN_KEYS.builderEvaluate`**; the builder binds to the run it started or to a stored card for exactly its canvas (`canvasKey`). Its score is a stylist's on two clocks; LOOK FACTS never move the number by themselves. `effort: "low"`, `max_tokens: 4000`.
 5. **`regenerateWithout` in `TripDetailView` calls `poolForTripDay`** — the leave-behind restyle respects the travel-day rule now; the 2026-09-22 watch-item is closed.
