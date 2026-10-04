@@ -18,12 +18,12 @@ import LookBackCard from "../recap/LookBackCard.jsx";
 // Shared with the recap's challenge/alternatives so the lists never drift.
 import { isResurfaceCandidate } from "../recap/recapData.js";
 import { resolveItemIds, filterByWeather } from "../../utils/item-helpers.js";
-import { autoColorPairs, rotateDaily, hexForColorLabel, seasonalBucketForDate } from "../../utils/wardrobe-coverage.js";
+import { autoColorPairs, rotateDaily, hexForColorLabel, resurfaceBucket } from "../../utils/wardrobe-coverage.js";
 import { PALETTE } from "../../constants/palette.js";
 import Thumb from "../../components/Thumb.jsx";
 
 
-export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop, onNavigate }) {
+export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenDay, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop, onNavigate }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -60,15 +60,16 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
   // and the Look-Back card — reads accurate wears.
   const wearItems = useMemo(() => applyWearStats(items, wearStats || {}), [items, wearStats]);
 
-  // Most worn, by the room she dressed for (Work / Work Dinner / Casual /
-  // Dinner), swim, gym and lounge aside — owner, 2026-09-22. Rooms with no
-  // wears are left out rather than shown empty. A wear is a RECORD, so it
-  // resolves against the wardrobe (both closets): the sandal she reached for
-  // all of an Arizona week still ranks while she is standing in NYC. The
-  // resting list below stays on `items` — what she can wear THIS week.
+  // Most worn, by the room she dressed for (Work — Work Dinner folded in —
+  // Casual / Dinner; owner 2026-09-22 and 2026-10-04), garments only, in her
+  // order: shirts, blazers, pants, skirts, dresses. Rooms with no wears are
+  // left out rather than shown empty. A wear is a RECORD, so it resolves
+  // against the wardrobe (both closets): the blouse she reached for all of
+  // an Arizona week still ranks while she is standing in NYC. The resting
+  // list below stays on `items` — what she can wear THIS week.
   const wornByRoom = useMemo(() => {
     const record = Array.isArray(wardrobe) && wardrobe.length ? wardrobe : items;
-    return mostWornByRoom(applyWearStats(record, wearStats || {}), 5);
+    return mostWornByRoom(applyWearStats(record, wearStats || {}), 8);
   }, [wardrobe, items, wearStats]);
 
   // Today's weather bucket at the ACTIVE CLOSET's location (cached 6h by
@@ -88,16 +89,20 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayIso, activeCloset?.id]);
 
+  // The weather every wear-it-this-week nudge on Home dresses for: the colder
+  // of today's forecast and the month (resurfaceBucket), so one mild October
+  // afternoon never puts shorts back in rotation and a failed weather fetch
+  // can never surface August wool. The recap's swaps and challenge read the
+  // same bucket.
+  const nudgeBucket = useMemo(() => resurfaceBucket(todayBucket), [todayBucket]);
+
   // Back in Rotation = restyle-worthy garments only (isResurfaceCandidate: no
-  // tees / activewear / lounge / swim, per the owner). Season-aware ALWAYS —
-  // live forecast bucket when it resolves, month-based NYC bucket otherwise,
-  // so a failed weather fetch can never surface August wool. Date-seeded
-  // rotation keeps the surfaced set fresh daily.
+  // tees / activewear / lounge / swim, per the owner), for this week's
+  // weather; date-seeded rotation keeps the surfaced set fresh daily.
   const neglected = useMemo(() => {
     const resting = neglectedItems(wearItems, 60).filter(isResurfaceCandidate);
-    const bucket = todayBucket || seasonalBucketForDate();
-    return rotateDaily(filterByWeather(resting, bucket), todayIso);
-  }, [wearItems, todayBucket, todayIso]);
+    return rotateDaily(filterByWeather(resting, nudgeBucket), todayIso);
+  }, [wearItems, nudgeBucket, todayIso]);
 
   // Color Stories — in-fashion color-blocking pairs her closet can make right
   // now (auto-derived, nothing to type), excluding pairs she already keeps by
@@ -276,10 +281,10 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
           the shared planner rows passed down from App. */}
       {items.length > 0 && (
         <LookBackCard items={wearItems} wardrobe={wardrobe} favorites={favorites || []} apiKey={apiKey}
-          plans={plans} onEditItem={onEditItem} onStyleItem={onStyleItem}/>
+          plans={plans} bucket={nudgeBucket} onEditItem={onEditItem} onStyleItem={onStyleItem} onOpenDay={onOpenDay}/>
       )}
 
-      {/* Most worn — one strip per room */}
+      {/* Most worn — one strip per room, garments in her order */}
       {wornByRoom.length > 0 && (
         <section style={sectionStyle} aria-label="Most worn">
           <div style={sectionHeader}>MOST WORN</div>
@@ -326,7 +331,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
       {neglected.length > 0 && (
       <section style={sectionStyle}>
         <div style={sectionHeader}>
-          BACK IN ROTATION · RESTING 60+ DAYS · {(todayBucket || seasonalBucketForDate()).toUpperCase()}-READY
+          BACK IN ROTATION · RESTING 60+ DAYS · {nudgeBucket.toUpperCase()}-READY
         </div>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {neglected.slice(0, 10).map(it => (

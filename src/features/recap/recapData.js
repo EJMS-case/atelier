@@ -8,11 +8,12 @@
 // from the leaned-on / overwear tally — trips are meant to repeat pieces.
 
 import { outfitsOf } from "../planner/outfits.js";
-import { WEAR_ROOMS, wearEligible, wearRoomsOf } from "../wear/wearApi.js";
+import { wearEligible } from "../wear/wearApi.js";
 import { asArray } from "../../lib/multitag.js";
-import { filterByWeather, isComfortCoded } from "../../utils/item-helpers.js";
+import { filterByWeather, isComfortCoded, formalityOf } from "../../utils/item-helpers.js";
 import { getSubcatL2 } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
+import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
 
 // Categories that don't count as "leaned-on" garments — belts, jewelry and
 // other accessories, shoes, and bags repeat freely by design.
@@ -40,6 +41,61 @@ export function isResurfaceCandidate(it) {
   return !isComfortCoded(it);
 }
 
+// ── "Try instead" — what a REASONABLE swap is ───────────────────────────────
+// Owner, 2026-10-04: "I can't swap trousers for jeans. I can't swap a blue
+// blazer for a red one. But perhaps I can swap my blue blazer for a
+// cardigan? … reasonable swaps that are stylish, chic, and or timeless."
+// A swap keeps the piece's JOB in the look and its COLOUR, and only then
+// looks for a fresher piece. The job is the shelf below — one reader, so a
+// trouser's alternatives are trousers (never the jeans that share Bottoms >
+// Pants with them), a blazer's are blazers and cardigans (the office layer,
+// both worn open over the same tops), a midi dress's are midi dresses.
+export function swapShelf(it) {
+  const cat = it?.category, sub = it?.subcategory || "";
+  switch (cat) {
+    case "Tops":
+      if (sub === "Tanks" || sub === "Bodysuits") return "sleeveless top";
+      if (sub === "Light Knit Tops" || sub === "Polos") return "fine knit top";
+      return "woven top"; // Blouses, Shirts, Tops
+    case "Knits":
+      return sub === "Cardigans" ? "layer" : "pullover";
+    case "Outerwear":
+      if (sub === "Blazers") return "layer";
+      if (sub === "Coats") return "coat";
+      return "jacket";
+    case "Bottoms": {
+      const l2 = getSubcatL2(cat, sub);
+      if (l2 === "Skirts") return sub === l2 ? "skirt" : `skirt ${sub.toLowerCase()}`;
+      if (l2 === "Shorts") return "shorts";
+      if (sub === "Jeans") return "jean";
+      if (sub === "Printed" || sub === "Satin/Silk") return `${sub.toLowerCase()} pant`;
+      return "trouser"; // Trousers, Ponte, a bare "Pants"
+    }
+    case "Dresses":
+      return sub ? `dress ${sub.toLowerCase()}` : "dress";
+    case "Jumpsuits": return "jumpsuit";
+    case "Sets": return "set";
+    default: return null;
+  }
+}
+
+// Colour is kept: the same family first, or neutral for neutral (a camel
+// blazer can become a black cardigan — neutrals stack freely; a navy one
+// never becomes red). Formality, where she has filed both, stays within a
+// step. Returns 0 when the pieces don't swap, 1 for a same-family swap, 2
+// for a neutral-for-neutral swap — the caller ranks 1 before 2.
+export function swapTier(target, candidate) {
+  if (!candidate || candidate.id === target.id) return 0;
+  const shelf = swapShelf(target);
+  if (!shelf || swapShelf(candidate) !== shelf) return 0;
+  const tf = formalityOf(target), cf = formalityOf(candidate);
+  if (tf !== null && cf !== null && Math.abs(tf - cf) > 1) return 0;
+  const a = effectiveColorFamily(target), b = effectiveColorFamily(candidate);
+  if (a && b && a === b) return 1;
+  if (a && b && NEUTRAL_PAIR_FAMILIES.has(a) && NEUTRAL_PAIR_FAMILIES.has(b)) return 2;
+  return 0;
+}
+
 function daysAgo(iso, fromIso) {
   if (!iso) return Infinity;
   const a = new Date(iso + "T12:00:00").getTime();
@@ -62,8 +118,11 @@ export function monthWindow(todayIso, days = 30) {
  * @param {Set<string>} p.favoritePieceIds - item ids the user hearted
  * @param {string} p.todayIso
  * @param {number} p.days
+ * @param {string|null} [p.bucket] - the weather the FORWARD nudges dress for
+ *   (resurfaceBucket: the colder of today's forecast and the month). Null →
+ *   no weather filter on swaps and the challenge.
  */
-export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(), favoritePieceIds = new Set(), todayIso, days = 30 }) {
+export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(), favoritePieceIds = new Set(), todayIso, days = 30, bucket = null }) {
   const itemMap = {};
   (items || []).forEach(it => { itemMap[it.id] = it; });
   const { startIso, endIso } = monthWindow(todayIso, days);
@@ -89,6 +148,10 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
         where: (p.notes || o.label || p.day_label || "").trim(),
         hearted: p.outfit_log_id ? favoriteLogIds.has(p.outfit_log_id) : false,
         itemIds: ids,
+        // Her saved arrangement, when the row carries one (the planner square
+        // draws the same); a look that only points at a saved look draws the
+        // portrait recipe here rather than fetching the log for a Home card.
+        layout: idx === 0 && Array.isArray(p.layout_data) && p.layout_data.length ? p.layout_data : null,
       });
     });
   });
@@ -103,10 +166,10 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   };
   const occasions = tally(looks, "occasion");
   const weathers = tally(looks, "weather");
-  // The season the recap covers — used to keep forward suggestions weather-
-  // appropriate (no chunky wool "rediscover" in a Hot month). Null → no filter.
-  const seasonWeather = weathers[0]?.key || null;
-  const forSeason = (list) => (seasonWeather ? filterByWeather(list, seasonWeather) : list);
+  // Forward nudges dress for THIS week (the caller's resurfaceBucket), not
+  // for the weather the window had: a September-heavy month in review used
+  // to hand October a challenge of Warm pieces. Null → no filter.
+  const forSeason = (list) => (bucket ? filterByWeather(list, bucket) : list);
 
   // "Where" highlights — dated notes, newest first, one per note text.
   const seenWhere = new Set();
@@ -134,23 +197,23 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     .filter(x => x.item && x.wears >= 2)
     .sort((a, b) => b.wears - a.wears || (b.item.name || "").localeCompare(a.item.name || ""));
 
-  // "Try instead" — for each overworn piece, a same-category piece she owns but
-  // hasn't worn this month, favoring hearted then longest-rested. Suggestions
-  // are (a) weather-appropriate for the season and (b) NOT reused across pieces,
-  // so three overworn tops don't all show the identical three swaps.
-  // "Try instead" swaps stay within the garment's L2 group — a pencil skirt's
-  // alternatives are skirts, not shorts (both live under Bottoms).
+  // "Try instead" — for each leaned-on piece, up to three pieces she owns that
+  // do the same job in the same colour (swapTier above), haven't been worn
+  // this window, suit this week's weather, and are not reused across pieces
+  // (three leaned-on tops never show the identical three swaps). Same-family
+  // swaps lead, then neutral-for-neutral; within a tier, hearted first, then
+  // longest-rested.
   const usedAltIds = new Set();
   const alternativesFor = (target) => {
-    const targetL2 = getSubcatL2(target.category, target.subcategory);
     const picks = forSeason((items || [])
-      .filter(it => it.category === target.category && it.id !== target.id
-        && (!targetL2 || getSubcatL2(it.category, it.subcategory) === targetL2)
-        && isResurfaceCandidate(it)
-        && it.image && !wornThisMonth.has(it.id) && !usedAltIds.has(it.id)))
-      .sort((a, b) => (favoritePieceIds.has(b.id) - favoritePieceIds.has(a.id))
-        || (daysAgo(b.last_worn, endIso) - daysAgo(a.last_worn, endIso)))
-      .slice(0, 3);
+      .filter(it => isResurfaceCandidate(it) && it.image && !wornThisMonth.has(it.id) && !usedAltIds.has(it.id)))
+      .map(it => ({ it, tier: swapTier(target, it) }))
+      .filter(x => x.tier > 0)
+      .sort((a, b) => (a.tier - b.tier)
+        || (favoritePieceIds.has(b.it.id) - favoritePieceIds.has(a.it.id))
+        || (daysAgo(b.it.last_worn, endIso) - daysAgo(a.it.last_worn, endIso)))
+      .slice(0, 3)
+      .map(x => x.it);
     picks.forEach(p => usedAltIds.add(p.id));
     return picks;
   };
@@ -179,29 +242,19 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   }
 
   // ── Period stats — the "in review" layer (month/quarter/year windows).
-  // All derived from the same looks; garments only for the piece rankings so
-  // shoes/bags (which repeat by design) don't crowd the story, and only the
-  // pieces she styles (wearEligible — a trip's daily pool suit is not a top
-  // piece). Ranked BY ROOM (owner, 2026-09-22), the same four rooms Home's
-  // Most worn reads.
+  // Garments only (shoes/bags repeat by design) and only the pieces she
+  // styles (wearEligible — a trip's daily pool suit is not a top piece). The
+  // per-room top pieces that used to sit here are gone: Home's Most worn is
+  // the one most-worn strip (owner, 2026-10-04: "find myself confused about
+  // the top section"), and two of them on one page read as repetitive.
   const periodWearDays = {};
-  const periodRoomDays = {}; // room -> id -> Set(date)
   looks.forEach(l => {
-    const rooms = wearRoomsOf(l);
     l.itemIds.forEach(id => {
       const it = itemMap[id];
       if (!it || OVERWEAR_EXCLUDE.has(it.category) || !wearEligible(it)) return;
       (periodWearDays[id] ||= new Set()).add(l.date);
-      for (const room of rooms) ((periodRoomDays[room] ||= {})[id] ||= new Set()).add(l.date);
     });
   });
-  const topByRoom = WEAR_ROOMS.map(room => ({
-    room,
-    pieces: Object.entries(periodRoomDays[room] || {})
-      .map(([id, ds]) => ({ item: itemMap[id], wears: ds.size }))
-      .sort((a, b) => b.wears - a.wears || (a.item.name || "").localeCompare(b.item.name || ""))
-      .slice(0, 6),
-  })).filter(r => r.pieces.length > 0);
   // Color story of the period — families actually WORN (weighted by
   // appearances), not families merely owned.
   const famCounts = {};
@@ -219,7 +272,6 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     garmentCount,
     utilizationPct: garmentCount > 0 ? Math.round((distinctGarments / garmentCount) * 100) : null,
     heartedCount: looks.filter(l => l.hearted).length,
-    topByRoom,
     colorFamilies,
   };
 

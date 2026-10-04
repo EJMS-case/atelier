@@ -40,6 +40,21 @@ export function seasonalBucketForDate(date = new Date()) {
   return MONTH_BUCKET[date.getMonth()];
 }
 
+// The bucket a WEAR-IT-THIS-WEEK nudge dresses for (Back in Rotation, the
+// recap's swaps and challenge): the colder of today's forecast and the
+// month. One mild October afternoon is not a reason to put shorts back in
+// rotation (owner, 2026-10-04: "It's chilly now so the suggestion of shorts
+// doesn't work anymore and it is mostly shorts") — the season is the floor,
+// the forecast can only pull the nudge colder. Style Me keeps reading the
+// live forecast alone: a request is about one day, a nudge is about a week.
+const BUCKET_COLD_ORDER = ["Hot", "Warm", "Mild", "Cool", "Cold"];
+export function resurfaceBucket(forecastBucket, date = new Date()) {
+  const month = seasonalBucketForDate(date);
+  const live = BUCKET_COLD_ORDER.includes(forecastBucket) ? forecastBucket : null;
+  if (!live) return month;
+  return BUCKET_COLD_ORDER.indexOf(live) > BUCKET_COLD_ORDER.indexOf(month) ? live : month;
+}
+
 // ── Core palette ────────────────────────────────────────────────────────────
 // Family counts across the closet, plus the dominant shade label per family
 // ("Blue (mostly Navy)") so coverage lines read like a stylist, not a chart.

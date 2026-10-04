@@ -6,17 +6,22 @@
 import { SUPABASE_URL, sbHeaders } from "../../lib/supabase.js";
 import { outfitsOf } from "../planner/outfits.js";
 import { nyToday } from "../../lib/time.js";
-import { normalizeOccasion } from "../../constants/taxonomy.js";
+import { normalizeOccasion, getSubcatL2 } from "../../constants/taxonomy.js";
 
 // ── Rooms ────────────────────────────────────────────────────────────────────
 // "Most worn" reads by the room she dressed for (owner, 2026-09-22: "I'd
 // rather it be separated by work / work dinner and casual and dinners only …
-// everything else doesn't matter as much"). These four are the rooms. A wear
-// logged under any other occasion (Active, Lounge, Occasion, a travel day)
-// still counts toward the piece's total but never toward a room. Legacy labels
-// fold through the taxonomy's aliases (Executive → Work, Daytime → Casual) so
-// her April logs read the same as her September ones.
-export const WEAR_ROOMS = ["Work", "Work Dinner", "Casual", "Dinner"];
+// everything else doesn't matter as much"). These three are the rooms. Work
+// Dinner is Work here (owner, 2026-10-04: "combine work and work dinner") —
+// the pieces are the same office pieces, and a room with four wears a year
+// is a strip of 1×s. Style Me still briefs Work Dinner on its own: a brief
+// changes the pool (no jeans, one evening cue); a wear record only counts.
+// A wear logged under any other occasion (Active, Lounge, Occasion, a travel
+// day) still counts toward the piece's total but never toward a room. Legacy
+// labels fold through the taxonomy's aliases (Executive → Work, Daytime →
+// Casual) so her April logs read the same as her September ones.
+export const WEAR_ROOMS = ["Work", "Casual", "Dinner"];
+const ROOM_OF = { "Work Dinner": "Work" };
 
 // Pieces she does not style — swim, gym, lounge — never rank as most worn: a
 // suit worn to the pool every day of a trip is not what she reaches for. The
@@ -34,7 +39,8 @@ export function wearRoomsOf(rec) {
   const raw = [rec?.occasion, ...(Array.isArray(rec?.occasions) ? rec.occasions : [])];
   const out = new Set();
   for (const o of raw) {
-    const room = normalizeOccasion(o);
+    const canon = normalizeOccasion(o);
+    const room = ROOM_OF[canon] || canon;
     if (WEAR_ROOMS.includes(room)) out.add(room);
   }
   return [...out];
@@ -181,25 +187,63 @@ export function neglectedItems(items, thresholdDays = 60) {
   });
 }
 
+// ── What "most worn" shows ───────────────────────────────────────────────────
+// Garments only (owner, 2026-10-04: "skip most worn shoes, bags, jewelry,
+// etc. … I always assume I'll be wearing the same shoes, belts and jewelry
+// and using the same bags repeatedly"), read in the order she thinks in:
+// shirts first, blazers second, pants, skirts, then dresses. One reader for
+// the group a garment ranks in; `null` is a piece the strip never shows.
+export const WORN_GROUPS = ["tops", "layers", "pants", "skirts", "dresses"];
+export function wornGroupOf(item) {
+  if (!wearEligible(item)) return null;
+  const cat = item.category, sub = item.subcategory || "";
+  if (cat === "Tops") return "tops";
+  if (cat === "Knits") return sub === "Cardigans" ? "layers" : "tops";
+  if (cat === "Outerwear") return "layers";
+  if (cat === "Bottoms") return getSubcatL2(cat, sub) === "Skirts" ? "skirts" : "pants";
+  if (cat === "Dresses" || cat === "Jumpsuits" || cat === "Sets" || cat === "Occasionwear") return "dresses";
+  return null; // shoes, bags, belts, accessories: the constants of her looks
+}
+
 /**
- * Most worn, by room: for each of WEAR_ROOMS, the top-N pieces she styles
- * (wearEligible) ranked by distinct days worn IN that room, ties broken by the
- * most recent wear, then name. A room nothing was worn in is left out, so the
- * caller renders exactly the rooms her record has. Reads the `wear_rooms`
- * applyWearStats attaches; a piece with no calendar or log record has none
- * and cannot rank (the stored wear_count cache never knew the room).
+ * Most worn, by room: for each of WEAR_ROOMS, up to n GARMENTS ranked by
+ * distinct days worn IN that room, taken a round at a time across the groups
+ * above (her top shirt, top blazer, top trousers, top skirt, top dress, then
+ * the seconds…) and shown grouped in that order, so a strip reads as the
+ * uniform she actually reaches for rather than five shirts. Ties break by
+ * the most recent wear, then name. A room nothing was worn in is left out.
+ * Reads the `wear_rooms` applyWearStats attaches; a piece with no calendar
+ * or log record has none and cannot rank.
  *
  * @returns {Array<{room:string, items:Array<{item:Object, wears:number}>}>}
  */
-export function mostWornByRoom(items, n = 5) {
+export function mostWornByRoom(items, n = 8) {
   return WEAR_ROOMS.map(room => {
-    const ranked = (items || [])
-      .filter(it => wearEligible(it) && (it.wear_rooms?.[room] || 0) > 0)
-      .sort((a, b) =>
+    const byGroup = Object.fromEntries(WORN_GROUPS.map(g => [g, []]));
+    for (const it of items || []) {
+      const g = wornGroupOf(it);
+      if (g && (it.wear_rooms?.[room] || 0) > 0) byGroup[g].push(it);
+    }
+    for (const g of WORN_GROUPS) {
+      byGroup[g].sort((a, b) =>
         (b.wear_rooms[room] - a.wear_rooms[room])
         || (b.last_worn || "").localeCompare(a.last_worn || "")
-        || (a.name || "").localeCompare(b.name || ""))
-      .slice(0, n)
+        || (a.name || "").localeCompare(b.name || ""));
+    }
+    const picked = [];
+    for (let round = 0; picked.length < n; round++) {
+      let any = false;
+      for (const g of WORN_GROUPS) {
+        const it = byGroup[g][round];
+        if (!it) continue;
+        any = true;
+        if (picked.length < n) picked.push(it);
+      }
+      if (!any) break;
+    }
+    const rank = (it) => WORN_GROUPS.indexOf(wornGroupOf(it));
+    const ranked = picked
+      .sort((a, b) => rank(a) - rank(b) || (b.wear_rooms[room] - a.wear_rooms[room]))
       .map(it => ({ item: it, wears: it.wear_rooms[room] }));
     return { room, items: ranked };
   }).filter(r => r.items.length > 0);

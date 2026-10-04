@@ -8,7 +8,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
 
-export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans, onOpenItem, onOpenDay, onOpenLook }) {
+export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans, onOpenDay, onOpenLook }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: item.color || "", notes: item.notes || "",
@@ -496,7 +496,7 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
           nothing when the piece has no history. Every row is a way out
           (owner, 2026-09-18): the date opens that planner day, a saved look
           opens it under Saved, and a companion thumb opens that garment. */}
-      {!isMisc && <ItemWearHistory item={item} wardrobe={wardrobe} logs={logs} plans={plans} onOpenItem={onOpenItem} onOpenDay={onOpenDay} onOpenLook={onOpenLook} />}
+      {!isMisc && <ItemWearHistory item={item} wardrobe={wardrobe} logs={logs} plans={plans} onOpenDay={onOpenDay} onOpenLook={onOpenLook} />}
 
       {onStyleAround && !isMisc && (
         <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}

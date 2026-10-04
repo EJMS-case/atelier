@@ -115,9 +115,23 @@ export function swimPieceKind(item) {
 // her own formality tag ≤2.
 const COMFORT_BRAND_RE = /fp movement|free people movement|popflex|beyond yoga|alo yoga|lululemon|l\*space/i;
 const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra|zip[- ]?up|athletic|swim|bikini|cover[- ]?up|lounge|pajama|sleep|cozy)\b/i;
+// Her filed formality as a number, or null when she has not filed one. THE
+// reader for the column: `Number(null)` is 0, and a bare Number() read made
+// every unfiled piece "f0" — a lounge piece. That hid every trouser, blouse
+// and cardigan with no formality from Back in Rotation, the recap's swaps and
+// challenge, and the colour stories, which is why the resting list was
+// "mostly shorts" (the shorts were filed f3; the trousers were not) — owner,
+// 2026-10-04.
+export function formalityOf(item) {
+  const raw = item?.formality;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const f = Number(raw);
+  return Number.isFinite(f) ? f : null;
+}
+
 export function isComfortCoded(item) {
-  const f = Number(item?.formality);
-  if (Number.isFinite(f) && f <= 2) return true;
+  const f = formalityOf(item);
+  if (f !== null && f <= 2) return true;
   const text = `${item?.brand || ""} ${item?.name || ""}`;
   return COMFORT_BRAND_RE.test(text) || COMFORT_NAME_RE.test(text);
 }

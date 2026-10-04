@@ -19,6 +19,7 @@ import { PALETTE } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { RUN_KEYS, startRun, useRun, clearRun } from "../../lib/backgroundRun.js";
 import Thumb from "../../components/Thumb.jsx";
+import LookTile from "../../components/LookTile.jsx";
 
 const PERIODS = {
   month:   { days: 30,  chip: "Month",   judgeLabel: "month",   topN: 4 },
@@ -45,7 +46,10 @@ function monthLabel(startIso, endIso) {
   } catch { return "last 30 days"; }
 }
 
-export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, plans: allPlans, onEditItem, onStyleItem }) {
+// `bucket` is the weather the forward nudges dress for (HomeView's
+// resurfaceBucket — the same one Back in Rotation reads); `onOpenDay` opens
+// a worn look's day in the Planner, the whole canvas.
+export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, plans: allPlans, bucket = null, onEditItem, onStyleItem, onOpenDay }) {
   const todayIso = nyToday();
   const [period, setPeriod] = useState("month");
   const [localErr, setLocalErr] = useState("");
@@ -75,8 +79,8 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
 
   const recap = useMemo(() => {
     if (!plans) return null;
-    return buildRecap({ plans, items, favoriteLogIds: favLogIds, favoritePieceIds: favPieceIds, todayIso, days });
-  }, [plans, items, favLogIds, favPieceIds, todayIso, days]);
+    return buildRecap({ plans, items, favoriteLogIds: favLogIds, favoritePieceIds: favPieceIds, todayIso, days, bucket });
+  }, [plans, items, favLogIds, favPieceIds, todayIso, days, bucket]);
 
   if (!recap) return null; // still loading plans — stay quiet
 
@@ -192,20 +196,6 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
               Color story: {periodStats.colorFamilies.slice(0, 5).map(c => c.family).join(" · ")}
             </div>
           )}
-          {periodStats.topByRoom.map(({ room, pieces }) => (
-            <div key={room} style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted }}>{room.toUpperCase()}</div>
-              <div style={{ display: "flex", gap: 6, marginTop: 4, overflowX: "auto", paddingBottom: 2 }}>
-                {pieces.map(({ item, wears }) => (
-                  <button key={item.id} onClick={() => onEditItem?.(item)}
-                    style={{ flexShrink: 0, width: 52, padding: 0, background: "none", border: "none", cursor: "pointer", textAlign: "center" }}>
-                    <Img it={item} size={52}/>
-                    <div style={{ fontSize: 9, color: PALETTE.muted, marginTop: 2 }}>{wears}×</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
@@ -233,13 +223,12 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
         )}
         {stylish && stylish.picks.map(({ look, why, repeats }, i) => (
           <div key={i} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${PALETTE.soft_line}` }}>
-            <div style={{ display: "flex", gap: 3 }}>
-              {piecesOf(look).slice(0, 4).map(it => (
-                <button key={it.id} onClick={() => onEditItem?.(it)} style={{ padding: 0, border: "none", background: "none", cursor: "pointer" }}>
-                  <Img it={it} size={44}/>
-                </button>
-              ))}
-            </div>
+            {/* The look as an outfit — her arrangement, one pair of shoes —
+                and a tap opens the day's whole canvas in the Planner, where
+                each piece is its own tap (owner, 2026-10-04). */}
+            <LookTile items={piecesOf(look)} layout={look.layout} width={96}
+              label={`Open ${friendlyDate(look.date)} in the Planner`}
+              onOpen={onOpenDay ? () => onOpenDay(look.date) : undefined}/>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, color: PALETTE.ink }}>
                 <span style={{ color: PALETTE.muted, marginRight: 4 }}>{i + 1}.</span>
