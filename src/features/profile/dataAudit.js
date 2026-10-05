@@ -12,7 +12,7 @@
 
 import { TAXONOMY, MISC_CATEGORY, getSubcatL2 } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
-import { CURATED_NOTES_MAX, getSleeveType, readKnitWeight } from "../../utils/item-helpers.js";
+import { CURATED_NOTES_MAX, getSleeveType, readKnitWeight, formalityOf } from "../../utils/item-helpers.js";
 
 // Categories where a missing material genuinely blinds texture reasoning.
 // Shoes/Bags/Accessories often carry material in the name ("Leather Tote"),
@@ -30,7 +30,7 @@ export const ISSUE_LABELS = {
   subcategory_unknown: "subcategory off the taxonomy",
   no_image:            "no photo",
   material_missing:    "no material — invisible to texture intelligence",
-  formality_missing:   "no formality tag",
+  formality_missing:   "no formality (1 active – 8 black tie) — set it on the Edit screen; until then the stylist reads the piece as unfiled, not loungey",
   notes_too_long:      `notes over ${CURATED_NOTES_MAX} chars with no stylist line — excluded from classifiers`,
   // The two fields her office dress code turns on (2026-09-10): a top with
   // no sleeve signal can't be told to stand alone (long) or take a layer
@@ -63,8 +63,7 @@ export function auditItem(it) {
   // readKnitWeight, not the raw tag: her own words ("light knit", "for
   // winter") already tell the app the weight, and the app reads them.
   if (it.category === "Knits" && it.subcategory === "Cardigans" && !readKnitWeight(it).weight) issues.push("knit_weight_missing");
-  const formality = it.formality === "" || it.formality == null ? NaN : Number(it.formality);
-  if (!Number.isFinite(formality)) issues.push("formality_missing");
+  if (formalityOf(it) == null) issues.push("formality_missing");
   // A stylist_line resolves long notes: classifiers and prompts read the
   // line, the copy stays for display/search/vision (migration 0018).
   const hasLine = !!String(it.stylist_line || "").trim();

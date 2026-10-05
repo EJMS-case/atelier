@@ -3,7 +3,7 @@ import { s } from "../ui/styles.js";
 import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
-import { readKnitWeight, KNIT_WEIGHTS, CURATED_NOTES_MAX, notesBeyondLine } from "../utils/item-helpers.js";
+import { readKnitWeight, KNIT_WEIGHTS, CURATED_NOTES_MAX, notesBeyondLine, formalityOf, FORMALITY_SCALE } from "../utils/item-helpers.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
@@ -19,6 +19,8 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
     pattern: item.pattern || "",
     knit_weight: item.knit_weight || "",
     knit_fit: item.knit_fit || "",
+    // Her filed formality as a number, or null — never "" (a smallint column).
+    formality: formalityOf(item),
     price_paid: item.price_paid ?? null,
     has_bg: item.has_bg,
     is_trimmed: item.is_trimmed,
@@ -316,7 +318,12 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
             heat gates and the office-layer preference turn on; when the tag
             is empty the hint shows what the app already reads from her own
             words (readKnitWeight), so she can confirm it or leave it. */}
-        {form.category === "Knits" && (() => {
+        {/* The shelf shows for every piece that reads as a knit — the Knits
+            category, or a knit filed elsewhere (Tops > Light Knit Tops, a
+            Sweater Dress, a knit set): 7 of her 19 untagged knits were filed
+            outside Knits and this screen hid the field from them
+            (2026-10-05 audit). */}
+        {(form.category === "Knits" || /\b(knit|sweater|cardigan|pullover)\b/i.test(`${form.subcategory} ${form.name} ${form.material}`)) && (() => {
           const read = form.knit_weight ? null : readKnitWeight({ ...form, category: "Knits" });
           return (
             <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
@@ -348,6 +355,20 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
             </div>
           );
         })()}
+        {/* Formality — the AI Readiness audit flagged "no formality" on 376
+            pieces and no screen offered the field (2026-10-05 audit; the
+            knit-weight gap above was the same class). The scale is the
+            app's own (the packer's bands, the stylist's LOOK FACTS); the
+            stylist reads an unfiled piece as unknown, never as loungey, so
+            leaving it empty costs nothing — filing it sharpens the read. */}
+        <div style={{marginTop:10}}>
+          <div style={s.fieldLabel}>Formality</div>
+          <select style={{...s.select,width:"100%"}} value={form.formality ?? ""}
+            onChange={e=>setForm(f=>({...f,formality:e.target.value === "" ? null : Number(e.target.value)}))}>
+            <option value="">— not filed (the stylist reads it as unknown) —</option>
+            {FORMALITY_SCALE.map(([v,label])=><option key={v} value={v}>{v} · {label}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Set linking — never for a holding-room row: a Misc item must not be

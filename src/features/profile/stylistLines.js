@@ -34,7 +34,7 @@ import { sb } from "../../lib/supabase.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
 import { MISC_CATEGORY } from "../../constants/taxonomy.js";
 import { StylistLineSchema, StylistLineTool } from "../../lib/ai/schemas.js";
-import { CURATED_NOTES_MAX, NOTES_NEGATION_LEGEND, getSleeveType, readKnitWeight } from "../../utils/item-helpers.js";
+import { CURATED_NOTES_MAX, NOTES_NEGATION_LEGEND, getSleeveType, readKnitWeight, formalityOf } from "../../utils/item-helpers.js";
 
 export const STYLIST_LINE_MAX = CURATED_NOTES_MAX;   // 200 — the classifier cap
 export const STYLIST_LINE_TARGET = 140;              // what the prompt asks for
@@ -122,7 +122,7 @@ export function herFacts(item) {
   const sleeve = getSleeveType(item);
   if (sleeve && sleeve !== "unknown") add("Sleeve", sleeve === "threeQuarter" ? "3/4" : sleeve);
   add("Season weight tag", item.season_weight);
-  add("Formality (1 loungey – 8 formal)", Number.isFinite(Number(item.formality)) && item.formality !== "" && item.formality != null ? item.formality : "");
+  add("Formality (1 loungey – 8 formal)", formalityOf(item) ?? "");
   add("Brand", item.brand);
   add("HER NOTES (verbatim — her word is final)", item.notes);
   const vd = item.vision_data;

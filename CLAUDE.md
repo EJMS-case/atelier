@@ -204,7 +204,12 @@ Conventions worth knowing:
   a bare `Number(it.formality) <= 2` read every unfiled piece as loungewear —
   227 of her 294 garments — and hid them from every resting surface for
   weeks ("it is mostly shorts", 2026-10-04). Any gate that reads the column
-  reads it through this.
+  reads it through this — `test:recap-data` fails a raw read by file. The
+  Edit screen files it on `FORMALITY_SCALE` (1 active … 8 black tie, the
+  packer's bands in words); 376 pieces were flagged "no formality" with no
+  field to set it until the 2026-10-05 audit. **A knit's weight is read by
+  `readKnitWeight()` everywhere, prompts included** — the inventory tag used
+  to read the raw column while the gates read her words.
 - **A wear-it-this-week nudge dresses for `resurfaceBucket()`** — the colder
   of today's forecast and the month (Back in Rotation, the recap's swaps and
   challenge). Style Me reads the live forecast alone: a request is one day.

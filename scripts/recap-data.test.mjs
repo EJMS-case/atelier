@@ -6,6 +6,9 @@
 // that no longer sits in the card.
 
 import { test } from "node:test";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { buildRecap, swapShelf, swapTier } from "../src/features/recap/recapData.js";
 import { resurfaceBucket } from "../src/utils/wardrobe-coverage.js";
@@ -104,4 +107,31 @@ test("formalityOf / isComfortCoded: an unfiled formality is unknown, never loung
   assert.equal(isComfortCoded({ name: "Marcee Pant", formality: null }), false, "unfiled trousers are not loungewear");
   assert.equal(isComfortCoded({ name: "Marcee Pant", formality: 2 }), true, "her own f2 is");
   assert.equal(isComfortCoded({ name: "Fleece Jogger", formality: null }), true, "the name still reads");
+});
+
+
+// ── Source contract: the formality column has ONE reader ─────────────────────
+// `Number(null)` is 0, so a bare read of `it.formality` in a gate or a prompt
+// tag reads every unfiled piece (376 of her rows) as f0 — the "mostly shorts"
+// bug of 2026-10-04. Every site reads through formalityOf(); the 2026-10-05
+// audit swept the seven prompt and gate sites that still read the column
+// raw, and this holds the class. `vd.formality` / `vision.formality` is the
+// photo read's TEXT, not the column, and is not matched here.
+test("every read of the formality column goes through formalityOf()", () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const files = [];
+  const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.(js|jsx)$/.test(n)) files.push(p); } };
+  walk(join(ROOT, "src"));
+  const RAW = [
+    /Number(?:\.isFinite)?\(\s*[\w?.]+\.formality\b/,   // Number(it.formality), Number.isFinite(it?.formality)
+    /\b(?!vd|vision|v)\w+\.formality\s*(?:<|>|<=|>=|===|!==|==|!=)/, // it.formality >= 5
+    /\$\{\s*(?!vd|vision|v)\w+\.formality\s*\}/,          // `f${it.formality}`
+  ];
+  const offenders = [];
+  for (const f of files) {
+    if (f.endsWith("utils/item-helpers.js")) continue;
+    const src = readFileSync(f, "utf8");
+    for (const re of RAW) if (re.test(src)) offenders.push(`${f.slice(ROOT.length + 1)}: ${src.match(re)[0]}`);
+  }
+  assert.deepEqual(offenders, [], "a formality read outside formalityOf()");
 });
