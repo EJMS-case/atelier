@@ -122,6 +122,19 @@ const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra
 // challenge, and the colour stories, which is why the resting list was
 // "mostly shorts" (the shorts were filed f3; the trousers were not) — owner,
 // 2026-10-04.
+// The scale she files on, as the Edit screen offers it. The words are the
+// app's own bands (tripPacker.formalityBand, standard.FORMALITY_BANDS): 1-2
+// active / lounge, 3-4 casual and travel, 4-6 dinner, 5-6 work, 7-8 formal.
+export const FORMALITY_SCALE = [
+  [1, "active, gym"],
+  [2, "lounge, sleep"],
+  [3, "casual, travel"],
+  [4, "elevated casual, an easy dinner"],
+  [5, "work"],
+  [6, "work, dinner, an event"],
+  [7, "formal"],
+  [8, "black tie"],
+];
 export function formalityOf(item) {
   const raw = item?.formality;
   if (raw === null || raw === undefined || raw === "") return null;

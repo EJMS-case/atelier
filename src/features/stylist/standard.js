@@ -46,6 +46,8 @@ import { runAllChecks } from "../../utils/styling-validator.js";
 import {
   isStatementPiece, isHosieryItem, isCompleteSetItem, isBlazerItem, slotForItem,
   getSleeveType, classifierNotes, promptNotes, NOTES_NEGATION_LEGEND,
+  formalityOf,
+  readKnitWeight,
 } from "../../utils/item-helpers.js";
 import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
 import { learnedContext } from "./learning.js";
@@ -177,13 +179,18 @@ const SLEEVE_SHORT = { long: "L", short: "S", sleeveless: "N", threeQuarter: "3Q
 // vision read — without the W-ID machinery. Both the chat's closet reference
 // and its CURRENT LOOK block use this, so a piece reads the same in both.
 export function describeItem(it, { notesMax } = {}) {
-  const f = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
+  const fo = formalityOf(it);
+  const f = fo != null ? ` f${fo}` : "";
   const tags = [];
   if (it.category === "Tops" || it.category === "Knits" || it.category === "Athleisure") {
     const code = SLEEVE_SHORT[getSleeveType(it)];
     if (code) tags.push(`sleeve [${code}]`);
   }
-  if (it.knit_weight) tags.push(`knit [${it.knit_weight}${it.knit_fit ? `,${it.knit_fit}` : ""}]`);
+  // Her tag, then her own words (readKnitWeight) — the prompt tag used to
+  // read the raw column, so a line that said "heavy knit" put nothing here
+  // while every gate already read it (2026-10-05 audit).
+  const kw = readKnitWeight(it).weight;
+  if (kw) tags.push(`knit [${kw}${it.knit_fit ? `,${it.knit_fit}` : ""}]`);
   if (isCompleteSetItem(it)) tags.push("[COMPLETE SET — a full top + bottom look on its own]");
   if (it.season_weight) tags.push(`season: ${String(it.season_weight).toLowerCase()}`);
   const notes = notesMax ? promptNotes(it, { maxLen: notesMax }) : promptNotes(it);
@@ -414,14 +421,16 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
   }
 
   // ── Formality ──
-  const withF = list.filter(it => Number.isFinite(it.formality));
+  // formalityOf: an unfiled piece is unknown, not f0 (376 of her rows).
+  const withF = list.map(it => ({ it, f: formalityOf(it) })).filter(x => x.f != null);
   if (withF.length) {
-    const fs = withF.map(it => it.formality);
+    const fs = withF.map(x => x.f);
     const min = Math.min(...fs), max = Math.max(...fs);
-    let line = `Formality: ${withF.map(it => `f${it.formality} ${shortName(it)}`).join("; ")}`;
+    const tag = (x) => `f${x.f} ${shortName(x.it)}`;
+    let line = `Formality: ${withF.map(tag).join("; ")}`;
     if (max - min > 2) {
-      const lo = withF.find(it => it.formality === min), hi = withF.find(it => it.formality === max);
-      line += ` — a ${max - min}-step spread between ${shortName(lo)} and ${shortName(hi)}, wider than the ~2 steps a look usually holds together.`;
+      const lo = withF.find(x => x.f === min), hi = withF.find(x => x.f === max);
+      line += ` — a ${max - min}-step spread between ${shortName(lo.it)} and ${shortName(hi.it)}, wider than the ~2 steps a look usually holds together.`;
     } else {
       line += ` — within a ${max - min}-step spread.`;
     }
@@ -429,10 +438,10 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     for (const occ of occList) {
       const band = FORMALITY_BANDS[occ];
       if (!band) continue;
-      const below = withF.filter(it => it.formality < band[0]);
-      const above = withF.filter(it => it.formality > band[1]);
-      if (below.length) notes.push(`Below the ${occ} band (f${band[0]}–${band[1]}): ${below.map(it => `f${it.formality} ${shortName(it)}`).join(", ")}.`);
-      if (above.length) notes.push(`Above the ${occ} band (f${band[0]}–${band[1]}): ${above.map(it => `f${it.formality} ${shortName(it)}`).join(", ")}.`);
+      const below = withF.filter(x => x.f < band[0]);
+      const above = withF.filter(x => x.f > band[1]);
+      if (below.length) notes.push(`Below the ${occ} band (f${band[0]}–${band[1]}): ${below.map(tag).join(", ")}.`);
+      if (above.length) notes.push(`Above the ${occ} band (f${band[0]}–${band[1]}): ${above.map(tag).join(", ")}.`);
     }
   }
 

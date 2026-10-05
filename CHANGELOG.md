@@ -2,6 +2,36 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Audit, second sweep: one reader for formality and knit weight at every site, and a Formality field she can file — 2026-10-05
+
+### Why
+
+The audit's second family. **Her AI Readiness audit flagged "no formality tag" on 376 of her 553 pieces, and no screen offered the field** — the same class as the knit-weight flag she could not act on in September (CLAUDE.md: a readiness flag she cannot act on is a bug in the app, not a data problem). Behind it, seven prompt and gate sites still read the formality column raw (`Number.isFinite(it.formality)`, `it.formality >= 5`) instead of through `formalityOf()`, the reader the 2026-10-04 fix named as the one; and the two prompt sites that tag a knit's weight read the raw `knit_weight` column while every gate already read her words through `readKnitWeight()` — so a cardigan whose line said "heavy knit" carried no weight tag in the inventory the stylist read.
+
+### Changed
+
+- **The Edit screen has a Formality field** (1 active, gym · 2 lounge, sleep · 3 casual, travel · 4 elevated casual, an easy dinner · 5 work · 6 work, dinner, an event · 7 formal · 8 black tie — `FORMALITY_SCALE` in `item-helpers.js`, the words from the packer's own bands). Empty reads as *not filed (the stylist reads it as unknown)*; it saves as a number or null, never `""`. The readiness label now says where to set it and that an unfiled piece is read as unfiled, not loungey.
+- **The knit shelf (weight + fit) shows for every piece that reads as a knit**, not only the Knits category: 7 of her 19 untagged knits were filed as Tops > Light Knit Tops, a Sweater Dress or a knit set, and the screen hid the field from them.
+- **`formalityOf()` at every site** — `describeItem` and the LOOK FACTS formality block (`standard.js`), the recap judge's and the trip advisor's inventory lines, the sampler's Casual gate and inventory tag, the packer's band distance, the stylist-line facts, the readiness flag. Same behaviour on a filed number; an unfiled piece is unknown everywhere.
+- **`readKnitWeight()` at the two prompt tag sites** (`describeItem`, the sampler's inventory line): her tag, then her words. A knit whose line says "heavy" or "light knit" now carries `knit [Chunky/Winter]` / `knit [Fine/Summer]` in what the stylist reads, as the gates already did.
+
+### Downstream, four ways
+
+- **Efficiency.** The inventory the stylist reads gains a knit tag on the pieces whose words state one — a few tokens per such line, in the cached closet block (one cache write after deploy). Nothing else grows.
+- **Effectiveness.** The prompt and the gates finally agree about a knit's weight; LOOK FACTS and the packer treat an unfiled formality the same way the resting surfaces do. The readiness flag she sees has a field behind it.
+- **Speed.** Unchanged.
+- **Education.** A formality she files reaches every surface through the one reader. The 376 unfiled are hers to file; the app reads them as unknown and never guesses.
+
+### Tests
+
+- `test:recap-data` gains a source contract: no `Number(x.formality)`, `x.formality >=` or `` `f${x.formality}` `` read under `src/` outside `item-helpers.js` (the photo read's `vd.formality` text excepted). It caught nothing after the sweep and catches every form the sweep removed.
+- `npm test` (51 suites), `npm run build`, `npm run smoke` (40 walk steps) green.
+
+### Data
+
+**14 knit rows gained the `knit_weight` tag their own stylist line states** (owner, standing: "If knit weight is unclear, check my notes … use what I have already given you"; CLAUDE.md: write a derived value back only when her words state it outright, and list every row). Each is exactly what `readKnitWeight()` already read from the line — the write makes the field hold what the app reads. Chunky/Winter: 100 Cashmere Crewneck Cardigan ("heavy"), Ava Sweater ("heavy"), Cable Knit Sweater Dress ("chunky, heavy … winter"), Cropped Knit Sweater ("heavy knit"), Ella Button-Up Sweater camel ("ribbed heavy knit"), Ella Button-Up Sweater deep red ("heavy knit"), Knit Jumper ("heavy knit"), Virgo Sweater Dress black ("heavy"), Virgo Sweater Dress red ("heavy ribbed knit … cold weather"). Fine/Summer: Black cardigan Top ("fine knit … lightweight"), Brook Peplum Cardigan ("light knit"), CozyChic Ultra Lite Contrast Ribbed Cardigan & Pants ("light knit"), Nylah Flare Sleeve Cardigan ("light knit"), Polka-dot Short Sleeve Knit Sweater ("fine knit"). **Five were left unfilled on purpose**: Bailey Cardigan, Crewneck Cardigan Sweater, Ella Button-Up Sweater white and Falling for Fall Cardigan say *"medium weight"* (neither of the two tags; hers to pick), and Francis Cropped Pullover says *"heavy knit"* and *"summer casual"* in the same line (the reader calls that conflicting and shows it to her rather than picking a side). Two things in her rows to surface, not change: the black Virgo Sweater Dress's archived note describes the red one, and the Polka-dot sweater's line repeats its weather clause with a typo ("goor"). No migration.
+
+
 ## [Unreleased] — Audit, first sweep: Evaluate and the Visual AI read answer through tools, like every other structured call — 2026-10-05
 
 ### Why

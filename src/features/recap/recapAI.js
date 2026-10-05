@@ -25,6 +25,7 @@
 // The pure composers are exported for scripts/recap-judge.test.mjs.
 
 import { invokeTool } from "../../lib/ai/toolUse.js";
+import { formalityOf } from "../../utils/item-helpers.js";
 import { StylishPicksSchema, StylishPicksTool } from "../../lib/ai/schemas.js";
 import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
 import { STYLIST_PERSONA, STYLIST_STANDARD, VOICE_RULES, personalGrounding } from "../stylist/standard.js";
@@ -41,7 +42,8 @@ export function describeLookPiece(it) {
   if (!it) return null;
   const color = (it.color || it.color_family || "").trim();
   const shelf = (it.subcategory || it.category || "").trim();
-  const f = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
+  const fo = formalityOf(it);
+  const f = fo != null ? ` f${fo}` : "";
   const name = (it.name || "").trim();
   const nameSaysShelf = name && shelf && name.toLowerCase().includes(shelf.toLowerCase().replace(/s$/, ""));
   const head = [color, nameSaysShelf ? "" : shelf].filter(Boolean).join(" ");

@@ -1,12 +1,27 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-05** (audit, first sweep), after Evaluate and the Visual AI read moved onto tool-use + Zod like every other structured call; before that the planner began warming the month before the visible one ("the month prior so I can toggle in the early weeks"); before that the planner moved to loading what the grid shows (the month plus its spill-over days) with ‹ › fetching the next month on the way, and the chat and evaluator went back to deliberate (`medium`) thinking on her call; before that Home began reading her way (Most worn by garment in her order with Work Dinner folded into Work; the resting list and the recap's nudges dressed for the colder of the forecast and the month; "try instead" swaps that keep a piece's job and colour; worn looks drawn as outfits that open the whole canvas), the standard was rewritten as taste on two clocks, the chat moved to `low` effort, Style Me began saying how much of the closet it read, and the null-formality reader bug (227 garments hidden from every resting surface) was fixed; earlier the same day the planner squares began drawing each day's look as she built it, the months began browsing as one and the evaluator moved to a two-clock score in the background; before that the planner speed-up, the collage that draws every piece, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild, the canvas stacking fix and the evaluation card rework; before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-05** (audit, second sweep), after the Edit screen gained a Formality field (376 pieces were flagged for one with nowhere to set it), every formality and knit-weight read went through its one reader, and 14 knits gained the weight tag their own line states; before that Evaluate and the Visual AI read moved onto tool-use + Zod like every other structured call; before that the planner began warming the month before the visible one ("the month prior so I can toggle in the early weeks"); before that the planner moved to loading what the grid shows (the month plus its spill-over days) with ‹ › fetching the next month on the way, and the chat and evaluator went back to deliberate (`medium`) thinking on her call; before that Home began reading her way (Most worn by garment in her order with Work Dinner folded into Work; the resting list and the recap's nudges dressed for the colder of the forecast and the month; "try instead" swaps that keep a piece's job and colour; worn looks drawn as outfits that open the whole canvas), the standard was rewritten as taste on two clocks, the chat moved to `low` effort, Style Me began saying how much of the closet it read, and the null-formality reader bug (227 garments hidden from every resting surface) was fixed; earlier the same day the planner squares began drawing each day's look as she built it, the months began browsing as one and the evaluator moved to a two-clock score in the background; before that the planner speed-up, the collage that draws every piece, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild, the canvas stacking fix and the evaluation card rework; before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-05 · Audit, second sweep: one reader for formality and knit weight; a Formality field she can file
+
+**Owner:** *"run an audit."* CHANGELOG has the detail and the 14 rows written. To carry:
+
+1. **`FORMALITY_SCALE` (`item-helpers.js`) is the scale the Edit screen offers**, worded from the packer's bands. The form holds a number or null; `sb.upsert` never sees `""` for it.
+2. **The knit shelf shows for anything that reads as a knit** (category Knits, or knit / sweater / cardigan / pullover in the subcategory, name or material). The readiness flag still names Knits > Cardigans only — that is the office-layer predicate's scope (`isLightCardigan`), not the field's.
+3. **`test:recap-data` holds the formality source contract.** A new read of the column that is not `formalityOf()` fails it by file and match.
+
+**Watch-items:**
+- **Her first Edit open:** a Formality select sits under the knit shelf on every non-Misc piece, empty for 376 of them. Filing is hers; nothing is derived. If she files a few and the LOOK FACTS line starts naming "below the Work band" on pieces she disagrees with, `FORMALITY_BANDS` in `standard.js` is the lever, never a default on the column.
+- **The five knits left without a tag** (four say "medium weight", Francis says heavy and summer in one line) are hers to pick on the Edit screen; the hint under the select quotes what the app read.
+- **Two row oddities surfaced, not changed:** the black Virgo Sweater Dress's archived note describes the red one; the Polka-dot sweater's line repeats its weather clause ("goor"). Her call from the Edit screen.
+
+**Verified before push:** `npm test` (51 suites), `npm run build`, `npm run smoke` green (40 walk steps).
 
 ### 2026-10-05 · Audit, first sweep: Evaluate and the Visual AI read answer through tools
 
@@ -65,7 +80,7 @@ it through.
 - **Her first Home open:** Back in Rotation should now draw trousers, blouses and cardigans, not shorts (the Cool bucket drops shorts and sandals). Most worn's Work strip should lead with her shirt and blazer. If a strip reads wrong, `wornGroupOf` is the lever; if the resting list is still thin, `isResurfaceCandidate` and `filterByWeather(…, "Cool")` are the two gates, in that order.
 - **Her first chat turn at `low`:** it must still hold its position under pushback. If it starts agreeing reflexively, `output_config.effort` in `builderChat.js` is the one-line way back to `medium`; the opinion rules are the real lever.
 - **Her first Evaluate / chat after deploy** pays one cache write for the new standard — expected.
-- **The 227 unfiled formalities** are hers to file; the AI Readiness audit (`dataAudit.js`) already lists them. Reading them as unknown is right; never backfill from a guess.
+- **The 227 unfiled formalities** are hers to file; the AI Readiness audit (`dataAudit.js`) already lists them. Reading them as unknown is right; never backfill from a guess. *(2026-10-05: the Edit screen now has the field — 376 across both closets.)*
 - **"Try instead" can be empty** for a leaned-on piece whose shelf has nothing fresh in its colour this week — honest, by design. If she wants a wider net, the second tier in `swapTier` (neutral for neutral) is where to loosen, never the shelf.
 - **The "Something hiccuped" row** is still the first thing to read on the next report (see the entry below).
 

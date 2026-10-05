@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, formalityOf } from "./item-helpers.js";
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 import { namedExplicitly, matchesFreeText, resolveRequestedPieces } from "./free-text-match.js";
@@ -282,7 +282,8 @@ const TROUSER_RE = /\b(trousers?|slacks|suit pants?|dress pants?)\b/i;
 export function readsAsOffice(item, occasion) {
   if (occasion !== "Casual") return false;
   if (isBlazerItem(item)) return true;
-  if (Number.isFinite(item.formality) && item.formality >= 5) return true;
+  const f = formalityOf(item);
+  if (f != null && f >= 5) return true;
   return slotForItem(item) === "bottom" && TROUSER_RE.test(`${item.name || ""} ${item.subcategory || ""}`);
 }
 
@@ -960,7 +961,10 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
 
   return sampled.map((it) => {
     const short = shortById[it.id];
-    const knitTag = it.knit_weight ? ` [${it.knit_weight}${it.knit_fit ? `,${it.knit_fit}` : ""}]` : "";
+    // Her tag, then her words — the one reader (readKnitWeight), so a knit whose
+    // line says "heavy" carries the tag the gates already read from it.
+    const kw = readKnitWeight(it).weight;
+    const knitTag = kw ? ` [${kw}${it.knit_fit ? `,${it.knit_fit}` : ""}]` : "";
     let sleeveTag = "";
     if (it.category === "Tops" || it.category === "Knits") {
       const raw = getSleeveType(it);
@@ -1001,7 +1005,8 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
     const name = it.name || "";
     const nameLower = name.toLowerCase();
     // Curated formality (1-8) — compact ` f6` token on the category segment.
-    const formalityTag = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
+    const fo = formalityOf(it);
+    const formalityTag = fo != null ? ` f${fo}` : "";
     // Rotation floor survivor — steer the model to fresher options when they
     // exist without banning the piece (small pools NEED these to stay usable).
     const repeatTag = repeatIds.has(it.id)

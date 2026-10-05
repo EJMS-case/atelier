@@ -19,7 +19,7 @@
 // filters the way Style Me's explicit-request override does. See
 // assignMustIncludes() + MUST_BONUS.
 
-import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind, formalityOf } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 import { defaultTripDayOccasion } from "./tripPools.js";
@@ -224,11 +224,12 @@ const DEST_FORMALITY_RELIEF = 0.5;
 // Steps between an item's curated formality and the occasion's band (0 when
 // in band, when the item has no formality, or when the occasion has no band).
 function formalityDistance(item, occasion) {
-  if (!Number.isFinite(item?.formality)) return 0;
+  const f = formalityOf(item);
+  if (f == null) return 0;
   const band = formalityBand(occasion);
   if (!band) return 0;
-  return item.formality < band[0] ? band[0] - item.formality
-       : item.formality > band[1] ? item.formality - band[1]
+  return f < band[0] ? band[0] - f
+       : f > band[1] ? f - band[1]
        : 0;
 }
 

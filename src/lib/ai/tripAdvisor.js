@@ -11,7 +11,7 @@ import { z } from "zod";
 import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
-import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
+import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND, formalityOf } from "../../utils/item-helpers.js";
 import { personalGrounding, occasionBrief } from "../../features/stylist/standard.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
@@ -209,7 +209,8 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // the stylist-relevant notes digest (tight 120-char cap; this is a single
   // fast call, not the full pipeline).
   const inventory = sampled.map(it => {
-    const f = Number.isFinite(it.formality) ? ` f${it.formality}` : "";
+    const fo = formalityOf(it);
+    const f = fo != null ? ` f${fo}` : "";
     const pat = it.pattern && it.pattern !== "solid" && it.pattern !== "" ? ` | ${it.pattern}` : "";
     const pn = promptNotes(it, { maxLen: 120 });
     const dest = prefer?.has(it.id) ? " | AT DESTINATION" : "";
