@@ -2,6 +2,34 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Audit, third sweep: the anon role holds no grant on Atelier's tables; the backup tables surfaced; the handoff's stale items marked — 2026-10-05
+
+### Why
+
+The audit's housekeeping family. CLAUDE.md carried three "still open, deliberately" data items since August: the `anon` role's table-level GRANTs (redundant under RLS, but revoking them makes a stray permissive policy harmless — "worth doing once things have been stable a while"), six backup tables with ~1,700 duplicate rows, and the two `gn_*` tables that belong to another app. Stable since 2026-08-29. And the handoff's watch-items had accumulated entries later sessions had already resolved.
+
+### Changed
+
+- **Migration 0038 revokes every grant the `anon` role held on Atelier's 15 tables and the 6 backup tables** (`supabase/migrations/0038_revoke_anon_table_grants.sql`, **applied live 2026-10-05**, break-glass rollback at the top of the file). Verified: `has_table_privilege('anon', …, 'SELECT')` is false on every application table and true for `authenticated`; `gn_games` / `gn_players` keep theirs (the other app's). The anon role has no sequence or function grants in `public`. The app never reads as anon (AuthGate; every request carries her JWT), and `npm run doctor` already explains a 401/403 when run with the committed anon key.
+- **The six backup tables are surfaced, not dropped** (her data is hers — surface and let her decide): `wardrobe_items_backup_20260824` (480 rows), `readiness_backup_20260820` (476), `wardrobe_items_backup_20260728` (426), `dropped_columns_backup_20260819` (163), `outfit_logs_backup_20260824` (101), `sets_backup_20260824` (41), `belt_swap_backup_20260802` (9). Deny-all (RLS on, no policy, and now no anon grant), read by nothing in the app. Dropping them is one `drop table` each, on her word; the list is in HANDOFF.
+- **The handoff's resolved watch-items are marked** (Evaluate / chat effort back at `medium`; the thumb path for tiles; the look-back judge; `regenPool` through the trip-day pool) so the next session reads live items only.
+
+### Downstream, four ways
+
+- **Efficiency.** No request changes; a permission check at the grant level is cheaper than a policy evaluation for a role that should never reach the table.
+- **Effectiveness.** A future `USING (true)` policy on an application table would no longer open it to the anon key. The backup decision is hers, with the row counts in front of her.
+- **Speed.** Unchanged.
+- **Education.** Unchanged.
+
+### Tests
+
+- `npm test` (51 suites), `npm run build`, `npm run smoke` (40 walk steps) green — no application code changed in this sweep; the gate ran on the docs + migration tree.
+
+### Data
+
+**Migration 0038 applied live** (grants only; no row changed, no table dropped). Nothing else written.
+
+
 ## [Unreleased] — Audit, second sweep: one reader for formality and knit weight at every site, and a Formality field she can file — 2026-10-05
 
 ### Why
