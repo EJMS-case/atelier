@@ -118,7 +118,12 @@ const TOOL_STEER = (name) => `Answer by calling the \`${name}\` tool exactly onc
 // through as the call site set them; `prepareRequest` (below, applied in
 // anthropicFetch to EVERY body the app sends) reconciles them with what the
 // model accepts, so a site only states what it wants.
-function toolBody({ model, maxTokens, temperature, content, tool, thinking, outputConfig, stream }) {
+// `system` is optional and rides through untouched — a site that shares a
+// cached system block with another surface (Evaluate shares the chat's,
+// cache_control and all) passes it here so tool-use output does not cost it
+// the cache. The steer line goes on the USER turn, never into the cached
+// block, so the block stays byte-stable across the two surfaces.
+function toolBody({ model, maxTokens, temperature, system, content, tool, thinking, outputConfig, stream }) {
   const forced = modelRules(model).forcedTool;
   const steered = forced ? content
     : typeof content === "string" ? `${content}\n\n${TOOL_STEER(tool.name)}`
@@ -127,6 +132,7 @@ function toolBody({ model, maxTokens, temperature, content, tool, thinking, outp
     model,
     max_tokens: maxTokens,
     ...(typeof temperature === "number" ? { temperature } : {}),
+    ...(system ? { system } : {}),
     ...(thinking ? { thinking } : {}),
     ...(outputConfig ? { output_config: outputConfig } : {}),
     ...(stream ? { stream: true } : {}),
@@ -265,6 +271,7 @@ export async function invokeTool({
   model,
   maxTokens = 1500,
   temperature,
+  system,
   content,
   tool,
   schema,
@@ -279,7 +286,7 @@ export async function invokeTool({
 
   let data;
   try {
-    ({ data } = await fetchToolJson({ apiKey, model, maxTokens, temperature, content, tool, signal, thinking, outputConfig, totalMs, kind }));
+    ({ data } = await fetchToolJson({ apiKey, model, maxTokens, temperature, system, content, tool, signal, thinking, outputConfig, totalMs, kind }));
   } catch (e) {
     logAiError(`${kind}:http`, { status: e.status, raw: e.rawMessage, stalled: e.stalled }, e.message);
     throw e;
@@ -318,12 +325,12 @@ export async function invokeTool({
  * existing transient handling moves to its next attempt; a caller abort
  * propagates untouched.
  */
-async function fetchToolJson({ apiKey, model, maxTokens, temperature, content, tool, signal, thinking, outputConfig, totalMs, kind }) {
+async function fetchToolJson({ apiKey, model, maxTokens, temperature, system, content, tool, signal, thinking, outputConfig, totalMs, kind }) {
   const started = Date.now();
   const wd = startWatchdog({ signal, idleMs: 0, totalMs });
   try {
     const res = await anthropicFetch(
-      toolBody({ model, maxTokens, temperature, content, tool, thinking, outputConfig }),
+      toolBody({ model, maxTokens, temperature, system, content, tool, thinking, outputConfig }),
       { apiKey, signal: wd.signal },
     );
     const data = await res.json();

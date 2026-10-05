@@ -392,3 +392,110 @@ export const StylishPicksTool = {
     required: ["picks", "summary"],
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. evaluateLook — the builder's Evaluate card (features/builder/evaluateLook.js).
+//    Was "respond in strict JSON" parsed by a tolerant bracket parser with a
+//    field-salvage fallback (evalParse.js, 2026-08-19 → 2026-10-05): the
+//    truncation it salvaged was thinking eating max_tokens, which the cap now
+//    covers, and the salvage path dropped every swap and add — the moves she
+//    taps. A tool call lands whole or not at all; a cut reply is an error she
+//    can retry, never half a card. The Zod side is tolerant where the model
+//    may thin out (empty lists, a null weather); the caps are safety rails
+//    against runaway output, not formatting (the old 120/160-char slices cut
+//    her headlines mid-sentence).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EvalMove = (withOut) => z.object({
+  ...(withOut ? { out: z.string().default("") } : {}),
+  in: z.string().default(""),
+  in_color: z.string().nullable().default(""),
+  in_brand: z.string().nullable().default(""),
+  why: z.string().default(""),
+}).passthrough();
+
+export const EvalSchema = z.object({
+  score: z.coerce.number().catch(NaN),
+  headline: z.string().default(""),
+  works: z.string().default(""),
+  swaps: z.array(EvalMove(true)).default([]),
+  adds: z.array(EvalMove(false)).default([]),
+  tips: z.array(z.string()).default([]),
+  weather: z.string().nullable().default(null),
+});
+
+const EVAL_MOVE_IN = {
+  in:       { type: "string", description: "The exact piece name from HER CLOSET list." },
+  in_color: { type: "string", description: "Its colour, copied from the same closet line, so the app can tell twins apart." },
+  in_brand: { type: "string", description: "Its brand, copied from the same closet line." },
+  why:      { type: "string", description: "One sentence: what it fixes and what it costs." },
+};
+
+export const EvalTool = {
+  name: "evaluate_look",
+  description: "Return the stylist's read of the look she built: the score on two clocks, what works, the swaps and adds from her closet, the tips for what stays, and the weather aside.",
+  input_schema: {
+    type: "object",
+    properties: {
+      score:    { type: "integer", minimum: 1, maximum: 10, description: "1-10, a stylist's score on two clocks (current and timeless)." },
+      headline: { type: "string", description: "One-line read on the look, a stylist's card voice, addressed to her — a complete thought." },
+      works:    { type: "string", description: "The one thing the look is already doing best — the actual pieces and the move." },
+      swaps: {
+        type: "array", maxItems: 3,
+        description: "0-3 swaps: a piece ON THE CANVAS out, a piece from HER CLOSET in. Empty when none would help.",
+        items: { type: "object", properties: { out: { type: "string", description: "The exact piece name from the canvas list." }, ...EVAL_MOVE_IN }, required: ["out", "in", "why"] },
+      },
+      adds: {
+        type: "array", maxItems: 2,
+        description: "0-2 pieces from HER CLOSET to bring in with nothing taken out — a piece she should put on goes here, never in a tip.",
+        items: { type: "object", properties: EVAL_MOVE_IN, required: ["in", "why"] },
+      },
+      tips: {
+        type: "array", maxItems: 3,
+        description: "Up to 3 adjustments to how she wears what STAYS — one complete, specific sentence each, never an add or a swap.",
+        items: { type: "string" },
+      },
+      weather: { type: ["string", "null"], description: "One light aside when the look reads seasonally off for the stated weather; null when it sits fine." },
+    },
+    required: ["score", "headline", "works", "swaps", "adds", "tips", "weather"],
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. enrichItemVision — the Visual AI read of a garment photo
+//     (features/vision/visionEnrich.js). Was "return STRICT JSON" parsed with
+//     a bracket regex — the same shape that broke the look-back judge on her
+//     phone. Every field is a free string the consumers display or match
+//     loosely (colour family, notes), so the Zod side only needs them to be
+//     strings and defaults an omitted one to "".
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const VisionSchema = z.object({
+  color: z.string().default(""),
+  color_secondary: z.string().nullable().default(""),
+  pattern: z.string().default(""),
+  fabric: z.string().default(""),
+  formality: z.string().default(""),
+  sleeve: z.string().default(""),
+  vibe: z.string().default(""),
+  confidence: z.string().default(""),
+});
+
+export const VisionTool = {
+  name: "describe_garment",
+  description: "Return what is actually visible in the garment photo — colour, pattern, fabric and drape, formality, sleeve, vibe — and how confident the read is.",
+  input_schema: {
+    type: "object",
+    properties: {
+      color:           { type: "string", description: "The main colour you SEE, plain name (e.g. 'navy', 'olive green', 'cream')." },
+      color_secondary: { type: "string", description: "A second prominent colour, or an empty string." },
+      pattern:         { type: "string", enum: ["solid", "stripe", "plaid", "floral", "polka-dot", "animal", "abstract", "colourblock"] },
+      fabric:          { type: "string", description: "Your read of fabric + drape in a few words (e.g. 'fluid satin', 'chunky cable knit', 'crisp cotton poplin')." },
+      formality:       { type: "string", enum: ["loungey", "casual", "elevated-casual", "polished", "formal"] },
+      sleeve:          { type: "string", enum: ["sleeveless", "short", "3/4", "long", "n/a"] },
+      vibe:            { type: "string", description: "A 3-6 word style impression." },
+      confidence:      { type: "string", enum: ["high", "medium", "low"] },
+    },
+    required: ["color", "color_secondary", "pattern", "fabric", "formality", "sleeve", "vibe", "confidence"],
+  },
+};

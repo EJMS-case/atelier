@@ -2,6 +2,35 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Audit, first sweep: Evaluate and the Visual AI read answer through tools, like every other structured call — 2026-10-05
+
+### Why
+
+Owner: *"Let me know when it's time for an Audit of the code!"* → *"run an audit."* Audits are sweeps, not reports (CLAUDE.md). The first family: the convention says structured AI output goes through tool-use + Zod, and two surfaces still asked for "strict JSON" and parsed it out of prose — Evaluate (a tolerant bracket parser with a field-salvage fallback, `evalParse.js`) and the Visual AI read (a bracket regex, the exact shape that broke the look-back judge on her phone on 2026-10-01).
+
+### Changed
+
+- **Evaluate answers through the `evaluate_look` tool** (`EvalTool` + `EvalSchema` in `lib/ai/schemas.js`, through `invokeTool`). The task prose is unchanged except that the JSON block at its foot became the tool's field descriptions. `normalizeEval` (pure, in `evaluateLook.js`) is what remains of the parser: the 1-10 clamp, the move shape `evalResolve.js` reads (`inColor` / `inBrand`), the safety caps, and a swap without its piece dropped. `evalParse.js` is deleted. The old salvage path showed a cut reply as a card with no swaps and no adds — the moves she taps — and the truncation it salvaged was thinking eating `max_tokens`, which the cap has covered since 2026-10-04. A tool call lands whole or the call fails and she retries; a missing call, a schema miss and an HTTP error each log an `evaluate_look:*` row with the payload.
+- **`invokeTool` carries a system block** (`system`, optional). Evaluate shares the chat's cached system block, `cache_control` and all; the steer line goes on the user turn so the block stays byte-stable across the two surfaces.
+- **The Visual AI read answers through the `describe_garment` tool** (`VisionTool` + `VisionSchema`): colour, secondary colour, pattern, fabric, formality, sleeve, vibe, confidence — the vocabularies live on the tool's enums, not in prose the model was asked to echo. The colour reconciliation against her tag and notes is unchanged.
+
+### Downstream, four ways
+
+- **Efficiency.** Evaluate's cached preamble is byte-identical to the chat's — the tool definition rides the uncached body (~400 tokens) and the "respond in strict JSON" block it replaces is gone from the task, so the per-call cost is about even. One fewer module in the builder's chunk. The vision read is the same one call.
+- **Effectiveness.** Every structured call in the app is now validated by a schema before a screen reads it; there is no longer a surface where a thin or cut reply reaches her as a half-card.
+- **Speed.** Unchanged: same models, same effort, same caps, same background run.
+- **Education.** Unchanged — the lesson paths (an applied swap teaches) read the same normalized shape.
+
+### Tests
+
+- `scripts/evaluate.test.mjs` (`test:evaluate`, replaces `test:evalparse`): the card's shape from a validated tool input — defaults, clamp, caps, a move without its piece dropped — and the resolver tests carried over. `test:standard` asserts the task names the tool and no longer says "strict JSON", and that the tool carries every field the card reads.
+- `npm test` (51 suites), `npm run build`, `npm run smoke` (40 walk steps) green.
+
+### Data
+
+Nothing written.
+
+
 ## [Unreleased] — The planner warms the month before the one she is on — 2026-10-04
 
 ### Why

@@ -11,7 +11,7 @@
 // come back when her words don't separate twins; the card shows them as chips
 // the way Style Me's read-back does, and she taps the one she means.
 //
-// Pure: no React, no supabase — scripts/eval-parse.test.mjs runs it.
+// Pure: no React, no supabase — scripts/evaluate.test.mjs runs it.
 
 import { resolveRequestedPieces } from "../../utils/free-text-match.js";
 
@@ -34,7 +34,7 @@ export function resolveMovePiece(list, words) {
 /**
  * Every move on an evaluation, resolved: swaps gain `outPieces` (from the
  * canvas) and `inPieces` (from the pool); adds gain `inPieces`.
- * @param {{swaps?: Array, adds?: Array}} evaluation  parseEvalResponse output
+ * @param {{swaps?: Array, adds?: Array}} evaluation  normalizeEval output (evaluateLook.js)
  * @param {{canvas?: Array, available?: Array}} ctx    the canvas items and the pool
  */
 export function resolveEvalMoves(evaluation, { canvas = [], available = [] } = {}) {
