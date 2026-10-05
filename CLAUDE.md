@@ -454,14 +454,19 @@ reintroduce a `USING (true)` policy.
 
 Still open, deliberately:
 
-- `gn_games` / `gn_players` carry their own `TO anon` allow-all policies. They
-  belong to a different app sharing this Supabase project and were left alone.
-- The `anon` role still holds table-level `GRANT`s. RLS denies it everything, so
-  this is redundant, but revoking the grants would make a stray permissive
-  policy harmless. Worth doing once things have been stable a while.
-- Six backup tables (~1,700 rows of duplicate wardrobe data) have RLS on with no
-  policy, so they are deny-all. Nothing reads them; dropping them entirely would
-  remove a standing liability.
+- `gn_games` / `gn_players` carry their own `TO anon` allow-all policies and
+  grants. They belong to a different app sharing this Supabase project and
+  were left alone.
+- Six backup tables (~1,700 rows of duplicate wardrobe data) have RLS on with
+  no policy and, since 0038, no anon grant — deny-all. Nothing reads them;
+  dropping them is HER call (names and counts in HANDOFF, 2026-10-05), never
+  ours.
+
+Done in the 2026-10-05 audit: **the `anon` role holds no table grant on any
+Atelier table** (migration 0038, applied live; verified with
+`has_table_privilege`). A new table needs `revoke all on public.<t> from anon`
+in the migration that creates it — Supabase grants anon on new public tables
+by default, and the default privileges were left alone for the other app.
 
 ## Session setup
 

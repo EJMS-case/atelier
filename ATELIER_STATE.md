@@ -182,7 +182,7 @@ Every save teaches. Every word she reads is written to her ("you", never "she").
 
 **Tables**: `wardrobe_items`, `closets`, `sets`, `outfit_logs` (saved and worn looks, with layout and a `source` marking looks she built herself), `look_feedback`, `look_edits`, `planned_outfits`, `trips`, `trip_items`, `favorites`, `inspiration_images`, `stylist_chats`, `user_settings` (key/value: fingerprint, rotation state, standing preferences, chat lessons, trend brief, shopping list, brand finds, verdicts, last gap analysis, Brand Atlas result), and `ai_errors` (failures and timing rows). Photos live in the `wardrobe-images` bucket with 256-pixel grid thumbnails, every object served with a one-year `Cache-Control` (the `?v=` stamp on each URL is the cache key, so a replaced photo is a new URL).
 
-**Security**: sign-in is required; every application table is `FOR ALL TO authenticated` pinned to her user id, and the photo bucket accepts writes only from authenticated users. The anonymous role returns zero rows from every table. API keys are per device in localStorage and are never synced through the database (that sync was the hole, closed 2026-08-28/29). The committed Supabase anon key identifies the project and is not an access boundary.
+**Security**: sign-in is required; every application table is `FOR ALL TO authenticated` pinned to her user id, and the photo bucket accepts writes only from authenticated users. The anonymous role returns zero rows from every table and, since 2026-10-05, holds no grant on any of them. API keys are per device in localStorage and are never synced through the database (that sync was the hole, closed 2026-08-28/29). The committed Supabase anon key identifies the project and is not an access boundary.
 
 **Migrations** are numbered SQL files applied by hand to the live project (36 so far).
 
@@ -213,7 +213,7 @@ Every save teaches. Every word she reads is written to her ("you", never "she").
 **Open, and hers to decide:**
 - 21 legacy `outfit_logs` rows still carry 2.1 MB of unreachable base64 collages; nulling them would shrink backups.
 - The legacy `api_keys` row in `user_settings` (hidden from every API role, but world-readable before 2026-08-28): delete it and rotate that key.
-- Six backup tables (~1,700 duplicate wardrobe rows) are deny-all and unread; dropping them removes a standing liability.
+- Six backup tables (~1,700 duplicate wardrobe rows) are deny-all and unread; dropping them is the owner's decision (the list, with row counts, is in HANDOFF).
 - One Arizona trip pin names a deleted garment.
 - Eight garments that moved to Arizona put sixteen July New York looks out of "Wearable now" in NYC; if any came home, the rows want moving back.
 - The trip packer's dinner-bag tie-break flakes about one run in eight (a jitter in the scoring); a proposed fix exists but changes packing behaviour she tuned by hand.
