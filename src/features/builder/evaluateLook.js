@@ -24,8 +24,19 @@
 //   · It had four rubric bullets and no standard. It now scores against THE
 //     STANDARD with the occasion and weather briefs and LOOK FACTS in context.
 //   · It wrote about her in the third person. VOICE_RULES: second person.
-// The JSON contract gains `swaps`; the weather-aside and Work-bag rules stay.
+// The contract gains `swaps`; the weather-aside and Work-bag rules stay.
 // MODEL_TOP with adaptive thinking, same fallback as the chat.
+//
+// 2026-10-05 (audit): the reply is a TOOL CALL (`EvalTool` + `EvalSchema` in
+// lib/ai/schemas.js, through invokeTool) — the path every other structured
+// call in the app takes. It replaced "respond in strict JSON" plus a
+// tolerant bracket parser with a field-salvage fallback (evalParse.js): the
+// truncation that parser salvaged was thinking eating max_tokens, which the
+// cap now leaves room for, and its salvage path dropped every swap and add —
+// the moves she taps — while showing the rest as if whole. A tool call lands
+// whole or the call fails and she retries. `normalizeEval` (pure, tested) is
+// what remains of the parser: the 1-10 clamp, the move shape evalResolve.js
+// reads, and the safety caps.
 //
 // 2026-10-04 (owner: "the ranking I get may be based on hard rules rather
 // than this season's style and timeless trends"): the task used to tell the
@@ -37,10 +48,9 @@
 // preference decides. The call runs in the background (backgroundRun.js, key
 // builder:evaluate) so leaving the builder no longer loses it.
 
-import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { invokeTool } from "../../lib/ai/toolUse.js";
+import { EvalSchema, EvalTool } from "../../lib/ai/schemas.js";
 import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
-import { parseEvalResponse } from "./evalParse.js";
-import { logAiError } from "../../lib/ai/logError.js";
 import {
   describeItem, personalGrounding, readLook, occasionBrief, weatherBrief, inspirationBrief,
 } from "../stylist/standard.js";
@@ -59,25 +69,10 @@ Then give:
 - "swaps": 0–3 swaps that would lift the look — each names a piece ON THE CANVAS to take out ("out" — its exact name from the canvas list) and the piece from HER CLOSET to put in its place ("in" — the exact name from the closet list, with its "in_color" and "in_brand" copied from that same closet line, so the app can tell twins apart: she owns two Ponte Knit Pants), and "why" in one sentence that says what it fixes and what it costs. A swap is the strongest thing you can give her; if none would help, return an empty array and say so in a tip. Never invent a piece, never suggest a purchase.
 - "adds": 0–2 pieces from HER CLOSET to bring in with nothing taken out — the layer the room asks for, the one piece of jewellery the look is missing — each as "in" / "in_color" / "in_brand" from the closet line and "why". A piece she should put on goes HERE, never in a tip: the app gives an add a button and a tip none.
 - "tips": up to 3 adjustments to how she wears what STAYS — concrete and chic, the kind a stylist makes on a client in the fitting room: a half-tuck, a cuff or sleeve push, a different layer order, letting a different piece lead, dropping something so one gesture reads, belting the trouser under the open blazer. Each tip is one complete, specific sentence that says why. A tip never tells her to add or swap a piece — those are moves above. One sharp tip beats three reaches.
+- "headline": one line on the look, a stylist's card voice, addressed to her — complete the thought, don't trail off.
+- "weather": the one light aside described above, or null.
 
-Write every field TO her — "you", "your" — never "she" or "her".
-
-Respond in strict JSON, no prose, no code fences:
-{
-  "score": 7,
-  "headline": "one-line read on the look, a stylist's card voice, addressed to her — complete the thought, don't trail off",
-  "works": "the one thing it's doing best",
-  "swaps": [
-    { "out": "exact canvas piece", "in": "exact closet piece", "in_color": "its colour from the closet line", "in_brand": "its brand from the closet line", "why": "what it fixes and what it costs" }
-  ],
-  "adds": [
-    { "in": "exact closet piece", "in_color": "its colour", "in_brand": "its brand", "why": "what it brings" }
-  ],
-  "tips": [
-    "one complete, specific styling adjustment"
-  ],
-  "weather": null
-}`;
+Write every field TO her — "you", "your" — never "she" or "her". Answer with the evaluate_look tool, every field filled.`;
 
 // Pure composers, exported for scripts/stylist-standard.test.mjs.
 export function composeEvalMessages({ items = [], occasions = [], weathers = [], available = [], personal = [], colorPairs = [], inspirations = [] } = {}) {
@@ -142,48 +137,67 @@ export async function evaluateLook(items, apiKey, opts = {}) {
   // deliberation costs her nothing on screen. Thinking tokens count against
   // max_tokens even though they never render — the 900→1400 truncation saga
   // (2026-08-19) was that in disguise — so the cap leaves headroom over the
-  // ~900-token JSON.
+  // ~900-token tool input.
   // No sampling params: `temperature` is a hard 400 on these models. The
   // system block is the chat's, cache_control and all, so the two surfaces
-  // share one cache.
-  const request = (model) => anthropicFetch({
+  // share one cache; invokeTool carries it and puts its steer line on the
+  // user turn. A missing tool call, a schema miss and an HTTP error each log
+  // an `evaluate_look:*` row to ai_errors with the payload (invokeTool).
+  const request = (model) => invokeTool({
+    apiKey,
     model,
-    max_tokens: 6000,
+    maxTokens: 6000,
     thinking: { type: "adaptive" },
-    output_config: { effort: "medium" },
+    outputConfig: { effort: "medium" },
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: user }],
-  }, { apiKey, signal: opts.signal });
+    content: user,
+    tool: EvalTool,
+    schema: EvalSchema,
+    kind: "evaluate_look",
+    signal: opts.signal,
+  });
 
-  let res;
+  let input;
   try {
-    res = await request(opts.model || MODEL_TOP);
+    input = await request(opts.model || MODEL_TOP);
   } catch (e) {
     if (opts.model || e?.status === 401 || e?.status === 429 || e?.name === "AbortError") throw e;
-    res = await request(MODEL_STRONG);
+    input = await request(MODEL_STRONG);
   }
+  return normalizeEval(input);
+}
 
-  const body = await res.json();
-  // Thinking blocks come back with empty text; only the text block carries JSON.
-  const text = body.content?.filter(b => b.type === "text").map(b => b.text || "").join("") || "";
-  const { parsed, salvaged } = parseEvalResponse(text);
-
-  // The protocol needs payloads: this path never logged, so the owner's
-  // parse failure left nothing to replay. A salvage is a `:recovered`-style
-  // heads-up; a total miss carries the raw text for a real diagnosis.
-  if (!parsed) {
-    logAiError("evaluate_look:parse", {
-      stop_reason: body.stop_reason ?? null,
-      model: body.model ?? null,
-      text: text.slice(0, 4000),
-    }, "unparseable evaluation response");
-    throw new Error("The evaluation came back garbled — tap Evaluate look again.");
-  }
-  if (salvaged) {
-    logAiError("evaluate_look:recovered", {
-      stop_reason: body.stop_reason ?? null,
-      truncated: body.stop_reason === "max_tokens",
-    }, "evaluation response needed tolerant parse");
-  }
-  return parsed;
+/**
+ * The card's shape from a validated tool input. Pure; exported for
+ * scripts/evaluate.test.mjs. Score clamps to 1-10 (null when the model gave
+ * none); a move keeps only the fields evalResolve.js reads, as `inColor` /
+ * `inBrand`; a swap without an `out` or an `in` is not a move. Caps are
+ * generous safety rails against runaway output, NOT formatting — the old
+ * 120/160-char slices were truncating her evaluations mid-sentence (owner
+ * report 2026-08-19).
+ */
+export function normalizeEval(input = {}) {
+  const str = (v, max) => String(v ?? "").trim().slice(0, max);
+  const move = (m, withOut) => ({
+    ...(withOut ? { out: str(m.out, 200) } : {}),
+    in: str(m.in, 200),
+    inColor: str(m.in_color ?? m.inColor, 60),
+    inBrand: str(m.in_brand ?? m.inBrand, 80),
+    why: str(m.why, 400),
+  });
+  const moves = (list, cap, withOut) => (Array.isArray(list) ? list : [])
+    .filter(m => m && typeof m === "object" && str(m.in, 200) && (!withOut || str(m.out, 200)))
+    .slice(0, cap)
+    .map(m => move(m, withOut));
+  const score = Number(input.score);
+  return {
+    score: Number.isFinite(score) ? Math.max(1, Math.min(10, Math.round(score))) : null,
+    headline: str(input.headline, 280),
+    works: str(input.works, 400),
+    swaps: moves(input.swaps, 3, true),
+    adds: moves(input.adds, 2, false),
+    tips: (Array.isArray(input.tips) ? input.tips : [])
+      .filter(t => typeof t === "string" && t.trim()).slice(0, 3).map(t => str(t, 400)),
+    weather: typeof input.weather === "string" && input.weather.trim() ? str(input.weather, 400) : null,
+  };
 }

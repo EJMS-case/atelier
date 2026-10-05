@@ -123,6 +123,9 @@ Conventions worth knowing:
   `src/lib/ai/schemas.js` and `src/lib/ai/toolUse.js`. A bracket-regex parse
   of a prose reply is how the look-back judge broke on her phone (the reply
   carried its own "[❤ hearted]" flags, 2026-10-01); `invokeTool` is the path.
+  The last two holdouts (Evaluate's `evalParse.js`, the Visual AI read) went
+  across in the 2026-10-05 audit; `invokeTool` takes an optional `system` so
+  a surface that shares a cached block (Evaluate shares the chat's) keeps it.
 - **Every surface that gives her an OPINION on a look composes in
   `src/features/stylist/standard.js`** — the persona, THE STANDARD, the
   opinion rules, the occasion + weather briefs, and `readLook()` (the app's

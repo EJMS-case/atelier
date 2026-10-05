@@ -89,10 +89,10 @@ test("the funnel carries her shopping list and what her closet is missing", () =
   assert.match(joined, /WHAT HER CLOSET IS MISSING/);
   assert.doesNotMatch(joined, /\brule\b/i);
 });
-import { parseEvalResponse } from "../src/features/builder/evalParse.js";
 import { STANDING_PREFERENCES } from "../src/constants/styling.js";
 import { composeSystemBlock, currentLookBlock } from "../src/features/builder/builderChat.js";
-import { composeEvalPrompt } from "../src/features/builder/evaluateLook.js";
+import { composeEvalPrompt, normalizeEval } from "../src/features/builder/evaluateLook.js";
+import { EvalSchema, EvalTool } from "../src/lib/ai/schemas.js";
 import { OCCASION_SLOTS } from "../src/constants/styling.js";
 import { normalizeItem } from "../src/utils/item-helpers.js";
 import { buildWardrobe } from "./fixtures/build-wardrobe.mjs";
@@ -492,15 +492,19 @@ test("a blazer on the canvas gets the open-blazer note, with the belt placed und
   assert.doesNotMatch(noBelt.text, /under the open blazer/);
 });
 
-test("the evaluator's swaps parse, and are dropped rather than half-shown on a truncated reply", () => {
-  const full = `{"score": 6, "headline": "Safe.", "works": "The column.", "swaps": [{"out": "Black Tote", "in": "Cognac Shoulder Bag", "why": "Pulls the brown shoe into a story."}], "tips": ["Half-tuck the blouse."], "weather": null}`;
-  const { parsed } = parseEvalResponse(full);
+test("the evaluator answers through the evaluate_look tool; its moves are the card's", () => {
+  // The task names the tool and its fields; the schema carries the shape.
+  const prompt = composeEvalPrompt({ items: [blouse(), trouser(), pump()] });
+  assert.match(prompt, /Answer with the evaluate_look tool/);
+  assert.doesNotMatch(prompt, /strict JSON/);
+  assert.equal(EvalTool.name, "evaluate_look");
+  for (const k of ["score", "headline", "works", "swaps", "adds", "tips", "weather"]) {
+    assert.ok(k in EvalTool.input_schema.properties, `tool lacks ${k}`);
+  }
+  const input = EvalSchema.parse({ score: 6, headline: "Safe.", works: "The column.", swaps: [{ out: "Black Tote", in: "Cognac Shoulder Bag", why: "Pulls the brown shoe into a story." }], tips: ["Half-tuck the blouse."], weather: null });
+  const parsed = normalizeEval(input);
   assert.equal(parsed.swaps.length, 1);
   assert.deepEqual(parsed.swaps[0], { out: "Black Tote", in: "Cognac Shoulder Bag", inColor: "", inBrand: "", why: "Pulls the brown shoe into a story." });
-  const cut = `{"score": 6, "headline": "Safe.", "works": "The column.", "swaps": [{"out": "Black Tote", "in": "Cog`;
-  const salvaged = parseEvalResponse(cut);
-  assert.equal(salvaged.parsed.score, 6);
-  assert.deepEqual(salvaged.parsed.swaps, []);
 });
 
 test("learning: lessons merge without duplicates and cap; blocks compose from every signal", () => {

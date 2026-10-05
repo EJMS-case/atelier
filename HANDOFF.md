@@ -1,12 +1,26 @@
 # Atelier — Handoff for the next improvement phase
 
-Refreshed **2026-10-04** (fifth pass), after the planner began warming the month before the visible one ("the month prior so I can toggle in the early weeks"); before that the planner moved to loading what the grid shows (the month plus its spill-over days) with ‹ › fetching the next month on the way, and the chat and evaluator went back to deliberate (`medium`) thinking on her call; before that Home began reading her way (Most worn by garment in her order with Work Dinner folded into Work; the resting list and the recap's nudges dressed for the colder of the forecast and the month; "try instead" swaps that keep a piece's job and colour; worn looks drawn as outfits that open the whole canvas), the standard was rewritten as taste on two clocks, the chat moved to `low` effort, Style Me began saying how much of the closet it read, and the null-formality reader bug (227 garments hidden from every resting surface) was fixed; earlier the same day the planner squares began drawing each day's look as she built it, the months began browsing as one and the evaluator moved to a two-clock score in the background; before that the planner speed-up, the collage that draws every piece, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild, the canvas stacking fix and the evaluation card rework; before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
+Refreshed **2026-10-05** (audit, first sweep), after Evaluate and the Visual AI read moved onto tool-use + Zod like every other structured call; before that the planner began warming the month before the visible one ("the month prior so I can toggle in the early weeks"); before that the planner moved to loading what the grid shows (the month plus its spill-over days) with ‹ › fetching the next month on the way, and the chat and evaluator went back to deliberate (`medium`) thinking on her call; before that Home began reading her way (Most worn by garment in her order with Work Dinner folded into Work; the resting list and the recap's nudges dressed for the colder of the forecast and the month; "try instead" swaps that keep a piece's job and colour; worn looks drawn as outfits that open the whole canvas), the standard was rewritten as taste on two clocks, the chat moved to `low` effort, Style Me began saying how much of the closet it read, and the null-formality reader bug (227 garments hidden from every resting surface) was fixed; earlier the same day the planner squares began drawing each day's look as she built it, the months began browsing as one and the evaluator moved to a two-clock score in the background; before that the planner speed-up, the collage that draws every piece, the paged Saved lists and the builder's new-piece-on-top rule; before that the look-back judge rebuild, the canvas stacking fix and the evaluation card rework; before that the Favorites fold, the model-generation move, the look-back fix and the Casual rework, the shared-name read (two Ponte Knit Pants), the room-word read of her stylist line (the "wrong Theory dress"), the trip-planner fix, Most worn by room, the photo-cache fix, the trip-day pool rule, and Travel Day defaults. The session log below
 is in merge order, newest first, and every entry names its PR — `CHANGELOG.md`
 carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
 ## Session log
+
+### 2026-10-05 · Audit, first sweep: Evaluate and the Visual AI read answer through tools
+
+**Owner:** *"run an audit."* CHANGELOG has the detail. To carry:
+
+1. **`invokeTool` takes `system`** (optional). Evaluate passes the chat's cached block through it; the steer line rides the user turn. A new tool-use site that shares a cache does the same — never paste the block into `content`.
+2. **`normalizeEval` is the card's shape** (pure, `evaluateLook.js`); `evalParse.js` is gone. The resolver fixtures live in `scripts/evaluate.test.mjs` now.
+3. **No `JSON.parse` of a model reply is left under `src/`** (`parseLooseJson` remains only inside `toolUse.js`'s stream assembly and the discovery page's web-search finish). A new site that needs structure writes a schema in `lib/ai/schemas.js` and calls `invokeTool`.
+
+**Watch-items:**
+- **Her first Evaluate after deploy** pays one cache write (the chat's block is unchanged; the tool rides the body) — expected. If a card ever fails with *"did not return structured evaluate_look output"*, `ai_errors` has an `evaluate_look:no_tool_use` row with the stop reason; the steer line in `toolBody` is the lever, as for Style Me.
+- **Her next Visual AI run**: the same descriptor shape is stored; a `vision_enrich:schema` row in `ai_errors` would mean the model wrote outside the tool's enums — loosen the Zod side, never the stored shape.
+
+**Verified before push:** `npm test` (51 suites), `npm run build`, `npm run smoke` green (40 walk steps).
 
 ### 2026-10-04 · The planner warms the month before the one she is on
 
@@ -74,7 +88,7 @@ it through.
 - **Browsing past months:** (superseded 2026-10-04) a visit loads its grid and warms the month before it; a month further back fetches with the spinner the first time and is instant after. The 42-cell grid shows adjacent-month days' looks dimmed — by design.
 - **A weather filter needs a weather on the row**: 16 of her planned days carry none and fade under any weather pick. That is honest, not a bug; tagging them is hers to do from the day view.
 - **The main chunk (503 kB / 150 gz) is React (131 kB), the auth client (103 kB), App.jsx (49 kB) and `ui/styles.js` (27 kB)** — measured by sourcemap this session. The earlier note that `standard.js` and the Zod schemas ride it was wrong: both are already their own chunks. Nothing cheap is left to split; the next bytes would be `fashion-combos.js` + `styling.js` (27 kB) if a boot-time importer can be cut.
-- **Evaluate still parses JSON** (`evalParse.js`, tolerant) rather than going through `invokeTool` + Zod as the convention says. One recovered parse in August, none since; converting is a clean next step, not an urgent one.
+- **Evaluate still parses JSON** — *(done 2026-10-05, audit: `EvalTool` + `EvalSchema` through `invokeTool`; `evalParse.js` deleted.)*
 
 **Verified before push:** `npm test` (50 suites), `npm run build`, `npm run smoke` green (39 walk steps).
 
@@ -129,7 +143,7 @@ it through.
 3. **Section labels are sentences**: WHAT'S WORKING · SWAP (TAKE OUT / PUT IN) · ADD · HOW TO WEAR IT · WEATHER NOTE, each with a note on what it is for.
 
 **Watch-items:**
-- **Her next Evaluate tap**: the blazer-over-bodysuit move should arrive as an ADD with Apply, and a swap's PUT IN row should show the photo and `name · colour · brand`. If a move still shows *not found in your closet*, the model wrote a name that isn't the closet line's — `ai_errors` has nothing for this yet; the resolver test fixtures in `eval-parse.test.mjs` are where to reproduce it with the row verbatim.
+- **Her next Evaluate tap**: the blazer-over-bodysuit move should arrive as an ADD with Apply, and a swap's PUT IN row should show the photo and `name · colour · brand`. If a move still shows *not found in your closet*, the model wrote a name that isn't the closet line's — `ai_errors` has nothing for this yet; the resolver test fixtures in `evaluate.test.mjs` (was `eval-parse.test.mjs`) are where to reproduce it with the row verbatim.
 - **Tips that still say "add your …"**: the task now forbids it, but the model may lean on habit for a turn. If it persists, the lever is moving that line up beside the `adds` definition, not a post-parse filter.
 
 **Verified before push:** `npm test` (47 suites), `npm run build`, `npm run smoke` green (34 walk steps).

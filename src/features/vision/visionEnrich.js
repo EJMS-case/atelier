@@ -7,7 +7,8 @@
 
 import { familyForColorString, effectiveColorFamily } from "../../constants/color.js";
 import { buildImgSource } from "../../lib/ai/stylist.js";
-import { anthropicFetch } from "../../lib/ai/toolUse.js";
+import { invokeTool } from "../../lib/ai/toolUse.js";
+import { VisionSchema, VisionTool } from "../../lib/ai/schemas.js";
 import { MODEL_STANDARD } from "../../constants/models.js";
 import { sb } from "../../lib/supabase.js";
 
@@ -43,19 +44,12 @@ export async function enrichAndPersistItem({ item, apiKey }) {
   return descriptor;
 }
 
-const PROMPT = `You are a meticulous fashion cataloguer. Describe ONLY the garment you can actually see in the photo — do not guess beyond what's visible.
-
-Return STRICT JSON, no prose, no code fences:
-{
-  "color": "the main colour you SEE, plain name (e.g. 'navy', 'olive green', 'cream')",
-  "color_secondary": "a second prominent colour, or empty string",
-  "pattern": "solid | stripe | plaid | floral | polka-dot | animal | abstract | colourblock",
-  "fabric": "your read of fabric + drape in a few words (e.g. 'fluid satin', 'chunky cable knit', 'crisp cotton poplin', 'structured wool', 'ribbed jersey')",
-  "formality": "loungey | casual | elevated-casual | polished | formal",
-  "sleeve": "sleeveless | short | 3/4 | long | n/a",
-  "vibe": "3-6 word style impression",
-  "confidence": "high | medium | low"
-}`;
+// The read comes back as a tool call (VisionTool + VisionSchema in
+// lib/ai/schemas.js) — the field list and its vocabularies live on the tool,
+// not in prose the model is asked to echo as JSON (2026-10-05 audit: this
+// was the last "return STRICT JSON" + bracket-regex parse in the app, the
+// shape that broke the look-back judge on her phone).
+const PROMPT = `You are a meticulous fashion cataloguer. Describe ONLY the garment you can actually see in the photo — do not guess beyond what's visible. Colour is the main colour you SEE; fabric is your read of fabric and drape in a few words; vibe is a 3-6 word style impression.`;
 
 /**
  * @param {Object} p
@@ -70,34 +64,22 @@ export async function enrichItemVision({ item, apiKey }) {
 
   const owner = `The owner tagged this piece — colour: ${item.color || "(none)"}; category: ${item.category}${item.subcategory ? " > " + item.subcategory : ""}; notes: ${item.notes || "(none)"}.`;
 
-  let res;
-  try {
-    res = await anthropicFetch({
-      model: MODEL_STANDARD,
-      max_tokens: 500,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source },
-          { type: "text", text: `${PROMPT}\n\n(For your reference only — do NOT let it bias what you actually see: ${owner})` },
-        ],
-      }],
-    }, { apiKey });
-  } catch (e) {
-    throw new Error(e.message || "Vision read failed");
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Vision read failed (${res.status})`);
-  }
-  const data = await res.json();
-  const text = (data.content || []).map(b => b.text || "").join("").trim();
   let vision;
   try {
-    const m = text.replace(/```json|```/g, "").match(/\{[\s\S]*\}/);
-    vision = JSON.parse(m ? m[0] : text);
-  } catch {
-    throw new Error("Couldn't read the vision response — try again.");
+    vision = await invokeTool({
+      apiKey,
+      model: MODEL_STANDARD,
+      maxTokens: 500,
+      content: [
+        { type: "image", source },
+        { type: "text", text: `${PROMPT}\n\n(For your reference only — do NOT let it bias what you actually see: ${owner})` },
+      ],
+      tool: VisionTool,
+      schema: VisionSchema,
+      kind: "vision_enrich",
+    });
+  } catch (e) {
+    throw new Error(e.message || "Vision read failed");
   }
 
   // ── Colour reconciliation — HER tag/notes are the source of truth ──
