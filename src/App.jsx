@@ -12,7 +12,7 @@ import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
 import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches, MISC_CATEGORY } from "./constants/taxonomy.js";
-import { defaultSortComparator, matchesColorFilter, mergeItems, slotForItem } from "./utils/item-helpers.js";
+import { defaultSortComparator, matchesColorFilter, mergeItems, slotForItem, formalityOf, onFormalityScale, FORMALITY_SCALE } from "./utils/item-helpers.js";
 import { computeFilterChips } from "./utils/style-filters.js";
 import { resolveRequestedPieces, requestForPiece } from "./utils/free-text-match.js";
 import RequestReadBack from "./features/stylist/RequestReadBack.jsx";
@@ -167,10 +167,14 @@ export default function App() {
   // items — see the available memo below.
   const [activeTrip, setActiveTrip] = useState(null);
   const [activeTripItems, setActiveTripItems] = useState([]);
-  // Bulk "move to closet" select mode on the closet grid.
+  // Select mode on the closet grid: bulk "move to closet" and, since
+  // 2026-10-07, bulk filing of formality ("is there a way to bulk edit
+  // quickly?" — 376 pieces had no formality and the Edit screen files one
+  // at a time). `bulkFormality` is the value the bar's select holds.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [moveBusy, setMoveBusy] = useState(false);
+  const [bulkFormality, setBulkFormality] = useState("");
   const [view,       setViewRaw]    = useState("home");
   const closetScrollRef = useRef(0);
   const viewRef = useRef("home");
@@ -1036,6 +1040,38 @@ export default function App() {
     }
   }, [selectedIds, moveBusy, items, persistItems]);
 
+  // File one formality across every selected piece. Same shape as the
+  // closet move: optimistic, one PATCH, revert JUST the column on failure.
+  // The selection clears and select mode stays on, so the next shelf is a
+  // filter chip and "Select unfiled" away; the cards show the new "f5".
+  const fileFormalityBulk = useCallback(async (proposed) => {
+    const ids = selectedIds;
+    const value = onFormalityScale(proposed);
+    if (ids.length === 0 || moveBusy || value == null) return;
+    const idSet = new Set(ids);
+    const prevById = new Map(items.filter(it => idSet.has(it.id)).map(it => [it.id, formalityOf(it)]));
+    const filed = items.map(it => idSet.has(it.id) ? { ...it, formality: value } : it);
+    setMoveBusy(true);
+    persistItems(filed);
+    flashSync("syncing");
+    try {
+      await sb.patchItems(ids, { formality: value }, "Bulk formality");
+      setSelectedIds([]);
+      flashSync("synced");
+    } catch (e) {
+      console.error("Bulk formality failed:", e);
+      setItems(prev => {
+        const reverted = prev.map(it => prevById.has(it.id) ? { ...it, formality: prevById.get(it.id) } : it);
+        saveLocalItems(reverted);
+        return reverted;
+      });
+      flashSync("error");
+      alert("⚠️ Couldn't file those pieces — check your connection and try again.");
+    } finally {
+      setMoveBusy(false);
+    }
+  }, [selectedIds, moveBusy, items, persistItems]);
+
   // Pre-fill the Style Me request with a phrasing the sampler / validator
   // can recognize, then jump to the panel. Used by ItemCard's spark button.
   const styleWithItem = useCallback((it) => {
@@ -1703,10 +1739,22 @@ export default function App() {
         <div style={s.cardBody}>
           <div style={s.cardCat}>{item.category}{item.subcategory ? ` · ${item.subcategory}` : ""}</div>
           <div style={s.cardName}>{item.name}</div>
+          {/* Where the piece is filed, so a shelf's gaps show while she selects. */}
+          {(() => { const f = formalityOf(item); return (
+            <div style={{ fontSize: 10, color: f == null ? "var(--color-accent-strong)" : "var(--color-text-muted)", marginTop: 2 }}>
+              {f == null ? "formality not filed" : `formality ${f} · ${FORMALITY_SCALE.find(([v]) => v === f)?.[1] || ""}`}
+            </div>
+          ); })()}
         </div>
       </div>
     );
   };
+
+  // What the grid is showing right now — the bar's "Select all" / "Select
+  // unfiled" read it, so a category chip + one tap selects a whole shelf.
+  const closetFilterActive = !!(closetSearch.trim() || activeFilters.category?.length || activeFilters.subcategory?.length || activeFilters.color?.length || activeFilters.brand?.length || activeFilters.sets || activeFilters.lastWorn);
+  const shownForSelect = isSetView ? [] : closetFilterActive ? filtered : [...recentItems, ...uncategorized];
+  const unfiledShown = shownForSelect.filter(it => formalityOf(it) == null);
 
   return (
     <div style={s.app}>
@@ -1920,13 +1968,15 @@ export default function App() {
             </div>
           )}
 
-          {/* Bulk "move to closet" — Select toggles a multi-select mode on
-              the grids below; the sticky bottom bar does the actual move. */}
-          {!isSetView && available.length > 0 && closets.length > 1 && (
+          {/* Select toggles a multi-select mode on the grids below; the
+              sticky bottom bar files a formality across the selection and,
+              with a second closet, moves pieces to it. Shown for any closet
+              with a grid — filing needs no second closet. */}
+          {!isSetView && available.length > 0 && (
             <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
               <button
                 style={selectMode ? {...s.chip, ...s.chipActive} : s.chip}
-                onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}>
+                onClick={() => { setSelectMode(v => !v); setSelectedIds([]); setBulkFormality(""); }}>
                 {selectMode ? "✕ Cancel select" : "Select"}
               </button>
             </div>
@@ -2069,6 +2119,46 @@ export default function App() {
               <span style={{ fontSize:12, color:"var(--color-text-2)", flexShrink:0 }}>
                 {selectedIds.length} selected
               </span>
+              {/* Whole-shelf selection: everything the grid shows, or just the
+                  pieces with no formality yet — a category chip narrows both.
+                  The landing view shows cards only for two weeks after an add,
+                  so with nothing on screen the bar says what to tap. */}
+              {shownForSelect.length === 0 && (
+                <span style={{ fontSize:12, color:"var(--color-text-muted)" }}>
+                  Tap a category chip above, or search, to pick a shelf.
+                </span>
+              )}
+              {shownForSelect.length > 0 && (
+                <button style={{...s.chip, padding:"6px 10px"}}
+                  onClick={() => setSelectedIds(shownForSelect.map(it => it.id))}>
+                  Select all ({shownForSelect.length})
+                </button>
+              )}
+              {unfiledShown.length > 0 && !isMiscView && (
+                <button style={{...s.chip, padding:"6px 10px"}}
+                  onClick={() => setSelectedIds(unfiledShown.map(it => it.id))}>
+                  Select unfiled ({unfiledShown.length})
+                </button>
+              )}
+              {/* Formality across the selection — the Edit screen's scale, one
+                  PATCH. Hidden in the holding room (a Misc piece is never styled). */}
+              {!isMiscView && (
+                <div style={{ display:"flex", gap:6, alignItems:"center", flex:"1 1 100%" }}>
+                  <select aria-label="Formality for the selected pieces"
+                    style={{...s.select, flex:1, minWidth:0, fontSize:12, padding:"8px 10px"}}
+                    value={bulkFormality}
+                    onChange={e => setBulkFormality(e.target.value)}>
+                    <option value="">Formality for the selection…</option>
+                    {FORMALITY_SCALE.map(([v,label]) => <option key={v} value={v}>{v} · {label}</option>)}
+                  </select>
+                  <button
+                    style={{...s.btnPrimary, padding:"8px 14px", flexShrink:0, opacity: selectedIds.length === 0 || bulkFormality === "" || moveBusy ? 0.5 : 1}}
+                    disabled={selectedIds.length === 0 || bulkFormality === "" || moveBusy}
+                    onClick={() => fileFormalityBulk(Number(bulkFormality))}>
+                    {moveBusy ? <><span style={s.spinnerSmLight}/> Filing…</> : `File ${selectedIds.length}`}
+                  </button>
+                </div>
+              )}
               {closets.filter(c => c.id !== activeCloset.id).map(c => (
                 <button key={c.id}
                   style={{...s.btnPrimary, padding:"8px 14px", opacity: selectedIds.length === 0 || moveBusy ? 0.5 : 1}}

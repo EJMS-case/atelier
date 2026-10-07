@@ -7,6 +7,7 @@ import { invokeTool } from "./ai/toolUse.js";
 import { AutoDetectSchema, AutoDetectTool } from "./ai/schemas.js";
 import { STYLING_TAXONOMY } from "../constants/taxonomy.js";
 import { MODEL_FAST } from "../constants/models.js";
+import { FORMALITY_SCALE, onFormalityScale } from "../utils/item-helpers.js";
 
 // `name` is a bulk-add convenience (proposed title), not part of the shared
 // wardrobe-item contract in ai/schemas.js — extend locally. The Zod extension
@@ -56,6 +57,7 @@ RULES:
 - \`brand\` only if a logo is clearly visible — otherwise null. Don't guess from style.
 - \`material\` one word when obvious ("silk", "cotton", "wool", "leather", "denim", "cashmere", "linen", "satin", "knit"), else null.
 - \`pattern\` one of: "solid", "striped", "plaid", "floral", "abstract", "animal", "polka-dot" — else null.
+- \`formality\` is where a stylist would file the piece on the client's scale, from the photo alone: ${FORMALITY_SCALE.map(([v, label]) => `${v} = ${label}`).join("; ")}. An integer 1–8, or null if the photo doesn't say (jewellery, a bag, a belt usually don't).
 - \`confidence\` 0–1 self-rating of overall accuracy.`;
 
 /**
@@ -113,6 +115,7 @@ function sanitize(raw) {
     brand: str(raw.brand),
     material: str(raw.material),
     pattern: str(raw.pattern),
+    formality: onFormalityScale(raw.formality),
     confidence: typeof raw.confidence === "number" ? Math.max(0, Math.min(1, raw.confidence)) : null,
   };
   if (out.category) {

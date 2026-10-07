@@ -207,7 +207,14 @@ Conventions worth knowing:
   reads it through this — `test:recap-data` fails a raw read by file. The
   Edit screen files it on `FORMALITY_SCALE` (1 active … 8 black tie, the
   packer's bands in words); 376 pieces were flagged "no formality" with no
-  field to set it until the 2026-10-05 audit. **A knit's weight is read by
+  field to set it until the 2026-10-05 audit. Add Items carries the same
+  select, pre-filled by the photo read as a proposal she confirms, and the
+  closet's Select mode files one value across a selection (*Select unfiled*
+  → Formality → File, one `sb.patchItems`), 2026-10-07. A value someone
+  PROPOSES for the column goes through `onFormalityScale()` (an integer on
+  the scale or null); a bulk edit of any column is a `patch` on
+  `sb.patchItems` and a control on the select bar, never a loop of upserts.
+  **A knit's weight is read by
   `readKnitWeight()` everywhere, prompts included** — the inventory tag used
   to read the raw column while the gates read her words.
 - **A wear-it-this-week nudge dresses for `resurfaceBucket()`** — the colder

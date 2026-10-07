@@ -409,16 +409,23 @@ export const sb = {
   },
   // Move many items to a closet in ONE request — same id=in.(…) bulk-PATCH
   // pattern as setLastWornBulk (multi-closet, Phase A).
-  async setClosetBulk(ids = [], closetId) {
+  // One PATCH across many rows — the closet move and the closet grid's
+  // bulk filing (Select → Formality, 2026-10-07) both ride it. `patch` is a
+  // plain column map; the caller has already normalised it (a number or
+  // null for a smallint, never "").
+  async patchItems(ids = [], patch = {}, label = "Bulk update") {
     const list = [...new Set(ids)].filter(Boolean);
-    if (list.length === 0) return;
+    if (list.length === 0 || !Object.keys(patch).length) return;
     const inList = list.map(encodeURIComponent).join(",");
     const res = await fetch(`${SUPABASE_URL}/rest/v1/wardrobe_items?id=in.(${inList})`, {
       method: "PATCH",
       headers: { ...sbHeaders(), "Prefer": "return=minimal" },
-      body: JSON.stringify({ closet_id: closetId }),
+      body: JSON.stringify(patch),
     });
-    if (!res.ok) throw new Error("Bulk closet move failed");
+    if (!res.ok) throw new Error(`${label} failed (${res.status})`);
+  },
+  async setClosetBulk(ids = [], closetId) {
+    return this.patchItems(ids, { closet_id: closetId }, "Bulk closet move");
   },
   // Persist the one-time Visual-AI descriptor for a single item. Best-effort
   // per item so a batch enrichment can continue past one failure.
