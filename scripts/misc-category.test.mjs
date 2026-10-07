@@ -267,3 +267,19 @@ test("auto-detect can never overwrite a row the user filed as Misc", () => {
   assert.equal(out.name, "ivory silk cami");
   assert.equal(out.subcategory, "Tanks");
 });
+
+// The photo read proposes a formality on the app's 1–8 scale (2026-10-07:
+// "add the formality tag to the page where I'm adding a new garment"). It
+// lands only where the row is unfiled, only as an integer on the scale, and
+// never over a value she set — the same no-clobber rule as every other field.
+test("applyDetection: a proposed formality fills an unfiled row, on the scale only, never over hers", () => {
+  const row = { id: "q1", name: "", category: "Tops", subcategory: "", brand: "", color: "", material: "", pattern: "", formality: null };
+  const base = { category: "Tops", subcategory: "Blouses", primary_color: "ivory", brand: null, material: null, pattern: null, confidence: 0.8 };
+  assert.equal(applyDetection(row, { ...base, formality: 5 }).formality, 5, "an unfiled row takes the proposal");
+  assert.equal(applyDetection({ ...row, formality: "" }, { ...base, formality: 5 }).formality, 5, '"" is unfiled too');
+  assert.equal(applyDetection({ ...row, formality: 3 }, { ...base, formality: 5 }).formality, 3, "her value stands");
+  assert.equal(applyDetection(row, { ...base, formality: 0 }).formality, null, "0 is off the scale");
+  assert.equal(applyDetection(row, { ...base, formality: 9 }).formality, null, "9 is off the scale");
+  assert.equal(applyDetection(row, { ...base, formality: "5" }).formality, null, "a string is not a filing (sanitize coerces upstream)");
+  assert.equal(applyDetection(row, { ...base, formality: null }).formality, null, "no proposal, no change");
+});

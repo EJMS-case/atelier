@@ -30,7 +30,7 @@ export const ISSUE_LABELS = {
   subcategory_unknown: "subcategory off the taxonomy",
   no_image:            "no photo",
   material_missing:    "no material — invisible to texture intelligence",
-  formality_missing:   "no formality (1 active – 8 black tie) — set it on the Edit screen; until then the stylist reads the piece as unfiled, not loungey",
+  formality_missing:   "no formality (1 active – 8 black tie) — set it on the Edit screen, or in the closet tap Select → Select unfiled → Formality to file a shelf at once; until then the stylist reads the piece as unfiled, not loungey",
   notes_too_long:      `notes over ${CURATED_NOTES_MAX} chars with no stylist line — excluded from classifiers`,
   // The two fields her office dress code turns on (2026-09-10): a top with
   // no sleeve signal can't be told to stand alone (long) or take a layer

@@ -32,6 +32,11 @@ export const AutoDetectSchema = z.object({
   brand: z.string().nullable().default(null),
   material: z.string().nullable().default(null),
   pattern: z.string().nullable().default(null),
+  // Where the piece sits on the app's 1–8 scale (FORMALITY_SCALE), read off
+  // the photo as a proposal — Add Items shows it in the row's Formality
+  // select for her to keep or change before the save. Anything outside the
+  // scale reads as "couldn't tell".
+  formality: z.coerce.number().int().min(1).max(8).nullable().default(null).catch(null),
   confidence: z.number().min(0).max(1).nullable().default(null).catch(null),
 });
 
@@ -47,6 +52,7 @@ export const AutoDetectTool = {
       brand:               { type: ["string", "null"] },
       material:            { type: ["string", "null"] },
       pattern:             { type: ["string", "null"] },
+      formality:           { type: ["integer", "null"], minimum: 1, maximum: 8 },
       confidence:          { type: ["number", "null"], minimum: 0, maximum: 1 },
     },
     required: ["category", "primary_color", "confidence"],

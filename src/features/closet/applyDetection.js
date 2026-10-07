@@ -5,6 +5,7 @@
 // typing.
 
 import { MISC_CATEGORY } from "../../constants/taxonomy.js";
+import { formalityOf, onFormalityScale } from "../../utils/item-helpers.js";
 
 /**
  * @param {Object} queueItem  - the current state of a BulkAddView queue entry
@@ -37,6 +38,12 @@ export function applyDetection(queueItem, detection) {
   if (detection.brand && !queueItem.brand) next.brand = detection.brand;
   if (detection.material && !queueItem.material) next.material = detection.material;
   if (detection.pattern && !queueItem.pattern) next.pattern = detection.pattern;
+  // Formality: a proposal on the app's 1–8 scale, shown in the row's select
+  // for her to keep or change. Only a value on the scale lands
+  // (onFormalityScale), and only where the row is still unfiled
+  // (formalityOf: null / "" / undefined).
+  const proposedFormality = onFormalityScale(detection.formality);
+  if (proposedFormality != null && formalityOf(queueItem) == null) next.formality = proposedFormality;
   if (typeof detection.confidence === "number") next.detection_confidence = detection.confidence;
 
   return next;

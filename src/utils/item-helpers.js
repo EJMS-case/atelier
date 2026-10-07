@@ -125,6 +125,13 @@ const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra
 // The scale she files on, as the Edit screen offers it. The words are the
 // app's own bands (tripPacker.formalityBand, standard.FORMALITY_BANDS): 1-2
 // active / lounge, 3-4 casual and travel, 4-6 dinner, 5-6 work, 7-8 formal.
+// A value someone proposes for the column — the photo read, the Add Items
+// select, the closet's bulk filer — is kept only if it is an integer on the
+// scale. 0 and 9 have no band; a string is not a filing.
+export function onFormalityScale(v) {
+  return Number.isInteger(v) && v >= 1 && v <= 8 ? v : null;
+}
+
 export const FORMALITY_SCALE = [
   [1, "active, gym"],
   [2, "lounge, sleep"],

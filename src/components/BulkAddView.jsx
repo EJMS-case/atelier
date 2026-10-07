@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
-import { CURATED_NOTES_MAX } from "../utils/item-helpers.js";
+import { CURATED_NOTES_MAX, FORMALITY_SCALE, formalityOf } from "../utils/item-helpers.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
@@ -50,7 +50,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         // AI auto-detect proposes a real title (applyDetection).
         name: "",
         category: "Tops", subcategory: "", brand: "", color: "", stylist_line: "",
-        material: "", pattern: "", price_paid: null, has_bg: false,
+        material: "", pattern: "", price_paid: null, formality: null, has_bg: false,
         detected_at: null, detection_confidence: null,
       }]);
       setProcessing(p => ({...p, [id]: "bg"}));
@@ -321,10 +321,24 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                         {["solid","striped","plaid","floral","abstract","animal","polka-dot"].map(p=><option key={p}>{p}</option>)}
                       </select>
                     </div>
-                    <input type="number" min="0" step="1"
-                      style={{...s.input,...s.queueInput}} placeholder="Price paid (USD, optional)"
-                      value={item.price_paid ?? ""}
-                      onChange={e=>update(item.id,"price_paid", e.target.value === "" ? null : Number(e.target.value))}/>
+                    <div style={s.queueRow2}>
+                      <input type="number" min="0" step="1"
+                        style={{...s.input,...s.queueInput}} placeholder="Price paid (USD, optional)"
+                        value={item.price_paid ?? ""}
+                        onChange={e=>update(item.id,"price_paid", e.target.value === "" ? null : Number(e.target.value))}/>
+                      {/* Formality, on the Edit screen's scale (owner, 2026-10-07:
+                          "add the formality tag to the page where I'm adding a
+                          new garment"). The photo read proposes a value
+                          (applyDetection); she keeps or changes it here. A
+                          number or null — never "" — so the smallint column
+                          takes it. */}
+                      <select style={{...s.select,...s.queueSelect}} value={formalityOf(item) ?? ""}
+                        aria-label="Formality"
+                        onChange={e=>update(item.id,"formality", e.target.value === "" ? null : Number(e.target.value))}>
+                        <option value="">Formality (not filed)</option>
+                        {FORMALITY_SCALE.map(([v,label])=><option key={v} value={v}>{v} · {label}</option>)}
+                      </select>
+                    </div>
                     {/* The stylist line is the one text field a piece has
                         (owner, 2026-09-18) — what every prompt and classifier
                         reads, capped at what they read. A piece added with

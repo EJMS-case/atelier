@@ -314,6 +314,35 @@ await check("Closet switcher opens from the chip's arrow", async () => {
   await page.evaluate(() => document.querySelector('button[aria-label="Switch closet"]')?.click());
 });
 
+// Select mode (owner, 2026-10-07: "is there a way to bulk edit quickly?"):
+// the chip shows for any closet with a grid (it used to need a second
+// closet), and the bar carries a Formality select with a "Select unfiled"
+// shortcut so a shelf files in three taps. The fixture's pieces carry no
+// formality, so the shortcut must count them.
+await check("Closet → Select mode: the bar files a formality across the selection", async () => {
+  // The landing view carries cards only for two weeks after an add (the
+  // fixture's rows have no created_at), so a shelf is a category chip away —
+  // the same first tap she makes.
+  await clickText("button", "Tops");
+  await page.waitForTimeout(300);
+  await clickText("button", "Select");
+  await page.waitForTimeout(300);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Select unfiled \(\d+\)/.test(text)) throw new Error('"Select unfiled (n)" did not render in the bar');
+  if (!/Select all \(\d+\)/.test(text)) throw new Error('"Select all (n)" did not render in the bar');
+  const hasSelect = await page.evaluate(() => !!document.querySelector('select[aria-label="Formality for the selected pieces"]'));
+  if (!hasSelect) throw new Error("the Formality select did not render in the bar");
+  await clickText("button", "Select unfiled");
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => document.body.innerText);
+  const m = after.match(/(\d+) selected/);
+  if (!m || Number(m[1]) === 0) throw new Error("Select unfiled selected nothing");
+  if (!/formality not filed/.test(after)) throw new Error("the select card does not say where a piece is filed");
+  await clickText("button", "✕ Cancel select");
+  await clickText("button", "All");
+  await page.waitForTimeout(200);
+});
+
 // A garment's Edit screen (owner, 2026-09-18): the stylist line is the ONE
 // text field — no Notes box, no "≤200" instruction — and every "In Your
 // Looks" row is a way out. The fixture's NYC look (log-nyc, 2026-08-01) is

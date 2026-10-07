@@ -2,6 +2,37 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Formality on Add Items, and the closet's Select mode files a shelf at once — 2026-10-07
+
+### Why
+
+Owner: *"Can you add the formality tag to the page where I'm adding a new garment? And is there a way to bulk edit quickly?"* The 2026-10-05 audit gave the Edit screen a Formality field, which files one piece at a time; 376 pieces are unfiled and a new piece arrived unfiled too. Two gaps in one family — a field she can set on a new piece, and a way to set it across many at once.
+
+### Changed
+
+- **Add Items carries a Formality select on every non-Misc row** (`BulkAddView.jsx`), the Edit screen's `FORMALITY_SCALE` (1 active … 8 black tie), beside the price. A number or null — never `""` — so the smallint column takes it. **The photo read proposes a value**: `AutoDetectSchema` / `record_clothing_item` gained `formality` (integer 1–8 or null), the prompt names the scale from the one list, and `applyDetection` fills the row only where it is still unfiled — the same no-clobber rule as colour, brand and material. She keeps or changes it before the save; nothing is written without her seeing it.
+- **`onFormalityScale(v)` (`item-helpers.js`) is the reader for a proposed value**: an integer on the scale or null. The photo read's sanitize, `applyDetection` and the bulk filer all use it; `test:recap-data`'s source contract holds that no site compares the column raw.
+- **The closet's Select mode files a formality across the selection.** The sticky bar gained a Formality select and a *File N* button (one PATCH through `sb.patchItems`, optimistic, the column alone reverted on failure), plus two shortcuts — *Select all (n)* for what the grid shows and *Select unfiled (n)* for the pieces with no formality yet — so a shelf files in three taps: category chip → Select → Select unfiled → pick → File. The selection clears and select mode stays on for the next shelf. The Select chip now shows for any closet with a grid (it needed a second closet before; the Move buttons still appear only when one exists). With nothing on screen (the landing view shows cards only for two weeks after an add) the bar says to tap a chip or search. A select-mode card says where the piece is filed (*formality 5 · work* or *formality not filed*). The holding room hides the Formality control — a Misc piece is never styled.
+- **`sb.setClosetBulk` rides the new `sb.patchItems(ids, patch, label)`** — one bulk PATCH, two callers.
+- **The readiness flag names both ways to act on it**: "set it on the Edit screen, or in the closet tap Select → Select unfiled → Formality to file a shelf at once".
+
+### Downstream, four ways
+
+- **Efficiency.** Filing N pieces is one request, not N upserts. The detect tool's body grows by one property and one prompt bullet (~60 tokens on an uncached MODEL_FAST call). No boot-chunk change: `item-helpers.js` is already in App's chunk and `anthropic.js` already imports from `utils/`.
+- **Effectiveness.** A filed formality reaches every reader at once — the Casual gate, the packer's distance, the inventory tag, LOOK FACTS — because they all go through `formalityOf()`. A new piece now arrives with a proposed filing instead of joining the unfiled pile.
+- **Speed.** The bar's work is local until *File*; the PATCH is fire-and-confirm with the cards already showing the new value.
+- **Education.** The stylist reads a filed piece in its band instead of "unknown"; the fewer unfiled pieces, the sharper every surface's read of her closet. The proposal is never a filing until she saves it.
+
+### Tests
+
+- `scripts/misc-category.test.mjs`: a proposed formality fills an unfiled row, on the scale only (0, 9, "5" rejected), never over hers.
+- `scripts/render.test.mjs` +1 step: Tops chip → Select → the bar shows *Select unfiled (n)*, *Select all (n)* and the Formality select; *Select unfiled* selects; the card says *formality not filed*; Cancel, All.
+- `npm test` (51 suites), `npm run build`, `npm run smoke` (41 walk steps) green.
+
+### Data
+
+No migration. No row written by this change; every filing is hers, from the bar or the Add Items row.
+
 ## [Unreleased] — Audit, third sweep: the anon role holds no grant on Atelier's tables; the backup tables surfaced; the handoff's stale items marked — 2026-10-05
 
 ### Why
