@@ -68,3 +68,15 @@ test("at Casual the sampler trails the tailoring behind the easy pieces, and kee
   const work = sampleClosetItems({ items: closet, occasion: "Work", occasionSlots: {}, weather: "" }).sampled.map(it => it.id);
   assert.equal(work.length, closet.length);
 });
+
+// A piece filed at one step that her line says crosses rooms (owner,
+// 2026-10-10: "what do I do when something is good for work and elevated
+// casual?"): the line names Casual, so the Casual ordering leaves it alone.
+// "not for casual" names the word and means the opposite — still trails.
+test("readsAsOffice yields to a line that names Casual, never to one that vetoes it", () => {
+  const cardigan = { id: "c", category: "Knits", subcategory: "Cardigans", name: "Cropped Merino Cardigan", formality: 5, stylist_line: "burgundy cropped merino cardigan; work or elevated casual" };
+  assert.equal(readsAsOffice(cardigan, "Casual"), false, "her line names Casual");
+  assert.equal(readsAsOffice({ ...cardigan, stylist_line: "weekend and office" }, "Casual"), false, "'weekend' is a Casual word");
+  assert.equal(readsAsOffice({ ...cardigan, stylist_line: "work only, not for casual" }, "Casual"), true, "a veto is not a rescue");
+  assert.equal(readsAsOffice({ ...cardigan, stylist_line: "" }, "Casual"), true, "f5 with no room word still trails at Casual");
+});

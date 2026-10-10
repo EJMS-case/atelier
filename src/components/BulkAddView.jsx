@@ -345,7 +345,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                         none is picked up by the Style Profile sweep. */}
                     <textarea rows={2} maxLength={CURATED_NOTES_MAX}
                       style={{...s.input,...s.queueInput, minHeight:52, resize:"vertical", fontFamily:"inherit", lineHeight:1.4}}
-                      placeholder="Stylist line — what the AI reads (e.g. black cropped cardigan, chunky knit; for weekends, NOT for work)"
+                      placeholder="Stylist line — what the AI reads, rooms included (e.g. burgundy cropped merino cardigan; work or elevated casual)"
                       value={item.stylist_line} onChange={e=>update(item.id,"stylist_line",e.target.value)}/>
                     </>)}
                   </div>

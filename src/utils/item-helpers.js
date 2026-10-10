@@ -125,6 +125,75 @@ const COMFORT_NAME_RE = /\b(hoodie|sweatshirt|jogger|legging|skort|sports?\s*bra
 // The scale she files on, as the Edit screen offers it. The words are the
 // app's own bands (tripPacker.formalityBand, standard.FORMALITY_BANDS): 1-2
 // active / lounge, 3-4 casual and travel, 4-6 dinner, 5-6 work, 7-8 formal.
+// ── Rooms, in her own words ──────────────────────────────────────────────────
+// Her stylist line lists the ROOMS a piece goes to ("work, dinners,
+// semiformal"; "work or evening"). ROOM_WORDS is the one vocabulary for
+// reading a room off that line, positive and negative alike:
+//   · noteNamesOccasion — "work" names Work; the room's keyword ban yields
+//     to it (below), because a line that lists this room AND another is a
+//     cross-room piece she wears here, not an evening-only piece that
+//     happens to mention work.
+//   · noteVetoesOccasion — "not for work" / "non-work" / "not regular
+//     dinners" keeps the piece OUT of that room outright.
+// One map, so a room she can name is exactly a room she can veto. (The
+// comfort rooms' broader OCCASION_NOTE_HINTS stay a RESCUE — noteSaysOccasion
+// — not a room name: "everyday" on a blazer vouches it past the dressiness
+// gate, it does not make "structured" a Lounge word.)
+export const ROOM_WORDS = {
+  Work: "work|office|boardroom",
+  "Work Dinner": "work|office|boardroom",
+  Casual: "casual|weekend|everyday|brunch|errands?",
+  Dinner: "dinner|date.?night|drinks",
+  Occasion: "occasion|event|wedding|gala|black.?tie",
+  Lounge: "loung(?:e|ing)|home",
+  Active: "gym|active|work.?out|training",
+  "Travel Day": "travel|airport|flight",
+  Vacation: "vacation|resort|beach",
+};
+const roomWordsRe = {};
+const roomVetoRe = {};
+// True when her own line or the name says this piece goes to this room.
+export function noteNamesOccasion(item, occasion) {
+  const words = ROOM_WORDS[occasion];
+  if (!words) return false;
+  const rx = roomWordsRe[occasion] ||= new RegExp(`\\b(?:${words})s?\\b`, "i");
+  return rx.test((item.name || "") + " " + classifierNotes(item));
+}
+
+// ── Negative occasion notes ("NOT FOR WORK") ─────────────────────────────────
+// The mirror image of noteNamesOccasion: her own note can veto a piece OUT of
+// an occasion outright (owner report 2026-08-19: a shoe whose note read
+// "NOT FOR WORK" was styled into a Work look — the note reached the prompt
+// as context but nothing enforced it). Recognized shapes: "not for work",
+// "no work", "never for work", "non-work", "not regular dinners" (any casing;
+// a preposition or one qualifying word between is optional). Per the owner,
+// "work" covers BOTH Work and Work Dinner. Curated notes only (NOTES POLICY)
+// — product copy can't veto. Only literally NAMING the piece in the request
+// box overrides: that's a per-tap instruction outranking a standing note.
+export function noteVetoesOccasion(item, occasion) {
+  const words = ROOM_WORDS[occasion];
+  if (!words) return false;
+  const rx = roomVetoRe[occasion] ||= new RegExp(
+    `\\b(?:not?|never|non)(?:[-\\s]+(?:for|at|to|in|on|regular|the|a|your|my))*[-\\s]+(?:${words})s?\\b`, "i");
+  return rx.test((item.name || "") + " " + classifierNotes(item));
+}
+
+// Her line puts this piece in this room: it names the room and does not veto
+// it ("not for casual" names the word, and means the opposite). The one
+// question every formality reader asks before letting the number speak — a
+// piece is filed at ONE step, and her line is where a cross-room piece says
+// it crosses (owner, 2026-10-10: "what do I do when something is good for
+// work and elevated casual?"). Read by the Casual ordering (readsAsOffice),
+// the stylist's LOOK FACTS band notes, and the trip packer's distance.
+export function lineWearsTo(item, occasion) {
+  if (!item || !occasion) return false;
+  // The packer passes a trip day's label as typed ("work", "Work dinner");
+  // the room vocabulary is keyed by the app's names.
+  const room = ROOM_WORDS[occasion] ? occasion
+    : Object.keys(ROOM_WORDS).find(k => k.toLowerCase() === String(occasion).trim().toLowerCase());
+  return !!room && noteNamesOccasion(item, room) && !noteVetoesOccasion(item, room);
+}
+
 // A value someone proposes for the column — the photo read, the Add Items
 // select, the closet's bulk filer — is kept only if it is an integer on the
 // scale. 0 and 9 have no band; a string is not a filing.

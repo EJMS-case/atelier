@@ -13,6 +13,7 @@ import {
   tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE,
 } from "../src/features/planner/tripPacker.js";
 import { filterByWeather, swimPieceKind } from "../src/utils/item-helpers.js";
+import { formalityDistance } from "../src/features/planner/tripPacker.js";
 import { outfitCoverageGaps } from "../src/features/planner/outfits.js";
 
 let passed = 0, failed = 0;
@@ -1457,6 +1458,22 @@ section("plentiful mode (destination closet)");
   assert(together === 0, "the leopard blouse and the fringe bag never share a look");
 }
 
+// ── Formality distance yields to her line (2026-10-10) ──────────────────────
+// "What do I do when something is good for work and elevated casual?" — a
+// piece is filed at one step; a room her line names puts it in that room's
+// band, in any letter case. A veto ("not for casual") is not a rescue.
+section("formality distance reads her line");
+{
+  const cardi = { category: "Knits", subcategory: "Cardigans", name: "Cropped Merino Cardigan", formality: 4 };
+  assert(formalityDistance(cardi, "Work") === 1, "f4 with no room word sits a step below Work");
+  const crosses = { ...cardi, stylist_line: "work or elevated casual" };
+  assert(formalityDistance(crosses, "Work") === 0, "her line names Work: in band");
+  assert(formalityDistance(crosses, "work") === 0, "any letter case");
+  assert(formalityDistance({ ...cardi, formality: 6, stylist_line: "work or elevated casual" }, "Casual") === 0, "f6 whose line names Casual: in the Casual band");
+  assert(formalityDistance({ ...cardi, formality: 6, stylist_line: "work, not for casual" }, "Casual") === 2, "a veto is not a rescue");
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 console.log(`\ntrip-packer: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
+

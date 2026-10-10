@@ -7,7 +7,11 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, formalityOf } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, formalityOf, noteNamesOccasion, noteVetoesOccasion, lineWearsTo } from "./item-helpers.js";
+// The room vocabulary lives beside classifierNotes in item-helpers.js (it is
+// read by the stylist's LOOK FACTS and the trip packer too); re-exported so
+// existing importers keep working.
+export { noteNamesOccasion, noteVetoesOccasion, lineWearsTo };
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 import { namedExplicitly, matchesFreeText, resolveRequestedPieces } from "./free-text-match.js";
@@ -182,59 +186,6 @@ export function noteSaysOccasion(item, occasion) {
   return rx.test(((item.name || "") + " " + classifierNotes(item)).toLowerCase());
 }
 
-// ── Rooms, in her own words ──────────────────────────────────────────────────
-// Her stylist line lists the ROOMS a piece goes to ("work, dinners,
-// semiformal"; "work or evening"). ROOM_WORDS is the one vocabulary for
-// reading a room off that line, positive and negative alike:
-//   · noteNamesOccasion — "work" names Work; the room's keyword ban yields
-//     to it (below), because a line that lists this room AND another is a
-//     cross-room piece she wears here, not an evening-only piece that
-//     happens to mention work.
-//   · noteVetoesOccasion — "not for work" / "non-work" / "not regular
-//     dinners" keeps the piece OUT of that room outright.
-// One map, so a room she can name is exactly a room she can veto. (The
-// comfort rooms' broader OCCASION_NOTE_HINTS stay a RESCUE — noteSaysOccasion
-// — not a room name: "everyday" on a blazer vouches it past the dressiness
-// gate, it does not make "structured" a Lounge word.)
-const ROOM_WORDS = {
-  Work: "work|office|boardroom",
-  "Work Dinner": "work|office|boardroom",
-  Casual: "casual|weekend|everyday|brunch|errands?",
-  Dinner: "dinner|date.?night|drinks",
-  Occasion: "occasion|event|wedding|gala|black.?tie",
-  Lounge: "loung(?:e|ing)|home",
-  Active: "gym|active|work.?out|training",
-  "Travel Day": "travel|airport|flight",
-  Vacation: "vacation|resort|beach",
-};
-const roomWordsRe = {};
-const roomVetoRe = {};
-// True when her own line or the name says this piece goes to this room.
-export function noteNamesOccasion(item, occasion) {
-  const words = ROOM_WORDS[occasion];
-  if (!words) return false;
-  const rx = roomWordsRe[occasion] ||= new RegExp(`\\b(?:${words})s?\\b`, "i");
-  return rx.test((item.name || "") + " " + classifierNotes(item));
-}
-
-// ── Negative occasion notes ("NOT FOR WORK") ─────────────────────────────────
-// The mirror image of noteNamesOccasion: her own note can veto a piece OUT of
-// an occasion outright (owner report 2026-08-19: a shoe whose note read
-// "NOT FOR WORK" was styled into a Work look — the note reached the prompt
-// as context but nothing enforced it). Recognized shapes: "not for work",
-// "no work", "never for work", "non-work", "not regular dinners" (any casing;
-// a preposition or one qualifying word between is optional). Per the owner,
-// "work" covers BOTH Work and Work Dinner. Curated notes only (NOTES POLICY)
-// — product copy can't veto. Only literally NAMING the piece in the request
-// box overrides: that's a per-tap instruction outranking a standing note.
-export function noteVetoesOccasion(item, occasion) {
-  const words = ROOM_WORDS[occasion];
-  if (!words) return false;
-  const rx = roomVetoRe[occasion] ||= new RegExp(
-    `\\b(?:not?|never|non)(?:[-\\s]+(?:for|at|to|in|on|regular|the|a|your|my))*[-\\s]+(?:${words})s?\\b`, "i");
-  return rx.test((item.name || "") + " " + classifierNotes(item));
-}
-
 // ── Room keyword bans ────────────────────────────────────────────────────────
 // A room's banned keywords ("evening", "formal" for Work) are read against her
 // line as WHOLE WORDS, plural allowed. Until 2026-09-24 they were substrings:
@@ -281,6 +232,10 @@ function tooDressyForComfort(item, occasion) {
 const TROUSER_RE = /\b(trousers?|slacks|suit pants?|dress pants?)\b/i;
 export function readsAsOffice(item, occasion) {
   if (occasion !== "Casual") return false;
+  // Her line names Casual ("work or elevated casual") — she wears it off
+  // duty, whatever its formality number (owner, 2026-10-10: "what do I do
+  // when something is good for work and elevated casual?").
+  if (lineWearsTo(item, "Casual")) return false;
   if (isBlazerItem(item)) return true;
   const f = formalityOf(item);
   if (f != null && f >= 5) return true;
