@@ -148,3 +148,41 @@ test("a stylist_line resolves the long-notes flag", () => {
   assert.ok(!auditItem({ ...longNotes, stylist_line: "silk cami, bias cut" }).includes("notes_too_long"));
   assert.ok(auditItem({ ...longNotes, stylist_line: "   " }).includes("notes_too_long"), "blank line doesn't count");
 });
+
+// The Style Profile page reads garments only (owner, 2026-10-10: "I don't want
+// shoes belts or accessories to appear on my style profile page"). One list,
+// NON_GARMENT_CATEGORIES, decides what a garment is; the page filters through
+// isGarment before the audit, and no site types the four names by hand again.
+import { isGarment, NON_GARMENT_CATEGORIES } from "../src/constants/taxonomy.js";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+test("isGarment: shoes, bags, belts and accessories are not garments; clothing is", () => {
+  for (const c of ["Shoes", "Bags", "Belts", "Accessories"]) assert.equal(isGarment({ category: c }), false, c);
+  for (const c of ["Tops", "Knits", "Bottoms", "Dresses", "Outerwear", "Occasionwear", "Jumpsuits"]) assert.equal(isGarment({ category: c }), true, c);
+  assert.equal(isGarment(null), false);
+  assert.equal(NON_GARMENT_CATEGORIES.size, 4);
+});
+
+test("the Style Profile page audits garments only, and no file re-types the non-garment list", () => {
+  const root = new URL("../src/", import.meta.url).pathname;
+  const view = readFileSync(join(root, "features/profile/StyleProfileView.jsx"), "utf8");
+  assert.match(view, /\.filter\(isGarment\)/, "StyleProfileView filters its pieces through isGarment");
+  const offenders = [];
+  const walk = (dir) => {
+    for (const f of readdirSync(dir)) {
+      const p = join(dir, f);
+      if (statSync(p).isDirectory()) { walk(p); continue; }
+      if (!/\.(jsx?|mjs)$/.test(f) || p.endsWith("constants/taxonomy.js")) continue;
+      const src = readFileSync(p, "utf8");
+      // The exact four, in any order, as one array or Set literal.
+      const lits = src.match(/(?:\[|new Set\(\[)\s*("[A-Za-z]+"\s*,\s*){3}"[A-Za-z]+"\s*\]/g) || [];
+      for (const l of lits) {
+        const names = new Set(l.match(/"([A-Za-z]+)"/g).map(x => x.slice(1, -1)));
+        if (names.size === 4 && ["Shoes", "Bags", "Belts", "Accessories"].every(n => names.has(n))) offenders.push(p.slice(root.length));
+      }
+    }
+  };
+  walk(root);
+  assert.deepEqual(offenders, [], "use NON_GARMENT_CATEGORIES / isGarment from constants/taxonomy.js");
+});

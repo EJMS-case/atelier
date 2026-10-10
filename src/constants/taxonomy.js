@@ -40,6 +40,15 @@ export const TAXONOMY = {
   [MISC_CATEGORY]: [],
 };
 
+// The pieces that finish a look rather than make one: shoes, bags, belts and
+// accessories (jewellery, hosiery, scarves, sunglasses). One list — the
+// stylist's fabric read, the recap's "leaned-on" count and the Style Profile
+// page all read it (owner, 2026-10-10: "I don't want shoes belts or
+// accessories to appear on my style profile page"). Before this, the same
+// four names were typed by hand at each site.
+export const NON_GARMENT_CATEGORIES = new Set(["Shoes", "Bags", "Belts", "Accessories"]);
+export const isGarment = (it) => !!it && !NON_GARMENT_CATEGORIES.has(it.category);
+
 // The styling-safe views of the two lists above. EVERY consumer that hands a
 // category list to a model, or renders a per-category styling/coverage
 // breakdown, must read these instead of CATEGORY_ORDER / TAXONOMY so the AI

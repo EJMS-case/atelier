@@ -39,7 +39,7 @@
 // every advisory surface actually composes the standard in.
 
 import { OCCASION_SLOTS } from "../../constants/styling.js";
-import { normalizeOccasion, weatherMatches } from "../../constants/taxonomy.js";
+import { normalizeOccasion, weatherMatches, isGarment } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
 import { formatWeather } from "../../prompts/styling-system-prompt.js";
 import { runAllChecks } from "../../utils/styling-validator.js";
@@ -454,7 +454,7 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     found.forEach(f => fabrics.add(f.toLowerCase()));
     if (SHEEN_RE.test(text)) sheen++; else if (found.length) matte++;
   }
-  const garments = list.filter(it => !["Shoes", "Bags", "Belts", "Accessories"].includes(it.category));
+  const garments = list.filter(isGarment);
   if (fabrics.size) {
     let line = `Fabrics on the canvas: ${[...fabrics].join(", ")} (${fabrics.size} distinct)`;
     if (garments.length >= 2 && fabrics.size < 2) line += " — one weight throughout; a second texture would give it depth.";

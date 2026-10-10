@@ -27,6 +27,7 @@ import { familyForColorString } from "../../constants/color.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { autoColorPairs, hexForColorLabel } from "../../utils/wardrobe-coverage.js";
 import { auditCloset, ISSUE_LABELS, CRITICAL_ISSUES } from "./dataAudit.js";
+import { isGarment } from "../../constants/taxonomy.js";
 import { PALETTE } from "../../constants/palette.js";
 
 // Families that ground a look rather than color-block it — suggestions pair
@@ -143,7 +144,11 @@ export default function StyleProfileView({
   // is standing in: the stylist reads the Arizona pieces on every trip day,
   // and a flag she cannot see is a flag she cannot act on. (The first sweep
   // ran on `items` and left the 21 Arizona pieces without a line, 2026-09-11.)
-  const readable = wardrobe.length ? wardrobe : items;
+  // Garments only (owner, 2026-10-10: "I don't want shoes belts or
+  // accessories to appear on my style profile page") — shoes, bags, belts and
+  // accessories are off this page's count, flag list and line button
+  // (isGarment, the one list). The stylist still reads them everywhere else.
+  const readable = useMemo(() => (wardrobe.length ? wardrobe : items).filter(isGarment), [wardrobe, items]);
   const audit = useMemo(() => auditCloset(readable), [readable]);
   // The photo-readable field her office dress code turns on. Visual AI fills
   // vision_data.sleeve for every photographed top it reads. (Declared AFTER
@@ -414,7 +419,7 @@ export default function StyleProfileView({
       <div style={s.settingsCard}>
         <div style={s.settingsTitle}>✦ AI Readiness</div>
         <p style={s.settingsSub}>
-          How much of your wardrobe — both closets — the stylist can fully read. A piece with an unreadable color or an off-taxonomy subcategory gets styled generically — fix the flagged fields and every AI surface gets sharper.
+          How much of your clothing — both closets, shoes and accessories aside — the stylist can fully read. A piece with an unreadable color or an off-taxonomy subcategory gets styled generically — fix the flagged fields and every AI surface gets sharper.
         </p>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
           <div style={{ fontSize: 26, fontFamily: "'DM Serif Display',Georgia,serif", color: "var(--color-text)" }}>
@@ -486,7 +491,7 @@ export default function StyleProfileView({
           </>
         )}
         {audit.flagged.length === 0 && audit.total > 0 && (
-          <div style={{ fontSize: 12, color: "var(--color-success)" }}>Every piece is fully readable. The stylist sees your whole closet.</div>
+          <div style={{ fontSize: 12, color: "var(--color-success)" }}>Every piece of clothing is fully readable. The stylist sees all of it.</div>
         )}
       </div>
 

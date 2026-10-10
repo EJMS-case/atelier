@@ -2,6 +2,34 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The Style Profile page reads clothing only — 2026-10-10
+
+### Why
+
+Owner: *"I don't want shoes belts or accessories to appear on my style profile page."* The AI Readiness section listed every piece in both closets. Live rows: 114 pieces are shoes (56), accessories (27), bags (20) or belts (11), and 112 of them were flagged "no formality", so the flagged list was crowded with things she doesn't file that way. Every one already carries a stylist line.
+
+### Changed
+
+- **`NON_GARMENT_CATEGORIES` and `isGarment()` in `constants/taxonomy.js`** are the one definition of "finishes a look rather than makes one": Shoes, Bags, Belts, Accessories. Bags go with accessories, as the stylist already grouped them.
+- **Style Profile → AI Readiness reads garments only**: the readiness percentage, the issue counts, *Show flagged pieces*, the sleeve prompt and *Write stylist lines* all filter through `isGarment` (memoised on the closet). The intro reads "your clothing — both closets, shoes and accessories aside"; the all-clear reads "Every piece of clothing is fully readable."
+- **The two hand-typed copies of the list now read it**: the stylist's fabric note in `standard.js` (`list.filter(isGarment)`) and the recap's `OVERWEAR_EXCLUDE` in `recapData.js`. Same four names, so no behaviour change there.
+
+### Downstream, four ways
+
+- **Efficiency.** The audit runs over ~114 fewer rows; no request changes; `taxonomy.js` is already in every chunk that imports it.
+- **Effectiveness.** The page's flags are now the ones that matter to how a garment is styled. Shoes, bags, belts and accessories are still read by every stylist surface exactly as before; only this page stops listing them.
+- **Speed.** Unchanged.
+- **Education.** Unchanged — nothing the stylist reads moved.
+
+### Tests
+
+- `scripts/data-audit.test.mjs`: `isGarment` over the four and seven garment categories; a source contract that the page filters through `isGarment` and that no file under `src/` re-types the four names as a literal list.
+- `npm test` (51 suites), `npm run build`, `npm run smoke` (41 walk steps) green.
+
+### Data
+
+None. No migration, no row written.
+
 ## [Unreleased] — Formality on Add Items, and the closet's Select mode files a shelf at once — 2026-10-07
 
 ### Why

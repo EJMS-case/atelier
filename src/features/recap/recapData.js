@@ -11,13 +11,13 @@ import { outfitsOf } from "../planner/outfits.js";
 import { wearEligible } from "../wear/wearApi.js";
 import { asArray } from "../../lib/multitag.js";
 import { filterByWeather, isComfortCoded, formalityOf } from "../../utils/item-helpers.js";
-import { getSubcatL2 } from "../../constants/taxonomy.js";
+import { getSubcatL2, NON_GARMENT_CATEGORIES } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
 import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
 
 // Categories that don't count as "leaned-on" garments — belts, jewelry and
 // other accessories, shoes, and bags repeat freely by design.
-const OVERWEAR_EXCLUDE = new Set(["Belts", "Accessories", "Shoes", "Bags"]);
+const OVERWEAR_EXCLUDE = NON_GARMENT_CATEGORIES;
 
 // Garment categories eligible for the forward-looking nudges (rediscover /
 // challenge / swap alternatives). Deliberately EXCLUDES accessories, belts,
