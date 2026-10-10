@@ -468,10 +468,11 @@ Still open, deliberately:
 - `gn_games` / `gn_players` carry their own `TO anon` allow-all policies and
   grants. They belong to a different app sharing this Supabase project and
   were left alone.
-- Six backup tables (~1,700 rows of duplicate wardrobe data) have RLS on with
-  no policy and, since 0038, no anon grant — deny-all. Nothing reads them;
-  dropping them is HER call (names and counts in HANDOFF, 2026-10-05), never
-  ours.
+- Seven backup tables (~1,700 rows of duplicate wardrobe data) and the empty
+  `shopping_collages` have RLS on and no anon grant — deny-all, read by
+  nothing. **She chose to keep them** (owner, 2026-10-10: "I'd rather not",
+  after the connector could not run the drop). Don't propose dropping them
+  again; if she raises it, the eight lines are in HANDOFF (2026-10-10).
 
 Done in the 2026-10-05 audit: **the `anon` role holds no table grant on any
 Atelier table** (migration 0038, applied live; verified with

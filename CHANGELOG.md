@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The unused tables stay; the drop migration is withdrawn — 2026-10-10
+
+### Why
+
+She approved dropping the seven backup tables and `shopping_collages` on the condition of no impact to the app (#270 wrote the drop as migration 0039 with the checks). The Supabase connector holds destructive statements for a confirmation that never appears in the session, so it could not run; offered the SQL editor instead, she said *"I'd rather not."* Her data, her call.
+
+### Changed
+
+- **`supabase/migrations/0039_drop_unused_tables.sql` removed** — a ready-to-run drop sitting among the numbered migrations is a trap once the decision is "keep". It stays in git (8c8e49a). The next migration is 0040.
+- CLAUDE.md's "Still open" bullet, HANDOFF's watch-item and ATELIER_STATE now say she chose to keep them; the eight drop lines are in HANDOFF should she change her mind.
+
+### Downstream, four ways
+
+- **Efficiency / speed / effectiveness.** None: no code, query or schema change; the tables were already deny-all and unread, and they stay that way. The render walk's mock keeps its `shopping_collages: []` entry (the table still exists).
+- **Education.** None for Atelier; the session notes stop proposing the drop.
+
+### Tests
+
+`npm test`, `npm run build`, `npm run smoke` green; no code changed.
+
+### Data
+
+None. All eight tables verified present, `wardrobe_items` at 559 rows.
+
 ## [Unreleased] — A piece that crosses rooms: file one step, name the rooms in the line — 2026-10-10
 
 ### Why
