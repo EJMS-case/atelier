@@ -213,7 +213,7 @@ Every save teaches. Every word she reads is written to her ("you", never "she").
 **Open, and hers to decide:**
 - 21 legacy `outfit_logs` rows still carry 2.1 MB of unreachable base64 collages; nulling them would shrink backups.
 - The legacy `api_keys` row in `user_settings` (hidden from every API role, but world-readable before 2026-08-28): delete it and rotate that key.
-- Six backup tables (~1,700 duplicate wardrobe rows) are deny-all and unread; dropping them is the owner's decision (the list, with row counts, is in HANDOFF).
+- Seven backup tables (~1,700 duplicate wardrobe rows) and an empty `shopping_collages` are deny-all and unread; the owner chose to keep them (2026-10-10).
 - One Arizona trip pin names a deleted garment.
 - Eight garments that moved to Arizona put sixteen July New York looks out of "Wearable now" in NYC; if any came home, the rows want moving back.
 - The trip packer's dinner-bag tie-break flakes about one run in eight (a jitter in the scoring); a proposed fix exists but changes packing behaviour she tuned by hand.
