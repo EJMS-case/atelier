@@ -2,6 +2,37 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A piece that crosses rooms: file one step, name the rooms in the line — 2026-10-10
+
+### Why
+
+Owner, filing a burgundy cropped merino cardigan on Add Items: *"What do I do when something is good for work and elevated casual? Think big picture."* Formality is one number, and three readers treated it as a boundary without asking her line. At f5 the Casual ordering (`readsAsOffice`) trailed the piece behind the easy ones; at f4 the stylist's LOOK FACTS called it "below the Work band" and the trip packer charged it a step's distance on a Work day. Her line already says which rooms a piece goes to (`ROOM_WORDS`: "elevated casual" names Casual, "work" names Work), and CLAUDE.md already holds that a room she names is a room she wears it to. The formality readers were the three places that didn't hear it.
+
+### Changed
+
+- **`lineWearsTo(item, occasion)` (`item-helpers.js`)** is the question every formality reader now asks first: her line names the room and does not veto it ("not for casual" names the word and means the opposite). Case-tolerant for the packer's typed day labels.
+- **`ROOM_WORDS`, `noteNamesOccasion`, `noteVetoesOccasion` moved from `closet-sampler.js` to `item-helpers.js`** beside `classifierNotes`, so the stylist and the packer read the one vocabulary without importing the sampler; `closet-sampler.js` re-exports them.
+- **The three readers yield to it**: `readsAsOffice` (Casual ordering), the LOOK FACTS band notes in `standard.js`, and `formalityDistance` in `tripPacker.js` (now exported for its test).
+- **The screens say it**: under Edit's Formality select, "Goes to more than one room? File the dressier one and name every room in the stylist line — 'work or elevated casual'. The stylist goes by your line." Add Items' stylist-line placeholder now reads "rooms included (… work or elevated casual)".
+
+### Downstream, four ways
+
+- **Efficiency.** No request, prompt or bundle change: `item-helpers.js` is already imported by every reader; the cached preamble is untouched.
+- **Effectiveness.** A cross-room piece reaches both rooms on every surface that reads formality: Style Me's Casual ordering, the builder chat and Evaluate (LOOK FACTS), and trip days (packer). The number keeps working for a piece whose line names one room.
+- **Speed.** Unchanged.
+- **Education.** Her words outrank the number, as everywhere else. Live: 1 filed piece (f5+, line names a Casual word) moves forward at Casual today; 16 unfiled garments already say both work and casual in their line, so whichever step she files them at, both rooms hold.
+
+### Tests
+
+- `casual-register.test.mjs`: the Casual ordering yields to "work or elevated casual" and "weekend and office", not to "not for casual", not to an f5 with no room word.
+- `stylist-standard.test.mjs`: `readLook` does not call an f4 cardigan whose line names work "below the Work band"; the same piece with no room word is.
+- `trip-packer.test.mjs` (+5): `formalityDistance` is 0 when the line names the day's room, in any case; a veto keeps the distance.
+- `npm test` (51 suites), `npm run build`, `npm run smoke` (41 walk steps) green.
+
+### Data
+
+None. No migration, no row written.
+
 ## [Unreleased] — The Style Profile page reads clothing only — 2026-10-10
 
 ### Why

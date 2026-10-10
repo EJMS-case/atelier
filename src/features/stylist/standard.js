@@ -46,7 +46,7 @@ import { runAllChecks } from "../../utils/styling-validator.js";
 import {
   isStatementPiece, isHosieryItem, isCompleteSetItem, isBlazerItem, slotForItem,
   getSleeveType, classifierNotes, promptNotes, NOTES_NEGATION_LEGEND,
-  formalityOf,
+  formalityOf, lineWearsTo,
   readKnitWeight,
 } from "../../utils/item-helpers.js";
 import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
@@ -438,8 +438,10 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     for (const occ of occList) {
       const band = FORMALITY_BANDS[occ];
       if (!band) continue;
-      const below = withF.filter(x => x.f < band[0]);
-      const above = withF.filter(x => x.f > band[1]);
+      // A piece whose line names this room is in it by her word — the number
+      // is one step for a piece that crosses rooms (2026-10-10).
+      const below = withF.filter(x => x.f < band[0] && !lineWearsTo(x.it, occ));
+      const above = withF.filter(x => x.f > band[1] && !lineWearsTo(x.it, occ));
       if (below.length) notes.push(`Below the ${occ} band (f${band[0]}–${band[1]}): ${below.map(tag).join(", ")}.`);
       if (above.length) notes.push(`Above the ${occ} band (f${band[0]}–${band[1]}): ${above.map(tag).join(", ")}.`);
     }

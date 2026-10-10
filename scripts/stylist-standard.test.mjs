@@ -731,3 +731,14 @@ test("the shopping palette is a preference, not a ban", async () => {
   assert.match(SHOPPING_STYLE_PROFILE, /a preference, never a restriction/);
   assert.match(SHOPPING_STYLE_PROFILE, /Every colour in her closet is approved/);
 });
+
+// LOOK FACTS' band notes yield to a room her line names (2026-10-10): a piece
+// filed f4 whose line says "work or elevated casual" is not "below the Work
+// band"; the same piece with no room word is.
+test("readLook: a piece whose line names the room is not called out of that room's band", () => {
+  const cardi = (line) => pick("Knits", "Cardigans", { color: "Burgundy", material: "merino", formality: 4, stylist_line: line });
+  const crosses = readLook([blouse(), trouser(), pump(), tote(), cardi("burgundy cropped merino cardigan; work or elevated casual")], { occasions: ["Work"] });
+  assert.doesNotMatch(crosses.text, /Below the Work band[^\n]*Cardigan/i);
+  const unnamed = readLook([blouse(), trouser(), pump(), tote(), cardi("burgundy cropped merino cardigan")], { occasions: ["Work"] });
+  assert.match(unnamed.text, /Below the Work band/);
+});

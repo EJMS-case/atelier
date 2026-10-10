@@ -368,6 +368,13 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
             <option value="">— not filed (the stylist reads it as unknown) —</option>
             {FORMALITY_SCALE.map(([v,label])=><option key={v} value={v}>{v} · {label}</option>)}
           </select>
+          {/* One number, and some pieces cross rooms (owner, 2026-10-10: "what
+              do I do when something is good for work and elevated casual?").
+              The line carries the rest: every formality reader yields to a
+              room the line names (lineWearsTo). */}
+          <div style={{fontSize:11,color:"var(--color-text-muted)",marginTop:5,lineHeight:1.45}}>
+            Goes to more than one room? File the dressier one and name every room in the stylist line — "work or elevated casual". The stylist goes by your line.
+          </div>
         </div>
       </div>
 

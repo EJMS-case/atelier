@@ -212,7 +212,11 @@ Conventions worth knowing:
   closet's Select mode files one value across a selection (*Select unfiled*
   → Formality → File, one `sb.patchItems`), 2026-10-07. A value someone
   PROPOSES for the column goes through `onFormalityScale()` (an integer on
-  the scale or null); a bulk edit of any column is a `patch` on
+  the scale or null). **A room her line names outranks the number**
+  (owner, 2026-10-10: "good for work and elevated casual"): every reader that
+  compares formality to a room asks `lineWearsTo(item, room)` first — the
+  Casual ordering, LOOK FACTS' band notes, the packer's distance. She files
+  the dressier step and names every room in the line; a bulk edit of any column is a `patch` on
   `sb.patchItems` and a control on the select bar, never a loop of upserts.
   **A knit's weight is read by
   `readKnitWeight()` everywhere, prompts included** — the inventory tag used
