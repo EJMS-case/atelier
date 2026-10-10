@@ -18,7 +18,7 @@ it through.
 
 **Watch-items:**
 - **Her next Casual Style Me** with the cardigan filed f5 and "work or elevated casual" in its line: it should sit among the easy pieces, not trail. If a piece she calls casual still trails, check its line for a room word (`ROOM_WORDS.Casual`: casual, weekend, everyday, brunch, errands).
-- **The table drop** she asked for ("remove the useless tables") is still pending: the session's safety check blocked the migration file as a mass delete. Eight tables, counts in the 2026-10-05 entry plus `shopping_collages` (0 rows, no reader). It needs her approval at the prompt or a settings allowance; nothing was dropped.
+- **The table drop** she approved ("go ahead as long as it has NO impact to my app") is written as `supabase/migrations/0039_drop_unused_tables.sql` and **not yet applied**: the Supabase connector timed out on all three attempts without reaching the database. She was given the eight lines to run in the SQL editor. No-impact checks are in the file's header (no reader in code; no function, view, trigger, FK, policy or publication depends on them). After it runs: confirm with a `pg_class` query, drop `shopping_collages` from the render mock, and update CLAUDE.md's "Still open" bullet.
 
 **Verified before push:** `npm test` (51 suites), `npm run build`, `npm run smoke` green (41 walk steps).
 
