@@ -82,6 +82,25 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
     return buildRecap({ plans, items, favoriteLogIds: favLogIds, favoritePieceIds: favPieceIds, todayIso, days, bucket });
   }, [plans, items, favLogIds, favPieceIds, todayIso, days, bucket]);
 
+  // The stored run names looks by (plan, outfit); re-resolve them against the
+  // looks in the window now. A pick whose day is gone simply drops.
+  // Every hook sits ABOVE the early returns below: this one used to sit after
+  // them, so the render after the planner rows landed ran one more hook than
+  // the "stay quiet" render before it — React #310, and Home crashed on open
+  // whenever the rows arrived after its first paint (35 times from
+  // 2026-10-04; every open on 2026-10-20). scripts/hooks-order.test.mjs.
+  const stylish = useMemo(() => {
+    if (!recap || run.status !== "done" || !run.result) return null;
+    const byKey = new Map((recap.looks || []).map(l => [`${l.planId}:${l.idx}`, l]));
+    return {
+      summary: run.result.summary || "",
+      finishedAt: run.finishedAt,
+      picks: (run.result.picks || [])
+        .map(p => ({ look: byKey.get(`${p.planId}:${p.idx}`), why: p.why, repeats: p.repeats || 1 }))
+        .filter(p => p.look),
+    };
+  }, [run, recap]);
+
   if (!recap) return null; // still loading plans — stay quiet
 
   const periodChips = (
@@ -141,20 +160,6 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
       };
     });
   };
-
-  // The stored run names looks by (plan, outfit); re-resolve them against the
-  // looks in the window now. A pick whose day is gone simply drops.
-  const stylish = useMemo(() => {
-    if (run.status !== "done" || !run.result) return null;
-    const byKey = new Map(recap.looks.map(l => [`${l.planId}:${l.idx}`, l]));
-    return {
-      summary: run.result.summary || "",
-      finishedAt: run.finishedAt,
-      picks: (run.result.picks || [])
-        .map(p => ({ look: byKey.get(`${p.planId}:${p.idx}`), why: p.why, repeats: p.repeats || 1 }))
-        .filter(p => p.look),
-    };
-  }, [run, recap.looks]);
 
   return (
     <section style={card}>

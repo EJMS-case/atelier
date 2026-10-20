@@ -24,7 +24,7 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (52 suites, no network)
+npm test           # full suite (53 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
 npm run test:render     # just the render walk (40 steps, headless, mocked REST)
@@ -48,6 +48,13 @@ survives in the body — passes `test:props` and the build, and throws only when
 that code runs (`TripModal` read `wardrobe` for fifteen days after #217 renamed
 it, 2026-09-22). `npm run test:undeclared` (in `npm test`) is the check: every
 identifier read under `src/` must be bound in scope or a known global.
+
+A hook below an early return ("still loading — stay quiet") passes all of
+the above and the walk too, then throws React #310 on the render after the
+data lands. `LookBackCard` crashed Home that way 35 times (2026-10-04 →
+10-20). `npm run test:hooks` (in `npm test`) fails it. When she reports
+"Something hiccuped", read `ai_errors` `render:%` first: it holds the build id
+and the stack.
 
 There is no linter or formatter configured — match the style of the file you
 are editing.

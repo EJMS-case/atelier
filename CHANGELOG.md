@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Home stops crashing on open: no hook after an early return — 2026-10-20
+
+### Why
+
+Owner, with a screenshot of "Something hiccuped" on Home: *"This happens every time I open the app."* `ai_errors` held 35 `render:view` rows on Home since 2026-10-04, across five builds, six of them on 2026-10-20. Rebuilding the reported build (`d9e76e0`, same asset hash) put the crash at React error #310 ("Rendered more hooks than during the previous render") in `LookBackCard`: it returns early while the planner rows are loading ("stay quiet"), and the `stylish` memo (added 2026-10-02, #257) sat below those returns. Whenever the rows landed after Home's first paint, the second render ran one more hook than the first. It was a race, and on 2026-10-20 she lost it every time.
+
+### Fixed
+
+- **`LookBackCard`**: `stylish` moved above both early returns, tolerating a null recap.
+- **`scripts/hooks-order.test.mjs` (`test:hooks`, in `npm test`)**: a lexical check over every component under `src/`. Once a statement at the component's own indentation returns, no later statement at that indentation may call a hook. It found exactly this one site. The render walk could not catch it: the walk's recap is empty on both renders, so both stop before the late hook.
+
+### Downstream, four ways
+
+No prompt, call, bundle or data change. One component, and the check that holds the class.
+
+### Tests
+
+`npm test` (53 suites), `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — One language: Style Me builds to the standard Evaluate scores with — 2026-10-20
 
 ### Why
