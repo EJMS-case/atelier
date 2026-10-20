@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, leavesLegBare, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -700,13 +700,7 @@ function checkHosieryPairing(response, idMap, allItems) {
     const bareLeg = resolved.some(it => {
       const role = getGarmentRole(it);
       if (role === "dress") return true;                 // dresses, jumpsuits, occasionwear
-      if (role !== "lower") return false;
-      // Lower-half pieces: only skirts/shorts leave the leg bare. Trousers,
-      // jeans, leggings and ponte pants cover it.
-      const sub = (it.subcategory || "").toLowerCase();
-      const text = ((it.name || "") + " " + sub).toLowerCase();
-      if (/trouser|pant|jean|legging|ponte|culotte|chino/.test(text)) return false;
-      return /skirt|mini|midi|maxi|short/.test(text);
+      return role === "lower" && leavesLegBare(it);
     });
 
     if (!bareLeg) {

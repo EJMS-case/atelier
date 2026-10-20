@@ -114,6 +114,7 @@ export function buildStylingPrompt({
   weather,
   dateContext = "",
   freeTextRequest,
+  pairingBlock = "",
   activeExclusions = [],
   recentlySuggestedItems = [],
   stylePreferences = {},
@@ -332,7 +333,7 @@ REQUEST
 ════════════════════════════════════════════════════════
 
 OCCASION: ${occasionNote}
-${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${requiredItemsBlock}${inspirationBlock}${drawnToBlock}${standingBlock}${fingerprintBlock}${stylePrefsBlock}${builtBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${trendBlock}${shoppingListBlock}${missingBlock}${recentCombosBlock}${honestyBlock}
+${comfortBlock}${weatherBlock ? weatherBlock + "\n" : ""}${dateBlock}${exclusionBlock}${requestBlock}${pairingBlock}${requiredItemsBlock}${inspirationBlock}${drawnToBlock}${standingBlock}${fingerprintBlock}${stylePrefsBlock}${builtBlock}${lovedLooksBlock}${dislikedLooksBlock}${swapLessonsBlock}${occasionMemoryBlock}${silhouetteBlock}${trendBlock}${shoppingListBlock}${missingBlock}${recentCombosBlock}${honestyBlock}
 ${recentBlock}${varietyNote}
 ${availabilityNote}
 ${directionsBlock}${lookCountInstruction}

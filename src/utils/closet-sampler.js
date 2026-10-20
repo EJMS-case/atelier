@@ -14,6 +14,7 @@ import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalForm
 export { noteNamesOccasion, noteVetoesOccasion, lineWearsTo };
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
+import { effectiveColorFamily } from "../constants/color.js";
 import { namedExplicitly, matchesFreeText, resolveRequestedPieces } from "./free-text-match.js";
 
 /**
@@ -277,6 +278,8 @@ const BUCKET_TARGETS = {
 // counts keep the shuffle meaningful within each tier — total determinism
 // would freeze the inventory order between taps.
 const freshnessBand = (count) => count <= 0 ? 0 : count <= 2 ? 1 : count <= 6 ? 2 : 3;
+
+const PLAIN_COLOUR_RE = /\b(black|white|gr[ae]y|navy|blue|red|pink|purple|green|yellow|orange|brown|beige|camel|tan|ivory|cream|burgundy|olive|teal|charcoal|nude|khaki|taupe|gold|silver|denim|wash)\b/i;
 
 /**
  * Main sampling function.
@@ -936,8 +939,14 @@ export function formatInventory(sampled, getSleeveType, opts = {}) {
       setTag = " [COMPLETE SET — full two-piece look; add NO other top or bottom, only outerwear/knit over it]";
     }
     // Color: use what the user entered; fall back to normalized family name.
+    // A brand shade name carries its family beside it ("Cacao (brown)") so
+    // the stylist reads the colour, not a word it may not know. Plain colour
+    // words go untagged — the tag costs tokens on every line it rides.
     const colorName = it.color || it.color_family || "";
-    const colorParts = colorName ? [colorName] : [];
+    const fam = colorName && !PLAIN_COLOUR_RE.test(colorName) ? effectiveColorFamily(it) : "";
+    const colorParts = colorName
+      ? [fam ? `${colorName} (${fam === "Neutrals" ? "neutral" : fam.toLowerCase()})` : colorName]
+      : [];
     if (it.pattern && it.pattern !== "solid" && it.pattern !== "—" && it.pattern !== "") {
       colorParts.push(it.pattern);
     }

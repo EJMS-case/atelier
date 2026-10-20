@@ -14,6 +14,7 @@
 import { COLOR_FAMILIES, effectiveColorFamily } from "../constants/color.js";
 import { FASHION_COMBOS, TEXTURE_ROSTER } from "../constants/fashion-combos.js";
 import { isComfortCoded } from "./item-helpers.js";
+import { COMFORT_CATEGORIES } from "../constants/taxonomy.js";
 
 // ── Season ──────────────────────────────────────────────────────────────────
 // Meteorological seasons, month-based (NYC): matches the fashion-combos and
@@ -74,10 +75,9 @@ const FAMILY_SHADES = (() => {
 // pieces the panel never mentioned. One predicate, used by every count here;
 // comboEligible narrows it further for a colour STORY (a promise about an
 // outfit, so occasionwear and comfort-coded pieces stay out of those too).
-const COVERAGE_EXCLUDED_CATS = new Set(["Athleisure", "Loungewear", "Swim"]);
 const METAL_COLOR_RE = /^(silver|gold|platinum|rose gold|gunmetal|bronze|brass|metallic|pewter)$/i;
 export function coverageEligible(item) {
-  if (!item || COVERAGE_EXCLUDED_CATS.has(item.category)) return false;
+  if (!item || COMFORT_CATEGORIES.has(item.category)) return false;
   return !METAL_COLOR_RE.test(String(item.color || "").trim());
 }
 
@@ -208,9 +208,27 @@ export function describeTextureCoverage(items, season) {
 
 // ── Fashion-combo matching ──────────────────────────────────────────────────
 export function matchesComboSide(item, side) {
-  if (effectiveColorFamily(item) !== side.family) return false;
+  const fam = effectiveColorFamily(item);
+  if (Array.isArray(side.family) ? !side.family.includes(fam) : fam !== side.family) return false;
   if (!side.shade) return true;
   return side.shade.test(item.color || "");
+}
+
+// Does a piece read as a pairing side she named in words ("Chocolate",
+// "Chocolate Brown", "Burgundy")? Any side label the side's text contains is
+// matched by matchesComboSide — the same shade vocabulary Home uses — so the
+// stylist's LOOK FACTS see a Cacao skirt as the chocolate of "Burgundy +
+// Chocolate" exactly as Home did. Null when no library label is in the text
+// (the caller falls back to its word match).
+const SIDE_BY_LABEL = (() => {
+  const m = new Map();
+  for (const c of FASHION_COMBOS) for (const s of [c.a, c.b]) if (!m.has(s.label.toLowerCase())) m.set(s.label.toLowerCase(), s);
+  return [...m.entries()].sort((a, b) => b[0].length - a[0].length);
+})();
+export function matchesPairSideText(item, text) {
+  const t = String(text || "").toLowerCase();
+  const hit = SIDE_BY_LABEL.find(([label]) => new RegExp(`\\b${label}\\b`).test(t));
+  return hit ? matchesComboSide(item, hit[1]) : null;
 }
 
 // A color story is a promise about how she can DRESS — so its supporting
@@ -250,6 +268,28 @@ function textCoversCombo(text, combo) {
 }
 
 /**
+ * The pairing a Style Me request names ("Color-block Burgundy + Chocolate —
+ * build the look around that pairing", Home's Color Stories tap), and which
+ * pieces of a pool read as each side — by the same matcher Home used to offer
+ * it, so a Cacao blazer counts as Chocolate here exactly as it did there. The
+ * free-text matcher reads her words literally and matched nothing for a
+ * pairing; this hands the stylist the answer instead of leaving the colour
+ * read to the model's guess at "Cacao". Null when the text names no pairing.
+ * Returns { label, a: { label, items }, b: { label, items } }.
+ */
+export function pairingInRequest(text, pool) {
+  if (!text || !String(text).includes("+")) return null;
+  const combo = FASHION_COMBOS.find(c => textCoversCombo(text, c));
+  if (!combo) return null;
+  const eligible = (pool || []).filter(comboEligible);
+  return {
+    label: comboLabel(combo),
+    a: { label: combo.a.label, items: eligible.filter(it => matchesComboSide(it, combo.a)) },
+    b: { label: combo.b.label, items: eligible.filter(it => matchesComboSide(it, combo.b)) },
+  };
+}
+
+/**
  * In-fashion pairs her closet can make TODAY — both sides owned, in the
  * current OR upcoming season (late August should already whisper fall), not
  * already on her manual list. Ranked by closet depth with a strong bonus for
@@ -262,15 +302,23 @@ function textCoversCombo(text, combo) {
 // uses — a second list would be a second opinion on what a neutral is.
 export const NEUTRAL_PAIR_FAMILIES = new Set(["Black", "Gray", "Brown", "Neutrals", "White"]);
 
-export function autoColorPairs(items, { date = new Date(), exclude = [], max = 4 } = {}) {
+// How much colour a side carries for the ranking: a true colour 1, brown ½
+// (a warm neutral that still tells a story — Burgundy + Chocolate is one of
+// her own pairings, and scoring brown as black buried every brown pairing
+// under the cap, 2026-10-20), the other neutrals 0.
+function sideColour(side) {
+  const fams = Array.isArray(side.family) ? side.family : [side.family];
+  if (fams.every(f => NEUTRAL_PAIR_FAMILIES.has(f))) return fams.includes("Brown") ? 0.5 : 0;
+  return 1;
+}
+
+// `max` defaults to every owned pairing; a caller that has room for fewer
+// passes one (the Style Me prompt takes 3).
+export function autoColorPairs(items, { date = new Date(), exclude = [], max = Infinity } = {}) {
   const season = seasonForDate(date);
   const upcoming = nextSeason(season);
-  const score = (x) => {
-    const chromaticSides =
-      (NEUTRAL_PAIR_FAMILIES.has(x.combo.a.family) ? 0 : 1) +
-      (NEUTRAL_PAIR_FAMILIES.has(x.combo.b.family) ? 0 : 1);
-    return chromaticSides * 100 + Math.min(x.a.length, x.b.length);
-  };
+  const score = (x) =>
+    (sideColour(x.combo.a) + sideColour(x.combo.b)) * 100 + Math.min(x.a.length, x.b.length);
   return FASHION_COMBOS
     .filter(c => c.seasons.includes(season) || c.seasons.includes(upcoming))
     .filter(c => !(exclude || []).some(text => textCoversCombo(text, c)))

@@ -14,8 +14,9 @@ import { COLOR_FAMILIES } from "../../constants/color.js";
 import { buildStylingPrompt } from "../../prompts/styling-system-prompt.js";
 import { sampleClosetItems, formatInventory, COMFORT_OCCASIONS } from "../../utils/closet-sampler.js";
 import { describeStyleFilters } from "../../utils/style-filters.js";
+import { pairingInRequest } from "../../utils/wardrobe-coverage.js";
 import { generateValidatedLooks } from "../../utils/styling-validator.js";
-import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSuggestionCounts } from "../../utils/rotation-tracker.js";
+import { getRecentlySuggestedItems, getRecencyRank, recordSuggestedLooks, loadSuggestionCounts, loadRecentLooks } from "../../utils/rotation-tracker.js";
 import { generateContactSheets } from "../../utils/contact-sheet.js";
 import { getSleeveType, shuffle, slotForItem, resolveItemIds } from "../../utils/item-helpers.js";
 import { coerceRecsShape } from "../../utils/coerce-shapes.js";
@@ -120,6 +121,14 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // piece reuse, and freshness-band ordering is position-only).
   const inventory = formatInventory(sampled, getSleeveType, { recentRepeatIds });
 
+  // A colour-pairing request (Home's Color Stories) — name which inventory
+  // pieces read as each side, by the matcher Home offered the pairing with.
+  const pairing = pairingInRequest(request, sampled);
+  const sideIds = (side) => side.items.map(it => reverseMap[it.id]).filter(Boolean).slice(0, 24).join(", ") || "none in this pool";
+  const pairingBlock = pairing
+    ? `THE PAIRING IN HER CLOSET (${pairing.label}) — pieces that read as ${pairing.a.label}: ${sideIds(pairing.a)}. Pieces that read as ${pairing.b.label}: ${sideIds(pairing.b)}. Her colour names are often the brand's (Cacao, Truffle, Brew are browns), so trust this read over the word. Build around one piece from each side.\n`
+    : "";
+
   // Lower-half availability via the shared slotForItem classifier so athleisure
   // bottoms (leggings/skorts) count too — previously an Active pool reported
   // "0 pants, 0 skirts, 0 dresses" and told the model to use pants that weren't
@@ -131,7 +140,28 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   const skirtCount = bottoms.filter(isSkirtLike).length;
   const pantsCount = bottoms.length - skirtCount;
   const skirtDressAvailable = skirtCount + dressCount > 0;
-  const availabilityNote = `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants/leggings, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the looks should use a skirt or dress (not pants)." : "Only pants/leggings available, so build the lower half from those."}`;
+  // "At least ONE of the looks should use a skirt or dress" was written for
+  // three-up generation. Once Style Me went to one look per tap, the one look
+  // WAS that look: 17 of her last 24 were a skirt or a dress, and her Work
+  // looks read as one formula (owner, 2026-10-20: "it seems to keep showing
+  // the same things"). A single look now hears what the last few leaned on —
+  // her own recent record, soft — and picks the lower half the brief wants.
+  const lowerOf = (ids) => {
+    for (const it of resolveItemIds(wardrobe, ids)) {
+      const s = slotForItem(it);
+      if (s === "dress" || s === "set") return "dress";
+      if (s === "bottom") return isSkirtLike(it) ? "skirt" : "pants";
+    }
+    return null;
+  };
+  const recentLowers = loadRecentLooks().slice(-6).map(l => lowerOf(l.ids)).filter(Boolean);
+  const lean = ["skirt", "dress", "pants"].map(k => [k, recentLowers.filter(x => x === k).length]).sort((a, b) => b[1] - a[1])[0];
+  const leanLine = recentLowers.length >= 4 && lean[1] >= recentLowers.length - 1
+    ? ` Her last ${recentLowers.length} looks were ${lean[1] === recentLowers.length ? "all" : "nearly all"} ${lean[0] === "pants" ? "trousers" : lean[0] + "s"} — a different lower half is welcome when the brief allows it.`
+    : "";
+  const availabilityNote = lookCount === 1
+    ? `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants/leggings, ${skirtCount} skirts, ${dressCount} dresses. Choose the one the brief and the weather want.${leanLine}`
+    : `AVAILABLE LOWER-HALF OPTIONS: ${pantsCount} pants/leggings, ${skirtCount} skirts, ${dressCount} dresses. ${skirtDressAvailable ? "Because skirts/dresses ARE available, at least ONE of the looks should use a skirt or dress (not pants)." : "Only pants/leggings available, so build the lower half from those."}`;
 
   // `shuffle` already clones internally; pass the array directly. The briefs
   // are the ROOM's (strategiesFor): Casual gets denim-and-jacket briefs, not
@@ -234,6 +264,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
     weather,
     dateContext,
     freeTextRequest: request || null,
+    pairingBlock,
     activeExclusions,
     recentlySuggestedItems,
     stylePreferences: stylePrefs,

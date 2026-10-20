@@ -60,6 +60,13 @@ export function storageHeaders(extra) {
 // URL + storage's max-age kept serving hour-old thumb bytes from the browser
 // HTTP cache even after the server thumb was regenerated. Steady state is
 // unaffected: same image → same hash → cache still works.
+// Every write to the wear record (planned_outfits, outfit_logs) bumps this,
+// so a reader holding the record can tell whether it is still current
+// without re-downloading it (App.refreshWearData's `ifFresh`).
+let wearWrites = 0;
+export const wearWriteCount = () => wearWrites;
+const bumpWear = (x) => { wearWrites++; return x; };
+
 export function thumbUrl(itemId, cacheKey) {
   let v = "";
   if (cacheKey) {
@@ -160,6 +167,7 @@ export const sb = {
   // cleanup is better than blocking the delete. Removes the deleted item ID from
   // every array it appears in across the three tables that reference garment IDs.
   async cascadeItemDelete(id) {
+    bumpWear();
     try {
       // ── outfit_logs.garment_ids ───────────────────────────────────────────
       const logsRes = await fetch(
@@ -263,6 +271,25 @@ export const sb = {
     return thumbUrl(itemId);
   },
 
+  // Every thumb the bucket holds, as { id → updated_at ms } — one request.
+  // Thumb.jsx seeds its registry from it so a device that has never built a
+  // thumb reads the server's instead of downloading every full photo.
+  async listThumbs() {
+    const out = new Map();
+    for (let offset = 0; offset < 10000; offset += 1000) {
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`, {
+        method: "POST",
+        headers: { ...storageHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix: "thumbs", limit: 1000, offset }),
+      });
+      if (!res.ok) throw new Error(`Thumb list failed (HTTP ${res.status})`);
+      const rows = await res.json();
+      for (const r of rows || []) if (r?.name && r.id) out.set(r.name, Date.parse(r.updated_at || r.created_at || "") || 0);
+      if (!rows || rows.length < 1000) break;
+    }
+    return out;
+  },
+
   // Server-side copy of an item's full image to a new object key (closet
   // duplication). The twin must own its own bytes — deleting the original
   // later calls removeImage(originalId), which would otherwise blank the
@@ -303,6 +330,7 @@ export const sb = {
   // Self-healing like `upsert`, so a caller never has to know which columns
   // exist on which deploy.
   async saveOutfitLog(log) {
+    bumpWear();
     return selfHealingWrite({
       url: `${SUPABASE_URL}/rest/v1/outfit_logs`,
       headers: () => ({ ...sbHeaders(), "Prefer": "return=representation" }),
@@ -353,6 +381,7 @@ export const sb = {
     return mergeOutfitLogMeta(rows, meta);
   },
   async deleteOutfitLog(id) {
+    bumpWear();
     const res = await fetch(`${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`, {
       method: "DELETE",
       headers: sbHeaders(),
@@ -360,6 +389,7 @@ export const sb = {
     if (!res.ok) throw new Error("Delete outfit log failed");
   },
   async updateOutfitLog(id, patch) {
+    bumpWear();
     return selfHealingWrite({
       url: `${SUPABASE_URL}/rest/v1/outfit_logs?id=eq.${id}`,
       method: "PATCH",
@@ -741,6 +771,7 @@ export const sb = {
     return res.json().catch(() => []);
   },
   async savePlan(plan) {
+    bumpWear();
     return selfHealingWrite({
       url: `${SUPABASE_URL}/rest/v1/planned_outfits?on_conflict=date`,
       headers: () => ({ ...sbHeaders(), "Prefer": "resolution=merge-duplicates,return=representation" }),
@@ -750,6 +781,7 @@ export const sb = {
     });
   },
   async deletePlan(date) {
+    bumpWear();
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/planned_outfits?date=eq.${date}`,
       { method: "DELETE", headers: sbHeaders() },

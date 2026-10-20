@@ -4,7 +4,7 @@
 // weather filter, color-filter predicate, sort comparators, sleeve classifier,
 // taxonomy migration, and the server-wins mergeItems.
 
-import { BAG_SUBCATEGORIES, BAG_NAME_RE, ATHLEISURE_SUBCATEGORY_ALIASES, weatherMatches } from "../constants/taxonomy.js";
+import { BAG_SUBCATEGORIES, BAG_NAME_RE, ATHLEISURE_SUBCATEGORY_ALIASES, weatherMatches, CATEGORY_ORDER, TAXONOMY, getSubcatL2, getL3Options } from "../constants/taxonomy.js";
 import {
   COLOR_SORT_ORDER, SLEEVE_SORT, LENGTH_SORT, WEIGHT_SORT,
   COLOR_FAMILY_RANGES, familyForColorString, effectiveColorFamily,
@@ -429,6 +429,21 @@ export function isHosieryItem(item) {
   );
 }
 
+// ── BARE-LEG LOWER HALF ─────────────────────────────────────────────────────
+// Does this lower-half piece leave the leg bare (somewhere for hosiery to go)?
+// The garment word wins over the fabric word: "Ultra Stretch Ponte Knit Pencil
+// Skirt" is a skirt, and reading "ponte" first called it a trouser and flagged
+// her brew tights under it on every chat turn (2026-10-20). Order: a skirt or
+// shorts word → bare; a leg-covering word → covered; then the skirt-length
+// subcategories (Mini / Midi / Maxi) → bare.
+export function leavesLegBare(item) {
+  if (!item) return false;
+  const text = ((item.name || "") + " " + (item.subcategory || "")).toLowerCase();
+  if (/\b(skirts?|skort|shorts?)\b/.test(text)) return true;
+  if (/trouser|pant|jean|legging|culotte|chino|jogger/.test(text)) return false;
+  return /\b(mini|midi|maxi)\b/.test(text);
+}
+
 // ── STATEMENT-PIECE DETECTOR ────────────────────────────────────────────────
 // Single source of truth for "is this a statement piece" — used by the
 // styling-validator's HC8 check (one statement per look) and the trip
@@ -776,6 +791,32 @@ export function defaultSortComparator(a, b) {
   if (wa !== wb) return wa - wb;
 
   return 0;
+}
+
+// ── SHELF ORDER ─────────────────────────────────────────────────────────────
+// How a picker lays a slot out (owner, 2026-10-20: "the order in which
+// garments show up for each category don't make sense" — the builder showed
+// the closet in upload order, oldest first, blouses beside cardigans beside
+// tanks). Shelf by shelf, the way the taxonomy files them: category
+// (CATEGORY_ORDER), then the piece's subcategory (TAXONOMY's L2 order, then
+// its L3 child's order — Trousers before Ponte, Mini before Midi), then the
+// closet grid's own order within a shelf (defaultSortComparator: colour dark
+// to light, sleeve, length, knit weight), then name. The builder's subcategory
+// chips read shelfSortComparator too, so the chip row and the grid agree.
+function shelfIndex(category, subcategory) {
+  const l2 = getSubcatL2(category, subcategory) || subcategory || "";
+  const l2s = TAXONOMY[category] || [];
+  const l2i = l2s.indexOf(l2);
+  const l3i = l2 && subcategory && subcategory !== l2 ? getL3Options(category, l2).indexOf(subcategory) : -1;
+  return (l2i === -1 ? 90 : l2i) * 100 + (l3i === -1 ? (subcategory === l2 ? 0 : 99) : l3i + 1);
+}
+
+export function shelfSortComparator(a, b) {
+  const ca = CATEGORY_ORDER.indexOf(a.category), cb = CATEGORY_ORDER.indexOf(b.category);
+  if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
+  const sa = shelfIndex(a.category, a.subcategory), sb = shelfIndex(b.category, b.subcategory);
+  if (sa !== sb) return sa - sb;
+  return defaultSortComparator(a, b) || String(a.name || "").localeCompare(String(b.name || ""));
 }
 
 // ── NORMALIZE ───────────────────────────────────────────────────────────────

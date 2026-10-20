@@ -11,7 +11,7 @@ import HomeView from "./features/home/HomeView.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { s, ss } from "./ui/styles.js";
 import { icons, Icon } from "./ui/icons.jsx";
-import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches, MISC_CATEGORY } from "./constants/taxonomy.js";
+import { SET_TAGS, STYLE_ME_OCCASIONS, subcatMatches, MISC_CATEGORY, countCloset } from "./constants/taxonomy.js";
 import { defaultSortComparator, matchesColorFilter, mergeItems, slotForItem, formalityOf, onFormalityScale, FORMALITY_SCALE } from "./utils/item-helpers.js";
 import { computeFilterChips } from "./utils/style-filters.js";
 import { resolveRequestedPieces, requestForPiece } from "./utils/free-text-match.js";
@@ -30,7 +30,7 @@ import { runWhenIdle } from "./utils/idle.js";
 import { compareSetsByName, compareSetsByType, setMembers } from "./features/closet/setType.js";
 import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem, poolIncluding } from "./features/closet/useVisibleWardrobe.js";
 import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
-import { sb } from "./lib/supabase.js";
+import { sb, wearWriteCount } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import { fetchClosetForecast } from "./lib/weather.js";
 import { nyToday, todayInTz } from "./lib/time.js";
@@ -153,6 +153,21 @@ async function unpinWornFromDate({ date, itemIds }) {
 }
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
+// The seconds counter beside Style Me's status line. It ticks on its own so a
+// generation re-renders this span once a second, not the whole of App (which
+// it did for the 20–60 s of every tap until 2026-10-20).
+function StylingElapsed({ startedAt }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!startedAt) return undefined;
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [startedAt]);
+  const secs = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+  if (secs < 8) return null;
+  return <>{` ${secs}s`}{secs >= 45 ? " — a big closet takes the stylist a little longer." : ""}</>;
+}
+
 export default function App() {
   const [items,      setItems]      = useState(() => loadLocalItems());
   // ── Multi-closet (Phase A) ──
@@ -273,16 +288,29 @@ export default function App() {
   // Cached Brand Atlas result (cross-device, user_settings) — Home renders it
   // with zero AI calls; scouting runs only on the explicit tap in the view.
   const [brandDiscovery, setBrandDiscovery] = useState(null);
+  // The boot's one read of the fingerprint row — the refresh check below
+  // reuses it instead of a second GET of the same key.
+  const fingerprintReadRef = useRef(null);
   useEffect(() => {
     listInspirations().then(setInspirations).catch(() => setInspirations([]));
-    sb.getStyleFingerprint().then(setStyleFingerprint).catch(() => setStyleFingerprint(null));
+    fingerprintReadRef.current = sb.getStyleFingerprint().catch(() => null);
+    fingerprintReadRef.current.then(setStyleFingerprint);
     sb.getBrandDiscovery().then(setBrandDiscovery).catch(() => setBrandDiscovery(null));
     // Pull the other devices' anti-repeat memory so this one doesn't re-suggest
     // pieces the stylist just offered elsewhere, then push the merged union
     // back so the remote copy is the superset (cheap single-row write).
+    // Written back only when this device holds something the remote copy
+    // lacks — it used to write the row on every boot.
     sb.getRotationState().then(remote => {
       mergeRemoteRotationState(remote);
-      sb.saveRotationState(exportRotationState());
+      const merged = exportRotationState();
+      const rc = remote?.counts || {};
+      const mc = merged.counts || {};
+      const differs = Object.keys(mc).length !== Object.keys(rc).length
+        || Object.keys(mc).some(k => mc[k] !== rc[k])
+        || (merged.looks || []).length !== (remote?.looks || []).length
+        || (merged.looks?.at(-1)?.at || 0) !== (remote?.looks?.at?.(-1)?.at || 0);
+      if (differs) sb.saveRotationState(merged);
     }).catch(() => {});
   }, []);
   // ── Sets metadata ──
@@ -326,14 +354,17 @@ export default function App() {
   // her own vetoes, the chips and the weather gates — there is no cap);
   // `total` is the closet she styled from.
   const [poolRead, setPoolRead] = useState(null);
-  const [stylingTick, setStylingTick] = useState(0);
-  useEffect(() => {
-    if (!stylingStartedAt) return undefined;
-    const t = setInterval(() => setStylingTick(x => x + 1), 1000);
-    return () => clearInterval(t);
-  }, [stylingStartedAt]);
-  const refreshWearData = useCallback(() => {
+  // `ifFresh` (Home's mount): skip the download when the record was read in
+  // the last five minutes and nothing has written to it since — every return
+  // to Home used to re-download every planned day and every log.
+  const wearReadRef = useRef({ at: 0, writes: -1 });
+  const refreshWearData = useCallback(({ ifFresh = false } = {}) => {
     if (wearFetchRef.current) return wearFetchRef.current;
+    const last = wearReadRef.current;
+    if (ifFresh && last.writes === wearWriteCount() && Date.now() - last.at < 5 * 60 * 1000) {
+      return Promise.resolve(null);
+    }
+    wearReadRef.current = { at: Date.now(), writes: wearWriteCount() };
     const p = Promise.all([
       sb.fetchAllPlans().catch(() => []),
       sb.fetchOutfitLogs().catch(() => []),
@@ -431,6 +462,10 @@ export default function App() {
     () => resolveVisibleWardrobe({ items, activeClosetId: activeCloset.id, activeTrip, tripItems: activeTripItems }),
     [items, activeCloset.id, activeTrip, activeTripItems],
   );
+  // The one count of the closet she is in — header badge and Home read it
+  // (countCloset: pieces / garments / finishing, the same words everywhere).
+  const availableCount = useMemo(() => countCloset(available), [available]);
+  const availableWithWear = useMemo(() => applyWearStats(available, wearData.stats || {}), [available, wearData.stats]);
 
   // ── MISC — the holding room ────────────────────────────────────────────────
   // Neither `wardrobe` nor `available` ever contains a Misc piece. This memo is
@@ -613,7 +648,7 @@ export default function App() {
       const count = (logs || []).length;
       if (count < 5) return;
       try {
-        const fp = await sb.getStyleFingerprint().catch(() => null);
+        const fp = await (fingerprintReadRef.current || sb.getStyleFingerprint().catch(() => null));
         const have = fp?.source_count || 0;
         // A read still written ABOUT her ("she pairs…") regenerates once into
         // the second person (2026-09-10: "speaking to me as if it isn't me").
@@ -1385,10 +1420,6 @@ export default function App() {
       case "stalled":     text = "The connection stalled — trying again…"; break;
       default:            text = "Styling your wardrobe…";
     }
-    const secs = stylingStartedAt ? Math.floor((Date.now() - stylingStartedAt) / 1000) : 0;
-    void stylingTick; // re-renders once a second while a generation runs
-    if (secs >= 8) text += ` ${secs}s`;
-    if (secs >= 45) text += " — a big closet takes the stylist a little longer.";
     return text;
   })();
 
@@ -1791,8 +1822,8 @@ export default function App() {
           >
             <span style={s.brandMark}>✦</span>
             <span style={s.brandName}>ATELIER</span>
-            {available.length > 0 && (
-              <span style={s.badge}>{available.length}</span>
+            {availableCount.garments > 0 && (
+              <span style={s.badge} title={`${availableCount.garments} garments in ${activeTrip ? "your trip pool" : activeCloset.name || "this closet"}`}>{availableCount.garments}</span>
             )}
             {syncLabel && (
               <span
@@ -2396,7 +2427,7 @@ export default function App() {
           {styling === true && (
             <div style={s.empty}>
               <span style={s.spinner}/>
-              <p style={s.emptyText}>{stylingStatusText}</p>
+              <p style={s.emptyText}>{stylingStatusText}<StylingElapsed startedAt={stylingStartedAt}/></p>
             </div>
           )}
           {styling === "partial" && (
@@ -2407,7 +2438,7 @@ export default function App() {
           )}
           {outfits?.length > 0 && poolRead && styling !== true && (
             <div style={{ padding: "4px 16px 2px", fontSize: 11, color: "var(--color-text-muted)" }}>
-              Styled from {poolRead.read} of the {poolRead.total} pieces in this closet
+              Styled from {poolRead.read} of the {poolRead.total} pieces {activeTrip ? "in your trip pool" : `in ${activeCloset.name || "this closet"}`}
               {poolRead.read < poolRead.total ? ` — the rest sit outside ${poolRead.occasion || "this room"}, your chips, or this weather.` : "."}
             </div>
           )}
@@ -2721,7 +2752,7 @@ export default function App() {
 
       {/* ── INSIGHTS ── */}
       {view === "insights" && (
-        <StyleInsightsView items={available} wardrobe={wardrobe} apiKey={apiKey} onBack={() => setView("home")}/>
+        <StyleInsightsView items={availableWithWear} wardrobe={wardrobe} apiKey={apiKey} onBack={() => setView("home")}/>
       )}
 
       {/* ── SHOPPING ── */}
@@ -2781,7 +2812,7 @@ export default function App() {
 
       {view === "visionpilot" && (
         <VisionPilotView
-          items={available}
+          items={wardrobe}
           apiKey={apiKey}
           onBack={() => setView("home")}
           onEnriched={(id, vd) => setItems(prev => prev.map(it => it.id === id ? { ...it, vision_data: vd } : it))}

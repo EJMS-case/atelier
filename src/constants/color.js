@@ -181,16 +181,19 @@ function resolveFamily(color) {
   // single-word buckets so the substring can't win (hyphen/space spellings the
   // shade table's exact " " form doesn't cover).
   if (/\bblack[\s-]?cherry\b/.test(c)) return "Purple";
-  if (/\b(red|cherry|crimson|burgundy|wine|oxblood|merlot|maroon|brick)\b/.test(c)) return "Red";
+  if (/\b(red|cherry|crimson|burgundy|wine|oxblood|merlot|maroon|brick|bordeaux|garnet|cabernet|claret)\b/.test(c)) return "Red";
   if (/\b(pink|blush|rose|magenta|fuchsia|coral|salmon|peach)\b/.test(c)) return "Pink";
   if (/\b(purple|violet|lavender|plum|lilac|aubergine|orchid)\b/.test(c)) return "Purple";
   if (/\b(blue|navy|sapphire|cobalt|sky|teal|denim|wash|indigo|midnight|cerulean|periwinkle)\b/.test(c)) return "Blue";
   if (/\b(green|forest|emerald|sage|hunter|olive|moss|jade|mint|pine)\b/.test(c)) return "Green";
   if (/\b(yellow|mustard|gold|ochre|amber|honey)\b/.test(c)) return "Yellow";
-  if (/\b(brown|espresso|caramel|chocolate|cognac|walnut|cocoa|chestnut|mahogany|tobacco|coffee|mocha)\b/.test(c)) return "Brown";
+  // Brand shade names count (owner, 2026-10-20: "Cacao, espresso, etc for
+  // brown. Is that tracking as brown?" — Cacao and Truffle were not, on the
+  // Carissa blazer and the Testra pants, and read as colourless everywhere).
+  if (/\b(brown|espresso|caramel|chocolate|cognac|walnut|cocoa|cacao|chestnut|mahogany|tobacco|coffee|mocha|truffle|brew|hickory|umber|sienna|toffee|hazelnut|cinnamon|java|saddle|whiskey|tortoise)\b/.test(c)) return "Brown";
   // Achromatic (only reached when no chromatic colour matched above).
   if (achro) return achro;
-  if (/\b(beige|camel|tan|nude|oat|sand|neutral|khaki|stone|taupe|mushroom|greige)\b/.test(c)) return "Neutrals";
+  if (/\b(beige|camel|tan|nude|oat|oatmeal|sand|neutral|khaki|stone|taupe|mushroom|greige|latte|biscuit|fawn|mink|natural|flax)\b/.test(c)) return "Neutrals";
   if (/\b(white|ivory|cream|ecru|alabaster|off.white|chalk|bone)\b/.test(c)) return "White";
   if (/\b(gray|grey|slate|charcoal|smoke|graphite|silver|metallic|pewter)\b/.test(c)) return "Gray";
   if (/\b(black|jet|onyx|noir)\b/.test(c)) return "Black";

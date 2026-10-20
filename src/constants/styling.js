@@ -56,18 +56,9 @@ export const STANDING_PREFERENCES = [
   "You'd rather be challenged than flattered: a safe look should be called safe, and the braver version named.",
 ];
 
-export const STYLE_PREFS = {
-  colorPairs: [
-    "Navy + Cool Pink",
-    "Navy + Cool Red",
-    "Burgundy + Navy",
-    "Cool Red + Cool Pink",
-    "Chocolate Brown + Cool Red",
-  ],
-  monochromaticMode: true,
-  tonalPairing: true,
-  direction: "effortless cool-girl chic, quiet luxury, it-girl energy",
-};
+// STYLE_PREFS lives in stylePrefs.js — utils/storage.js reads it at boot,
+// and importing it from here pulled this whole module into the boot chunk.
+export { STYLE_PREFS } from "./stylePrefs.js";
 
 // Consumed fields ONLY (verified against every caller):
 //   · banned.categories / banned.subcategories — read by the closet-sampler's

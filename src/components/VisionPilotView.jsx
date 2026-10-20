@@ -12,6 +12,7 @@ import { s } from "../ui/styles.js";
 import { pieceLine } from "../utils/item-helpers.js";
 import { enrichItemVision, enrichAndPersistItem, pickPilotSample } from "../features/vision/visionEnrich.js";
 import { PALETTE as SHARED_PALETTE } from "../constants/palette.js";
+import Thumb from "./Thumb.jsx";
 
 // This view's `line` has always been the lighter border (not border-strong),
 // and it carries its own ok/warn status colors — keep those as local overrides.
@@ -104,7 +105,7 @@ export default function VisionPilotView({ items, apiKey, onBack, onEnriched }) {
       {/* ── Primary: enrich the whole closet ── */}
       <div style={{ background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: 16, marginBottom: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: PALETTE.ink }}>Your closet</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: PALETTE.ink }}>Both closets</span>
           <span style={{ fontSize: 12, color: PALETTE.muted, fontVariantNumeric: "tabular-nums" }}>
             {enrichedCount} / {withImg.length} read
           </span>
@@ -128,7 +129,7 @@ export default function VisionPilotView({ items, apiKey, onBack, onEnriched }) {
 
         {!running && (
           allDone && !finishedMsg
-            ? <div style={{ fontSize: 13, color: PALETTE.ok, marginTop: 8 }}>✓ Whole closet read. Style Me is using it.</div>
+            ? <div style={{ fontSize: 13, color: PALETTE.ok, marginTop: 8 }}>✓ Both closets read. Style Me is using it.</div>
             : <button onClick={runFull} style={{ ...s.btnPrimary, width: "100%", marginTop: 10 }}>
                 {remaining.length === withImg.length
                   ? `✦ Read all ${withImg.length} pieces`
@@ -166,7 +167,7 @@ export default function VisionPilotView({ items, apiKey, onBack, onEnriched }) {
               return (
                 <div key={item.id} style={{ display: "flex", gap: 12, padding: 12, background: PALETTE.cream, border: `1px solid ${PALETTE.line}`, borderRadius: 10 }}>
                   <div style={{ flexShrink: 0, width: 84, height: 110, background: "#fff", border: `1px solid ${PALETTE.line}`, borderRadius: 6, overflow: "hidden" }}>
-                    {item.image && <img src={item.image} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                    {item.image && <Thumb item={item} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                   </div>
                   <div style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
                     <div style={{ fontSize: 13, color: PALETTE.ink, fontWeight: 500, marginBottom: 4 }}>{item.name}</div>

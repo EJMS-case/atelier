@@ -55,6 +55,7 @@ function pump() {
 export function forgetThumb(id) {
   if (!id) return;
   known.delete(id);
+  serverAt?.delete(id);
   attempted.delete(id);
   persist();
 }
@@ -65,17 +66,51 @@ export function forgetThumb(id) {
 // the first-load regression this file was written to avoid.
 export function thumbSourceFor(item) {
   const id = item?.id;
-  if (!id || !item?.image || !known.has(id)) return null;
+  if (!id || !item?.image || !hasThumb(item)) return null;
   return thumbUrl(id, item.image);
+}
+
+// Seed the registry from the bucket. Without it a new phone — or one whose
+// storage was cleared — rendered every tile from the full photo and then
+// re-built and re-uploaded a thumb the server already held, two at a time,
+// for the whole closet (569 of 572 pieces have one, 2026-10-20). primeThumbs
+// runs once, before App mounts, on a device whose registry is nearly empty; a
+// server thumb counts only when it is at least as new as the photo's ?v=
+// stamp, so a replaced photo never shows its old thumb.
+const photoStamp = (url) => Number(String(url || "").match(/[?&]v=(\d{10,})/)?.[1] || 0);
+let seeding = null;
+let serverAt = null;
+let persistTimer = null;
+export function primeThumbs() {
+  if (seeding || serverAt || known.size >= 100) return;
+  seeding = sb.listThumbs()
+    .then(m => { serverAt = m; })
+    .catch(() => { serverAt = new Map(); })
+    .finally(() => { seeding = null; });
+}
+function hasThumb(item) {
+  const id = item?.id;
+  if (!id) return false;
+  if (known.has(id)) return true;
+  const at = serverAt?.get(id);
+  if (!at || !item.image || at < photoStamp(item.image)) return false;
+  known.add(id);
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(persist, 1000);
+  return true;
 }
 
 export function ensureThumb(item) {
   const id = item?.id;
-  if (!id || known.has(id) || attempted.has(id)) return;
+  if (!id || hasThumb(item) || attempted.has(id)) return;
   if (!item.image || item.image.startsWith("data:")) return; // not yet uploaded
   attempted.add(id);
   queue.push(async () => {
     try {
+      // A registry seed in flight may already know this thumb — never
+      // rebuild one the server holds.
+      if (seeding) await seeding;
+      if (hasThumb(item)) return;
       const b64 = await imageToBase64(item.image);
       const thumb = await compressImage(b64, 256, 0.8, true);
       await sb.uploadThumb(id, thumb);
@@ -94,11 +129,22 @@ export function ensureThumb(item) {
 
 export default function Thumb({ item, alt, style }) {
   const id = item?.id;
-  const [src, setSrc] = useState(() => (id && known.has(id) ? thumbUrl(id, item?.image) : item?.image));
+  // While the registry seed is in flight, hold the tile empty for that beat
+  // rather than start the full photo it is about to replace.
+  const [src, setSrc] = useState(() => (hasThumb(item) ? thumbUrl(id, item?.image) : (seeding ? null : item?.image)));
 
   useEffect(() => {
     if (!item?.image) { setSrc(null); return; }
-    if (id && known.has(id)) { setSrc(thumbUrl(id, item.image)); return; }
+    if (hasThumb(item)) { setSrc(thumbUrl(id, item.image)); return; }
+    if (seeding) {
+      let live = true;
+      seeding.then(() => {
+        if (!live) return;
+        if (hasThumb(item)) setSrc(thumbUrl(id, item.image));
+        else { setSrc(item.image); ensureThumb(item); }
+      });
+      return () => { live = false; };
+    }
     // Unknown thumb: render the full image now (no regression), build the thumb
     // for next time. We intentionally don't hot-swap to the thumb mid-session —
     // the full image is already on screen, so re-fetching the thumb we just made
@@ -109,7 +155,7 @@ export default function Thumb({ item, alt, style }) {
 
   return (
     <img
-      src={src || item?.image}
+      src={src || (seeding ? undefined : item?.image)}
       alt={alt}
       loading="lazy"
       decoding="async"
@@ -118,7 +164,7 @@ export default function Thumb({ item, alt, style }) {
         // A remembered thumb is missing (e.g. cleared on the server) — drop the
         // memory, fall back to the full image, and allow a rebuild.
         if (id && src && src !== item?.image) {
-          known.delete(id); persist();
+          known.delete(id); serverAt?.delete(id); persist();
           attempted.delete(id);
           setSrc(item?.image);
         }

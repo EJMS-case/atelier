@@ -135,7 +135,7 @@ export default function StyleProfileView({
   // chat, and trips already read these automatically; adding one here just
   // promotes it to her standing hand-picked list.
   const fashionSuggestions = useMemo(
-    () => autoColorPairs(items, { exclude: prefs.colorPairs }),
+    () => autoColorPairs(items, { exclude: prefs.colorPairs, max: 4 }),
     [items, prefs.colorPairs],
   );
 
@@ -426,7 +426,7 @@ export default function StyleProfileView({
             {audit.readinessPct === null ? "—" : `${audit.readinessPct}%`}
           </div>
           <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-            {audit.criticalClean} of {audit.total} pieces fully readable
+            {audit.criticalClean} of {audit.total} garments read clearly · both closets
           </div>
         </div>
         {Object.keys(audit.counts).length > 0 && (
@@ -465,7 +465,7 @@ export default function StyleProfileView({
         {audit.flagged.length > 0 && (
           <>
             <button style={{ ...s.btnSecondary, width: "100%", fontSize: 12 }} onClick={() => setAuditOpen(o => !o)}>
-              {auditOpen ? "Hide flagged pieces" : `Show flagged pieces (${audit.flagged.length})`}
+              {auditOpen ? "Hide pieces with something to add" : `Show pieces with something to add (${audit.flagged.length})`}
             </button>
             {auditOpen && (
               <div style={{ marginTop: 8, maxHeight: 320, overflowY: "auto" }}>

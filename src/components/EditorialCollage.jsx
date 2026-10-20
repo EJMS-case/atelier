@@ -44,7 +44,13 @@ function useIsMobileCollage() {
 // no white-space gaps. The trip screen's day cards use it: a packing view
 // where the pieces matter more than the arrangement. The planner's squares
 // used to as well; they are `tile`s now (below).
-export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride, compact = false, tile = false }) {
+// `thumbs`: draw each piece from its 256px thumb (the registry in Thumb.jsx)
+// while keeping the card's own layout — for a LIST of look cards (Saved,
+// History, a trip's day cards), where twelve cards × five full photos, each
+// alpha-scanned on the main thread, was the slowest screen in the app
+// (2026-10-20). A single look on screen (Style Me's result, the day sheet,
+// the builder) keeps the full photo.
+export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, layoutOverride, compact = false, tile = false, thumbs = false }) {
   const viewportMobile = useIsMobileCollage();
   // A TILE is a small portrait box the caller sizes (a planner square): it
   // keeps the composed look — her saved arrangement, or the dense portrait
@@ -156,7 +162,7 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
             // fills the slot tightly instead of floating in empty space. Big
             // visual win for Style Me looks where the slot is small and the
             // PNG's transparent halo would otherwise dominate.
-            tile ? (
+            (tile || thumbs) ? (
               <TrimmedImage item={slot} alt={slot.name}
                 style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
             ) : (

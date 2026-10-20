@@ -1514,6 +1514,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                               <EditorialCollage
                                 lookItems={outfitItems}
                                 compact
+                                thumbs
                                 canvasStyle={{ borderRadius: 0, padding: "8px 12px" }}
                               />
                             </div>

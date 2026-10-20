@@ -152,7 +152,7 @@ export default function ColorAdvisorView({ items, apiKey, onBack }) {
             <button style={{...s.btnPrimary, width:"100%", marginBottom:20}}
               onClick={handleAudit} disabled={auditRunning}>
               <Icon path={icons.sparkle} size={15}/>
-              {auditItems.length > 0 ? "Re-run Audit" : `Run Audit (${items.filter(i=>i.image && ["Tops","Knits","Dresses","Outerwear","Jumpsuits","Occasionwear"].includes(i.category)).length} garments)`}
+              {auditItems.length > 0 ? "Re-run Audit" : `Run Audit (${items.filter(i=>i.image && ["Tops","Knits","Dresses","Outerwear","Jumpsuits","Occasionwear"].includes(i.category)).length} pieces worn near your face)`}
             </button>
           )}
 

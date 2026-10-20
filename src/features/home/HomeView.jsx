@@ -20,6 +20,7 @@ import { isResurfaceCandidate } from "../recap/recapData.js";
 import { resolveItemIds, filterByWeather } from "../../utils/item-helpers.js";
 import { autoColorPairs, rotateDaily, hexForColorLabel, resurfaceBucket } from "../../utils/wardrobe-coverage.js";
 import { PALETTE } from "../../constants/palette.js";
+import { countCloset } from "../../constants/taxonomy.js";
 import Thumb from "../../components/Thumb.jsx";
 
 
@@ -31,12 +32,13 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
   const horizonIso = addDaysIso(todayIso, 14);
 
   // Plans + wear stats are fetched once by App (shared with the stylist and
-  // LookBackCard) and passed down. Ask for a refresh on every Home visit so
-  // the dashboard reflects outfits logged / plans saved since the last fetch —
-  // the same per-mount refetch semantics this view had when it fetched itself.
+  // LookBackCard) and passed down. Each Home visit asks for a refresh only if
+  // the record may have moved (`ifFresh`: something wrote a plan or a log
+  // since, or five minutes passed) — re-downloading every planned day on
+  // every return to Home was one of the "extremely slow" costs (2026-10-20).
   // Swallow rejections: the refresh is best-effort (the view just keeps the
   // stats it already has), and an unhandled rejection would surface in console.
-  useEffect(() => { onRefreshWearData?.()?.catch?.(() => {}); }, [onRefreshWearData]);
+  useEffect(() => { onRefreshWearData?.({ ifFresh: true })?.catch?.(() => {}); }, [onRefreshWearData]);
 
   // Today + "Coming up" derive from the shared planner rows. fetchAllPlans and
   // fetchPlansBetween return the same select=*, date-ascending rows, so the
@@ -110,16 +112,23 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
   // Swatches only — the piece thumbnails kept surfacing items whose photo
   // read as the wrong color and weren't tappable, so the owner asked to drop
   // them (2026-08-20: "omit the icons of clothing and just have the
-  // swatches"). Eight stories, and her hand-picked pairs are NOT excluded
+  // swatches"). Every owned story (first eight, then "Show all"), and her hand-picked pairs are NOT excluded
   // here anymore — hiding them made favorites like Burgundy + Navy invisible
   // on Home (the exclusion still applies in Style Profile, where it prevents
   // suggesting a pair she already keeps).
+  // The badge beside ATELIER shows the same garments number (countCloset).
+  const closetCount = useMemo(() => countCloset(items), [items]);
   const colorStories = useMemo(() => {
     try {
-      return autoColorPairs(items, { max: 8 });
+      return autoColorPairs(items);
     } catch { return []; }
   }, [items]);
-  // Eight stories is a screen of swatches between "Today" and the rest of
+  // Every pairing her closet makes this season (owner, 2026-10-20: "all the
+  // color pairings aren't there" — a cap of eight hid 28 of 36). The first
+  // eight show; the rest are one tap away.
+  const [allColors, setAllColors] = useState(false);
+  const shownStories = allColors ? colorStories : colorStories.slice(0, 8);
+  // Even eight stories is a screen of swatches between "Today" and the rest of
   // Home; she asked for them to fold away (2026-09-17: "The colors can be
   // collapsed as well"). Remembered per device.
   const [colorsOpen, setColorsOpen] = useState(() => !loadHomeCollapsed().colorStories);
@@ -176,7 +185,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14, marginTop: 4 }}>
         <h2 style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: 22, color: PALETTE.ink, margin: 0 }}>Today</h2>
         <div style={{ fontSize: 10, letterSpacing: "0.06em", color: PALETTE.muted }}>
-          {items.length} pieces{neglected.length > 0 && ` · ${neglected.length} resting`}
+          {closetCount.garments} garments · {closetCount.finishing} shoes, bags &amp; accessories{neglected.length > 0 && ` · ${neglected.length} resting`}
         </div>
       </div>
 
@@ -214,7 +223,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
           </button>
           {colorsOpen && (<>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {colorStories.map(story => (
+            {shownStories.map(story => (
               <button key={story.label}
                 onClick={() => (onStyleRequest || onOpenStyle)?.(`Color-block ${story.label} — build the look around that pairing`)}
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "#fff", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
@@ -237,6 +246,12 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
               </button>
             ))}
           </div>
+          {colorStories.length > 8 && (
+            <button onClick={() => setAllColors(v => !v)}
+              style={{ marginTop: 8, width: "100%", padding: "7px 10px", background: "none", border: `1px solid ${PALETTE.soft_line}`, borderRadius: 8, fontSize: 11, color: PALETTE.soft, cursor: "pointer" }}>
+              {allColors ? "Show fewer" : `Show all ${colorStories.length} pairings`}
+            </button>
+          )}
           <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 8 }}>
             Tap a pairing and the stylist builds the look around it.
           </div>
