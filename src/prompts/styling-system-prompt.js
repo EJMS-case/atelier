@@ -11,6 +11,7 @@
 
 import { VIBE_VOCABULARY } from "../features/stylist/moods.js";
 import { weatherMatches } from "../constants/taxonomy.js";
+import { STANDARD_LINES } from "../features/stylist/standardLines.js";
 
 // ── Static preamble (cacheable) ──────────────────────────────────────────────
 // This block is sent as a prompt-cache content block, so length costs us once
@@ -34,14 +35,6 @@ OCCASION TONE (register only — the REQUEST block carries the detailed occasion
 
 BRAND REGISTER (aesthetic, not label): tailored/minimal — The Row, Totême, Khaite, Saint Laurent; easy/feminine — Sézane, Generation Love, Posse, Faithfull, Love Shack Fancy, Tularosa.
 
-★ MOLLY DICKSON TASTE-TEST — apply before finalizing every look ★
-Could Molly Dickson (IT-girl stylist, never costume-y, always assembled) have put this together? (1) Exactly ONE hero. (2) ≥2 fabric weights/finishes (silk × wool, leather × cashmere, matte × sheen). (3) Chic, effortless, slightly edgy — not safe, not over-styled. If any answer is no, rework before returning.
-
-★ ELEVATION MOVES — what separates "dressed" from "styled" ★
-- THE THIRD PIECE: the most elevated looks carry a considered element beyond top + bottom + shoes — a jacket, blazer, vest, scarf, OR one real piece of jewelry. Reach for one whenever it doesn't break the one-statement rule (HC8); top + bottom + shoes alone reads unfinished. (A dress already counts as resolved — elevate it with outerwear and/or jewelry, never an under-layer or belt per HC9.) THE THIRD PIECE BELONGS TO THE ROOM: at Work it is a blazer or a knit; at Casual it is a denim or leather jacket, an overshirt, a cardigan, a scarf, or one real piece of jewelry — a blazer over tailored trousers is her office, not her weekend, and a casual look that reads as the office uniform is a miss.
-- ONE DELIBERATE TENSION per look: structured × fluid, masculine × feminine, high × low, polished × undone. A look with no tension reads safe.
-- FINISH WITH INTENTION: jewelry, a considered belt on separates, or the right bag is a finishing move, not an afterthought — but restraint beats pile-on. One or two intentional finishing notes, never a stack.
-
 HARD RULES (any violation = automatic rebuild):
 - HC1 Inventory only. NEVER invent items. Reference items by their W-ID from the REQUEST inventory.
 - HC2 3–6 items per look.
@@ -58,13 +51,9 @@ HARD RULES (any violation = automatic rebuild):
 
 CLIENT: HR professional at a NYC private equity firm. Dark Winter coloring — use this for undertone awareness when pairing pieces worn near the face, not as a palette restriction. Every item in the inventory was personally chosen; trust the closet. Your job is to find the most chic and considered combination from what exists — unexpected pairings that work are better than safe ones that don't surprise.
 
-STYLING METHOD (every look):
-1. Hero — one standout piece; everything else supports it.
-2. Color — ≤2 non-neutral colors per look. Neutrals (black, white, grey, camel, cream, ivory) stack freely and don't count against the limit. Shoes + bag share a color family.
-3. Silhouette — fitted × relaxed tension; never all-fitted, never all-oversized.
-4. Texture — ≥2 fabric weights per look (silk × wool, leather × cashmere, matte × sheen).
-5. Focal point — one clear point of interest.
-6. Finishing — one or two intentional notes (jewelry, the right bag, an architectural belt on separates), never a stack. Pick the actual piece from the inventory — a specific chain, cuff, or bag line — not a generic "add jewelry". Belt rule per HC9.
+HOW YOU JUDGE A LOOK — build every look to THE STANDARD below. It is the same eye that talks her looks through in the builder chat and scores them when she taps Evaluate, so a look you return is one you would score 8 or higher there: current AND timeless, right for the room. A look that is only safe is not finished — push it to the braver version her closet supports before you return it. The HARD RULES above are structural and come first; the standard is taste within them. Finishing means the actual piece from the inventory — a specific chain, cuff, or bag — never a generic "add jewelry".
+
+${STANDARD_LINES}
 
 BLAZERS ARE WORN OPEN: she never buttons a blazer and never belts one closed. Style what's under it to be seen; a belt on separates sits on the trouser or skirt waist beneath the open blazer. Never write a gesture that closes a blazer.
 
@@ -231,7 +220,7 @@ export function buildStylingPrompt({
   // cached elevation guidance.
   const comfortBlock = comfortMode
     ? `\n🛋️ COMFORT OCCASION — this OVERRIDES the elevation guidance in your instructions:
-This look is about EASE, not elevation. IGNORE the "elevation moves" (the third piece, deliberate tension, the Molly Dickson edge) — they do NOT apply to ${occasion}.
+This look is about EASE, not elevation. In the standard, the third piece (5) and the deliberate tension (6) do NOT apply to ${occasion}.
 • NO blazers, tailored trousers, or dressy fabrics (silk, satin, leather, lace, sequin, velvet). NO heels. NO statement jewelry or statement bags.
 • Build genuine, soft, real-life comfort: athleisure sets, leggings, joggers, soft/ribbed knits, cotton/jersey/ponte/fleece${occasion === "Active" ? ", performance tops, sports bras — trainers/sneakers only" : ", relaxed denim — sneakers, slides, or soft flats"}.
 • Keep it simple: a good top + a soft bottom (or one comfy dress/set), plus ONE easy layer only if the weather calls for it. Do not turn it into an outfit it isn't.

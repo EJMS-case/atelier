@@ -69,7 +69,7 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // that may still arrive from saved planner entries or older callers.
   occasion = normalizeOccasion(occasion) || "Casual";
   // Comfort occasions: ease over elevation. These opt OUT of the editorial hero
-  // briefs and the "elevation moves" preamble (which were pushing blazers,
+  // briefs and the standard's elevation lines — third piece, tension — (which were pushing blazers,
   // statement jewelry, and dressy fabrics onto loungewear). The occasion set
   // is shared with the closet-sampler so the two can never drift apart.
   const comfortMode = COMFORT_OCCASIONS.has(occasion);

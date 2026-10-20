@@ -132,7 +132,12 @@ Conventions worth knowing:
   computed read of the canvas). Don't write a new advisory prompt with a
   pasted persona and no rubric: that is exactly how the builder chat ended up
   agreeing with everything (2026-09-10). Add the new file to the source
-  contract in `scripts/stylist-standard.test.mjs`.
+  contract in `scripts/stylist-standard.test.mjs`. **The surface that BUILDS
+  a look reads the same rubric** (owner, 2026-10-20: "the evaluator doesn't
+  speak the same language as the builder"): Style Me's preamble carries
+  `STANDARD_LINES` (`standardLines.js`), a number on a look means
+  `SCORE_SCALE`, and Evaluate and the chat read the look's own history
+  through `originBlock()`. Never give the generator a method of its own.
 - **Navigation is fixed (owner, 2026-09-17): ATELIER = Home; the closet
   chip's NAME opens the closet grid and the ▼ beside it opens the switcher;
   every top-level Back lands on Home.** The nav is Style Me · Planner ·

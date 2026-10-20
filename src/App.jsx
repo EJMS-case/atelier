@@ -2453,6 +2453,16 @@ export default function App() {
                   weathers: lk.weather ? [lk.weather] : [...weather],
                   notes: null,
                   layout_data: Array.isArray(lk.layout_data) ? lk.layout_data : null,
+                  // Style Me's own card for the look — Evaluate reads it as
+                  // its own earlier word (evaluateLook.originBlock), so the
+                  // two speak as one stylist.
+                  stylist_read: [
+                    lk.styling || lk.rationale,
+                    lk.color_strategy && `Colour: ${lk.color_strategy}`,
+                    lk.silhouette && `Silhouette: ${lk.silhouette}`,
+                    lk.texture_story && `Texture: ${lk.texture_story}`,
+                    lk.focal_point && `Focal point: ${lk.focal_point}`,
+                  ].filter(Boolean).join("\n") || null,
                 });
                 setManualBuilderOpen(true);
               }}

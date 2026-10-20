@@ -826,6 +826,7 @@ export default function SilhouetteBuilder({
         // where she's going when Work is already selected.
         occasions: asArray(occasions),
         weathers: asArray(weathers),
+        origin: initialLook?.stylist_read ? { source: "styleme", text: initialLook.stylist_read, ids: initialLook.garment_ids || [] } : null,
         apiKey,
         onDelta: setLastAssistant,
       });
@@ -952,7 +953,16 @@ export default function SilhouetteBuilder({
     // The occasion/weather chips she's tagged the look with double as the
     // evaluation brief — the stylist judges fitness-for-purpose, not just
     // abstract prettiness. Errors land in the run's state (runErr above).
-    const brief = { occasions: asArray(occasions), weathers: asArray(weathers), available: builderPool };
+    // The look's origin, when there is one: the chat's latest read of this
+    // canvas wins (it is the newer word), else Style Me's card for a look she
+    // opened from her results. Evaluate answers it in the same voice.
+    const lastRead = [...chatMessages].reverse().find(m => m.role === "assistant" && m.content);
+    const origin = lastRead
+      ? { source: "chat", text: lastRead.content }
+      : initialLook?.stylist_read
+        ? { source: "styleme", text: initialLook.stylist_read, ids: initialLook.garment_ids || [] }
+        : null;
+    const brief = { occasions: asArray(occasions), weathers: asArray(weathers), available: builderPool, origin };
     startRun(RUN_KEYS.builderEvaluate, async () => {
       const evaluation = await evaluateLook(items, apiKey, brief);
       return { evaluation, canvasIds, canvasKey: [...canvasIds].sort().join("|"), occasions: brief.occasions, weathers: brief.weathers };
