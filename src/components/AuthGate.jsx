@@ -11,6 +11,7 @@
 import { useState, useEffect } from "react";
 import { s } from "../ui/styles.js";
 import { signIn, isSignedIn, onAuthChange } from "../lib/auth.js";
+import { primeThumbs } from "./Thumb.jsx";
 
 export default function AuthGate({ children }) {
   const [signedIn, setSignedIn] = useState(isSignedIn());
@@ -30,7 +31,10 @@ export default function AuthGate({ children }) {
     return () => { off(); clearTimeout(t); };
   }, []);
 
-  if (signedIn) return children;
+  // Signed in: seed the thumb registry before App's first render, so a
+  // cold device's first tiles wait on one list request instead of starting
+  // every full photo. Idempotent (a no-op once the registry knows its thumbs).
+  if (signedIn) { primeThumbs(); return children; }
 
   if (!ready) {
     return (

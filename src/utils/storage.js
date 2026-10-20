@@ -8,7 +8,7 @@
 // at app startup via `migrateLocalStorage()`.
 
 import { normalizeItem } from "./item-helpers.js";
-import { STYLE_PREFS } from "../constants/styling.js";
+import { STYLE_PREFS } from "../constants/stylePrefs.js";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 
 const STORAGE_KEY           = "atelier:wardrobe:v1";

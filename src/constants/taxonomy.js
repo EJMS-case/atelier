@@ -47,7 +47,38 @@ export const TAXONOMY = {
 // accessories to appear on my style profile page"). Before this, the same
 // four names were typed by hand at each site.
 export const NON_GARMENT_CATEGORIES = new Set(["Shoes", "Bags", "Belts", "Accessories"]);
-export const isGarment = (it) => !!it && !NON_GARMENT_CATEGORIES.has(it.category);
+export const isGarment = (it) => !!it && !!it.category && it.category !== MISC_CATEGORY && !NON_GARMENT_CATEGORIES.has(it.category);
+
+// The pieces she wears but does not dress in: swim, gym, lounge. Out of the
+// wear record (wearEligible), the colour numbers (coverageEligible) and the
+// recap's "garments worn" — one list, read by all three.
+export const COMFORT_CATEGORIES = new Set(["Swim", "Athleisure", "Loungewear"]);
+export const isEverydayGarment = (it) => isGarment(it) && !COMFORT_CATEGORIES.has(it.category);
+
+// ── HOW THE APP COUNTS HER CLOSET (owner, 2026-10-20: "the count of garments
+// in my closet is inconsistent throughout the app") ────────────────────────
+// Every number she reads about her closet comes from countCloset, over the
+// list the screen is about (`available` — the closet she is in — unless the
+// label says "both closets"), and uses these words, and only these:
+//   pieces    — everything in the list (garments + finishing)
+//   garments  — clothing: isGarment (lounge, gym and swim included)
+//   finishing — shoes, bags, belts and accessories
+//   everyday  — garments minus lounge, gym and swim (the wear record's set;
+//               the recap says so in its label)
+// A coord set of separates counts each piece; a set stored as one row is one.
+// Before this, five hand lists answered "how many garments" — 489, 380, 294
+// and 386 for the same closet on four screens.
+export function countCloset(list) {
+  let pieces = 0, garments = 0, everyday = 0;
+  for (const it of list || []) {
+    if (!it || it.category === MISC_CATEGORY) continue;
+    pieces++;
+    if (!isGarment(it)) continue;
+    garments++;
+    if (!COMFORT_CATEGORIES.has(it.category)) everyday++;
+  }
+  return { pieces, garments, everyday, finishing: pieces - garments };
+}
 
 // The styling-safe views of the two lists above. EVERY consumer that hands a
 // category list to a model, or renders a per-category styling/coverage
@@ -65,7 +96,9 @@ export const SUBCATEGORY_L3 = {
   // fabric, and "Wide Leg" can't separate them because nearly every trouser she
   // owns is wide leg. What they share is a bold print and a decidedly
   // non-office register, which is exactly the distinction the stylist needs.
-  "Pants":              ["Jeans","Satin/Silk","Trousers","Ponte","Printed"],
+  // Ordered tailored → casual (2026-10-20): the builder and the closet's
+  // child-chip row lay a shelf out in this order (shelfSortComparator).
+  "Pants":              ["Trousers","Ponte","Satin/Silk","Printed","Jeans"],
   "Skirts":             ["Mini","Midi","Maxi"],
   "Boots":              ["Ankle","Knee-High","Over-the-Knee"],
   "Heels":              ["Block","Kitten","Stiletto"],

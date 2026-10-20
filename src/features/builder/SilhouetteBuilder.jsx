@@ -13,7 +13,7 @@ import { sendBuilderMessage, rememberChat } from "./builderChat.js";
 import { sb } from "../../lib/supabase.js";
 import MarkdownLite from "../../components/MarkdownLite.jsx";
 import { OCCASIONS, WEATHER_SHORTS, getL3Options, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
-import { slotForItem, itemIdIndex, resolveItemIds } from "../../utils/item-helpers.js";
+import { slotForItem, itemIdIndex, resolveItemIds, shelfSortComparator } from "../../utils/item-helpers.js";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
@@ -453,10 +453,11 @@ export default function SilhouetteBuilder({
   // resolved per item against its OWN category.
   const subcatsForSlot = useMemo(() => {
     const def = SLOTS.find(s => s.key === activeSlot);
-    const all = (builderPool || []).filter(it => def?.match(it));
+    const all = (builderPool || []).filter(it => def?.match(it)).sort(shelfSortComparator);
+    // In shelf order (the grid's), not alphabetical.
     return [...new Set(all
       .map(it => it.subcategory ? (getSubcatL2(it.category, it.subcategory) || it.subcategory) : "")
-      .filter(Boolean))].sort();
+      .filter(Boolean))];
   }, [activeSlot, builderPool]);
 
   // The L2 chip the current filter lives under (the filter itself when it IS
@@ -496,6 +497,7 @@ export default function SilhouetteBuilder({
         (it.subcategory || "").toLowerCase().includes(q)
       );
     }
+    pool = [...pool].sort(shelfSortComparator);
     return { core: pool.filter(it => !isComfortItem(it)), comfort: pool.filter(isComfortItem) };
   }, [activeSlot, builderPool, search, subcatFilter]);
 
@@ -527,7 +529,7 @@ export default function SilhouetteBuilder({
         kind: "coord",
         key: setId,
         members,
-        image: members.find(m => m.image)?.image || null,
+        cover: members.find(m => m.image) || null,
         label: setsMeta?.[setId]?.name
           || `Set · ${[...new Set(members.map(m => m.subcategory || m.category).filter(Boolean))].slice(0, 3).join(" + ")}`,
       }));
@@ -542,7 +544,7 @@ export default function SilhouetteBuilder({
 
   const setEntries = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const singles = singleSetItems.map(it => ({ kind: "single", key: it.id, image: it.image, label: pickerLabel(it), item: it }));
+    const singles = singleSetItems.map(it => ({ kind: "single", key: it.id, label: pickerLabel(it), item: it }));
     const all = [...coordSets, ...singles];
     return q ? all.filter(e => (e.label || "").toLowerCase().includes(q)) : all;
   }, [coordSets, singleSetItems, search]);
@@ -1231,7 +1233,7 @@ export default function SilhouetteBuilder({
                       <div style={{ aspectRatio: "1", background: PALETTE.cream, borderRadius: 4, overflow: "hidden", marginBottom: 4, position: "relative" }}>
                         {entry.kind === "single"
                           ? <Thumb item={entry.item} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
-                          : entry.image && <img src={entry.image} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
+                          : entry.cover && <Thumb item={entry.cover} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>}
                         {entry.kind === "coord" && (
                           <span style={{ position: "absolute", top: 3, right: 3, fontSize: 8, fontWeight: 600, letterSpacing: "0.04em", background: "rgba(28,24,20,0.82)", color: "#fff", borderRadius: 8, padding: "1px 5px" }}>
                             {entry.members.length} pcs{state === "partial" ? " ·" : ""}

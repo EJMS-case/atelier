@@ -6,7 +6,7 @@
 import { SUPABASE_URL, sbHeaders } from "../../lib/supabase.js";
 import { outfitsOf } from "../planner/outfits.js";
 import { nyToday } from "../../lib/time.js";
-import { normalizeOccasion, getSubcatL2 } from "../../constants/taxonomy.js";
+import { normalizeOccasion, getSubcatL2, COMFORT_CATEGORIES } from "../../constants/taxonomy.js";
 
 // ── Rooms ────────────────────────────────────────────────────────────────────
 // "Most worn" reads by the room she dressed for (owner, 2026-09-22: "I'd
@@ -27,9 +27,8 @@ const ROOM_OF = { "Work Dinner": "Work" };
 // suit worn to the pool every day of a trip is not what she reaches for. The
 // same three categories utils/wardrobe-coverage.js keeps out of her numbers;
 // its metal-jewellery clause is about colour, not wear, so it stays out here.
-const WEAR_EXCLUDED_CATS = new Set(["Swim", "Athleisure", "Loungewear"]);
 export function wearEligible(item) {
-  return !!item && !WEAR_EXCLUDED_CATS.has(item.category);
+  return !!item && !COMFORT_CATEGORIES.has(item.category);
 }
 
 // The rooms one wear record counts toward. Reads the single `occasion` and the

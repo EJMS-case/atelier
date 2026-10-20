@@ -2,6 +2,51 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — One count of the closet; brand colour names; every pairing; the Quince skirt; Work's skirt habit; the builder's shelves; speed — 2026-10-20
+
+### Why
+
+Six reports from her in one message: *"The count of garments in my closet is inconsistent throughout the app … including AI readiness"*; *"all the color pairings aren't there. Is the app smart enough to recognize colors that aren't explicitly named? … Cacao, espresso, etc for brown"*; *"My stylist chat keeps flagging something about the quince skirt"*; *"I've been unimpressed with the work outfits lately … It seems to keep showing the same things"*; *"When I'm in builder, the order in which garments show up for each category don't make sense"*; *"The app has also been extremely slow."* Then: audit for dead or duplicate code.
+
+### Fixed
+
+- **The Quince skirt.** The hosiery check read "ponte" before "skirt", so *Ultra Stretch Ponte Knit Pencil Skirt* — and four more ponte pencil skirts — counted as trousers, and every chat turn about a look with tights under one opened with "the app flagged the brew sheer tights" (three chats on 2026-10-20). `leavesLegBare()` (`item-helpers.js`) is the one reader: a skirt or shorts word wins, then a leg-covering word, then Mini / Midi / Maxi.
+- **Counts.** Five hand lists answered "how many garments" (`isGarment`, the recap's `GARMENT_CATS`, `coverageEligible`, `wearEligible`, Color Advisor's own list) and the screens mixed one closet with both. Now `countCloset()` (`taxonomy.js`) gives pieces / garments / finishing / everyday from one pass, and `COMFORT_CATEGORIES` / `isEverydayGarment` are the one lounge-gym-swim list (wear record, colour numbers, recap). The header badge and Home's line read the closet she is in, in garments ("N garments · M shoes, bags & accessories"); AI Readiness says "N of M garments read clearly · both closets" and its flag list "pieces with something to add" (it includes optional fields, which "fully readable" did not count); the recap says "lounge, gym and swim aside" instead of "% of the closet"; Style Me names the closet or the trip pool it read; Visual AI reads both closets, so a readiness flag on an Arizona top can be cleared from NYC; Style Intelligence's underused list reads the calendar's wear (not the stale column) and drops the dead `is_active_rotation` check.
+- **Brand colour names.** Cacao and Truffle (the Carissa blazer, the Testra pants) resolved to no family and were invisible to every colour surface. The resolver now reads cacao, truffle, brew, hickory, umber, toffee, hazelnut, cinnamon, java, saddle, whiskey, tortoise as brown; bordeaux, garnet, cabernet, claret as red; oatmeal, latte, mink, natural as neutral. The stylist's inventory line tags a brand name with its family ("Cacao (brown)"); plain colour words go untagged.
+- **Every pairing.** Home showed eight of the 36–37 pairings her closet makes this season, and ranked brown as black, so no brown pairing ever reached the eight. Each pairing side also carried its own regex — a plain "Brown" or Cacao piece counted for one Chocolate pairing and not the next. One shade vocabulary per side label (`SHADE` in `fashion-combos.js`), a side may straddle two families (camel / caramel are Neutrals or Brown by brand), brown ranks as half a colour, and Home lists the first eight with "Show all N pairings".
+- **A pairing tap reaches the stylist.** "Color-block Burgundy + Chocolate" matched no pieces in the literal free-text matcher. `pairingInRequest()` (`wardrobe-coverage.js`) names which inventory pieces read as each side — the same matcher Home offered the pairing with — in a soft "THE PAIRING IN HER CLOSET" block. The chat and Evaluate's pairing read (`itemMatchesSide` in `standard.js`) asks the same vocabulary first (`matchesPairSideText`), so a Cacao skirt activates "Burgundy + Chocolate" there too.
+- **Work's skirt habit.** The prompt still said "at least ONE of the looks should use a skirt or dress" — written for three-up generation; with one look per tap it made every look a skirt or a dress (17 of her last 24 looks). A single look now hears the lower-half counts and, when her last four-plus looks all leaned one way, that a different lower half is welcome. Three-up keeps the old line.
+- **Builder order.** The picker showed the closet in upload order, oldest first. `shelfSortComparator()` lays a slot out shelf by shelf — category, taxonomy subcategory (Blouses, Bodysuits, Shirts … Tanks; Cardigans, Pullovers; Trousers, Ponte, Satin/Silk, Printed, Jeans; Mini, Midi, Maxi), then the closet grid's own colour / sleeve / length order — and the subcategory chips follow it. Pants' L3 order is now tailored → casual everywhere.
+
+### Faster
+
+- **Thumbs on a cold device.** A phone with an empty thumb registry drew every tile from the full photo, then rebuilt and re-uploaded a thumb the server already had (569 of 572 pieces have one). `primeThumbs()` lists the bucket once, before App mounts, and trusts a thumb at least as new as the photo's `?v=` stamp.
+- **Saved / History / trip day cards draw from thumbs** (`EditorialCollage thumbs`): twelve cards × five full photos, each alpha-scanned on the main thread, was the slowest list in the app. A single look on screen (Style Me's result, the day sheet, the builder) keeps the full photo — the trade is a softer piece in a small card for a list that scrolls.
+- **Home stops re-downloading the wear record on every visit.** Every write to planned_outfits / outfit_logs bumps `wearWriteCount()` in `supabase.js`; Home's refresh runs only when something wrote or five minutes passed.
+- **Style Me's seconds counter** ticks in its own component (`StylingElapsed`) instead of re-rendering all of App once a second for the length of a generation.
+- **Boot:** the fingerprint row is read once (the refresh check reused a second GET); the rotation state is written back only when this device holds something the remote lacks (it wrote on every boot); `STYLE_PREFS` moved to `constants/stylePrefs.js` so the boot chunk no longer carries the styling library (entry chunk 514 → 500 kB).
+- Builder set covers, Style Intelligence anchors and Visual AI's grid now use `<Thumb>` (three raw `<img src={it.image}>` tiles).
+
+### Audit: dead and duplicate code
+
+- Removed: `GARMENT_CATS`, `OVERWEAR_EXCLUDE`, `WEAR_EXCLUDED_CATS`, `COVERAGE_EXCLUDED_CATS` (four copies of two lists), the per-pairing shade regexes (72 sides onto 17 vocabularies), the dead `is_active_rotation` read, the ticker state in App, unused `image` fields on the builder's set entries.
+- Unused exports and unimported files: none found beyond test-only exports (scanned every `export` under `src/` against `src/` and `scripts/`).
+
+### Downstream, four ways
+
+- **Efficiency.** The cached preamble is unchanged; the pairing block and the lower-half line ride the dynamic body. The inventory's family tag rides only brand-named colours (a few dozen lines). One storage list request replaces up to ~570 full-photo downloads and thumb uploads on a cold device.
+- **Effectiveness.** The colour family now reaches every surface that reads `effectiveColorFamily` (Home, Style Me, shopping, the recap, the closet's colour chips) through the one resolver; the hosiery read reaches the validator, so the chat stops quoting a false flag.
+- **Speed.** Fewer full-photo decodes in lists, no per-second App re-render, no Home re-download on return.
+- **Education.** Her recent record now steers the lower half of a single look; a pairing she taps reaches the stylist as pieces, not words.
+
+### Tests
+
+`npm test` (52 suites — new `test:closet-reads`), `npm run build`, `npm run smoke` green.
+
+### Data
+
+None written. Read live: 572 rows (NYC 489, Arizona 83); 569 server thumbs, none older than its photo; the five ponte pencil skirts; Cacao and Truffle with no stored family; the rotation window's last 24 looks.
+
 ## [Unreleased] — The unused tables stay; the drop migration is withdrawn — 2026-10-10
 
 ### Why

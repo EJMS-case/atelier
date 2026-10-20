@@ -24,7 +24,7 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (51 suites, no network)
+npm test           # full suite (52 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
 npm run test:render     # just the render walk (40 steps, headless, mocked REST)
@@ -164,6 +164,21 @@ Conventions worth knowing:
   (gym, lounge, swim and metal-coloured jewellery out) — and says the count
   it rests on; "zero charcoal" to a woman with three charcoal sweatpants is
   how "What the numbers say" read as wrong (2026-09-17).
+- **Every count she reads comes from `countCloset()`** (`constants/taxonomy.js`,
+  owner 2026-10-20: "the count of garments in my closet is inconsistent
+  throughout the app"), and uses its four words only: *pieces* (everything),
+  *garments* (`isGarment`: clothing, lounge/gym/swim included), *finishing*
+  (shoes, bags, belts, accessories), *everyday* (garments minus
+  `COMFORT_CATEGORIES` — the wear record's set, labelled "lounge, gym and swim
+  aside"). The list is `available` (the closet she is in) unless the label
+  says "both closets". Don't type a category list to count with.
+- **A colour is read by `effectiveColorFamily()`, and a pairing side by the
+  `SHADE` vocabulary in `fashion-combos.js`** (owner, 2026-10-20: "I'm
+  inputting the name of the color per the brand. Cacao, espresso"). A brand
+  shade that resolves to no family is a gap in `resolveFamily`'s keyword
+  lists — add the word there, once. `matchesComboSide` (Home),
+  `pairingInRequest` (Style Me) and `matchesPairSideText` (the chat and
+  Evaluate) are the three askers; don't write a fourth regex per pairing.
 - **A small picture of a piece names the PIECE, never the photo** (owner,
   2026-10-04: "the planner runs extremely slow to load"). Every tile under
   ~100px — a calendar cell, a packing row, a picker card, a Home strip — is
@@ -171,8 +186,10 @@ Conventions worth knowing:
   that trims its piece); both read the 256px thumb the bucket holds through
   the one registry in `components/Thumb.jsx` and fall back to the photo only
   while a thumb does not exist yet. `<TrimmedImage src={…}>` with the full
-  photo is for a composite that fills the screen (the builder canvas, a saved
-  look's collage). A raw `<img src={it.image}>` on a tile is the regression:
+  photo is for a composite that fills the screen (the builder canvas, Style
+  Me's result, the day sheet); a LIST of look cards passes `thumbs` to
+  `EditorialCollage` (2026-10-20). A device with an empty registry is seeded
+  from the bucket once (`primeThumbs`, called by AuthGate before App mounts). A raw `<img src={it.image}>` on a tile is the regression:
   the month grid was downloading ~160 full photos and alpha-scanning each on
   the main thread to paint 20px squares.
 - **The collage never drops a piece.** `components/collageLayout.js` is the

@@ -188,7 +188,7 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${PALETTE.soft_line}` }}>
           <div style={{ fontSize: 12, color: PALETTE.soft, lineHeight: 1.6 }}>
             <strong style={{ color: PALETTE.ink }}>{periodStats.distinctGarments}</strong> of {periodStats.garmentCount} garments worn
-            {periodStats.utilizationPct !== null && <span style={{ color: PALETTE.muted }}> ({periodStats.utilizationPct}% of the closet)</span>}
+            {periodStats.utilizationPct !== null && <span style={{ color: PALETTE.muted }}> ({periodStats.utilizationPct}% · lounge, gym and swim aside)</span>}
             {periodStats.heartedCount > 0 && <> · <strong style={{ color: PALETTE.ink }}>{periodStats.heartedCount}</strong> loved</>}
           </div>
           {periodStats.colorFamilies.length > 0 && (

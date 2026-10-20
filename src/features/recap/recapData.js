@@ -8,25 +8,19 @@
 // from the leaned-on / overwear tally — trips are meant to repeat pieces.
 
 import { outfitsOf } from "../planner/outfits.js";
-import { wearEligible } from "../wear/wearApi.js";
 import { asArray } from "../../lib/multitag.js";
 import { filterByWeather, isComfortCoded, formalityOf } from "../../utils/item-helpers.js";
-import { getSubcatL2, NON_GARMENT_CATEGORIES } from "../../constants/taxonomy.js";
+import { getSubcatL2, isEverydayGarment, countCloset } from "../../constants/taxonomy.js";
 import { effectiveColorFamily } from "../../constants/color.js";
 import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
-
-// Categories that don't count as "leaned-on" garments — belts, jewelry and
-// other accessories, shoes, and bags repeat freely by design.
-const OVERWEAR_EXCLUDE = NON_GARMENT_CATEGORIES;
 
 // Garment categories eligible for the forward-looking nudges (rediscover /
 // challenge / swap alternatives). Deliberately EXCLUDES accessories, belts,
 // shoes, bags, AND Swim / Loungewear / Athleisure — the user doesn't want those
 // surfaced as "neglected pieces to rediscover" (belts were crowding it out).
 // Exported: HomeView's "Back in Rotation" list applies the same eligibility rule.
-export const GARMENT_CATS = new Set([
-  "Tops", "Knits", "Bottoms", "Dresses", "Occasionwear", "Jumpsuits", "Sets", "Outerwear",
-]);
+// The set is taxonomy.js's isEverydayGarment (garments minus lounge, gym and
+// swim) — the same set the recap's "N of M garments worn" counts.
 
 // The category gate above wasn't enough (owner, 2026-08-20 ×2: no t-shirts /
 // lounge / swim / athleisure, and no occasionwear — "a cocktail dress I'd
@@ -35,7 +29,7 @@ export const GARMENT_CATS = new Set([
 // category, so the shared isComfortCoded heuristic (item-helpers: activewear
 // brand / comfort-coded name / her own formality ≤2) does the real work.
 export function isResurfaceCandidate(it) {
-  if (!GARMENT_CATS.has(it.category)) return false;
+  if (!isEverydayGarment(it)) return false;
   if (it.category === "Occasionwear") return false; // event pieces rest by design
   if ((it.subcategory || "") === "T-Shirts") return false;
   return !isComfortCoded(it);
@@ -184,7 +178,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   looks.filter(l => !l.isTrip).forEach(l => {
     l.itemIds.forEach(id => {
       const it = itemMap[id];
-      if (!it || OVERWEAR_EXCLUDE.has(it.category) || !wearEligible(it)) return;
+      if (!isEverydayGarment(it)) return;
       (wearDays[id] ||= new Set()).add(l.date);
     });
   });
@@ -243,7 +237,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
 
   // ── Period stats — the "in review" layer (month/quarter/year windows).
   // Garments only (shoes/bags repeat by design) and only the pieces she
-  // styles (wearEligible — a trip's daily pool suit is not a top piece). The
+  // styles (isEverydayGarment — a trip's daily pool suit is not a top piece). The
   // per-room top pieces that used to sit here are gone: Home's Most worn is
   // the one most-worn strip (owner, 2026-10-04: "find myself confused about
   // the top section"), and two of them on one page read as repetitive.
@@ -251,7 +245,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   looks.forEach(l => {
     l.itemIds.forEach(id => {
       const it = itemMap[id];
-      if (!it || OVERWEAR_EXCLUDE.has(it.category) || !wearEligible(it)) return;
+      if (!isEverydayGarment(it)) return;
       (periodWearDays[id] ||= new Set()).add(l.date);
     });
   });
@@ -265,7 +259,7 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
   const colorFamilies = Object.entries(famCounts)
     .sort((a, b) => b[1] - a[1])
     .map(([family, count]) => ({ family, count }));
-  const garmentCount = (items || []).filter(it => GARMENT_CATS.has(it.category)).length;
+  const garmentCount = countCloset(items).everyday;
   const distinctGarments = Object.keys(periodWearDays).length;
   const periodStats = {
     distinctGarments,

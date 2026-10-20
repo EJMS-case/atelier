@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import { s, si } from "../ui/styles.js";
 import { sb } from "../lib/supabase.js";
 import { streamStyleProfile, colorHex } from "../lib/ai/stylist.js";
-import { wearEligible } from "../features/wear/wearApi.js";
 // STYLING_CATEGORY_ORDER: insights never names the "Misc" holding room (its
 // items are stripped upstream, so the row would always read zero anyway).
-import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
+import { STYLING_CATEGORY_ORDER, isEverydayGarment } from "../constants/taxonomy.js";
+import { effectiveColorFamily } from "../constants/color.js";
 import { loadInsightsDismissed, saveInsightsDismissed } from "../utils/storage.js";
 import { useRun, startRun, RUN_KEYS } from "../lib/backgroundRun.js";
 import Thumb from "./Thumb.jsx";
@@ -24,17 +24,20 @@ function analyzeWardrobe(items, outfitLogs) {
 
   const now = Date.now();
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  // Garments she dresses in (lounge, gym and swim aside), read through the
+  // calendar's wear stats (App passes applyWearStats(available)).
   results.underutilized = items.filter(it => {
-    if (it.is_active_rotation === false) return false;
+    if (!isEverydayGarment(it)) return false;
     if (!it.last_worn) return true;
     return (now - new Date(it.last_worn).getTime()) > thirtyDays;
   }).slice(0, 8);
 
+  const byId = new Map(items.map(it => [it.id, it]));
   const pairMap = {};
   outfitLogs.forEach(log => {
     const ids = log.garment_ids || [];
-    const logItems = ids.map(id => items.find(it => it.id === id)).filter(Boolean);
-    const colors = [...new Set(logItems.map(it => it.color_family || it.color).filter(Boolean))];
+    const logItems = ids.map(id => byId.get(id)).filter(Boolean);
+    const colors = [...new Set(logItems.map(it => effectiveColorFamily(it)).filter(Boolean))];
     for (let i = 0; i < colors.length; i++) {
       for (let j = i + 1; j < colors.length; j++) {
         const key = [colors[i], colors[j]].sort().join(" + ");
@@ -49,7 +52,7 @@ function analyzeWardrobe(items, outfitLogs) {
   results.wardrobeAnchors = Object.entries(wearCounts).filter(([, c]) => c >= 5).sort((a, b) => b[1] - a[1])
     // Anchors are pieces she styles — swim, gym and lounge never anchor a
     // wardrobe (same eligibility as Home's Most worn).
-    .map(([id, count]) => ({ item: items.find(it => it.id === id), count })).filter(a => a.item && wearEligible(a.item));
+    .map(([id, count]) => ({ item: byId.get(id), count })).filter(a => a.item && isEverydayGarment(a.item));
   results.totalOutfits = outfitLogs.length;
   return results;
 }
@@ -139,7 +142,7 @@ export default function StyleInsightsView({ items, wardrobe, apiKey, onBack }) {
           <div style={si.divider}/><div style={{...si.sectionLabel,marginBottom:8}}>WARDROBE ANCHORS</div>
           {analysis.wardrobeAnchors.map((a, i) => (
             <div key={i} style={si.insightRow}>
-              <div style={si.anchorThumb}>{a.item.image ? <img src={a.item.image} alt="" loading="lazy" decoding="async" style={si.anchorImg}/> : <span style={{color:"var(--color-border-muted)"}}>{a.item.category?.[0]}</span>}</div>
+              <div style={si.anchorThumb}>{a.item.image ? <Thumb item={a.item} alt="" style={si.anchorImg}/> : <span style={{color:"var(--color-border-muted)"}}>{a.item.category?.[0]}</span>}</div>
               <div style={si.insightText}><strong>{a.item.name}</strong> — worn {a.count} times.</div>
             </div>
           ))}

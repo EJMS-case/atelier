@@ -49,7 +49,7 @@ import {
   formalityOf, lineWearsTo,
   readKnitWeight,
 } from "../../utils/item-helpers.js";
-import { NEUTRAL_PAIR_FAMILIES } from "../../utils/wardrobe-coverage.js";
+import { NEUTRAL_PAIR_FAMILIES, matchesPairSideText } from "../../utils/wardrobe-coverage.js";
 import { learnedContext } from "./learning.js";
 import { matchesBrief } from "../inspiration/inspirationApi.js";
 
@@ -251,6 +251,7 @@ function pairSideWords(side) {
 }
 
 function itemMatchesSide(it, side) {
+  if (matchesPairSideText(it, side)) return true;
   const colour = (it.color || it.color_family || "").toLowerCase();
   const family = (effectiveColorFamily(it) || "").toLowerCase();
   return pairSideWords(side).some(w => colour.includes(w) || family === w);

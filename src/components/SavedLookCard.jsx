@@ -45,6 +45,7 @@ export default function SavedLookCard({ log, wardrobe, subtitle, headerRight, no
           lookItems={logItems}
           layoutOverride={log.layout_data}
           onItemClick={item => setDetailItem(item)}
+          thumbs
         />
       ) : (
         <div style={{...s.histThumbPh, height: 120, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"var(--color-text-muted)"}}>
