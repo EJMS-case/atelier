@@ -42,7 +42,7 @@ import { readSSEText } from "../../lib/ai/sse.js";
 import { sb } from "../../lib/supabase.js";
 import {
   STYLIST_PERSONA, STYLIST_STANDARD, OPINION_RULES, VOICE_RULES,
-  describeItem, personalGrounding, readLook, occasionBrief, weatherBrief, inspirationBrief,
+  describeItem, personalGrounding, readLook, occasionBrief, weatherBrief, inspirationBrief, originBlock,
 } from "../stylist/standard.js";
 import { recordChatLessons } from "../stylist/learning.js";
 
@@ -117,7 +117,7 @@ ${availableReference(available)}`;
 
 // Per-turn state — deliberately OUTSIDE the cached system block. Rebuilt on
 // every send so mid-conversation edits are always visible. Pure, for the test.
-export function currentLookBlock({ assembledItems = [], emptySlots = [], occasions = [], weathers = [], available = [], colorPairs = [], inspirations = [] } = {}) {
+export function currentLookBlock({ assembledItems = [], emptySlots = [], occasions = [], weathers = [], available = [], colorPairs = [], inspirations = [], origin = null } = {}) {
   const occ = (occasions || []).filter(Boolean);
   const wx = (weathers || []).filter(Boolean);
   const brief = [occ.join(" + "), wx.join(" / ")].filter(Boolean).join(" · ");
@@ -135,6 +135,9 @@ export function currentLookBlock({ assembledItems = [], emptySlots = [], occasio
     weatherText ? `\n${weatherText}` : null,
     inspoText ? `\n${inspoText}` : null,
     facts.text ? `\n${facts.text}` : null,
+    // Style Me's card for a look she opened from her results — the same
+    // block Evaluate reads, so the chat and the score answer one intent.
+    origin ? `\n${originBlock(origin, assembledItems)}` : null,
   ].filter(Boolean).join("\n");
 }
 
@@ -154,13 +157,13 @@ export function currentLookBlock({ assembledItems = [], emptySlots = [], occasio
  * @param {Function} params.onDelta        - (textSoFar) => void, called as tokens arrive
  * @returns {Promise<string>}              - final assistant reply text
  */
-export async function sendBuilderMessage({ messages, assembledItems, available, emptySlots, occasions = [], weathers = [], apiKey, onDelta }) {
+export async function sendBuilderMessage({ messages, assembledItems, available, emptySlots, occasions = [], weathers = [], origin = null, apiKey, onDelta }) {
   if (!apiKey) throw new Error("API key required.");
   if (!assembledItems?.length) throw new Error("Assemble at least one item first.");
 
   const { blocks: personal, pairs, inspirations } = await personalGrounding({ available });
   const system = composeSystemBlock({ personal, available });
-  const stateBlock = currentLookBlock({ assembledItems, emptySlots, occasions, weathers, available, colorPairs: pairs, inspirations });
+  const stateBlock = currentLookBlock({ assembledItems, emptySlots, occasions, weathers, available, colorPairs: pairs, inspirations, origin });
 
   // Fresh state rides the LAST user message; earlier messages stay raw so the
   // conversation history reads clean and the system block stays cacheable.

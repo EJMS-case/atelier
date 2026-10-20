@@ -52,11 +52,13 @@ import { invokeTool } from "../../lib/ai/toolUse.js";
 import { EvalSchema, EvalTool } from "../../lib/ai/schemas.js";
 import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
 import {
-  describeItem, personalGrounding, readLook, occasionBrief, weatherBrief, inspirationBrief,
+  describeItem, personalGrounding, readLook, occasionBrief, weatherBrief, inspirationBrief, SCORE_SCALE, originBlock,
 } from "../stylist/standard.js";
 import { composeSystemBlock } from "./builderChat.js";
 
-const EVAL_TASK = `She built this outfit herself from her own wardrobe and tapped Evaluate. SCORE the look 1-10 as a stylist scores it: on what it IS, this season — hero, colour, silhouette, texture, the third piece, tension, finish, register — and on two clocks at once. CURRENT: does it read now? WHAT READS CURRENT in your context is the season as researched; judge against it, not against a memory of last year. TIMELESS: would this still read in five years — proportion, quality, restraint, nothing that dates it to a trend cycle? A look that is current AND timeless is the 9; a look that is only one of them says which in the headline. When an occasion is given, fitness for that room is part of the merit: a beautiful look that's wrong for the room is not a 9. A safe look is not an 8: say it is safe and show her the braver version from her closet.
+const EVAL_TASK = `She tapped Evaluate on the look on her canvas. SCORE the look 1-10 as a stylist scores it: on what it IS, this season — hero, colour, silhouette, texture, the third piece, tension, finish, register — and on two clocks at once. CURRENT: does it read now? WHAT READS CURRENT in your context is the season as researched; judge against it, not against a memory of last year. TIMELESS: would this still read in five years — proportion, quality, restraint, nothing that dates it to a trend cycle? A look that is current AND timeless is the 9; a look that is only one of them says which in the headline. When an occasion is given, fitness for that room is part of the merit: a beautiful look that's wrong for the room is not a 9.
+
+THE SCALE — ${SCORE_SCALE}
 
 LOOK FACTS below are computed by the app from her closet data and her own preferences — notes for you, never text to quote, and NEVER arithmetic: nothing listed there moves the score by itself. Read each line as a stylist reads a client's own words — weigh it, say it as taste (what the look is doing and the move that fixes it), and let the look's merit decide the number. The two places her preference IS the verdict: her office is business professional (a long sleeve stands alone; short sleeves or a tank take a knit or blazer over them), and a blazer is worn open — a Work look that ignores the first, or any look that buttons or belts the second, is not one of your high scores, and you say why as a stylist, never as a rule broken or a line cited. Everything else is taste, and you speak it as taste. "Still open" items are a work in progress, not faults: score what is on the canvas and let a swap or a tip name the missing piece if it matters.
 
@@ -75,10 +77,12 @@ Then give:
 Write every field TO her — "you", "your" — never "she" or "her". Answer with the evaluate_look tool, every field filled.`;
 
 // Pure composers, exported for scripts/stylist-standard.test.mjs.
-export function composeEvalMessages({ items = [], occasions = [], weathers = [], available = [], personal = [], colorPairs = [], inspirations = [] } = {}) {
+export function composeEvalMessages({ items = [], occasions = [], weathers = [], available = [], personal = [], colorPairs = [], inspirations = [], origin = null } = {}) {
   const occ = (occasions || []).filter(Boolean);
   const wx = (weathers || []).filter(Boolean);
   const context = [];
+  const originText = originBlock(origin, items);
+  if (originText) context.push(originText);
   if (occ.length || wx.length) {
     context.push(`SHE'S DRESSING FOR: ${[occ.join(" + "), wx.join(" / ")].filter(Boolean).join(" · ")}`);
   }
@@ -111,7 +115,9 @@ export function composeEvalPrompt(args) {
  * @param {string} apiKey
  * @param {Object} opts   - { occasions?: string[], weathers?: string[],
  *                           available? (the builder pool — the closet the
- *                           swaps come from), model?, signal? }
+ *                           swaps come from), origin? ({ source: "styleme" |
+ *                           "chat", text, ids } — see originBlock), model?,
+ *                           signal? }
  */
 export async function evaluateLook(items, apiKey, opts = {}) {
   if (!apiKey) throw new Error("API key required");
@@ -127,6 +133,7 @@ export async function evaluateLook(items, apiKey, opts = {}) {
     personal,
     colorPairs: pairs,
     inspirations,
+    origin: opts.origin,
   });
 
   // Adaptive thinking at `medium` effort. It ran `low` for a few hours on

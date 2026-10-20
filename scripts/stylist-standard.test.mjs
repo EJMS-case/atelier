@@ -742,3 +742,37 @@ test("readLook: a piece whose line names the room is not called out of that room
   const unnamed = readLook([blouse(), trouser(), pump(), tote(), cardi("burgundy cropped merino cardigan")], { occasions: ["Work"] });
   assert.match(unnamed.text, /Below the Work band/);
 });
+
+// ── One language: Style Me builds to the standard Evaluate scores with ──────
+// Owner, 2026-10-20: "the evaluator doesn't speak the same language as the
+// builder — the builder will build me something and the evaluator will give
+// it a very bad score." Style Me's preamble carried its own method; the
+// evaluator had no score anchors and never saw what the look was meant to do.
+test("one language: Style Me's preamble carries the standard's nine lines, and no private method", async () => {
+  const { STANDARD_LINES, SCORE_SCALE } = await import("../src/features/stylist/standard.js");
+  const { buildStylingPrompt } = await import("../src/prompts/styling-system-prompt.js");
+  const { staticPreamble } = buildStylingPrompt({ occasion: "Work", weather: "Mild (55-69°F)", inventoryBlock: "", closetCount: 0 });
+  assert.ok(staticPreamble.includes(STANDARD_LINES), "Style Me builds to the standard");
+  assert.ok(STYLIST_STANDARD.startsWith(STANDARD_LINES), "the chat and Evaluate judge with the same lines");
+  assert.doesNotMatch(staticPreamble, /MOLLY DICKSON|STYLING METHOD|ELEVATION MOVES/);
+  assert.match(staticPreamble, /score 8 or higher there/);
+  // One scale: Evaluate's task and the chat's opinion rules carry the same text.
+  const evalPrompt = composeEvalPrompt({ items: [blouse(), trouser()] });
+  assert.ok(evalPrompt.includes(SCORE_SCALE));
+  assert.ok(OPINION_RULES.includes(SCORE_SCALE));
+  assert.match(SCORE_SCALE, /not below 7 for being familiar/);
+});
+
+test("one language: Evaluate and the chat read the look's origin as their own earlier word", async () => {
+  const { originBlock } = await import("../src/features/stylist/standard.js");
+  const b = blouse(), t = trouser(), p = pump();
+  const origin = { source: "styleme", text: "Navy silk tucked into burgundy wide-legs — tonal depth.", ids: [b.id, t.id, p.id] };
+  const evalPrompt = composeEvalPrompt({ items: [b, t], origin });
+  assert.match(evalPrompt, /YOUR OWN STYLE ME CARD FOR THIS LOOK/);
+  assert.match(evalPrompt, /She has changed 1 piece since/);
+  assert.match(evalPrompt, /tonal depth/);
+  assert.match(currentLookBlock({ assembledItems: [b, t, p], origin }), /YOUR OWN STYLE ME CARD/);
+  assert.doesNotMatch(currentLookBlock({ assembledItems: [b, t, p] }), /STYLE ME CARD/);
+  assert.equal(originBlock(null, [b]), "");
+  assert.match(originBlock({ source: "chat", text: "A solid 8." }, [b]), /YOUR LAST READ OF THIS CANVAS IN THE CHAT/);
+});

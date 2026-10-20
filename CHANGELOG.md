@@ -2,6 +2,39 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — One language: Style Me builds to the standard Evaluate scores with — 2026-10-20
+
+### Why
+
+Owner: *"the evaluator doesn't speak the same language as the builder — the builder will build me something and the evaluator will give it a very bad score. Can that be improved?"* Three causes, all in the prompts:
+
+1. **Two rubrics.** Style Me's preamble carried its own method — a "Molly Dickson taste-test", "≤2 non-neutral colours", "shoes + bag share a colour family", "elevation moves". The chat and Evaluate judge against THE STANDARD (`standard.js`): nine lines including register (formality steps) and the two clocks (current against the researched brief, and timeless), neither of which Style Me was ever told. Style Me built to one rubric, Evaluate scored to another.
+2. **No scale.** Evaluate's only anchor was "a safe look is not an 8". Nothing told it where a quiet, correct look sits, so the number was free to fall far below the chat's ("a solid 8" on 2026-10-20) for the same kind of look.
+3. **No memory of intent.** A look opened from Style Me reached Evaluate as "she built this outfit herself": Style Me's own card (the colour story, the silhouette, the hero) was dropped at the builder's door. The chat's read of the same canvas didn't reach it either.
+
+### Changed
+
+- **`standardLines.js`** holds THE STANDARD's nine lines (a leaf module: standard.js imports the prompt module, so the reverse import would be a cycle). `STYLIST_STANDARD` is still that block plus HOW SHE WEARS THINGS, and the string is unchanged byte for byte, so the chat's cached prefix is unchanged.
+- **Style Me's preamble** replaces its private method with the nine lines, framed as "the same eye that scores her looks in Evaluate — return a look you would score 8 or higher there; a look that is only safe is not finished". The HARD RULES, open blazer, hosiery, notes and rationale sections stay. The comfort-room carve-out now names the standard's lines 5 and 6.
+- **`SCORE_SCALE` (`standard.js`)** is the one scale: 9 current AND timeless and right for the room; 8 strong on one clock; 7 right for the room but safe, with the braver version named; 6 one real miss; 5 and below wrong for the room or fighting, saying which. "A look built to the standard is not below 7 for being familiar." Evaluate's task and the chat's opinion rules carry the same text.
+- **`originBlock()` (`standard.js`)**: Evaluate reads the chat's latest reply on this canvas or, when there is none, Style Me's card for a look she opened from her results (rationale, colour, silhouette, texture, focal point, carried on the builder seed as `stylist_read`). It counts the pieces she has changed since and says "That was you … if you now see it differently, say what changed." The chat reads the Style Me card the same way.
+- Evaluate's task no longer opens with "She built this outfit herself".
+
+### Downstream, four ways
+
+- **Efficiency.** Style Me's cached preamble changes once (about +350 tokens net, 13.7k → 15.1k characters: the nine lines in, three method sections out). The chat's cached block is byte-identical; `OPINION_RULES` gains the scale, which costs one cache write. The origin rides the uncached user turn, capped at 1,500 characters.
+- **Effectiveness.** The rubric that builds a look and the rubric that judges it are the same text, so a score gap now means a real disagreement, and the evaluator has to name it.
+- **Speed.** No new calls, and no change to effort or model tier.
+- **Education.** Unchanged paths: an applied swap and a chat turn still record lessons through `learning.js`, and every surface reads the same rubric.
+
+### Tests
+
+`npm test` (52 suites; two new contracts in `test:standard`), `npm run build`, `npm run smoke` green.
+
+### Data
+
+None.
+
 ## [Unreleased] — One count of the closet; brand colour names; every pairing; the Quince skirt; Work's skirt habit; the builder's shelves; speed — 2026-10-20
 
 ### Why
