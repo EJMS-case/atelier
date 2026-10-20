@@ -8,6 +8,14 @@ it through.
 
 ## Session log
 
+### 2026-10-20 · Home stopped crashing on open (a hook after an early return)
+
+**Owner:** *"This happens every time I open the app"* ("Something hiccuped" on Home). React #310 in `LookBackCard`: a `useMemo` below its "still loading" `return null`. It had been crashing Home on a race since 2026-10-04 (35 `render:view` rows in `ai_errors`). Fixed; `test:hooks` now fails any component with a hook after a return.
+
+**How it was found, for next time:** `ai_errors` → `kind like 'render:%'` gives the build id (`bv`) and the minified stack. Check out that commit, run `npx vite build` (same hash = same line numbers), and read the column the stack names.
+
+**Watch-item:** her next few opens of Home should log no `render:view` rows. Any new row names its build. A row on a build after this fix is a different bug.
+
 ### 2026-10-20 · One language: Style Me builds to the standard Evaluate scores with
 
 **Owner:** *"the evaluator doesn't speak the same language as the builder — the builder will build me something and the evaluator will give it a very bad score."* CHANGELOG has the detail. To carry:
