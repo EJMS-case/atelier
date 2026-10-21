@@ -8,6 +8,12 @@ it through.
 
 ## Session log
 
+### 2026-10-21 · The day sheet's "?" pieces (iOS canvas memory)
+
+**Owner:** *"What's happening here??"* The blazer and dress in today's look drew as broken images. The photos are fine in the bucket. `TrimmedImage` never released its canvases, and past iOS Safari's canvas-memory cap `toDataURL` returns `"data:,"` without throwing, which was cached for the session. CHANGELOG has the detail.
+
+**Watch-item:** if a "?" reappears on any full-photo collage, check whether reopening the sheet fixes it. If it does, a load failed and was retried (the fix working). If it does not, read the piece's `image` URL against `storage.objects` before touching code.
+
 ### 2026-10-20 · Home stopped crashing on open (a hook after an early return)
 
 **Owner:** *"This happens every time I open the app"* ("Something hiccuped" on Home). React #310 in `LookBackCard`: a `useMemo` below its "still loading" `return null`. It had been crashing Home on a race since 2026-10-04 (35 `render:view` rows in `ai_errors`). Fixed; `test:hooks` now fails any component with a hook after a return.

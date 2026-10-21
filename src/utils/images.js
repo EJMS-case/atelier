@@ -30,7 +30,10 @@ export function compressImage(dataUrl, maxDim = 400, quality = 0.6, transparent 
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(transparent ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality));
+      const out = transparent ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality);
+      releaseCanvas(canvas);
+      // A canvas the phone could not back answers "data:," — keep the input.
+      resolve(isEncodedImage(out) ? out : dataUrl);
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
@@ -65,11 +68,28 @@ export async function imageToBase64(src) {
 // or null when the image is fully opaque or can't be sampled (CORS-tainted).
 // `alphaThreshold` defaults to 12 (≈5% alpha) — anti-aliased fringe still
 // counts as "content" so we don't shave letterforms off a printed tee.
+// Hand a scratch canvas's backing store back now rather than at GC. iOS Safari
+// caps the canvas memory a page may hold; past the cap it does not throw — a
+// new canvas silently gets no buffer and toDataURL answers "data:,". A day
+// sheet that scanned a dozen 1000px photos and kept every canvas alive drew
+// its two largest pieces as broken "?" images (2026-10-21).
+export function releaseCanvas(canvas) {
+  if (!canvas) return;
+  canvas.width = 0; canvas.height = 0;
+}
+
+// A data URL a canvas really encoded. "data:," is WebKit's answer for a canvas
+// with no backing store; caching it would draw a broken image all session.
+export function isEncodedImage(url) {
+  return typeof url === "string" && /^data:image\/[a-z]+;base64,./.test(url);
+}
+
 export function getAlphaBbox(img, alphaThreshold = 12) {
+  let canvas = null;
   try {
     const w = img.naturalWidth, h = img.naturalHeight;
     if (!w || !h) return null;
-    const canvas = document.createElement("canvas");
+    canvas = document.createElement("canvas");
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
@@ -98,6 +118,8 @@ export function getAlphaBbox(img, alphaThreshold = 12) {
   } catch {
     // Tainted canvas (CORS) — caller falls back to rendering the full image.
     return null;
+  } finally {
+    releaseCanvas(canvas);
   }
 }
 
@@ -125,7 +147,9 @@ export async function trimTransparentBorders(dataUrl) {
       c.width = outW; c.height = outH;
       const ctx = c.getContext("2d");
       ctx.drawImage(img, bbox.x, bbox.y, bbox.w, bbox.h, margin, margin, bbox.w, bbox.h);
-      resolve(c.toDataURL("image/png"));
+      const out = c.toDataURL("image/png");
+      releaseCanvas(c);
+      resolve(isEncodedImage(out) ? out : dataUrl);
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
@@ -150,6 +174,7 @@ export function assessCutout(dataUrl) {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0);
         const data = ctx.getImageData(0, 0, w, h).data;
+        releaseCanvas(canvas);
         resolve(assessAlphaMatte(data, w, h));
       } catch {
         resolve(null); // tainted canvas / OOM — can't judge, fail open
@@ -182,6 +207,7 @@ export function detectTransparency(imgUrl) {
           ctx.getImageData(0, h - 1, 1, 1).data,
           ctx.getImageData(w - 1, h - 1, 1, 1).data,
         ];
+        releaseCanvas(canvas);
         const anyTransparent = corners.some(p => p[3] < 250);
         resolve(anyTransparent);
       } catch {
