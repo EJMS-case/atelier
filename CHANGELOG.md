@@ -2,6 +2,28 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The day sheet draws every piece: no broken "?" photos on the phone — 2026-10-21
+
+### Why
+
+Owner, with a screenshot of today's planner sheet (Tuesday 2026-10-20): *"What's happening here??"* Two of the look's seven pieces drew as iOS broken-image boxes, the **Double Weave Blazer** and the **Eano Sleeveless Dress**. The live rows were checked first. Both pieces' `image` URLs are well-formed and stamped, and both photos and their thumbs are in the bucket (`storage.objects`: 204 kB and 173 kB PNGs, `max-age=31536000`). Her data was fine. The failure was in the draw.
+
+The day sheet draws each piece through `TrimmedImage` from the full photo: load, alpha-scan on a 1000px canvas, crop onto a second canvas, `toDataURL`. Neither canvas was released. iOS Safari caps the canvas memory a page may hold, and past the cap it does not throw: a new canvas gets no backing store and `toDataURL` returns `"data:,"`. `loadTrimmed` cached that empty URL for the session, so the piece stayed broken until the app reloaded. The two largest photos in the look were the two that broke. A failed network load was cached for the session in the same way.
+
+### Fixed
+
+- **`releaseCanvas()` / `isEncodedImage()` (`utils/images.js`)**: every scratch canvas in the photo helpers hands its memory back as soon as it has been read (the bbox scan, the trim crop, `compressImage`, `trimTransparentBorders`, `assessCutout`, `detectTransparency`). Every encode is checked before use.
+- **`TrimmedImage`**: only a real encode is cached, and a crop that does not encode falls back to the photo. A failed load is no longer cached, so the next mount retries. An `<img>` that still fails steps back to the original photo.
+- **Upload time, same family**: `compressImage` and `trimTransparentBorders` returned the canvas's answer unchecked. Past the cap, a new piece could have been uploaded as an empty image. Both now keep their input instead.
+
+### Downstream, four ways
+
+*Efficiency*: less memory held per screen, because the canvases are freed at once instead of at GC. No change to bytes downloaded. *Effectiveness*: every full-photo collage benefits (the day sheet, Style Me's result, the builder canvas, a saved look opened). *Speed*: none felt, apart from fewer broken tiles. *Education*: no learning path touched.
+
+### Tests
+
+`test:storage` gains three checks: `"data:,"` is rejected, every canvas in the photo helpers is released and every encode is checked, and a failed load is not cached. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Home stops crashing on open: no hook after an early return — 2026-10-20
 
 ### Why

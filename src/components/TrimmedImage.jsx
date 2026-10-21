@@ -15,7 +15,13 @@
 // canvas size, so each unique image is processed at most once per session.
 //
 // CORS-tainted images (rare with Supabase Storage but possible) fall back to
-// the original <img> source so the piece still renders, just not trimmed.
+// the original <img> source so the piece still renders, just not trimmed. So
+// does a crop the phone could not encode: past iOS Safari's canvas-memory cap
+// toDataURL returns "data:," without throwing, and that empty URL was cached
+// for the session — the day sheet drew her blazer and dress as "?" boxes
+// (2026-10-21). Only a real encode is cached, every scratch canvas is released
+// as soon as it is read, a failed load is never cached (the next mount
+// retries), and an <img> that still fails steps back to the photo.
 //
 // TWO WAYS TO NAME THE SOURCE (2026-10-04, "the planner runs extremely slow"):
 //   · `src`  — the photo itself. For a composite that fills the screen (the
@@ -34,7 +40,7 @@
 //     that fails to load drops back to the photo and forgets the thumb.
 
 import { useEffect, useRef, useState } from "react";
-import { getAlphaBbox, PHOTO_MAX_DIM } from "../utils/images.js";
+import { getAlphaBbox, isEncodedImage, releaseCanvas, PHOTO_MAX_DIM } from "../utils/images.js";
 import { thumbSourceFor, ensureThumb, forgetThumb } from "./Thumb.jsx";
 
 // Cropped transparent PNGs are cached as data URLs; cap their dimension so a
@@ -88,15 +94,21 @@ function loadTrimmed(src) {
           const canvas = document.createElement("canvas");
           canvas.width = dw; canvas.height = dh;
           canvas.getContext("2d").drawImage(img, bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, dw, dh);
-          url = canvas.toDataURL("image/png");
-          nw = dw; nh = dh;   // report the cropped size, not the padded original
+          const encoded = canvas.toDataURL("image/png");
+          releaseCanvas(canvas);
+          if (isEncodedImage(encoded)) {
+            url = encoded;
+            nw = dw; nh = dh;   // report the cropped size, not the padded original
+          }
         }
       } catch { url = src; nw = img.naturalWidth; nh = img.naturalHeight; /* tainted canvas — render original */ }
       const val = put(src, { url, nw, nh });
       inflight.delete(src);
       resolve(val);
     };
-    img.onerror = () => { const val = put(src, { url: src, nw: 0, nh: 0 }); inflight.delete(src); resolve(val); };
+    // Not cached: a dropped connection on the phone would otherwise leave the
+    // piece broken until the app reloads.
+    img.onerror = () => { inflight.delete(src); resolve({ url: src, nw: 0, nh: 0 }); };
     img.src = src;
   });
   inflight.set(src, p);
@@ -140,6 +152,14 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
     return () => { cancelled = true; };
   }, [source]);
 
+  // The trimmed copy failed to paint: forget it and draw the photo itself.
+  const onError = () => {
+    if (url && url !== source && source) {
+      if (cache.get(source)?.url === url) cache.delete(source);
+      setUrl(source);
+    }
+  };
+
   // Render the original immediately as a fallback while the crop resolves —
   // keeps layout from popping in.
   return (
@@ -149,6 +169,7 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
       style={style}
       loading="lazy"
       decoding="async"
+      onError={onError}
     />
   );
 }
