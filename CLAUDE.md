@@ -10,7 +10,8 @@ Read these in order when you pick up unfamiliar work:
 
 | File | What it holds |
 |---|---|
-| `HANDOFF.md` | Current state, open watch-items, and what the last few sessions shipped. **Start here** — the newest entry is at the top. |
+| `OPEN_ITEMS.md` | **Start here.** Only what is still open: what waits on her, the work queue in priority order, phone watch-items, known limits. Close an item by deleting it there. |
+| `HANDOFF.md` | Current state, open watch-items, and what the last few sessions shipped. The newest entry is at the top. |
 | `CHANGELOG.md` | One entry per merged PR, newest first. Use it to find when a behaviour changed. |
 | `PLAN.md` | Historical (2026-07) parity plan. Superseded; useful only for background. |
 | `ATELIER_STATE.md` | Self-contained description of the app and every feature as of 2026-09-18, written to be shared outside the repo (e.g. with Claude chat). Refresh it when a feature lands or moves. |

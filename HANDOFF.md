@@ -6,6 +6,8 @@ carries the per-PR detail, `CLAUDE.md` the standing conventions. Everything
 from "Owner preferences" down is older standing context: search it, don't read
 it through.
 
+> **The open-items list lives in `OPEN_ITEMS.md`** (2026-10-25): only what is still open, checked against the live rows. The "Known open items" and roadmap sections below are history; many of their entries have since closed. Trust `OPEN_ITEMS.md` over them.
+
 ## Session log
 
 ### 2026-10-25 · A worn day takes a heart; "judge again" is a button
