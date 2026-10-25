@@ -13,7 +13,7 @@
 // 2026-10-02: the picks vanished and read the same in every window).
 
 import { useMemo, useState } from "react";
-import { buildRecap, monthWindow } from "./recapData.js";
+import { buildRecap, monthWindow, wornSinceJudged } from "./recapData.js";
 import { nyToday, friendlyDate } from "../../lib/time.js";
 import { PALETTE } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
@@ -102,6 +102,11 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
   }, [run, recap]);
 
   if (!recap) return null; // still loading plans — stay quiet
+
+  const judgedOn = stylish?.finishedAt
+    ? new Date(stylish.finishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : "earlier";
+  const newSince = stylish ? wornSinceJudged(recap.looks, stylish.finishedAt) : 0;
 
   const periodChips = (
     <div style={{ display: "flex", gap: 4 }}>
@@ -209,11 +214,8 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
       <div style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <div style={label}>MOST STYLISH THIS {PERIODS[period].chip.toUpperCase()}</div>
-          {stylish && !judging && (
-            <button onClick={() => { clearRun(runKey); runJudge(); }}
-              style={{ background: "none", border: "none", padding: 0, fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
-              judged {stylish.finishedAt ? new Date(stylish.finishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "earlier"} · re-judge
-            </button>
+          {stylish && (
+            <div style={{ fontSize: 10, color: PALETTE.muted, letterSpacing: "0.06em" }}>judged {judgedOn}</div>
           )}
         </div>
         {!stylish && (
@@ -224,7 +226,11 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
         )}
         {judgeErr && <div style={{ fontSize: 11, color: "var(--color-danger)", marginTop: 6 }}>{judgeErr}</div>}
         {stylish && stylish.picks.length === 0 && (
-          <div style={{ fontSize: 12, color: PALETTE.muted }}>Not enough full outfits to rank yet.</div>
+          <div style={{ fontSize: 12, color: PALETTE.muted }}>
+            {(run.result?.picks || []).length > 0
+              ? `The looks it picked have left this ${judgeLabel} — judge again for the ${judgeLabel} as it stands.`
+              : "Not enough full outfits to rank yet."}
+          </div>
         )}
         {stylish && stylish.picks.map(({ look, why, repeats }, i) => (
           <div key={i} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${PALETTE.soft_line}` }}>
@@ -251,6 +257,16 @@ export default function LookBackCard({ items, wardrobe, favorites = [], apiKey, 
             <span style={{ fontSize: 9, letterSpacing: "0.14em", color: PALETTE.muted, marginRight: 6 }}>THE {PERIODS[period].chip.toUpperCase()} IN ONE LINE</span>
             {stylish.summary}
           </div>
+        )}
+        {/* Judging again is a real button (owner, 2026-10-25: "I can't rerun
+            my most stylish outfits anymore"). Since #257 kept the picks, the
+            only way back in was grey 10px text beside the heading — it read
+            as a date stamp, not a control. It says what is new since. */}
+        {stylish && !judging && (
+          <button onClick={() => { clearRun(runKey); runJudge(); }}
+            style={{ width: "100%", marginTop: 10, padding: "9px 12px", background: "transparent", color: PALETTE.ink, border: `1px solid ${PALETTE.ink}`, borderRadius: 8, fontSize: 12, letterSpacing: "0.06em", cursor: "pointer" }}>
+            ↻ Judge my {judgeLabel} again{newSince > 0 ? ` · ${newSince} look${newSince === 1 ? "" : "s"} worn since` : ""}
+          </button>
         )}
       </div>
 
