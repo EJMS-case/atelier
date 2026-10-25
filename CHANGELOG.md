@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A worn day takes a heart; "judge again" is a button — 2026-10-25
+
+### Why
+
+Owner: *"I can't rerun my most stylish outfits anymore. I can't heart outfits from planner outfits I already wore."*
+
+1. **Re-running the judge.** Before #257 (2026-10-02) the picks lived in the card's state, so every visit to Home showed the big "✦ Show my most stylish looks" button again. #257 kept the picks per window, which was the right call, but the only way to run it again became grey 10px text beside the heading ("judged Oct 24 · re-judge"). It read as a date stamp. A headless walk with her shape of data (a stored run, worn days, a mocked stylist) showed the control itself works: one tap, one call, new picks. The control was the problem.
+2. **Hearting a worn day.** A favorite is a saved look with a heart (2026-10-01). The live rows: 131 worn calendar days, 11 of them pointing at a saved look. The other 120 had nothing for a heart to land on, the day sheet had no heart, and History showed those days read-only ("Worn — pinned on the Planner").
+
+### Fixed
+
+- **`LookBackCard`**: "↻ Judge my month again" is a full-width button under the picks, with "· N looks worn since" when she has worn looks after the last judging (`wornSinceJudged`, New York days). The heading keeps "judged Oct 24" as plain text. When the stored picks have all left the window, the card says so instead of "Not enough full outfits".
+- **`features/planner/wornHeart.js`**: a worn look's ♥ does what Style Me's does. It saves the look (its date, pieces, occasion, weather, and her arrangement for the day's first look) and hearts it. Identity is History's: the same date and the same set of pieces (`sigOf`) is the same wear, so a day that already has its saved look reuses it and nothing is saved twice. A second tap un-hearts it, and the saved look stays, as on Saved. The day's first look is linked (`outfit_log_id`, one column upserted by date) when the day has no link, so Home's look-back counts the heart.
+- **Planner day sheet**: a "♡ Love / ♥ Loved" button on every past or today look. It is disabled while the day's saved looks load and while the save lands, so a double tap cannot save twice.
+- **History**: a calendar row carries the ♥. Once hearted, the saved look takes the row's place, heart filled.
+
+### Downstream, four ways
+
+*Efficiency*: no new reads. The day sheet already loads her saved looks, and History already holds them. A heart is one log insert, one favorite insert and, for an unlinked first look, one single-column upsert. `wornHeart.js` rides the planner chunk. *Effectiveness*: the heart reaches every reader that already reads favorites: Saved's ♥ chip, the look-back judge's ♥ boost and its "N loved" count, and `learning.js`'s loved looks. *Speed*: nothing on open. A heart is two or three small writes. *Education*: every worn look she loves now teaches the stylist through the same loved-look signal as a Style Me ♥. Before this, 120 days could not.
+
+### Tests
+
+New `test:worn-heart` (in `npm test`): identity by date and set, the save's shape, reuse without a second save, un-heart, a second look saving without the first look's layout, an empty look refused, and the New York day count. The render walk's previous-month step now taps Love on a worn day and asserts the saved look (date, pieces) and the heart on its id. Its REST mock returns created rows for `outfit_logs` and `favorites`. `npm test` (523 pass), `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — The day sheet draws every piece: no broken "?" photos on the phone — 2026-10-21
 
 ### Why

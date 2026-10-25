@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useEffect, useMemo } from "react";
 import RouteFallback from "./RouteFallback.jsx";
 import { s } from "../ui/styles.js";
 import { HeartIcon } from "../ui/icons.jsx";
+import { toggleWornHeart } from "../features/planner/wornHeart.js";
 import { sb } from "../lib/supabase.js";
 import SavedLookCard from "./SavedLookCard.jsx";
 import SearchInput from "./SearchInput.jsx";
@@ -24,6 +25,8 @@ const SilhouetteBuilder = lazy(() => import("../features/builder/SilhouetteBuild
 export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAgain, onDelete, onUnlog, isFav, toggleFav, nested, onEditItem, apiKey, onSaveLook, onFavoriteLook, onSchedule }) {
   const [logs,       setLogs]       = useState([]);
   const [plans,      setPlans]      = useState([]);
+  const [heartingId, setHeartingId] = useState(null);
+  const [heartErr,   setHeartErr]   = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [filterOcc,  setFilterOcc]  = useState("All");
   const [filterWx,   setFilterWx]   = useState("All");
@@ -76,6 +79,8 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
         notes: p.notes || null,
         collage_url: null,
         __planner: true,
+        __plan: p,
+        __idx: idx,
       });
     });
   });
@@ -112,6 +117,22 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
   const formatMonth = (ym) => {
     try { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("en-US", { month:"long", year:"numeric" }); }
     catch { return ym; }
+  };
+  const handleHeartWorn = async (entry) => {
+    setHeartingId(entry.id); setHeartErr(null);
+    try {
+      const { log, created } = await toggleWornHeart({
+        date: entry.date_worn,
+        outfit: { items: entry.garment_ids, occasion: entry.occasion },
+        idx: entry.__idx,
+        plan: entry.__plan,
+        layout: entry.__idx === 0 ? entry.__plan?.layout_data : null,
+        logs, isFav, toggleFav,
+      });
+      if (created) setLogs(prev => [log, ...prev]);
+    } catch (e) {
+      setHeartErr({ id: entry.id, msg: e?.message || "Couldn't save the heart — try again." });
+    } finally { setHeartingId(null); }
   };
   const handleWearAgain = async (log) => {
     setWearingId(log.id);
@@ -223,9 +244,18 @@ export default function OutfitHistory({ wardrobe, available, setsMeta, onWearAga
               <SavedLookCard key={log.id} log={log} wardrobe={wardrobe} subtitle={subtitle} notes={log.notes} onEditItem={onEditItem}
                 actions={log.__planner ? (
                   // Planner-worn entry: it's managed on the calendar (edit/remove
-                  // it there), so History shows it read-only rather than exposing
-                  // log-only actions that have no outfit_log to act on.
-                  <div style={{ fontSize:11, color:"var(--color-text-muted)" }}>Worn — pinned on the Planner</div>
+                  // it there), so History keeps the log-only actions off it. The
+                  // heart is the exception (owner, 2026-10-25): loving it saves
+                  // it as a look and hearts it (wornHeart.js), and the saved
+                  // look then takes this row's place, heart filled.
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <button style={s.heartBtn} disabled={heartingId === log.id} onClick={() => handleHeartWorn(log)} aria-label="Love this look">
+                      <HeartIcon filled={false} size={15} stroke="var(--color-border-muted)"/>
+                    </button>
+                    <div style={{ fontSize:11, color:"var(--color-text-muted)" }}>
+                      {heartErr && heartingId === null && heartErr.id === log.id ? heartErr.msg : "Worn — pinned on the Planner"}
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <div style={{ display:"flex", gap:8, alignItems:"center" }}>

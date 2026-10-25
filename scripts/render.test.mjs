@@ -211,6 +211,7 @@ function applyFilters(rows, url) {
 // Every REST read, in order — the planner steps assert WHAT the planner
 // fetched, not only what it drew.
 const restReads = [];
+const restWrites = [];
 await page.route("**/rest/v1/**", route => {
   const url = new URL(route.request().url());
   const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0];
@@ -224,6 +225,15 @@ await page.route("**/rest/v1/**", route => {
       const body = JSON.parse(route.request().postData() || "{}");
       return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify([{ id: "22222222-2222-4222-8222-222222222222", created_at: new Date().toISOString(), ...(Array.isArray(body) ? body[0] : body) }]) });
     }
+    // A saved look and a favorite come back as ROWS, as PostgREST returns
+    // them: the heart on a worn day saves the look, then hearts its id.
+    if (method === "POST" && (table === "outfit_logs" || table === "favorites")) {
+      const body = JSON.parse(route.request().postData() || "{}");
+      const row = { id: `${table}-${restWrites.length + 1}`, created_at: new Date().toISOString(), ...(Array.isArray(body) ? body[0] : body) };
+      restWrites.push({ table, row });
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify([row]) });
+    }
+    if (method === "POST") restWrites.push({ table, row: JSON.parse(route.request().postData() || "null") });
     return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
   }
   const rows = applyFilters(TABLE[table] ?? [], url);
@@ -526,7 +536,7 @@ await check("Planner → the occasion filter fades the days outside it and count
 // "Can you update that to be more seamless between months?" — ‹ in the day
 // view steps to the previous planned day even when it sits in last month,
 // fetching that month on the way, and the grid follows.
-await check("Planner → ‹ in the day view crosses into the previous month", async () => {
+await check("Planner → ‹ in the day view crosses into the previous month, and its worn look takes a heart", async () => {
   await page.evaluate((day) => document.querySelector(`button[aria-label^="${day},"]`)?.click(), iso(3));
   await page.waitForTimeout(300);
   const prev = await page.evaluate(() => { const b = document.querySelector('button[aria-label="Previous outfit"]'); if (!b || b.disabled) return false; b.click(); return true; });
@@ -537,6 +547,21 @@ await check("Planner → ‹ in the day view crosses into the previous month", a
   const text = await page.evaluate(() => document.body.innerText);
   if (!text.includes(monthLabelOf(PREV_MONTH_DAY))) throw new Error("the grid did not follow the day view into the previous month");
   if (!/WORN/.test(text)) throw new Error("the previous month's day did not open as a worn day");
+  // A worn look takes a heart from the day itself (owner, 2026-10-25: "I
+  // can't heart outfits from planner outfits I already wore"): it saves as a
+  // look with its date and pieces, then the heart lands on that look's id.
+  const before = restWrites.length;
+  await page.waitForTimeout(600); // the sheet's saved looks load with it
+  const loved = await page.evaluate(() => { const b = document.querySelector('button[aria-label="Love this look"]'); if (!b) return false; b.click(); return true; });
+  if (!loved) throw new Error("a worn day offers no heart");
+  await page.waitForTimeout(600);
+  const writes = restWrites.slice(before);
+  const log = writes.find(w => w.table === "outfit_logs")?.row;
+  if (!log || log.date_worn !== PREV_MONTH_DAY || (log.garment_ids || []).length !== LOOK_IDS.length) throw new Error("the heart did not save the worn look with its date and pieces");
+  const fav = writes.find(w => w.table === "favorites")?.row;
+  if (!fav || fav.reference_id !== log.id) throw new Error("the heart did not land on the saved look");
+  const label = await page.evaluate(() => document.querySelector('button[aria-label="Remove from favorites"]')?.innerText || "");
+  if (!/Loved/.test(label)) throw new Error("the day's heart did not fill");
   await closeSheet();
   // Back to the current month: the trip steps below find their strip there.
   const nowLabel = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });

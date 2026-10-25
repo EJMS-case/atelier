@@ -31,6 +31,8 @@ import { homeClosetFor, poolForTripDay } from "./tripPools.js";
 // opens, so the calendar she asked for paints first (2026-10-04).
 const TripDetailView = lazy(() => import("./TripDetailView.jsx"));
 import Thumb from "../../components/Thumb.jsx";
+import { HeartIcon } from "../../ui/icons.jsx";
+import { toggleWornHeart, wornLookHearted } from "./wornHeart.js";
 
 const WEEK_HEADER = ["S","M","T","W","T","F","S"];
 // Accent stays a literal hex (matches --color-accent-strong): this view builds
@@ -131,7 +133,7 @@ let lastTripScrollY = 0;
 // activation / suitcase-close flows call it after flipping trip status.
 // `onItemsClosetChanged` patches App's local items after the trip-complete
 // flow reassigns left-behind pieces to the destination closet (B5).
-export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed }) {
+export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, isFav, toggleFav, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed }) {
   // `focusDay` (iso) opens the planner ON that day — the way in from a
   // garment's "In Your Looks" row. It wins over the remembered month and the
   // remembered trip, is consumed once on mount (so a later plain open of the
@@ -805,6 +807,21 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
           available={available}
           wardrobe={wardrobe}
           outfitLogs={outfitLogs}
+          isFav={isFav}
+          onHeartWorn={toggleFav ? async (outfit, idx) => {
+            // A heart on a worn look saves it as a look and hearts it
+            // (wornHeart.js). The day's saved looks load with the sheet;
+            // wait for them so a look that is already saved is reused.
+            const logs = outfitLogs ?? await sb.fetchOutfitLogs().catch(() => []);
+            const p = plans[activeDay];
+            const { log, created, hearted } = await toggleWornHeart({
+              date: activeDay, outfit, idx, plan: p, layout: layoutFor(p), logs, isFav, toggleFav,
+            });
+            setOutfitLogs(prev => created ? [log, ...(prev ?? logs)] : (prev ?? logs));
+            if (hearted && idx === 0 && p && !p.outfit_log_id) {
+              setPlans(cur => ({ ...cur, [activeDay]: { ...cur[activeDay], outfit_log_id: log.id } }));
+            }
+          } : undefined}
           forecast={forecast}
           forecastLabel={`${activeCloset?.name || "NYC"} forecast`}
           hasApiKey={!!apiKey}
@@ -933,7 +950,29 @@ function GenerateForDay({ iso, isPast, hasExisting, forecast, hasApiKey, onGener
   );
 }
 
-function DayModal({ iso, plan, layout, available, wardrobe: wardrobeProp, outfitLogs, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
+// The ♥ on a worn look in the day sheet. Busy while the save lands so a
+// double tap cannot save the look twice; says so when the save fails.
+function WornHeartButton({ hearted, loading, onToggle }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const tap = async () => {
+    if (busy || loading) return;
+    setBusy(true); setErr("");
+    try { await onToggle(); }
+    catch (e) { setErr(e?.message || "Couldn't save the heart — try again."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <button onClick={tap} disabled={busy || loading}
+      aria-label={hearted ? "Remove from favorites" : "Love this look"} title={err || undefined}
+      style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: 6, opacity: busy || loading ? 0.6 : 1 }}>
+      <HeartIcon filled={hearted} size={13} stroke="var(--color-border-muted)"/>
+      {err ? "Try again" : hearted ? "Loved" : "Love"}
+    </button>
+  );
+}
+
+function DayModal({ iso, plan, layout, available, wardrobe: wardrobeProp, outfitLogs, isFav, onHeartWorn, forecast, forecastLabel, hasApiKey, onPrev, onNext, onClose, onPickSaved, onGenerate, onGoToStyleMe, onClear, onRemoveOutfit, onEditItem, onEditOutfit, onBuildDay }) {
   // Saved looks RESOLVE against the wardrobe, never against what's available —
   // see the vocabulary in features/closet/useVisibleWardrobe.js. `available`
   // stays the picker scope; this is only read to render what a day holds.
@@ -1027,6 +1066,14 @@ function DayModal({ iso, plan, layout, available, wardrobe: wardrobeProp, outfit
                 layoutOverride={idx === 0 ? planLayout : null}
                 onItemClick={onEditItem ? (it) => onEditItem(it) : undefined}/>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                {/* A look she wore can be loved from the day itself (owner,
+                    2026-10-25) — it becomes a saved look with a heart. */}
+                {(isPast || isToday) && onHeartWorn && (
+                  <WornHeartButton
+                    hearted={wornLookHearted({ logs: outfitLogs, date: iso, ids: o.items, isFav })}
+                    loading={outfitLogs === null}
+                    onToggle={() => onHeartWorn(o, idx)}/>
+                )}
                 {onEditOutfit && (
                   <button onClick={() => onEditOutfit(o, idx)} style={{ ...btnSecondary, fontSize: 11, padding: "6px 12px" }}>
                     ✎ Edit

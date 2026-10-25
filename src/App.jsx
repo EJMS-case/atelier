@@ -2595,6 +2595,8 @@ export default function App() {
             onRefreshActiveTrip={refreshActiveTrip}
             onItemsClosetChanged={applyItemsClosetChange}
             apiKey={apiKey}
+            isFav={isFav}
+            toggleFav={toggleFav}
             onGoToStyleMe={() => setView("style")}
             focusDay={plannerFocusDay}
             onFocusDayConsumed={() => setPlannerFocusDay(null)}

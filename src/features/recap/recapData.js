@@ -281,3 +281,14 @@ export function buildRecap({ plans = [], items = [], favoriteLogIds = new Set(),
     periodStats,
   };
 }
+
+// How many looks in the window were worn after the judge last ran — the
+// reason to run it again. Days are compared in New York time, the calendar's
+// clock. A look worn the same day as the judging counts as already seen.
+export function wornSinceJudged(looks = [], finishedAt) {
+  if (!finishedAt) return 0;
+  let judgedIso;
+  try { judgedIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(finishedAt)); }
+  catch { return 0; }
+  return (looks || []).filter(l => l && l.date && l.date > judgedIso).length;
+}

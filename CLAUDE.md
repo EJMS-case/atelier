@@ -24,7 +24,7 @@ them whole.
 npm install        # dependencies (the session-start hook does this for you on the web)
 npm run dev        # local dev server
 npm run build      # production build + service-worker cache stamp
-npm test           # full suite (53 suites, no network)
+npm test           # full suite (54 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
 npm run test:render     # just the render walk (40 steps, headless, mocked REST)
@@ -150,7 +150,8 @@ Conventions worth knowing:
   every top-level Back lands on Home.** The nav is Style Me · Planner ·
   Saved · ⚙; Inspo is Saved's third tab (All · History · Inspo — Favorites
   is the ♥ chip on All since 2026-10-01: a favorite is a saved look with a
-  heart, and a Style Me ♥ saves + hearts). Settings holds plumbing only
+  heart, and a Style Me ♥ saves + hearts; a worn Planner day's ♥ does the
+  same through `features/planner/wornHeart.js`, 2026-10-25). Settings holds plumbing only
   (account, keys, photo tools, sync). Anything else she uses — Style Profile,
   Style Intelligence, Color Advisor, Visual AI, Brand Atlas, Shopping — is a
   row on Home. Don't add a pointer card to Settings again.

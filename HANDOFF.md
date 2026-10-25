@@ -8,6 +8,18 @@ it through.
 
 ## Session log
 
+### 2026-10-25 · A worn day takes a heart; "judge again" is a button
+
+**Owner:** *"I can't rerun my most stylish outfits anymore. I can't heart outfits from planner outfits I already wore."* CHANGELOG has the detail. To carry:
+
+1. **The re-judge worked; it just didn't look like a control.** It was grey 10px text after #257 kept the picks. It is now "↻ Judge my month again · N looks worn since" under the picks.
+2. **`wornHeart.js` is the one path for a heart on a worn day** (day sheet and History). It saves the look and hearts it, reusing the saved look that is the same date and the same pieces. Don't write a second one for another surface; call it.
+
+**Watch-items:**
+- **Her first heart on a worn day**: Saved → All → ♥ should show it with its date as worn, and History should show it with the heart filled, in place of the calendar row.
+- **A day she has already saved a look for**: hearting it must not add a second card to Saved. If it does, the saved look's pieces differ from the day's (an edited day). That is by design: it is a different wear.
+- **Home's look-back** counts the heart after the next Home refresh (the writes bump the wear counter).
+
 ### 2026-10-21 · The day sheet's "?" pieces (iOS canvas memory)
 
 **Owner:** *"What's happening here??"* The blazer and dress in today's look drew as broken images. The photos are fine in the bucket. `TrimmedImage` never released its canvases, and past iOS Safari's canvas-memory cap `toDataURL` returns `"data:,"` without throwing, which was cached for the session. CHANGELOG has the detail.
