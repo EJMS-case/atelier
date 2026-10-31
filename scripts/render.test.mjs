@@ -79,14 +79,16 @@ const TRIP_ID = "11111111-1111-4111-8111-111111111111";
 // Dates are relative to TODAY, deliberately: the calendar opens on the current
 // month, so a hard-coded trip drifts out of view and the walk starts skipping
 // the screen it exists to cover. (It did — the check reported "no trip
-// affordance" until this was fixed.)
+// affordance" until this was fixed.) The trip starts TODAY, not in two days:
+// on the last days of a month a +2 start put the whole trip in next month's
+// grid and the walk failed on Oct 31 for a reason that wasn't the app.
 const iso = (offsetDays) => {
   const d = new Date(); d.setUTCHours(12, 0, 0, 0); d.setUTCDate(d.getUTCDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 };
 const TRIPS = [{
   id: TRIP_ID, destination: "Arizona", status: "planning",
-  start_date: iso(2), end_date: iso(6),
+  start_date: iso(0), end_date: iso(4),
   destination_closet_id: AZ_CLOSET, activity: "Casual",
   must_include_ids: [wardrobe[0].id], notes: "",
 }];

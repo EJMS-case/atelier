@@ -2,6 +2,38 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Casual and Dinner stop dressing her for the office — 2026-10-31
+
+### Why
+
+Owner: *"I'm not happy with the outfits atelier is building for casual and dinner. It keeps giving work outfits for both — trousers etc and items that are labeled for work in formality."*
+
+The app does not log which pieces a generated look used, so the cause was read from the pool, the briefs and her live rows. Today's Style Me rows show 12 Casual and Dinner taps between 21:07 and 21:14.
+- **Casual** answered the 2026-10-01 report with an ORDERING. Office pieces trailed the inventory, but every one of them still reached the model. In NYC that is 9 f5 and 12 f6 bottoms against 20 f3/f4, plus 19 blazers. The ordering didn't hold.
+- **Dinner** had nothing at all. Its brief invited the office ("structured wool", "a polished loafer", every tank "under a blazer"), and it drew from the default briefs, which are tailored ("BOTTOM HERO: bold trouser", "OUTERWEAR HERO: Coat/blazer is the star"). Its room words didn't include "evening", so "work or evening" on her Sheath Dress didn't read as a Dinner piece.
+
+### Fixed
+
+- **`readsAsOffice(item, room)`** (`closet-sampler.js`) now covers both rooms, read from what she gave. Her line naming the room always wins (`lineWearsTo`).
+  - **Casual:** a blazer, a garment filed f5+ (her scale: 5 "work", 6 "work, dinner, an event", neither says casual), or a trouser by name. Coats and jackets are no longer read as office: the leather jacket (f6) and the City Coat (f6) are Casual's third piece.
+  - **Dinner:** a garment filed f5, the one step that doesn't say dinner. f6 stays, and so does a silk or lace trouser.
+- **Step 3c of the sampler keeps office pieces out of the Casual and Dinner inventory.** It is a preference held at the pool, never a refusal. These still come back:
+  - a piece her request names (`resolveRequestedPieces`, the one reader, so "my black top" can't carry the black trousers back in), or a literal name;
+  - an Only or Include toggle's members;
+  - a floor (tops 6, bottoms 4, dresses 2, outerwear 3), least formal first, when the room would run short. Anything that returns still trails its bucket.
+- **Dinner's brief** says what Dinner is and names the office uniform as what it is not (blouse + tailored trouser + blazer, a work sheath with a pump). **Dinner gets its own hero and proportion briefs** (dress, texture, skirt, top, and a jacket "never over a work blouse and trousers"), the way Casual has since 10-01.
+- **The standard's third-piece line** names Dinner's register too, so Evaluate and the chat judge Dinner the way Style Me now builds it.
+- **`ROOM_WORDS.Dinner`** adds "evening" and "night out": "work or evening" is a Dinner piece, and "not for evening" keeps a piece out.
+- **Test harness:** `browser-harness.mjs` found no Chromium under Playwright's new `chrome-linux64/` layout, so `npm run smoke` printed "skipping" and exited 0. That was a green that never ran. It now finds the binary. The walk then failed two trip steps on `main`, because the fixture trip started 2 days out and on Oct 31 that is all in November's grid. The trip now starts today.
+
+### Downstream, four ways
+
+*Efficiency:* the Casual and Dinner inventory is shorter, so fewer uncached input tokens per tap. On live NYC rows that is about 60 garments out at Casual and about 8 at Dinner. The cached preamble changes once (the standard's line 5). *Effectiveness:* every surface that builds a Casual or Dinner look goes through `sampleClosetItems`, so the gate reaches all of them: Style Me, trip days, and the planner's generate. Evaluate and the chat read the standard's new line. A preference held at the pool reaches generation, which a soft check alone never does. *Speed:* no new call, a slightly smaller prompt. *Education:* nothing new learned. The read is her own formality filing and her line's room words, so filing a piece, or adding "casual" or "dinner" to its line, changes where it goes.
+
+### Tests
+
+`test:casual-register` rewritten from "an ordering, never a removal" to the gate: what reads as office in each room; a big Casual closet carries no trouser, blazer or f5 blouse; Dinner keeps f6, silk, blazers and leather; the floor brings office pieces back trailing; a named piece always returns. `npm test`, `npm run build`, `npm run smoke` (44 render steps, now actually run) green.
+
 ## [Unreleased] — A worn day takes a heart; "judge again" is a button — 2026-10-25
 
 ### Why

@@ -7,8 +7,11 @@
 //   · the Casual brief never said tailoring was the exception (it does now,
 //     and the standard every advisory surface reads says the same);
 //   · the inventory led with the blazers and wool trousers — the model reads
-//     list order as salience — so the sampler now trails them at Casual
-//     (readsAsOffice), an ordering, never a removal.
+//     list order as salience. 2026-10-01 trailed them (an ordering); a month
+//     on she was still getting work looks at Casual AND Dinner (owner,
+//     2026-10-31), so the sampler now keeps office pieces out of both rooms
+//     (readsAsOffice, step 3c) unless she names them, toggles them, or the
+//     room would run short — then they come back, trailing.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -33,40 +36,82 @@ test("the Casual brief and the standard both say tailoring is the exception ther
   assert.match(STYLIST_STANDARD, /a blazer over tailored trousers reads as the office/);
 });
 
-test("readsAsOffice reads blazers, f5+ pieces and trousers — at Casual only", () => {
+test("readsAsOffice reads blazers, f5+ garments and trousers at Casual; f5 garments at Dinner", () => {
   const blazer = { id: "b", category: "Outerwear", subcategory: "Blazers", name: "Staple Blazer" };
   const trouser = { id: "t", category: "Bottoms", subcategory: "Pants", name: "Terena Wool Trouser" };
   const silkTop = { id: "s", category: "Tops", subcategory: "Blouses", name: "Silk Blouse", formality: 5 };
   const jean = { id: "j", category: "Bottoms", subcategory: "Pants", name: "501 Jean", formality: 3 };
   const denimJacket = { id: "d", category: "Outerwear", subcategory: "Jackets", name: "Denim Jacket" };
+  const leather = { id: "l", category: "Outerwear", subcategory: "Jackets", name: "black leather oversized jacket", formality: 6 };
+  const coat = { id: "c", category: "Outerwear", subcategory: "Coats", name: "The City Coat", formality: 6 };
   for (const it of [blazer, trouser, silkTop]) assert.equal(readsAsOffice(it, "Casual"), true, it.name);
-  for (const it of [jean, denimJacket]) assert.equal(readsAsOffice(it, "Casual"), false, it.name);
-  assert.equal(readsAsOffice(blazer, "Work"), false, "an ordering for Casual only");
+  for (const it of [jean, denimJacket, leather, coat]) assert.equal(readsAsOffice(it, "Casual"), false, it.name);
+  assert.equal(readsAsOffice(blazer, "Work"), false, "Work is the office");
+  // Dinner: f5 is "work" on her scale; f6 says dinner; a silk trouser is an evening piece.
+  const workTrouser = { id: "w", category: "Bottoms", subcategory: "Trousers", name: "Testra Ankle Pants", formality: 5, stylist_line: "Tailored ankle trouser in burgundy for work" };
+  const silkTrouser = { id: "r", category: "Bottoms", subcategory: "Trousers", name: "Rosalie Silk Trouser" };
+  const f6Trouser = { id: "f", category: "Bottoms", subcategory: "Trousers", name: "Wide Leg Pants", formality: 6 };
+  const sheath = { id: "e", category: "Dresses", subcategory: "Midi", name: "Sheath Dress", formality: 5, stylist_line: "black sheath midi; work or evening" };
+  assert.equal(readsAsOffice(workTrouser, "Dinner"), true);
+  assert.equal(readsAsOffice(silkTrouser, "Dinner"), false);
+  assert.equal(readsAsOffice(f6Trouser, "Dinner"), false);
+  assert.equal(readsAsOffice(blazer, "Dinner"), false, "a blazer has a seat at dinner");
+  assert.equal(readsAsOffice(sheath, "Dinner"), false, "'evening' in her line names Dinner");
 });
 
-test("at Casual the sampler trails the tailoring behind the easy pieces, and keeps every piece", () => {
-  const closet = [
-    { id: "blz1", category: "Outerwear", subcategory: "Blazers", name: "Theory Blazer" },
-    { id: "blz2", category: "Outerwear", subcategory: "Blazers", name: "Admiral Blazer" },
-    { id: "dj", category: "Outerwear", subcategory: "Jackets", name: "Denim Jacket" },
-    { id: "lj", category: "Outerwear", subcategory: "Jackets", name: "Leather Jacket" },
-    { id: "tr1", category: "Bottoms", subcategory: "Pants", name: "Wool Trouser" },
-    { id: "jean", category: "Bottoms", subcategory: "Pants", name: "Light Wash Jean" },
-    { id: "skirt", category: "Bottoms", subcategory: "Skirts", name: "Denim Skirt" },
-    { id: "tee", category: "Tops", subcategory: "T-Shirts", name: "White Tee" },
-    { id: "tank", category: "Tops", subcategory: "Tanks", name: "Scoop Tank" },
-    { id: "sn", category: "Shoes", subcategory: "Sneakers", name: "Sneaker" },
-    { id: "bag", category: "Bags", subcategory: "Tote", name: "Tote" },
-  ];
-  const { sampled } = sampleClosetItems({ items: closet, occasion: "Casual", occasionSlots: {}, weather: "" });
-  const ids = sampled.map(it => it.id);
-  assert.equal(ids.length, closet.length, "an ordering, never a removal");
-  const pos = (id) => ids.indexOf(id);
-  assert.ok(pos("dj") < pos("blz1") && pos("lj") < pos("blz2"), `jackets lead blazers: ${ids.join(",")}`);
-  assert.ok(pos("jean") < pos("tr1") && pos("skirt") < pos("tr1"), `denim leads the trouser: ${ids.join(",")}`);
-  // Same closet at Work: nothing trails for being tailored.
-  const work = sampleClosetItems({ items: closet, occasion: "Work", occasionSlots: {}, weather: "" }).sampled.map(it => it.id);
-  assert.equal(work.length, closet.length);
+const OFFICE_CLOSET = [
+  { id: "blz1", category: "Outerwear", subcategory: "Blazers", name: "Theory Blazer" },
+  { id: "blz2", category: "Outerwear", subcategory: "Blazers", name: "Admiral Blazer" },
+  { id: "dj", category: "Outerwear", subcategory: "Jackets", name: "Denim Jacket" },
+  { id: "lj", category: "Outerwear", subcategory: "Jackets", name: "Leather Jacket" },
+  { id: "coat", category: "Outerwear", subcategory: "Coats", name: "Peacoat" },
+  { id: "tr1", category: "Bottoms", subcategory: "Trousers", name: "Wool Trouser", formality: 5 },
+  { id: "tr2", category: "Bottoms", subcategory: "Trousers", name: "Cigarette Trouser", formality: 5 },
+  { id: "jean", category: "Bottoms", subcategory: "Pants", name: "Light Wash Jean" },
+  { id: "jean2", category: "Bottoms", subcategory: "Pants", name: "Black Jean" },
+  { id: "skirt", category: "Bottoms", subcategory: "Skirts", name: "Denim Skirt" },
+  { id: "satin", category: "Bottoms", subcategory: "Skirts", name: "Satin Slip Skirt", formality: 6 },
+  { id: "tee", category: "Tops", subcategory: "T-Shirts", name: "White Tee" },
+  { id: "tank", category: "Tops", subcategory: "Tanks", name: "Scoop Tank" },
+  { id: "cami", category: "Tops", subcategory: "Camisoles", name: "Silk Cami", formality: 6 },
+  { id: "blouse", category: "Tops", subcategory: "Blouses", name: "Work Blouse", formality: 5 },
+  { id: "sn", category: "Shoes", subcategory: "Sneakers", name: "Sneaker" },
+  { id: "bag", category: "Bags", subcategory: "Tote", name: "Tote" },
+];
+const sampleIds = (occasion, extra = {}) =>
+  sampleClosetItems({ items: OFFICE_CLOSET, occasion, occasionSlots: {}, weather: "", ...extra }).sampled.map(it => it.id);
+
+test("at Casual the office stays out while the room has enough — and comes back, trailing, when it doesn't", () => {
+  const ids = sampleIds("Casual");
+  // Tops bucket is below its floor of 6, so the office top returns — after the easy ones.
+  for (const id of ["dj", "lj", "coat", "jean", "skirt", "tee", "tank"]) assert.ok(ids.includes(id), id);
+  assert.ok(ids.indexOf("tee") < ids.indexOf("blouse"), `easy tops lead: ${ids.join(",")}`);
+  // Bottoms: jean, jean2, skirt + floor of 4 → one office piece at most, never both trousers.
+  assert.ok(!(ids.includes("tr1") && ids.includes("tr2")), `trousers held back: ${ids.join(",")}`);
+  // Work keeps everything.
+  assert.equal(sampleIds("Work").length, OFFICE_CLOSET.length);
+});
+
+test("a big Casual closet carries no trousers or blazers at all", () => {
+  const extra = Array.from({ length: 6 }, (_, i) => ({ id: `t${i}`, category: "Tops", subcategory: "T-Shirts", name: `Tee ${i}` }))
+    .concat(Array.from({ length: 4 }, (_, i) => ({ id: `j${i}`, category: "Bottoms", subcategory: "Jeans", name: `Jean ${i}` })));
+  const ids = sampleClosetItems({ items: [...OFFICE_CLOSET, ...extra], occasion: "Casual", occasionSlots: {}, weather: "" }).sampled.map(it => it.id);
+  for (const id of ["tr1", "tr2", "blz1", "blz2", "blouse"]) assert.ok(!ids.includes(id), `${id} kept out: ${ids.join(",")}`);
+});
+
+test("at Dinner the pieces she filed 'work' stay out; evening pieces and blazers stay in", () => {
+  const extra = Array.from({ length: 4 }, (_, i) => ({ id: `s${i}`, category: "Bottoms", subcategory: "Skirts", name: `Leather Skirt ${i}`, formality: 6 }))
+    .concat(Array.from({ length: 4 }, (_, i) => ({ id: `c${i}`, category: "Tops", subcategory: "Camisoles", name: `Satin Cami ${i}`, formality: 6 })));
+  const ids = sampleClosetItems({ items: [...OFFICE_CLOSET, ...extra], occasion: "Dinner", occasionSlots: {}, weather: "" }).sampled.map(it => it.id);
+  for (const id of ["tr1", "tr2", "blouse"]) assert.ok(!ids.includes(id), `${id} kept out: ${ids.join(",")}`);
+  for (const id of ["satin", "cami", "blz1", "lj"]) assert.ok(ids.includes(id), `${id} kept: ${ids.join(",")}`);
+});
+
+test("naming an office piece, or toggling it in, brings it back", () => {
+  const named = sampleIds("Casual", { freeTextRequest: 'style my "Wool Trouser" for brunch' });
+  assert.ok(named.includes("tr1"), "a named trouser is hers to wear");
+  const dinner = sampleIds("Dinner", { freeTextRequest: 'something with my "Cigarette Trouser"' });
+  assert.ok(dinner.includes("tr2"));
 });
 
 // A piece filed at one step that her line says crosses rooms (owner,

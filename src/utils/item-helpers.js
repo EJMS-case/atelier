@@ -143,7 +143,7 @@ export const ROOM_WORDS = {
   Work: "work|office|boardroom",
   "Work Dinner": "work|office|boardroom",
   Casual: "casual|weekend|everyday|brunch|errands?",
-  Dinner: "dinner|date.?night|drinks",
+  Dinner: "dinner|date.?night|drinks|evening|night.?out",
   Occasion: "occasion|event|wedding|gala|black.?tie",
   Lounge: "loung(?:e|ing)|home",
   Active: "gym|active|work.?out|training",

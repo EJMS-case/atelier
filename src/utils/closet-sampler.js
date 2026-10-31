@@ -223,24 +223,42 @@ function tooDressyForComfort(item, occasion) {
   return DRESSY_COMFORT_MATERIAL.test(text);
 }
 
-// ── Tailoring in the off-duty room ───────────────────────────────────────────
-// At Casual a blazer or a tailored trouser is the exception, not the default
-// (the brief in OCCASION_SLOTS.Casual says so in words); here the same read
-// orders the inventory so the easy pieces lead and the office pieces trail.
-// Read from what she gave: the blazer predicate every surface shares, her
-// curated formality (f5 Business Casual and up), and the trouser words in a
-// name or subcategory. A pool is never emptied by this — it is an ordering.
+// ── The office, out of the off-duty rooms ────────────────────────────────────
+// Casual and Dinner kept coming back as Work looks — trousers, blazers, pieces
+// she filed "work" (owner, 2026-10-31: "It keeps giving work outfits for both
+// — trousers etc and items that are labeled for work in formality"). The
+// 2026-10-01 answer was an ORDERING (office pieces trailed the Casual
+// inventory); a month on she was still seeing the office uniform, because the
+// model still saw every trouser and blazer and the default briefs still
+// handed it "bold trouser" and "blazer hero". So the read below now decides
+// what reaches the inventory at all (step 3c of sampleClosetItems), with
+// the yields every pool gate here has: a piece she NAMED this tap, an active
+// Only / Include toggle, and a floor so the room can never run dry.
+//
+// What reads as the office, from what she gave:
+//   · her line names this room ("work or elevated casual", "work, dinners")
+//     → never; she wears it here, whatever its number (2026-10-10);
+//   · Casual: a blazer, a garment she filed f5+ (her scale: 5 "work", 6
+//     "work, dinner, an event" — neither says casual), or a trouser by name.
+//     Coats and jackets keep their seat: a leather jacket or a peacoat is the
+//     Casual third piece, not tailoring.
+//   · Dinner: a garment she filed f5 — "work" on her scale, and the only step
+//     that doesn't say dinner. f6 is hers for dinner; a silk or lace trouser
+//     is a dinner piece, so a trouser by name is not read here.
 const TROUSER_RE = /\b(trousers?|slacks|suit pants?|dress pants?)\b/i;
+export const OFFICE_GATED_ROOMS = new Set(["Casual", "Dinner"]);
 export function readsAsOffice(item, occasion) {
-  if (occasion !== "Casual") return false;
-  // Her line names Casual ("work or elevated casual") — she wears it off
-  // duty, whatever its formality number (owner, 2026-10-10: "what do I do
-  // when something is good for work and elevated casual?").
-  if (lineWearsTo(item, "Casual")) return false;
-  if (isBlazerItem(item)) return true;
+  if (!OFFICE_GATED_ROOMS.has(occasion)) return false;
+  if (lineWearsTo(item, occasion)) return false;
+  const slot = slotForItem(item);
   const f = formalityOf(item);
+  if (occasion === "Dinner") {
+    return f === 5 && slot !== "shoes" && slot !== "bag" && slot !== "accessory" && slot !== "outerwear";
+  }
+  if (isBlazerItem(item)) return true;
+  if (slot === "outerwear" || slot === "shoes" || slot === "bag" || slot === "accessory") return false;
   if (f != null && f >= 5) return true;
-  return slotForItem(item) === "bottom" && TROUSER_RE.test(`${item.name || ""} ${item.subcategory || ""}`);
+  return slot === "bottom" && TROUSER_RE.test(`${item.name || ""} ${item.subcategory || ""}`);
 }
 
 // ── Category bucketing ───────────────────────────────────────────────────────
@@ -611,6 +629,40 @@ export function sampleClosetItems({
     }
   }
 
+  // ── 3c. The office stays at the office (Casual, Dinner) ──
+  // See readsAsOffice. A piece she named or typed this tap, an active Only /
+  // Include toggle's members, and the floor below all keep their seat; the
+  // pieces that survive on the floor still trail their bucket (bandOf).
+  if (OFFICE_GATED_ROOMS.has(occasion)) {
+    const OFFICE_FLOOR = { tops: 6, bottoms: 4, dresses: 2, outerwear: 3 };
+    // "Which pieces does her request name?" has one reader (free-text-match);
+    // the generous colour/material match would let "my black top" carry
+    // every black trouser back in.
+    const asked = freeTextRequest
+      ? new Set(resolveRequestedPieces(pool, freeTextRequest).pieces.map(it => it.id))
+      : new Set();
+    const yields = (it) => asked.has(it.id) || nameRescueIds.has(it.id) ||
+      onlyRescueIds.has(it.id) || includeTypes.some(t => t.match(it));
+    const office = pool.filter(it => readsAsOffice(it, occasion) && !yields(it));
+    if (office.length > 0) {
+      const officeIds = new Set(office.map(it => it.id));
+      const kept = pool.filter(it => !officeIds.has(it.id));
+      // The floor refills from the least formal office pieces first: the
+      // closest an office piece comes to this room.
+      const fOrder = (it) => formalityOf(it) ?? 5.5;
+      for (const [bucket, floor] of Object.entries(OFFICE_FLOOR)) {
+        let have = kept.filter(it => getBucket(it) === bucket).length;
+        if (have >= floor) continue;
+        for (const it of office.filter(o => getBucket(o) === bucket).sort((a, b) => fOrder(a) - fOrder(b))) {
+          if (have >= floor) break;
+          kept.push(it);
+          have++;
+        }
+      }
+      pool = kept;
+    }
+  }
+
   // Boost applies only when the pool can actually use legwear (a skirt or
   // dress survived the filters): hosiery is exempted from the repeat-rotation
   // drop in 3b and sorted to the front of the accessories bucket in step 5 so the
@@ -790,11 +842,8 @@ export function sampleClosetItems({
   // Band from the FAMILY's max lifetime count (see famCount above): a
   // rarely-suggested twin of a hero piece sorts with the hero instead of
   // leading the bucket as if it were new. Feedback and hearts stay per-item.
-  // A piece that is tailoring in a room where tailoring is the exception
-  // (readsAsOffice: Casual) trails its bucket by two bands — position only,
-  // never removed: the model reads list order as salience, and a Casual
-  // inventory that led with the Theory blazers and the wool trousers kept
-  // coming back as the office uniform (owner, 2026-10-01).
+  // An office piece that survived step 3c (named, toggled, or on the floor)
+  // trails its bucket by two bands: the model reads list order as salience.
   const bandOf = (it) =>
     Math.max(0, freshnessBand(famCount[famOf(it)] ?? (itemSuggestionCounts[it.id] || 0)) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0) + (readsAsOffice(it, occasion) ? 2 : 0);
   for (const key of Object.keys(buckets)) {
