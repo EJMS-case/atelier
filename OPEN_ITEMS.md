@@ -44,7 +44,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 - **Evaluate vs Style Me (#273):** a Style Me look opened in the builder should score 7+ unless the headline names what changed. Style Me may read a little braver. If it's too much for the office, say so.
 - **Work looks (#272):** single Work looks should mix trousers back in, and the chat should stop flagging hosiery on the Quince ponte skirt.
 - **Counts (#272):** the badge counts garments, not every piece. Home's line shows garments + finishing = pieces.
-- **Casual (#269):** the cardigan filed f5 with "work or elevated casual" in its line should sit among the easy pieces.
+- **Casual and Dinner (2026-10-31):** no trousers, blazers or f5 pieces at Casual, and no f5 work pieces at Dinner, unless you name one. A piece you wear to both rooms keeps its seat when its line names the room (the f5 cardigan with "work or elevated casual" still shows at Casual).
 - **Add Items (#267):** the Formality select arrives pre-filled for clothing as a proposal. If its guesses run high or low, say so.
 
 ## 4. Known limits (decided, not planned)

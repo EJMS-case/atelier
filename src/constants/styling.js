@@ -136,7 +136,15 @@ export const OCCASION_SLOTS = {
     // taxonomy.js routes legacy "Date Night" data here.)
     required: { bag: true },
     banned: { categories: ["Athleisure","Loungewear","Swim"], subcategories: ["T-Shirts","Shorts","Sandals"], keywords: [] },
-    promptNote: "DINNER: Evening out — dinner parties, dinners with friends, date night, drinks. Elevated and feminine with a little sharpness: show silhouette, let one texture do the talking. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Lean into texture variety: silk, satin, leather, fine knit, lace, structured wool. At least one of the 3 looks should be a dress when the closet allows. Heels, refined boots, or a polished loafer. A real bag. Tanks and sleeveless shells work as layering bases (under a blazer, jacket, or knit) — check each piece's own notes.",
+    // Owner, 2026-10-31: "It keeps giving work outfits for both [Casual and
+    // Dinner] — trousers etc and items that are labeled for work in
+    // formality." The brief used to invite the office in ("structured wool",
+    // "a polished loafer", every tank "under a blazer") and the default
+    // briefs handed Dinner "bold trouser" and "blazer hero". It now says what
+    // Dinner IS and names the office uniform as the thing it is not; Dinner
+    // has its own hero / proportion briefs (STYLING_STRATEGIES.occasion), and
+    // the sampler keeps the pieces she filed "work" out (readsAsOffice).
+    promptNote: "DINNER: Evening out — dinner parties, dinners with friends, date night, drinks. Elevated and feminine with a little sharpness: show silhouette, let one texture do the talking. This is her evening register and it must NEVER read as the office with lipstick on: no blouse + tailored trouser + blazer, no work sheath with a pump. Lead with a dress, a skirt, or a trouser that is itself an evening piece (silk, satin, leather, lace, a dramatic flare) — at least one of the 3 looks should be a dress when the closet allows. Every look MUST have a bottom (pants/skirt) OR a dress — never just a top alone. Lean into texture and sheen: silk, satin, leather, suede, velvet, fine knit, lace. The third piece is a leather or suede jacket, a sharp blazer worn open over something with sheen or skin (never over a work blouse and trousers), a great coat, or one strong earring. Heels, a refined boot, or a strappy sandal when it's warm. A real bag, smaller than her work tote. Tanks and sleeveless shells work as layering bases — check each piece's own notes.",
   },
   Occasion: {
     // Cocktail parties, weddings, galas, black-tie events. The sampler's
@@ -212,6 +220,24 @@ export const STYLING_STRATEGIES = {
         "TOP HERO: A tee, tank, knit, or shirt is the focal point — interesting texture, killer color, a stripe worn well. Bottom quiet.",
         "DRESS HERO: One easy dress does the work — a slip, a sundress, a knit dress. A jacket + flat sandal or sneaker just frame it.",
         "SHOE HERO: The sneaker, the loafer, the sandal, the ballet flat is the point — the rest stays quiet so the shoe reads.",
+      ],
+    },
+    // Dinner's own hero / proportion briefs (owner, 2026-10-31): the
+    // defaults are the tailored register — "bold trouser", "Coat/blazer is
+    // the star" — and every Dinner tap drew one of them.
+    Dinner: {
+      proportion: [
+        "VOLUME UP TOP: A blouson sleeve, a dramatic collar, a cropped leather jacket over a slim skirt or slip — drama in the shoulder line, sleek below.",
+        "VOLUME BELOW: A fitted top or bodysuit over a fluid skirt, a wide silk trouser, a full midi. Movement in the bottom half.",
+        "COLUMN: Slim and streamlined head-to-toe — a slip or sheath for evening, a tonal knit and satin skirt. Interest from TEXTURE and SHEEN, not volume.",
+        "CONTRAST: One dramatically fitted piece vs one dramatically fluid one — a body-skimming knit over a bias skirt, a corset top over a wide leg. The tension IS the look.",
+      ],
+      hero: [
+        "DRESS HERO: One great dress does the work. A jacket, a heel and one earring just frame it.",
+        "TEXTURE HERO: Fabric is the star — satin, silk, leather, velvet, lace. Luxury is tactile.",
+        "SKIRT HERO: The skirt is the statement — satin, leather, a slit, a bias cut. Top plays second.",
+        "TOP HERO: A camisole, a sheer blouse, a corset, a one-shoulder knit is the focal point. Bottom quiet.",
+        "JACKET HERO: A leather or suede jacket, or a sharp blazer worn open over sheen or skin, is the star — never over a work blouse and trousers.",
       ],
     },
   },

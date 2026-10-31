@@ -40,10 +40,14 @@ export async function findBrowser(label) {
     console.log(`${label}: playwright-core missing — run \`npm install\`. Skipping.`);
     return null;
   }
+  // Playwright's layout moved from chrome-linux/ to chrome-linux64/ (and the
+  // cloud image adds a top-level `chromium` link); reading only the old path
+  // made smoke print "skipping" and exit 0 — a green that never ran
+  // (2026-10-31).
   const executablePath = fs.existsSync(BROWSERS_DIR)
-    ? fs.readdirSync(BROWSERS_DIR)
-        .map(d => `${BROWSERS_DIR}/${d}/chrome-linux/chrome`)
-        .find(p => fs.existsSync(p))
+    ? [`${BROWSERS_DIR}/chromium`, ...fs.readdirSync(BROWSERS_DIR).flatMap(d =>
+        [`${BROWSERS_DIR}/${d}/chrome-linux/chrome`, `${BROWSERS_DIR}/${d}/chrome-linux64/chrome`])]
+        .find(p => fs.existsSync(p) && fs.statSync(p).isFile())
     : null;
   if (!executablePath) { console.log(`${label}: no chromium binary found — skipping`); return null; }
   return { chromium, executablePath };

@@ -10,6 +10,15 @@ it through.
 
 ## Session log
 
+### 2026-10-31 · Casual and Dinner stop dressing her for the office
+
+**Owner:** *"It keeps giving work outfits for both — trousers etc and items that are labeled for work in formality."* CHANGELOG has the detail. To carry:
+
+1. **`readsAsOffice` now decides what reaches the Casual and Dinner inventory** (sampler step 3c). It is no longer an ordering. Her line naming the room always wins. A request, a toggle and the floor bring pieces back.
+2. **Smoke was silently skipping in the cloud container** (the Chromium path moved). If `npm run smoke` ever prints "skipping", it did not run.
+
+**Watch-items:** Casual should lead with denim and jackets, with no trousers and no blazers. Dinner should lead with dresses, skirts and evening trousers, with no f5 work pieces. A piece she wants in both rooms gets the room in its line ("work or elevated casual", "work, dinners").
+
 ### 2026-10-25 · A worn day takes a heart; "judge again" is a button
 
 **Owner:** *"I can't rerun my most stylish outfits anymore. I can't heart outfits from planner outfits I already wore."* CHANGELOG has the detail. To carry:
