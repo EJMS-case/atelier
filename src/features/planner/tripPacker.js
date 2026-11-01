@@ -19,7 +19,7 @@
 // filters the way Style Me's explicit-request override does. See
 // assignMustIncludes() + MUST_BONUS.
 
-import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind, formalityOf, lineWearsTo } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind, formalityOf, lineWearsTo, readsAsOffice } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 import { defaultTripDayOccasion } from "./tripPools.js";
@@ -221,6 +221,10 @@ function formalityBand(occasion) {
 // this one number gates BOTH halves of the destination preference (the
 // softened formality penalty and the bonus itself).
 const DEST_ADEQUATE_DIST = 2;
+// Score an office piece pays on a Casual or Dinner day. Above the user
+// occasion tag (+4) and the preferred-shoe term (+3), so only a pin brings
+// one past an easy alternative; the formality-distance term stacks on top.
+export const OFFICE_PENALTY = 5;
 // Share of the formality-distance penalty an adequate at-destination item
 // still pays. Halved: the gap is a style preference, not a packing cost.
 const DEST_FORMALITY_RELIEF = 0.5;
@@ -387,6 +391,12 @@ export function scoreForOccasion(item, occasion, opts = {}) {
   // sinks below a formality-3 short on a Casual day (-3 vs 0 — well above the
   // packer's 0.6 jitter) while a strong explicit signal (user occasion tag +4,
   // preferred shoe sub +3) can still outweigh it when the wardrobe is thin.
+  // The office stays at the office (item-helpers readsAsOffice, the read
+  // Style Me's sampler applies): a blazer, a trouser or a work-filed garment
+  // on a Casual or Dinner day loses to any easy or evening alternative —
+  // a preference held by score, so a thin trip pool can still dress the
+  // day, and a pin still seats (the pin's natural-fit term, not this one).
+  if (readsAsOffice(item, occasion)) s -= OFFICE_PENALTY;
   const dist = formalityDistance(item, occasion);
   if (dist > 0) {
     let penalty = Math.min(4.5, 1.5 * dist);

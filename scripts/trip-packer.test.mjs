@@ -9,12 +9,13 @@
 
 import {
   buildDailyOutfits, capsuleTargets, defaultOccasions, alternativesFor, TRIP_ACTIVITIES,
-  scoreForOccasion, heatScore, SCORCHING_F,
+  scoreForOccasion, heatScore, SCORCHING_F, OFFICE_PENALTY,
   tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE, activityEvening,
 } from "../src/features/planner/tripPacker.js";
 import { filterByWeather, swimPieceKind } from "../src/utils/item-helpers.js";
 import { formalityDistance } from "../src/features/planner/tripPacker.js";
 import { outfitCoverageGaps } from "../src/features/planner/outfits.js";
+import { eligibleForTripDay } from "../src/lib/ai/tripAdvisor.js";
 
 let passed = 0, failed = 0;
 function assert(cond, label) {
@@ -196,6 +197,56 @@ section("Vegas activity");
   const plan = tripDayOccasions({ dayCount: 6, startDate: "2026-12-05", relaxed: true, activity: "Vegas" });
   assert(plan.slice(1, 5).every(o => o === "Casual"), `Vegas days stay Casual by day: ${plan.join(",")}`);
   assert(tripDayOccasions({ dayCount: 6, startDate: "2026-12-05", relaxed: true }).includes("Dinner"), "without Vegas the relaxed rhythm still lays dinner nights");
+}
+
+// ── 4c. The office stays at the office on trip days too ─────────────────────
+// Owner, 2026-10-31: Casual and Dinner "keeps giving work outfits"; #278
+// fixed Style Me's sampler. 2026-11-01: "Are you thinking big picture?" —
+// the packer and the trip screen's AI day look read the same piece.
+section("office pieces on Casual and Dinner trip days");
+{
+  const base = wardrobe(); // first: wardrobe() resets the id counter
+  const trouser = mk("Bottoms", "Trousers", "Wool Trouser");
+  const jean = mk("Bottoms", "Jeans", "Straight Jean");
+  const blazer = mk("Outerwear", "Blazers", "Crepe Blazer");
+  const leather = mk("Outerwear", "Jackets", "Leather Jacket");
+  const workTop = mk("Tops", "Blouses", "Office Blouse", { formality: 5 });
+  const cami = mk("Tops", "Camisoles", "Satin Cami", { formality: 6 });
+  const crossTop = mk("Tops", "Blouses", "Crossover Blouse", { formality: 5, stylist_line: "work or elevated casual" });
+  const gap = (a, b, occ) => scoreForOccasion(a, occ) - scoreForOccasion(b, occ);
+  assert(gap(jean, trouser, "Casual") >= OFFICE_PENALTY, "Casual: a jean outscores a trouser by the office penalty");
+  assert(gap(leather, blazer, "Casual") >= OFFICE_PENALTY, "Casual: a leather jacket outscores a blazer");
+  assert(gap(cami, workTop, "Dinner") >= OFFICE_PENALTY, "Dinner: an f6 cami outscores an f5 work blouse");
+  assert(gap(crossTop, workTop, "Casual") >= OFFICE_PENALTY, "her line naming Casual keeps a piece in");
+  assert(gap(trouser, jean, "Work") >= 0, "Work: the trouser pays nothing");
+  // Through the packer: a Casual day with both on offer picks the jean, and a
+  // pinned trouser still seats.
+  const items = [...base, trouser, blazer, leather];
+  const { dailyOutfits } = buildDailyOutfits(items, [62, 62, 62], { occasions: ["Casual", "Casual", "Casual"] });
+  assert(!dailyOutfits.flat().some(it => it.id === trouser.id || it.id === blazer.id), "no trouser or blazer on Casual days");
+  const pinned = buildDailyOutfits(items, [62, 62, 62], { occasions: ["Casual", "Casual", "Casual"], mustIncludeIds: new Set([trouser.id]) });
+  assert(pinned.dailyOutfits.flat().some(it => it.id === trouser.id), "a pinned trouser still seats");
+}
+
+// The trip screen's AI day look reads the same piece: office pieces leave
+// its inventory on a Casual or Dinner day, a pin stays, and a pool too thin
+// to dress the day without them keeps everything.
+section("eligibleForTripDay");
+{
+  const base = wardrobe(); // first: wardrobe() resets the id counter
+  const trouser = mk("Bottoms", "Trousers", "Wool Trouser");
+  const blazer = mk("Outerwear", "Blazers", "Crepe Blazer");
+  const items = [...base, trouser, blazer];
+  const casual = eligibleForTripDay(items, "Casual", "Mild (55-69°F)");
+  assert(!casual.some(it => it.id === trouser.id || it.id === blazer.id), "Casual inventory carries no trouser or blazer");
+  assert(casual.some(it => it.category === "Shoes") && casual.some(it => it.category === "Bags"), "shoes and bags stay");
+  const pinned = eligibleForTripDay(items, "Casual", "Mild (55-69°F)", { mustInclude: new Set([blazer.id]) });
+  assert(pinned.some(it => it.id === blazer.id), "a pinned blazer stays in");
+  const work = eligibleForTripDay(items, "Work", "Mild (55-69°F)");
+  assert(work.some(it => it.id === trouser.id), "Work keeps the trouser");
+  const thin = [trouser, blazer, mk("Tops", "T-Shirts", "Tee"), mk("Shoes", "Flats", "Flat"), mk("Bags", "", "Tote")];
+  const kept = eligibleForTripDay(thin, "Casual", "Mild (55-69°F)");
+  assert(kept.some(it => it.id === trouser.id), "a pool too thin to dress the day keeps its office pieces");
 }
 
 // ── 5. Single-day rebuilds stay inside the trip's capsule ────────────────────
@@ -533,9 +584,11 @@ section("formality-band scoring");
   const short3 = mk("Bottoms", "Shorts", "Tailored Short", { formality: 3 });
   const short4 = mk("Bottoms", "Shorts", "Tailored Short", { formality: 4 });
   const shortNone = mk("Bottoms", "Shorts", "Tailored Short");
-  // Casual band is [3,4]: f3/f4 in-band, f6 two steps out → -3.
-  assert(scoreForOccasion(short3, "Casual") - scoreForOccasion(short6, "Casual") === 3,
-    "Casual: formality 6 sits 1.5/step (=3) below formality 3");
+  // Casual band is [3,4]: f3/f4 in-band, f6 two steps out → -3 — and an f6
+  // garment reads as the office at Casual (readsAsOffice), so it also pays
+  // OFFICE_PENALTY.
+  assert(scoreForOccasion(short3, "Casual") - scoreForOccasion(short6, "Casual") === 3 + OFFICE_PENALTY,
+    "Casual: formality 6 sits 1.5/step (=3) plus the office penalty below formality 3");
   assert(scoreForOccasion(short3, "Casual") === scoreForOccasion(short4, "Casual"),
     "Casual: both in-band formalities score identically");
   assert(scoreForOccasion(shortNone, "Casual") === scoreForOccasion(short3, "Casual"),

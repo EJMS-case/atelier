@@ -178,6 +178,13 @@ Conventions worth knowing:
   (gym, lounge, swim and metal-coloured jewellery out) — and says the count
   it rests on; "zero charcoal" to a woman with three charcoal sweatpants is
   how "What the numbers say" read as wrong (2026-09-17).
+- **A look is built in three places, and a preference reaches all three:**
+  Style Me's sampler (`closet-sampler.js`, also a calendar day), the trip
+  packer (`tripPacker.scoreForOccasion`), and the trip screen's AI day look
+  (`tripAdvisor.eligibleForTripDay`). `readsAsOffice` (`item-helpers`) is
+  the pattern: one reader, applied in each (owner, 2026-11-01: "Are you
+  thinking big picture?" after #278 reached only the sampler). A pin or a
+  named piece wins in every one of them.
 - **Every count she reads comes from `countCloset()`** (`constants/taxonomy.js`,
   owner 2026-10-20: "the count of garments in my closet is inconsistent
   throughout the app"), and uses its four words only: *pieces* (everything),

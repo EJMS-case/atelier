@@ -7,11 +7,11 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, formalityOf, noteNamesOccasion, noteVetoesOccasion, lineWearsTo } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, formalityOf, noteNamesOccasion, noteVetoesOccasion, lineWearsTo, readsAsOffice, OFFICE_GATED_ROOMS } from "./item-helpers.js";
 // The room vocabulary lives beside classifierNotes in item-helpers.js (it is
 // read by the stylist's LOOK FACTS and the trip packer too); re-exported so
 // existing importers keep working.
-export { noteNamesOccasion, noteVetoesOccasion, lineWearsTo };
+export { noteNamesOccasion, noteVetoesOccasion, lineWearsTo, readsAsOffice, OFFICE_GATED_ROOMS };
 import { buildFilterPredicate, matchesActiveOnly, activeIncludeTypes, FILTER_TYPES } from "./style-filters.js";
 import { familyKey } from "./rotation-tracker.js";
 import { effectiveColorFamily } from "../constants/color.js";
@@ -223,43 +223,9 @@ function tooDressyForComfort(item, occasion) {
   return DRESSY_COMFORT_MATERIAL.test(text);
 }
 
-// ── The office, out of the off-duty rooms ────────────────────────────────────
-// Casual and Dinner kept coming back as Work looks — trousers, blazers, pieces
-// she filed "work" (owner, 2026-10-31: "It keeps giving work outfits for both
-// — trousers etc and items that are labeled for work in formality"). The
-// 2026-10-01 answer was an ORDERING (office pieces trailed the Casual
-// inventory); a month on she was still seeing the office uniform, because the
-// model still saw every trouser and blazer and the default briefs still
-// handed it "bold trouser" and "blazer hero". So the read below now decides
-// what reaches the inventory at all (step 3c of sampleClosetItems), with
-// the yields every pool gate here has: a piece she NAMED this tap, an active
-// Only / Include toggle, and a floor so the room can never run dry.
-//
-// What reads as the office, from what she gave:
-//   · her line names this room ("work or elevated casual", "work, dinners")
-//     → never; she wears it here, whatever its number (2026-10-10);
-//   · Casual: a blazer, a garment she filed f5+ (her scale: 5 "work", 6
-//     "work, dinner, an event" — neither says casual), or a trouser by name.
-//     Coats and jackets keep their seat: a leather jacket or a peacoat is the
-//     Casual third piece, not tailoring.
-//   · Dinner: a garment she filed f5 — "work" on her scale, and the only step
-//     that doesn't say dinner. f6 is hers for dinner; a silk or lace trouser
-//     is a dinner piece, so a trouser by name is not read here.
-const TROUSER_RE = /\b(trousers?|slacks|suit pants?|dress pants?)\b/i;
-export const OFFICE_GATED_ROOMS = new Set(["Casual", "Dinner"]);
-export function readsAsOffice(item, occasion) {
-  if (!OFFICE_GATED_ROOMS.has(occasion)) return false;
-  if (lineWearsTo(item, occasion)) return false;
-  const slot = slotForItem(item);
-  const f = formalityOf(item);
-  if (occasion === "Dinner") {
-    return f === 5 && slot !== "shoes" && slot !== "bag" && slot !== "accessory" && slot !== "outerwear";
-  }
-  if (isBlazerItem(item)) return true;
-  if (slot === "outerwear" || slot === "shoes" || slot === "bag" || slot === "accessory") return false;
-  if (f != null && f >= 5) return true;
-  return slot === "bottom" && TROUSER_RE.test(`${item.name || ""} ${item.subcategory || ""}`);
-}
+// readsAsOffice / OFFICE_GATED_ROOMS live in item-helpers (one reader for
+// the sampler, the trip packer and the trip screen's AI day look); step 3c
+// below is where the sampler applies them.
 
 // ── Category bucketing ───────────────────────────────────────────────────────
 // Maps each item's category to one of the sampling buckets.
