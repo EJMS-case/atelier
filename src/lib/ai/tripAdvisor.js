@@ -11,7 +11,8 @@ import { z } from "zod";
 import { WEATHER_HIGH } from "../weather.js";
 import { invokeTool, invokeToolRaw } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
-import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND, formalityOf } from "../../utils/item-helpers.js";
+import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND, formalityOf, readsAsOffice } from "../../utils/item-helpers.js";
+import { isGarment } from "../../constants/taxonomy.js";
 import { personalGrounding, occasionBrief } from "../../features/stylist/standard.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
@@ -136,6 +137,23 @@ const TripLooksTool = {
  *                   the trip, so handing it the whole list would put every pin
  *                   on every day.
  */
+// The pieces a trip day's AI look may draw from: weather-fit, swim only on
+// a pool activity, a pin always. On a Casual or Dinner day the office stays
+// out (item-helpers readsAsOffice — the read Style Me's sampler and the
+// packer apply), unless so few garments would be left that the day could
+// not be dressed; then every piece stays and the brief decides.
+export function eligibleForTripDay(items, occasion, weather, { allowSwim = false, mustInclude = null } = {}) {
+  const fits = (items || []).filter(it => {
+    if (!it.category) return false;
+    if (mustInclude?.has(it.id)) return true;
+    if (!allowSwim && (it.category === "Swim" || it.category === "Loungewear")) return false;
+    return filterByWeather([it], weather).length > 0;
+  });
+  const offDuty = fits.filter(it => mustInclude?.has(it.id) || !readsAsOffice(it, occasion));
+  return offDuty.filter(isGarment).length >= OFF_DUTY_FLOOR ? offDuty : fits;
+}
+const OFF_DUTY_FLOOR = 8;
+
 export async function generateTripDayLook(items, occasion, weather, destination, apiKey, opts = {}) {
   if (!apiKey || !items?.length) return null;
 
@@ -156,12 +174,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     ? opts.mustIncludeIds
     : null;
 
-  const eligible = items.filter(it => {
-    if (!it.category) return false;
-    if (mustInclude?.has(it.id)) return true;
-    if (!allowSwim && (it.category === "Swim" || it.category === "Loungewear")) return false;
-    return filterByWeather([it], weather).length > 0;
-  });
+  const eligible = eligibleForTripDay(items, occasion, weather, { allowSwim, mustInclude });
 
   if (eligible.length < 4) return null;
 

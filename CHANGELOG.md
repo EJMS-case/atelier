@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The office stays out of Casual and Dinner on trips too — 2026-11-01
+
+### Why
+
+Owner: *"Does Atelier still try to reuse items like shoes etc for trips? Are you thinking big picture?"*
+
+Reuse: yes, checked. The packer's capsule (`priorUse` seeds both the wear counts and the per-slot distinct sets) spans the day looks and the Vegas evening looks, so shoes and bags repeat across the trip and a reshuffle stays inside it.
+
+Big picture: not all the way. #278 kept office pieces out of Casual and Dinner at Style Me's sampler, which also serves a calendar day's generate. Two surfaces that build trip days don't read the sampler: the trip preview's packer scored a trouser with no formality at 0 on a Casual day and an f5 work piece in band on a Dinner day, and the trip screen's AI day look (`tripAdvisor`) handed the model every weather-fit piece. CLAUDE.md's own list says a preference must reach "Style Me, builder chat, Evaluate, trip days, the packer".
+
+### Fixed
+
+- **`readsAsOffice` / `OFFICE_GATED_ROOMS` move to `utils/item-helpers.js`**, the one reader; `closet-sampler.js` re-exports them and its step 3c is unchanged.
+- **The packer** (`scoreForOccasion`) charges `OFFICE_PENALTY` (5) to an office piece on a Casual or Dinner day — above the user occasion tag (+4) and the preferred-shoe term (+3), stacked with the formality distance. A preference by score, so a thin trip pool still dresses the day, and a pin still seats through its natural-fit term.
+- **The trip screen's AI day look** (`eligibleForTripDay`, new and pure): office pieces leave the inventory on a Casual or Dinner day, a pin stays, and a pool with fewer than 8 off-duty garments keeps everything so the day can be dressed.
+
+### Downstream, four ways
+
+*Efficiency:* the trip-day inventory is shorter on Casual and Dinner days (fewer uncached tokens); the packer's extra term is one predicate per score. *Effectiveness:* every surface that builds a Casual or Dinner look now reads the same piece: Style Me, a calendar day, the trip preview, a trip-day reshuffle, the trip screen's regenerate. *Speed:* none. *Education:* none new; her formality filing and her line's room words are the read everywhere, so one edit on a piece moves it in every surface.
+
+### Tests
+
+`test:packer` (321): score gaps per room, a Casual trip day packs no trouser or blazer and a pinned one seats, `eligibleForTripDay` drops, keeps a pin, keeps Work, and keeps a thin pool. The existing formality-band assertion now expects the office penalty on an f6 short at Casual. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — A "Vegas" trip activity: a work-from-the-room day and a show-or-dinner evening — 2026-11-01
 
 ### Why

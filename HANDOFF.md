@@ -10,6 +10,10 @@ it through.
 
 ## Session log
 
+### 2026-11-01 · The office out of Casual and Dinner on trips too
+
+**Owner:** *"Are you thinking big picture?"* #278 reached Style Me but not the trip packer or the trip screen's AI day look. `readsAsOffice` now lives in `item-helpers` and all three read it (sampler drops with a floor; packer `OFFICE_PENALTY`; `eligibleForTripDay`). A pin wins everywhere. **When a preference lands in the sampler, check the packer and `tripAdvisor` in the same PR** — they build looks without the sampler.
+
 ### 2026-11-01 · "Vegas" trip activity
 
 **Owner:** *"I mostly see shows … and go to nice dinners. I work remotely during work days … I'll only need top-up work clothes and rarely bring a blazer."* CHANGELOG has the detail. To carry:

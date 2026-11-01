@@ -194,6 +194,49 @@ export function lineWearsTo(item, occasion) {
   return !!room && noteNamesOccasion(item, room) && !noteVetoesOccasion(item, room);
 }
 
+// ── The office, out of the off-duty rooms ────────────────────────────────────
+// Casual and Dinner kept coming back as Work looks — trousers, blazers, pieces
+// she filed "work" (owner, 2026-10-31: "It keeps giving work outfits for both
+// — trousers etc and items that are labeled for work in formality"). The
+// 2026-10-01 answer was an ORDERING (office pieces trailed the Casual
+// inventory); a month on she was still seeing the office uniform, because the
+// model still saw every trouser and blazer and the default briefs still
+// handed it "bold trouser" and "blazer hero". So the read below now decides
+// what reaches the inventory at all (closet-sampler step 3c), with
+// the yields every pool gate here has: a piece she NAMED this tap, an active
+// Only / Include toggle, and a floor so the room can never run dry.
+//
+// What reads as the office, from what she gave:
+//   · her line names this room ("work or elevated casual", "work, dinners")
+//     → never; she wears it here, whatever its number (2026-10-10);
+//   · Casual: a blazer, a garment she filed f5+ (her scale: 5 "work", 6
+//     "work, dinner, an event" — neither says casual), or a trouser by name.
+//     Coats and jackets keep their seat: a leather jacket or a peacoat is the
+//     Casual third piece, not tailoring.
+//   · Dinner: a garment she filed f5 — "work" on her scale, and the only step
+//     that doesn't say dinner. f6 is hers for dinner; a silk or lace trouser
+//     is a dinner piece, so a trouser by name is not read here.
+// Every surface that builds a Casual or Dinner look reads it (owner, 2026-11-01:
+// "Are you thinking big picture?"): the sampler drops the pieces with a
+// floor, the trip packer scores them down (OFFICE_PENALTY), and the trip
+// screen's AI day look leaves them out of its inventory. A pin or a named
+// piece wins everywhere.
+const TROUSER_RE = /\b(trousers?|slacks|suit pants?|dress pants?)\b/i;
+export const OFFICE_GATED_ROOMS = new Set(["Casual", "Dinner"]);
+export function readsAsOffice(item, occasion) {
+  if (!OFFICE_GATED_ROOMS.has(occasion)) return false;
+  if (lineWearsTo(item, occasion)) return false;
+  const slot = slotForItem(item);
+  const f = formalityOf(item);
+  if (occasion === "Dinner") {
+    return f === 5 && slot !== "shoes" && slot !== "bag" && slot !== "accessory" && slot !== "outerwear";
+  }
+  if (isBlazerItem(item)) return true;
+  if (slot === "outerwear" || slot === "shoes" || slot === "bag" || slot === "accessory") return false;
+  if (f != null && f >= 5) return true;
+  return slot === "bottom" && TROUSER_RE.test(`${item.name || ""} ${item.subcategory || ""}`);
+}
+
 // A value someone proposes for the column — the photo read, the Add Items
 // select, the closet's bulk filer — is kept only if it is an integer on the
 // scale. 0 and 9 have no band; a string is not a filing.
