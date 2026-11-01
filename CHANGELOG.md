@@ -2,6 +2,27 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The planner's calendar lines up again after the clocks changed — 2026-11-01
+
+### Why
+
+Owner: *"Why are the calendar dates off? Yesterday (Saturday) was 10/31. Why does the calendar not match!!"*
+
+Daylight saving ended at 2 a.m. on Sunday, 2026-11-01. The planner's `addDays` added 24 hours to a local midnight, and that Sunday has 25 hours. Local midnight Nov 1 plus 24 hours is 11 p.m. Nov 1, so the grid drew Nov 1 twice and put every later day one square late, under the wrong weekday. That affected October's spill-over row and the whole of November. The spring-forward Sunday (23 hours) would have skipped a day in March. Live rows were checked: no `planned_outfits` row was written for any date from 10-30 to 11-10, so no plan landed on a wrong day. Each cell's date matched its own label; only where the cells sat was wrong.
+
+### Fixed
+
+- **`features/planner/monthGrid.js`** (new, pure): `startOfMonth`, `endOfMonth`, `addMonths`, `addDays`, `monthGridDays`, moved out of `CalendarView.jsx`. `addDays` now steps the calendar (`new Date(y, m, d + n)`), never milliseconds.
+- **Swept:** every other `86400000` / `24*60*60*1000` in `src/` is either an elapsed-time cutoff, a UTC-anchored step (`tripDays`, Add a day), or a noon-anchored step (`monthWindow`, `addDaysIso`). None of them can land on the wrong date.
+
+### Downstream, four ways
+
+*Efficiency / speed:* no change. *Effectiveness:* the month grid and its range fetch (`grid[0]` to `grid[41]`) read correct dates again. *Education:* none.
+
+### Tests
+
+New `test:month-grid` (in `npm test`, run in America/New_York). It checks that October and November 2026, March 2027 and November 2027 draw 42 distinct consecutive days, each under its own weekday, and that Sat Oct 31 is followed by Sun Nov 1. The old helper fails all four checks. `npm test`, `npm run build` and `npm run smoke` all pass.
+
 ## [Unreleased] — Casual and Dinner stop dressing her for the office — 2026-10-31
 
 ### Why

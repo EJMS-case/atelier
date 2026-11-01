@@ -8,6 +8,7 @@ import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
+import { startOfMonth, endOfMonth, addMonths, addDays, monthGridDays } from "./monthGrid.js";
 import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
@@ -2358,16 +2359,3 @@ function formatTripRange(startIso, endIso) {
   return s === e ? s : `${s} – ${e}`;
 }
 
-function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
-function endOfMonth(d)   { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
-function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
-function addDays(d, n)   { return new Date(d.getTime() + n * 24 * 60 * 60 * 1000); }
-
-function monthGridDays(anchor) {
-  const start = startOfMonth(anchor);
-  const dayOfWeek = start.getDay();
-  const first = addDays(start, -dayOfWeek);
-  const days = [];
-  for (let i = 0; i < 42; i++) days.push(addDays(first, i));
-  return days;
-}
