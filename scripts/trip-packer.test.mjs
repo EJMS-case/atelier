@@ -9,7 +9,7 @@
 
 import {
   buildDailyOutfits, capsuleTargets, defaultOccasions, alternativesFor, TRIP_ACTIVITIES,
-  scoreForOccasion, heatScore, SCORCHING_F, OFFICE_PENALTY,
+  scoreForOccasion, heatScore, SCORCHING_F, OFFICE_PENALTY, DRESSIER_SHOE,
   tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE, activityEvening,
 } from "../src/features/planner/tripPacker.js";
 import { filterByWeather, swimPieceKind } from "../src/utils/item-helpers.js";
@@ -192,6 +192,16 @@ section("Vegas activity");
   assert(evening.dailyOutfits[1].length && evening.dailyOutfits[2].length, "every day between gets one");
   const eveShoes = evening.dailyOutfits.flat().filter(it => it.category === "Shoes");
   assert(eveShoes.some(it => !/Sneaker|Sandal/i.test(it.subcategory)), "the evening keeps a dressier shoe");
+  // Vegas runs dressier (owner, 2026-11-01: "some of these evening ideas
+  // are too casual for that"): the evening shoe is a heel, not a flat.
+  const flat = items.find(it => it.name === "Ballet Flat");
+  const kitten = items.find(it => it.name === "Kitten Heel Slingback");
+  assert(scoreForOccasion(kitten, "Dinner", { dressier: true }) - scoreForOccasion(flat, "Dinner", { dressier: true }) >= 2 * DRESSIER_SHOE,
+    "a heel outranks a flat on a dressier Dinner");
+  assert(scoreForOccasion(kitten, "Dinner") === scoreForOccasion(flat, "Dinner"), "her usual Dinner still weighs them alike");
+  assert(scoreForOccasion(flat, "Casual", { dressier: true }) === scoreForOccasion(flat, "Casual"), "the day look is untouched");
+  assert(evening.dailyOutfits.slice(1, 3).every(day => day.some(it => it.category === "Shoes" && !/Flat|Sneaker|Sandal/i.test(it.subcategory))),
+    `every Vegas evening wears a heel: ${evening.dailyOutfits.slice(1, 3).map(d => d.find(it => it.category === "Shoes")?.name).join(" / ")}`);
   // The occasion plan: Vegas days stay Casual by day even for a relaxed
   // destination closet — the evenings already carry the Dinner.
   const plan = tripDayOccasions({ dayCount: 6, startDate: "2026-12-05", relaxed: true, activity: "Vegas" });

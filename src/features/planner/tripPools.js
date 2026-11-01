@@ -35,6 +35,20 @@ export const TRAVEL_DAY = "Travel Day";
 // The closet she leaves from and comes home to: the one that is not the
 // destination. Two closets today (NYC / Arizona); with more, the default
 // closet that is not the destination, else the first other one.
+// A destination closet is a closet somewhere she is GOING. Her home closet
+// (the default one) can never be that: picking "NYC" under "Closet at
+// destination" meant "pack from NYC" (owner, 2026-11-01: "I selected nyc
+// closet only. These items are exclusively in my Arizona closet. Why did
+// they show up here?"), and reading it as a destination made Arizona the
+// home she left from — the Travel Day dressed from Arizona and every NYC
+// piece counted as "already at destination". One reader: the sheet, the
+// trip screen and the saved row all pass the picked id through here.
+export function destinationClosetFor(closets, destClosetId = null) {
+  if (!destClosetId) return null;
+  const home = (closets || []).find(c => c && c.is_default)?.id || DEFAULT_CLOSET_ID;
+  return destClosetId === home ? null : destClosetId;
+}
+
 export function homeClosetFor(closets, destClosetId = null) {
   const list = (closets || []).filter(c => c && c.id && c.id !== destClosetId);
   return (list.find(c => c.is_default) || list[0])?.id || DEFAULT_CLOSET_ID;

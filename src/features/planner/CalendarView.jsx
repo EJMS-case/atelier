@@ -25,7 +25,7 @@ import { resolveItemIds } from "../../utils/item-helpers.js";
 import { restoreScroll } from "../../utils/restoreScroll.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { logAiError } from "../../lib/ai/logError.js";
-import { homeClosetFor, poolForTripDay } from "./tripPools.js";
+import { homeClosetFor, poolForTripDay, destinationClosetFor } from "./tripPools.js";
 
 // The trip screen is a second tap from the month grid, and it is half the
 // planner's bytes (TripDetailView + its packing tabs). It loads when a trip
@@ -1322,7 +1322,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
       ].filter(t => t.length >= 3);
       return tokens.some(t => q.includes(t.toLowerCase()));
     });
-    setDestClosetId(match ? match.id : "");
+    setDestClosetId(destinationClosetFor(closets, match?.id) || "");
   }, [destination, closets, destClosetTouched]);
 
   const dayCount = Math.max(1, Math.round((new Date(end) - new Date(start)) / (24 * 60 * 60 * 1000)) + 1);
@@ -1895,11 +1895,14 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
             already living there; the packing list becomes just what to carry. */}
         <label style={{ fontSize: 11, color: PALETTE.muted, display: "block", marginTop: 10 }}>
           Closet at destination
+          {/* Her home closet is never a destination (tripPools
+              destinationClosetFor): it is not offered, and "None" names it as
+              where the trip packs from. */}
           <select value={destClosetId}
-            onChange={e => { setDestClosetId(e.target.value); setDestClosetTouched(true); invalidatePreview(); }}
+            onChange={e => { setDestClosetId(destinationClosetFor(closets, e.target.value) || ""); setDestClosetTouched(true); invalidatePreview(); }}
             style={dateInput}>
-            <option value="">None — pack everything</option>
-            {(closets || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="">None — pack from {(closets || []).find(c => c.is_default)?.name || "home"}</option>
+            {(closets || []).filter(c => !c.is_default).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
         {destClosetId && (
@@ -2213,6 +2216,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
             currentDayItems={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.items || []}
             weather={perDayBucket(addDaysIso(start, swapTarget.dayIdx))}
             occasion={dayLooks?.[swapTarget.dayIdx]?.[swapTarget.outfitIdx]?.occasion}
+            activity={dayActivities?.[swapTarget.dayIdx] || activity}
             onPick={(newItem) => swapItem(swapTarget.dayIdx, swapTarget.outfitIdx, swapTarget.item.id, newItem)}
             onClose={() => setSwapTarget(null)}
           />
@@ -2223,10 +2227,12 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
 }
 
 // ── Swap picker (per-item replacement modal) ─────────────────────────────────
-function SwapPicker({ target, items, preferItemIds, currentDayItems, weather, occasion, onPick, onClose }) {
+function SwapPicker({ target, items, preferItemIds, currentDayItems, weather, occasion, activity, onPick, onClose }) {
   const excludeIds = currentDayItems.map(it => it.id);
+  // activity: a dressier evening (Vegas) ranks the swap sheet the way the
+  // packer ranked the look.
   const candidates = alternativesFor(items, target.item, {
-    weather, occasion, exclude: excludeIds, preferItemIds,
+    weather, occasion, activity, exclude: excludeIds, preferItemIds,
   });
 
   return (

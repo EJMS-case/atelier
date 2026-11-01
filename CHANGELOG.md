@@ -2,6 +2,29 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A Vegas trip packs from NYC, and its evenings wear a heel — 2026-11-01
+
+### Why
+
+Owner, with a screenshot of a Vegas preview: *"I selected nyc closet only. These items are exclusively in my Arizona closet. Why did they show up here? Vegas also tends to be a little dressier, so some of these evening ideas are too casual for that."*
+
+1. **Arizona pieces on the Travel Day.** The sheet's "Closet at destination" offered NYC, and she picked it to mean "pack from NYC". The app read it as the closet she was travelling TO, so home became the other closet, Arizona: the Travel Day dressed from Arizona (a vest and floral shorts that live there), the pool was NYC ∪ Arizona, and "16 already at destination" counted her NYC pieces. No trip row was saved yet; the live `trips` rows show no Vegas trip and no trip with the NYC closet as its destination.
+2. **A ballet flat for a Vegas evening.** Two causes. The Dinner shoe preference tested the subcategory for the word "heel", and her heels are filed Kitten, Block, Stiletto and Slingback, so at every dinner a ballet flat (+3) outscored every heel (0). And nothing said Vegas runs dressier than her usual dinner.
+
+### Fixed
+
+- **`destinationClosetFor(closets, id)`** (`tripPools.js`): her home closet (the default) is never a destination; picking it means none. The sheet's select no longer offers it ("None — pack from NYC" names where the trip packs from), the auto-match from the typed destination goes through it, and the trip screen reads a saved row's `destination_closet_id` through it too.
+- **Dinner and Work shoe preference reads `HEEL_SUBS`** (`preferHeels`), so every heel she files counts as a heel.
+- **A dressier evening** (`ACTIVITY_FILTERS.Vegas.dressierEvening`, scored through `opts.dressier`): on a Dinner day a heel gains `DRESSIER_SHOE` and a flat, loafer, ballet, sneaker or slide loses it (a heel ends 12 above a ballet flat), and f4 ("an easy dinner") sits a step under the band. The day look is untouched. The swap sheet ranks with the same flag. The AI day note says Vegas evenings take a heel, never a flat, and her dressiest dinner pieces.
+
+### Downstream, four ways
+
+*Efficiency / speed:* none. *Effectiveness:* the closet read is one reader on every surface that holds a destination closet (sheet, trip screen, saved row). The heel read fixes every Dinner and Work trip day, not only Vegas. The dressier flag reaches the preview, a reshuffle, the swap sheet and the AI day look. *Education:* none new.
+
+### Tests
+
+`test:trippool` (46): the home closet as a pick means no destination, Arizona stays one, home stays NYC. `test:packer` (325): a heel outranks a flat on a dressier Dinner, her usual Dinner weighs them alike, the day look is untouched, every Vegas evening wears a heel. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — The office stays out of Casual and Dinner on trips too — 2026-11-01
 
 ### Why
