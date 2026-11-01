@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-01 · A Vegas trip packs from NYC; its evenings wear a heel
+
+**Owner:** Arizona pieces on a Vegas Travel Day; evening looks too casual. Picking NYC as the "Closet at destination" made Arizona home. `destinationClosetFor` (tripPools) now reads every destination pick: the home closet is never a destination. The Dinner shoe preference now reads `HEEL_SUBS` (her heels are filed Kitten/Block/Stiletto/Slingback, and a ballet flat had been outscoring them at every dinner). Vegas is `dressierEvening`.
+
+**Watch-item:** rebuild the Vegas preview with "None — pack from NYC". The Travel Days should dress from NYC, "already at destination" should read 0, and every Evening look should wear a heel.
+
 ### 2026-11-01 · The office out of Casual and Dinner on trips too
 
 **Owner:** *"Are you thinking big picture?"* #278 reached Style Me but not the trip packer or the trip screen's AI day look. `readsAsOffice` now lives in `item-helpers` and all three read it (sampler drops with a floor; packer `OFFICE_PENALTY`; `eligibleForTripDay`). A pin wins everywhere. **When a preference lands in the sampler, check the packer and `tripAdvisor` in the same PR** — they build looks without the sampler.

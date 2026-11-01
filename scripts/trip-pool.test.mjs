@@ -155,7 +155,7 @@ section("Misc is never readmitted");
 // the middle of a trip." / "When I edit a look within an Arizona vacation,
 // only Arizona closet + anything I packed should be included."
 {
-  const { homeClosetFor, isHomeTravelDay, poolForTripDay, defaultTripDayOccasion, TRAVEL_DAY } = await import("../src/features/planner/tripPools.js");
+  const { homeClosetFor, isHomeTravelDay, poolForTripDay, defaultTripDayOccasion, TRAVEL_DAY, destinationClosetFor } = await import("../src/features/planner/tripPools.js");
   section("tripPools: home closet, travel days, and the edit pool");
 
   assert(defaultTripDayOccasion(0, 5) === TRAVEL_DAY, "day one defaults to Travel Day");
@@ -166,7 +166,14 @@ section("Misc is never readmitted");
 
   const closets = [{ id: DEFAULT_CLOSET_ID, name: "NYC", is_default: true }, { id: ARIZONA_CLOSET_ID, name: "Arizona", is_default: false }];
   assert(homeClosetFor(closets, ARIZONA_CLOSET_ID) === DEFAULT_CLOSET_ID, "home for an Arizona trip is NYC");
-  assert(homeClosetFor(closets, DEFAULT_CLOSET_ID) === ARIZONA_CLOSET_ID, "home for a NYC-destination trip is the other closet");
+  // Her home closet is never a destination (owner, 2026-11-01: picking NYC
+  // under "Closet at destination" made Arizona home, and a Vegas Travel Day
+  // dressed from Arizona). destinationClosetFor reads the pick first.
+  assert(destinationClosetFor(closets, DEFAULT_CLOSET_ID) === null, "picking the home closet as the destination means no destination closet");
+  assert(destinationClosetFor(closets, ARIZONA_CLOSET_ID) === ARIZONA_CLOSET_ID, "Arizona is a destination");
+  assert(destinationClosetFor(closets, null) === null && destinationClosetFor(closets, "") === null, "none stays none");
+  assert(destinationClosetFor([], DEFAULT_CLOSET_ID) === null, "no closets loaded: the default id is still home");
+  assert(homeClosetFor(closets, destinationClosetFor(closets, DEFAULT_CLOSET_ID)) === DEFAULT_CLOSET_ID, "so home stays NYC for a trip packed from NYC");
   assert(homeClosetFor(closets, null) === DEFAULT_CLOSET_ID, "no destination → the default closet");
   assert(homeClosetFor([], ARIZONA_CLOSET_ID) === DEFAULT_CLOSET_ID, "no closets loaded → the default closet id");
 

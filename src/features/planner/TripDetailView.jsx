@@ -23,7 +23,7 @@ import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
-import { homeClosetFor, poolForTripDay, defaultTripDayOccasion } from "./tripPools.js";
+import { homeClosetFor, poolForTripDay, defaultTripDayOccasion, destinationClosetFor } from "./tripPools.js";
 import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 
@@ -258,7 +258,8 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
   const tempHighForDay = (iso) =>
     forecast?.[iso]?.high ?? brief?.tempHighF ?? null;
 
-  const destClosetId = trip.destination_closet_id || null;
+  // Her home closet is never a destination (tripPools destinationClosetFor).
+  const destClosetId = destinationClosetFor(closets, trip.destination_closet_id);
   // Home = the closet that is not the destination (tripPools.js): a Travel
   // Day on the first or last day builds from it.
   const homeClosetId = useMemo(() => homeClosetFor(closets, destClosetId), [closets, destClosetId]);

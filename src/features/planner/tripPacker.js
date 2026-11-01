@@ -166,6 +166,11 @@ function occasionPriorityRegex(occasion) {
   const o = (occasion || "").toLowerCase();
   if (/work\s*dinner|date|dinner|occasion/.test(o)) {
     return {
+      // preferHeels: HEEL_SUBS is L3-aware. The word test alone missed her
+      // heels filed Kitten / Block / Stiletto / Slingback, so a ballet flat
+      // outscored every heel at dinner (owner, 2026-11-01, a Vegas evening in
+      // flats).
+      preferHeels: true,
       preferShoeSub: /heel|pump|mule|loafer|ballet|flat/i,
       avoidShoeSub:  /sneaker|sandal/i,
       preferTopName: /silk|satin|lace|cami|blouse|wrap/i,
@@ -176,6 +181,7 @@ function occasionPriorityRegex(occasion) {
   }
   if (/work/.test(o)) {
     return {
+      preferHeels: true,
       preferShoeSub: /heel|pump|loafer|mule|boot/i,
       avoidShoeSub:  /sneaker|sandal|flip/i,
       preferTopName: /blouse|button|silk|knit|blazer/i,
@@ -225,6 +231,10 @@ const DEST_ADEQUATE_DIST = 2;
 // occasion tag (+4) and the preferred-shoe term (+3), so only a pin brings
 // one past an easy alternative; the formality-distance term stacks on top.
 export const OFFICE_PENALTY = 5;
+// A dressier evening (Vegas): the swing between a heel and a flat on a
+// Dinner day, on top of the room's own shoe terms — a heel ends 12 above a
+// ballet flat (+3+3 vs +3-3), far past the 0.6 jitter.
+export const DRESSIER_SHOE = 3;
 // Share of the formality-distance penalty an adequate at-destination item
 // still pays. Halved: the gap is a style preference, not a packing cost.
 const DEST_FORMALITY_RELIEF = 0.5;
@@ -358,6 +368,9 @@ export function heatScore(item, highF) {
  * @param {number}  [opts.highF]         - THAT DAY's forecast high, °F. Drives
  *   the scorching-heat term above. Omitted → no heat term (the 2-arg call
  *   signature every earlier caller and test uses stays exactly as it was).
+ * @param {boolean} [opts.dressier]      - the activity's evenings run dressier
+ *   than the room's default (ACTIVITY_FILTERS.dressierEvening, Vegas): on a
+ *   Dinner day a heel outranks a flat and f4 sits a step under the band.
  */
 export function scoreForOccasion(item, occasion, opts = {}) {
   const rules = occasionPriorityRegex(occasion);
@@ -365,7 +378,7 @@ export function scoreForOccasion(item, occasion, opts = {}) {
   const sub = item.subcategory || "";
   let s = 0;
   if (item.category === "Shoes") {
-    if (rules.preferShoeSub?.test(sub)) s += 3;
+    if (rules.preferShoeSub?.test(sub) || (rules.preferHeels && HEEL_SUBS.has(item.subcategory))) s += 3;
     if (rules.avoidShoeSub?.test(sub))  s -= 3;
   }
   if (item.category === "Tops" || item.category === "Knits" || item.category === "Dresses") {
@@ -376,6 +389,13 @@ export function scoreForOccasion(item, occasion, opts = {}) {
     if (rules.avoidBagName?.test(name))  s -= 2;
   }
   if (rules.avoidName?.test(name)) s -= 4;
+  if (opts.dressier && /dinner|occasion/.test((occasion || "").toLowerCase())) {
+    if (item.category === "Shoes") {
+      if (HEEL_SUBS.has(item.subcategory)) s += DRESSIER_SHOE;
+      else if (/flat|loafer|ballet|sneaker|slide/i.test(sub)) s -= DRESSIER_SHOE;
+    }
+    if (formalityOf(item) === 4 && !lineWearsTo(item, occasion)) s -= 1.5;
+  }
   // Occasion field on the item itself, if user tagged it. `occasion` may be
   // a plain string OR (post-multitag migration) an array of strings — the
   // old code assumed string and crashed buildDailyOutfits with
@@ -571,6 +591,11 @@ const ACTIVITY_FILTERS = {
     bannedRegex: null,
     allowSwim: false,
     eveningOccasion: "Dinner",
+    // Vegas runs dressier than her usual dinner (owner, 2026-11-01: "some
+    // of these evening ideas are too casual for that"): a Dinner look here
+    // takes a heel over a flat and her dressier dinner pieces (f5 and up
+    // on her scale; f4 "an easy dinner" sits a step under).
+    dressierEvening: true,
   },
   // Default — minimal filtering.
   "Sightseeing": {
@@ -725,7 +750,7 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
       }
       return true;
     });
-    return { pool, occasion: occasions[d], wxBucket, hi };
+    return { pool, occasion: occasions[d], wxBucket, hi, dressier: !!actFilter.dressierEvening };
   });
 
   // Which items each day admits on its own merits, captured BEFORE pinned
@@ -821,13 +846,14 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     };
 
     const seatScore = (item, slot, d) => {
-      const { occasion, hi } = dayPools[d];
+      const { occasion, hi, dressier } = dayPools[d];
       // Same signals pick() scores with, so seating and picking agree about
       // which day suits a piece: this day's real high (the scorching-heat term)
       // and whether the piece is already at the destination.
       let s = scoreForOccasion(item, occasion, {
         atDestination: !!(opts.preferItemIds instanceof Set && opts.preferItemIds.has(item.id)),
         highF: hi,
+        dressier,
       });
       // Natural fit is a preference, not a gate: a pinned piece the day's
       // weather or activity would normally reject can still be seated there
@@ -926,10 +952,11 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
     // heat term. dayPools is indexed by the same dayIdx every pick() call
     // already passes, including single-day rebuilds (which build one pool).
     const highF = dayPools[dayIdx]?.hi;
+    const dressier = !!dayPools[dayIdx]?.dressier;
     const scored = candidates.map(c => {
       const wears = useCount.get(c.id) || 0;
       const atDest = !!prefer?.has(c.id);
-      let s = scoreForOccasion(c, occasion, { atDestination: atDest, highF });
+      let s = scoreForOccasion(c, occasion, { atDestination: atDest, highF, dressier });
       // Already at the destination — packing cost zero (see PREFER_BONUS).
       if (atDest) s += destinationBonus(c, occasion);
       // She's bringing it regardless, so every day it fits is a day it saves
@@ -1232,7 +1259,7 @@ export function alternativesFor(items, currentItem, opts = {}) {
         item: it,
         // opts.highF (the day's actual high) is optional here too — swap
         // sheets that only know the bucket simply get no heat term.
-        score: scoreForOccasion(it, occasion, { atDestination: atDest, highF: opts.highF })
+        score: scoreForOccasion(it, occasion, { atDestination: atDest, highF: opts.highF, dressier: !!ACTIVITY_FILTERS[opts.activity]?.dressierEvening })
              + (atDest ? destinationBonus(it, occasion) : 0),
       };
     })
