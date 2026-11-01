@@ -881,6 +881,29 @@ await check("Plan a trip → Preview looks builds every day", async () => {
   const blank = tiles.filter(t => !t.painted);
   if (blank.length) throw new Error(`${blank.length} of ${tiles.length} tiles never painted their photo (${blank.slice(0, 3).map(t => t.name).join(", ")})`);
 });
+await check("Plan a trip → a day switched to Vegas gains an Evening look", async () => {
+  // The second day card's activity select (the trip-level one sits in a
+  // <label>; the day cards' do not). Owner, 2026-11-01: Vegas evenings are a
+  // look of their own, so switching a day to it adds one.
+  const before = await page.evaluate(() => [...document.querySelectorAll("input")].filter(i => i.value === "Evening").length);
+  const switched = await page.evaluate(() => {
+    const sel = [...document.querySelectorAll("select")]
+      .filter(s => [...s.options].some(o => o.text === "Vegas") && !s.closest("label"))[1];
+    if (!sel) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+    setter.call(sel, "Vegas");
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  });
+  if (!switched) throw new Error("no per-day activity select offering Vegas");
+  await page.waitForTimeout(800);
+  const after = await page.evaluate(() => [...document.querySelectorAll("input")].filter(i => i.value === "Evening").length);
+  if (after !== before + 1) throw new Error(`expected one Evening look to appear (had ${before}, now ${after})`);
+  const occ = await page.evaluate(() => [...document.querySelectorAll("select")]
+    .filter(s => [...s.options].some(o => o.text === "Travel Day") && !s.closest("label"))
+    .map(s => s.value));
+  if (!occ.includes("Dinner")) throw new Error(`the Evening look is not a Dinner look (${occ.join(",")})`);
+});
 await check("Plan a trip → Save trip opens the new trip", async () => {
   await clickText("button", "Save trip");
   await page.waitForTimeout(1500);
