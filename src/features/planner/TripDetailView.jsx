@@ -17,9 +17,9 @@ import { SEASONAL_HIGHS, nyToday } from "../../lib/time.js";
 import { tripStatusActions, statusOf, isTripUnderway } from "./tripStatus.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
-import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds } from "./outfits.js";
+import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds, DAYPART_EVENING } from "./outfits.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
-import { TRIP_ACTIVITIES, buildDailyOutfits } from "./tripPacker.js";
+import { TRIP_ACTIVITIES, buildDailyOutfits, activityEvening } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
@@ -917,6 +917,19 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
         });
         if (!look) continue;
         const outfits = [{ id: newOutfitId(), label: "", occasion, items: look.items }];
+        // An activity with an evening look of its own (Vegas): a second look
+        // for the evening on every day between the travel days, the way the
+        // Plan a trip preview builds it. The day look is a prior day to it.
+        const evening = activityEvening(activity);
+        const dayIdx = days.indexOf(iso);
+        if (evening && dayIdx > 0 && dayIdx < days.length - 1) {
+          const eve = await generateTripDayLook(poolForDay(iso, evening), evening, weather, trip.destination, apiKey, {
+            priorDays: [...priorDays, { occasion, weather, itemIds: look.items.map(it => it.id) }],
+            brief, activity, preferItemIds,
+            mustIncludeIds: unplacedPins(running),
+          });
+          if (eve) outfits.push({ id: newOutfitId(), label: DAYPART_EVENING, occasion: evening, items: eve.items });
+        }
         const payload = buildPlanPayload({
           date: iso,
           outfits,

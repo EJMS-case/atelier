@@ -1645,6 +1645,15 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
       const fresh = buildOneOutfit({ dayIso, dayAct: act, occasion: o.occasion, label: o.label, dayIdx, excludeOutfitIdx: "*" });
       return fresh ? { ...o, items: fresh.items } : o;
     });
+    // An activity with an evening look of its own (Vegas) gives this day one
+    // too, when it is not a travel day and does not have one yet — the same
+    // second look the preview builds for the whole trip.
+    const evening = activityEvening(act);
+    const isEnd = dayIdx === 0 || dayIdx === dayCount - 1;
+    if (evening && !isEnd && !rebuilt.some(o => o.label === DAYPART_EVENING)) {
+      const built = buildOneOutfit({ dayIso, dayAct: act, occasion: evening, label: DAYPART_EVENING, dayIdx, excludeOutfitIdx: "*" });
+      if (built) rebuilt.push(built);
+    }
     mutateDay(dayIdx, () => rebuilt);
   }
 

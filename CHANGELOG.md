@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A Vegas evening look wherever a Vegas day is built — 2026-11-01
+
+### Why
+
+Owner: *"Finish what you were doing first, then fix everything else from this chat."* The Vegas activity's evening look (#280) was built by the Plan a trip preview only. Two other places build a Vegas day and left it with a day look alone: switching one day's activity to Vegas on the preview, and the trip screen's "Generate all empty days".
+
+### Fixed
+
+- **Preview, per-day activity switch** (`changeActivity`): a day switched to an activity with an evening look gains one, when it is not a travel day and has none yet.
+- **Trip screen, Generate all** (`handleGenerateAll`): every empty day between the travel days gets a second AI look in the evening occasion, labelled "Evening", with the day look as a prior day so the two share nothing.
+- **Render walk**: a step switches a middle day to Vegas and expects one "Evening" Dinner look to appear (45 steps).
+
+### Downstream, four ways
+
+*Efficiency:* one more AI call per empty Vegas day on Generate all (the evening look); the preview's is local. *Effectiveness:* every surface that builds a Vegas day now gives it both looks. *Speed:* Generate all takes about twice as long on a Vegas trip. *Education:* none new.
+
+### Tests
+
+`npm test`, `npm run build`, `npm run smoke` (45 render steps) green.
+
 ## [Unreleased] — A Vegas trip packs from NYC, and its evenings wear a heel — 2026-11-01
 
 ### Why
