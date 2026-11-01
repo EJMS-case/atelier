@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A "Vegas" trip activity: a work-from-the-room day and a show-or-dinner evening — 2026-11-01
+
+### Why
+
+Owner: *"We go to Vegas often. I mostly see shows like Cirque du Soleil and go to nice dinners. I work remotely during work days when I'm there — I'll only need top-up work clothes and rarely bring a blazer. Add an appropriate 'default trip activity' for this."*
+
+No existing activity fit. Sightseeing packs one Casual look a day; the relaxed-destination rhythm gives at most four dinner nights; Family Visit packs for a pool. Vegas is the one trip where the evening is the point of every day, and the day is spent on calls.
+
+### Added
+
+- **"Vegas" in `TRIP_ACTIVITIES`** (both activity selects pick it up). Its packer profile keeps **blazers out** of the pool (a pinned blazer still comes: a pin clears every activity ban), keeps heels in, packs no swim, and declares an **evening look** (`eveningOccasion: "Dinner"`).
+- **`activityEvening(activity)`** (`tripPacker.js`): the one reader for an activity's evening occasion. `tripDayOccasions` takes `activity` and stands the relaxed dinner-night rhythm down when the evenings already dress up, so no day gets two Dinners and no day look.
+- **The trip preview builds the evening look** (`handlePreview`): after the day looks, a second packer pass over every day between the travel days, with the day looks as `priorUse`, so the evening shoe and bag repeat across the trip inside the same capsule. The look is saved as the day's "Evening" outfit (the day sheet's `DAYPART_EVENING`), beside the Casual day look. A travel day draws from nothing in that pass and gets no evening look.
+- **The AI day-look note** (`tripAdvisor.js` `ACTIVITY_NOTES.Vegas`): the day is Casual with a camera-ready top, never an office look, a blazer only if pinned; the evening is a Dinner look with sheen or skin, a heel, a small bag; the evening pieces are the point, the day pieces repeat.
+- The activity hint under the select names what Vegas packs.
+
+### Downstream, four ways
+
+*Efficiency:* no new call. The evening pass is the same pure packer, once more, in the browser; the saved rows are the same two-outfit shape "+ Add outfit" already writes. *Effectiveness:* every place a Vegas day is built reads the profile: the preview (packer), the trip screen's regenerate (`generateTripDayLook`, which carries the activity note), per-day reshuffles (the activity filter), and the day pool (`poolForTripDay` with the evening occasion). The Dinner look reads the Dinner room, which #278 kept the office out of. *Speed:* one more synchronous pass at preview, milliseconds. *Education:* nothing new learned; her words are in the profile. A Vegas trip's saved looks and hearts teach through the paths that already exist.
+
+### Tests
+
+`test:packer` gains a Vegas section (309 assertions): the activity exists, its evening is Dinner, no blazer is packed unless pinned, a pinned one comes, the evening pass skips travel days and keeps a dressier shoe, and the occasion plan keeps Vegas days Casual even for a relaxed destination closet. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — The planner's calendar lines up again after the clocks changed — 2026-11-01
 
 ### Why

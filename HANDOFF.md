@@ -10,6 +10,15 @@ it through.
 
 ## Session log
 
+### 2026-11-01 · "Vegas" trip activity
+
+**Owner:** *"I mostly see shows … and go to nice dinners. I work remotely during work days … I'll only need top-up work clothes and rarely bring a blazer."* CHANGELOG has the detail. To carry:
+
+1. **An activity can declare an evening look** (`eveningOccasion` on its packer profile, read through `activityEvening`). The preview then builds two looks a day inside one capsule. A second such activity adds a profile, never a second preview path.
+2. **A pin clears an activity ban.** The Vegas blazer ban is a preference held at the pool; pinning the blazer brings it.
+
+**Watch-item:** Plan a Vegas trip and preview it. Each middle day should show a Casual look and an "Evening" Dinner look; the first and last day one Travel Day look. No blazer unless you pinned one. If the evening shoe changes every night, say so: the capsule should hold it to two or three.
+
 ### 2026-10-31 · Casual and Dinner stop dressing her for the office
 
 **Owner:** *"It keeps giving work outfits for both — trousers etc and items that are labeled for work in formality."* CHANGELOG has the detail. To carry:

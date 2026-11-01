@@ -141,12 +141,16 @@ export function dinnerDayIndices(dayCount, nights) {
  * @param {number}  o.dayCount
  * @param {Date|string} [o.startDate] - trip start; only used to detect December
  * @param {boolean} [o.relaxed]       - see isRelaxedDestinationCloset
+ * @param {string}  [o.activity]      - the trip's default activity (activityEvening)
  * @returns {string[]} one occasion per day
  */
-export function tripDayOccasions({ dayCount, startDate, relaxed = false } = {}) {
+export function tripDayOccasions({ dayCount, startDate, relaxed = false, activity = null } = {}) {
   const days = Math.max(0, Math.floor(dayCount) || 0);
   const plan = defaultOccasions(days);
-  if (!relaxed || days === 0) return plan;
+  // An activity with an evening look of its own already dresses every
+  // evening up (activityEvening); laying dinner nights over the day looks
+  // would give those days two Dinners and no day.
+  if (!relaxed || days === 0 || activityEvening(activity)) return plan;
   const december = tripTouchesDecember(startDate, days);
   const nights = december
     ? clamp(Math.round(days * DEC_DINNER_RATE), DEC_DINNER_MIN, DEC_DINNER_MAX)
@@ -472,7 +476,17 @@ function itemSlot(it) {
 // that don't make sense for the activity regardless of how they score
 // for the day's occasion. Without this layer Hot+Casual at Disney was
 // returning heels and silk maxis because nothing was hard-banning them.
-export const TRIP_ACTIVITIES = ["Sightseeing", "Theme Park", "Beach", "Resort", "Family Visit", "Active", "City Walking"];
+export const TRIP_ACTIVITIES = ["Sightseeing", "Theme Park", "Beach", "Resort", "Family Visit", "Active", "City Walking", "Vegas"];
+
+// An activity whose evenings are a look of their own (owner, 2026-11-01:
+// "We go to Vegas often. I mostly see shows like Cirque du Soleil and go to
+// nice dinners. I work remotely during work days"): every day between the
+// travel days gets a second, evening look in this occasion. The preview
+// builds it after the day looks, inside the same capsule; the relaxed
+// dinner-night rhythm stands down, since every evening already dresses up.
+export function activityEvening(activity) {
+  return ACTIVITY_FILTERS[activity]?.eveningOccasion || null;
+}
 
 // Heel / boot bans go through the shared HEEL_SUBS / isBootItem helpers
 // (utils/item-helpers) instead of per-activity subcategory lists — the local
@@ -534,6 +548,19 @@ const ACTIVITY_FILTERS = {
     bannedSubcategories: new Set(),
     bannedRegex: /\b(stiletto|ankle.?strap)\b/i,
     allowSwim: false,
+  },
+  "Vegas": {
+    // Shows and nice dinners by night; a remote-work day in the room by day,
+    // so the day look is Casual with a camera-ready top ("top-up work
+    // clothes"), never an office look. She rarely brings a blazer: blazers
+    // stay out of the pool, and a pin brings one (a pin clears every
+    // activity ban). Heels stay in — this is the one activity where the
+    // evening is the point.
+    bannedCategories: [],
+    bannedSubcategories: new Set(["Blazers"]),
+    bannedRegex: null,
+    allowSwim: false,
+    eveningOccasion: "Dinner",
   },
   // Default — minimal filtering.
   "Sightseeing": {

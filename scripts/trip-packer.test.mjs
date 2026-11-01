@@ -10,7 +10,7 @@
 import {
   buildDailyOutfits, capsuleTargets, defaultOccasions, alternativesFor, TRIP_ACTIVITIES,
   scoreForOccasion, heatScore, SCORCHING_F,
-  tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE,
+  tripDayOccasions, isRelaxedDestinationCloset, RELAXED_DEST_SHARE, activityEvening,
 } from "../src/features/planner/tripPacker.js";
 import { filterByWeather, swimPieceKind } from "../src/utils/item-helpers.js";
 import { formalityDistance } from "../src/features/planner/tripPacker.js";
@@ -153,6 +153,49 @@ section("Family Visit activity");
   assert(poolSuits[2] == null, "the dinner day gets no pool suit");
   const kittenOk = dailyOutfits[2].find(it => it.category === "Shoes");
   assert(kittenOk && !/Sneaker|Sandal/i.test(kittenOk.subcategory), "dinner out still gets a dressier shoe (kitten heel fine)");
+}
+
+// ── 4b. Vegas: a work-from-the-room day, a show-or-dinner evening ──────────
+// Owner, 2026-11-01: "We go to Vegas often. I mostly see shows like Cirque
+// du Soleil and go to nice dinners. I work remotely during work days when
+// I'm there — I'll only need top-up work clothes and rarely bring a blazer."
+section("Vegas activity");
+{
+  assert(TRIP_ACTIVITIES.includes("Vegas"), "Vegas is a trip activity");
+  assert(activityEvening("Vegas") === "Dinner", "a Vegas evening is a Dinner look");
+  assert(activityEvening("Sightseeing") === null && activityEvening(undefined) === null, "other activities have no evening look of their own");
+  const items = [...wardrobe(), mk("Outerwear", "Blazers", "Crepe Blazer"), mk("Outerwear", "Jackets", "Leather Jacket")];
+  const blazer = items.find(it => it.name === "Crepe Blazer");
+  const { dailyOutfits } = buildDailyOutfits(items, Array(4).fill(62), {
+    occasions: ["Travel Day", "Casual", "Casual", "Travel Day"],
+    activities: Array(4).fill("Vegas"),
+  });
+  assert(!dailyOutfits.flat().some(it => it.id === blazer.id), "she rarely brings a blazer: none packed unless pinned");
+  const pinned = buildDailyOutfits(items, Array(4).fill(62), {
+    occasions: ["Travel Day", "Casual", "Casual", "Travel Day"],
+    activities: Array(4).fill("Vegas"),
+    mustIncludeIds: new Set([blazer.id]),
+  });
+  assert(pinned.packingList.some(it => it.id === blazer.id), "a pinned blazer still comes");
+  // Evening looks build in the day looks' capsule and keep heels.
+  const priorUse = {};
+  for (const day of dailyOutfits) for (const it of day) priorUse[it.id] = (priorUse[it.id] || 0) + 1;
+  const evening = buildDailyOutfits(items, Array(4).fill(62), {
+    occasions: ["Travel Day", "Dinner", "Dinner", "Travel Day"],
+    activities: Array(4).fill("Vegas"),
+    priorUse,
+    tripDayCount: 4,
+    dayItems: [[], items, items, []],
+  });
+  assert(!evening.dailyOutfits[0].length && !evening.dailyOutfits[3].length, "a travel day gets no evening look");
+  assert(evening.dailyOutfits[1].length && evening.dailyOutfits[2].length, "every day between gets one");
+  const eveShoes = evening.dailyOutfits.flat().filter(it => it.category === "Shoes");
+  assert(eveShoes.some(it => !/Sneaker|Sandal/i.test(it.subcategory)), "the evening keeps a dressier shoe");
+  // The occasion plan: Vegas days stay Casual by day even for a relaxed
+  // destination closet — the evenings already carry the Dinner.
+  const plan = tripDayOccasions({ dayCount: 6, startDate: "2026-12-05", relaxed: true, activity: "Vegas" });
+  assert(plan.slice(1, 5).every(o => o === "Casual"), `Vegas days stay Casual by day: ${plan.join(",")}`);
+  assert(tripDayOccasions({ dayCount: 6, startDate: "2026-12-05", relaxed: true }).includes("Dinner"), "without Vegas the relaxed rhythm still lays dinner nights");
 }
 
 // ── 5. Single-day rebuilds stay inside the trip's capsule ────────────────────
