@@ -5,7 +5,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, fetchAllPlans, fetchOutfitLogLayouts, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
-import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor } from "./tripPacker.js";
+import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor, activityEvening } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { startOfMonth, endOfMonth, addMonths, addDays, monthGridDays } from "./monthGrid.js";
@@ -1502,7 +1502,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
       // The first and last day are Travel Days (owner, 2026-09-22). Between
       // them: Casual, and for a relaxed destination (her Arizona closet) a
       // few Dinner nights spread through the trip — more of them in December.
-      const occasions = tripDayOccasions({ dayCount, startDate: start, relaxed: destRelaxed });
+      const occasions = tripDayOccasions({ dayCount, startDate: start, relaxed: destRelaxed, activity });
       const dayIsos = Array.from({ length: dayCount }, (_, i) => addDaysIso(start, i));
       const highs = dayIsos.map(iso => perDayHigh(iso));
       // Per-day activity defaults to the trip-level activity for every day.
@@ -1524,6 +1524,33 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
         mustIncludeIds,
         dayItems,
       });
+      // An activity whose evenings are a look of their own (Vegas: a show or
+      // a nice dinner every night) builds a second, evening look for every
+      // day between the travel days — in the same capsule as the day looks
+      // (priorUse carries them), so the evening shoe and bag repeat across
+      // the trip the way the packer repeats everything else. A travel day
+      // draws from nothing here and so gets no evening look.
+      const eveningOutfits = Array.from({ length: dayCount }, () => null);
+      const eveningOcc = activities.map((act, i) =>
+        i === 0 || i === dayCount - 1 ? null : activityEvening(act));
+      if (eveningOcc.some(Boolean)) {
+        const priorUse = {};
+        for (const day of dailyOutfits) for (const it of day || []) priorUse[it.id] = (priorUse[it.id] || 0) + 1;
+        const eveningItems = dayIsos.map((_, i) => eveningOcc[i] ? poolForTripDay({
+          pool: tripPool, wardrobe: source, homeClosetId, destClosetId: destClosetId || null,
+          pins: mustIncludeIds, occasion: eveningOcc[i], dayIdx: i, dayCount, mode: "pack",
+        }) : []);
+        const evening = buildDailyOutfits(tripPool, highs, {
+          occasions: eveningOcc.map((o, i) => o || occasions[i]),
+          activity,
+          activities,
+          preferItemIds,
+          priorUse,
+          tripDayCount: dayCount,
+          dayItems: eveningItems,
+        });
+        evening.dailyOutfits.forEach((items, i) => { if (eveningOcc[i] && items?.length) eveningOutfits[i] = items; });
+      }
       const totalItems = dailyOutfits.reduce((n, d) => n + (d?.length || 0), 0);
       if (totalItems === 0) {
         setPreviewError(`No outfits could be built — the trip pool has ${tripPool.length} items but none match the forecast for these days. Try a different climate or activity, or add more weather-appropriate pieces.`);
@@ -1544,6 +1571,9 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
         const suit = poolSuits?.[i];
         if (suit?.length) {
           looks.push({ id: newOutfitId(), label: "Pool", occasion: "Casual", items: suit });
+        }
+        if (eveningOutfits[i]) {
+          looks.push({ id: newOutfitId(), label: DAYPART_EVENING, occasion: eveningOcc[i], items: eveningOutfits[i] });
         }
         return looks;
       }));
@@ -1941,7 +1971,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
             : <>Climate override: every day packs for {weather}, ignoring the forecast.</>}
         </div>
         <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 2, fontStyle: "italic", lineHeight: 1.5 }}>
-          Beach, Resort &amp; Family Visit pack for the pool · Theme Park &amp; Active skip heels &amp; delicate fabrics. Per-day overrides below.
+          Beach, Resort &amp; Family Visit pack for the pool · Theme Park &amp; Active skip heels &amp; delicate fabrics · Vegas packs a work-from-the-room day and a show-or-dinner evening, no blazer unless you pin one. Per-day overrides below.
         </div>
 
         {/* Climate brief — only shown once a destination + brief exists. */}
