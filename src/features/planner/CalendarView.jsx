@@ -20,6 +20,7 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import RouteFallback from "../../components/RouteFallback.jsx";
 import { sb } from "../../lib/supabase.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
+import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { restoreScroll } from "../../utils/restoreScroll.js";
@@ -1255,6 +1256,16 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
   // occasion = which look within the day. Edits land here and never touch
   // the database until Save trip.
   const [dayLooks, setDayLooks] = useState(null); // Array<Array<OutfitDraft>>
+  // Atelier's pass over the whole trip (tripStylist.js). Preview shows the
+  // packer's draft at once and starts this in the background; when it lands,
+  // every day she has not touched takes Atelier's look. `previewIdRef` names
+  // the preview a run belongs to, so a run for an earlier preview (she changed
+  // the dates, or previewed again) never paints over this one.
+  const styleRun = useRun(RUN_KEYS.tripStyle);
+  const previewIdRef = useRef(null);
+  const touchedDaysRef = useRef(new Set());
+  const [dayNotes, setDayNotes] = useState(null);   // string[] | null — Atelier's line per day
+  const [tripStory, setTripStory] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   // { dayIdx, outfitIdx, item } when picking a replacement
@@ -1393,7 +1404,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
 
   // If user re-runs Preview the working copy is rebuilt — but vibe/weather
   // edits made in the preview don't auto-clear it.
-  const invalidatePreview = () => { setDayLooks(null); };
+  const invalidatePreview = () => { setDayLooks(null); setDayNotes(null); setTripStory(""); previewIdRef.current = null; };
 
   // Pick the effective weather bucket: explicit override > AI brief > seasonal
   function effectiveWeather() {
@@ -1533,13 +1544,13 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
       const eveningOutfits = Array.from({ length: dayCount }, () => null);
       const eveningOcc = activities.map((act, i) =>
         i === 0 || i === dayCount - 1 ? null : activityEvening(act));
+      const eveningItems = dayIsos.map((_, i) => eveningOcc[i] ? poolForTripDay({
+        pool: tripPool, wardrobe: source, homeClosetId, destClosetId: destClosetId || null,
+        pins: mustIncludeIds, occasion: eveningOcc[i], dayIdx: i, dayCount, mode: "pack",
+      }) : []);
       if (eveningOcc.some(Boolean)) {
         const priorUse = {};
         for (const day of dailyOutfits) for (const it of day || []) priorUse[it.id] = (priorUse[it.id] || 0) + 1;
-        const eveningItems = dayIsos.map((_, i) => eveningOcc[i] ? poolForTripDay({
-          pool: tripPool, wardrobe: source, homeClosetId, destClosetId: destClosetId || null,
-          pins: mustIncludeIds, occasion: eveningOcc[i], dayIdx: i, dayCount, mode: "pack",
-        }) : []);
         const evening = buildDailyOutfits(tripPool, highs, {
           occasions: eveningOcc.map((o, i) => o || occasions[i]),
           activity,
@@ -1578,6 +1589,39 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
         return looks;
       }));
       setDayActivities(activities);
+      setDayNotes(null);
+      setTripStory("");
+      touchedDaysRef.current = new Set();
+      // The draft is on screen; now Atelier styles the trip as one capsule.
+      if (apiKey) {
+        const previewId = newOutfitId();
+        previewIdRef.current = previewId;
+        const days = dayIsos.map((iso, i) => ({
+          label: new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }),
+          occasion: occasions[i],
+          activity: activities[i],
+          weather: perDayBucket(iso),
+          pool: dayItems[i],
+          evening: eveningOcc[i],
+          eveningPool: eveningItems[i],
+          travel: occasions[i] === "Travel Day",
+        }));
+        const tripBrief = brief;
+        startRun(RUN_KEYS.tripStyle, async () => {
+          const { styleTrip } = await import("./tripStylist.js");
+          const styled = await styleTrip({
+            days, destination: destination.trim(), brief: tripBrief,
+            prefer: preferItemIds, pins: mustIncludeIds.size ? mustIncludeIds : null, apiKey,
+          });
+          // Ids only: the run result persists per device, and the preview
+          // resolves them against its own pool.
+          return {
+            previewId,
+            story: styled.story,
+            days: styled.days.map(d => ({ look: d.look?.map(it => it.id) || null, evening: d.evening?.map(it => it.id) || null, note: d.note })),
+          };
+        });
+      }
     } catch (e) {
       console.error("[Trip Preview] failed:", e);
       setPreviewError(`Couldn't build the preview: ${e.message || "unknown error"}`);
@@ -1586,11 +1630,49 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
     }
   }
 
+  // Atelier's trip lands: every day she has not touched takes its look. A
+  // packer look that seats a pin Atelier left out stays (a pin is promised a
+  // place), and so does a pool suit — Atelier styles the day and evening.
+  useEffect(() => {
+    const r = styleRun.result;
+    if (styleRun.status !== "done" || !r || !dayLooks || r.previewId !== previewIdRef.current) return;
+    previewIdRef.current = null;   // applied once
+    const byId = new Map(tripPool.map(it => [it.id, it]));
+    const resolve = ids => (ids || []).map(id => byId.get(id)).filter(Boolean);
+    const placed = new Set(r.days.flatMap(d => [...(d.look || []), ...(d.evening || [])]));
+    const keepsPin = look => (look?.items || []).some(it => mustIncludeIds.has(it.id) && !placed.has(it.id));
+    setDayLooks(prev => (prev || []).map((looks, i) => {
+      const styled = r.days[i];
+      if (!styled || touchedDaysRef.current.has(i)) return looks;
+      const next = looks.map(o => {
+        const evening = o.label === DAYPART_EVENING;
+        const isPool = o.label === "Pool";
+        const ids = evening ? styled.evening : isPool ? null : styled.look;
+        const items = resolve(ids);
+        if (!ids || items.length !== ids.length || keepsPin(o)) return o;
+        return { ...o, items };
+      });
+      // The packer may have found no evening look the pool could dress; Atelier's stands.
+      const eveningOcc = i > 0 && i < prev.length - 1 ? activityEvening(dayActivities?.[i] || activity) : null;
+      if (eveningOcc && styled.evening?.length && !next.some(o => o.label === DAYPART_EVENING)) {
+        const items = resolve(styled.evening);
+        if (items.length === styled.evening.length) next.push({ id: newOutfitId(), label: DAYPART_EVENING, occasion: eveningOcc, items });
+      }
+      return next;
+    }));
+    setDayNotes(r.days.map((d, i) => touchedDaysRef.current.has(i) ? "" : d.note || ""));
+    setTripStory(r.story || "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styleRun.status, styleRun.result]);
+  const styling = !!previewIdRef.current && styleRun.status === "running";
+  const styleFailed = !!previewIdRef.current && styleRun.status === "error";
+
   // ── Per-outfit mutations ────────────────────────────────────────────────
   // All edits go through a single mutateOutfit helper so the day-array
   // immutability is in one place.
   function mutateDay(dayIdx, fn) {
     if (!dayLooks) return;
+    touchedDaysRef.current.add(dayIdx);
     const next = dayLooks.slice();
     next[dayIdx] = fn(next[dayIdx] || []);
     setDayLooks(next);
@@ -1634,6 +1716,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
     next[dayIdx] = act;
     setDayActivities(next);
     if (!dayLooks) return;
+    touchedDaysRef.current.add(dayIdx);
     // Reshuffle every outfit on the day so the new activity filter applies.
     // All-swim "Pool" looks are left as-is — the regular composer can never
     // produce swim, so rebuilding one here would silently destroy the suit.
@@ -1931,7 +2014,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
           </div>
           {pinnedItems.length > 0 ? (
             <>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 0 2px", scrollbarWidth: "none" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 0 2px" }}>
                 {pinnedItems.map(it => (
                   <button key={it.id} title={`Remove ${it.name}`}
                     onClick={() => {
@@ -2023,6 +2106,16 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
               {uncoveredDayCount > 0 && ` · ${uncoveredDayCount} day${uncoveredDayCount === 1 ? "" : "s"} may need more`}
             </div>
 
+            {(styling || styleFailed || tripStory) && (
+              <div style={{ marginBottom: 10, padding: "8px 10px", border: `1px solid ${PALETTE.line}`, borderRadius: 6, background: "#fff", fontSize: 11, color: PALETTE.soft, lineHeight: 1.5 }}>
+                {styling
+                  ? <><span style={{ marginRight: 6, animation: "spin 1s linear infinite", display: "inline-block" }}>◌</span>Atelier is styling the trip as one capsule — these are quick drafts, and each day you haven't touched takes Atelier's look when it lands.</>
+                  : styleFailed
+                    ? <>Atelier couldn't style the trip this time ({styleRun.error}) — these are the quick drafts. Preview again to retry.</>
+                    : <>✦ <em>{tripStory}</em></>}
+              </div>
+            )}
+
             {/* Per-day editable preview. Each day card holds a stack of outfit
                 blocks so the user can have a daytime look + a dinner look on
                 the same day. */}
@@ -2066,6 +2159,12 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
                         {TRIP_ACTIVITIES.map(a => <option key={a}>{a}</option>)}
                       </select>
                     </div>
+
+                    {dayNotes?.[dayIdx] && (
+                      <div style={{ fontSize: 11, color: PALETTE.soft, fontStyle: "italic", lineHeight: 1.5, margin: "-2px 0 8px" }}>
+                        {dayNotes[dayIdx]}
+                      </div>
+                    )}
 
                     {/* Outfit stack — each outfit gets its own block. */}
                     {looks.map((outfit, outfitIdx) => {

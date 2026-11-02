@@ -170,6 +170,9 @@ await context.addInitScript(([authKey, closetKey, nyc, exp]) => {
     user: { id: "00000000-0000-4000-8000-000000000000", email: "fixture@example.com", aud: "authenticated", role: "authenticated" },
   }));
   window.localStorage.setItem(closetKey, JSON.stringify(nyc));
+  // A key, so the trip preview's Atelier pass runs (answered below by the
+  // style_trip route); every other Anthropic call is still aborted.
+  window.localStorage.setItem("atelier:api-key", "sk-ant-fixture");
 }, ["atelier:auth", "atelier:active-closet:v1", NYC_CLOSET, YEAR_2099]);
 
 const page = await context.newPage();
@@ -251,7 +254,31 @@ await page.route("**/storage/v1/**", route => route.fulfill({ status: 200, body:
 const CUTOUT = cutoutPng();
 await page.route("**/storage/v1/object/public/wardrobe-images/**", route =>
   route.fulfill({ status: 200, body: CUTOUT, headers: { "content-type": "image/png", "cache-control": "public, max-age=31536000", "access-control-allow-origin": "*" } }));
-await page.route("**/api.anthropic.com/**", route => route.abort());
+// The whole-trip stylist (planner/tripStylist.js) is answered from its own
+// prompt: per day, the first top, bottom and shoe the day's lines allow —
+// enough for the walk to see Atelier's looks replace the packer's draft. Every
+// other Anthropic call is aborted, as the walk has always done.
+const styleTripCalls = [];
+await page.route("**/api.anthropic.com/**", route => {
+  let body = null;
+  try { body = JSON.parse(route.request().postData() || "null"); } catch { /* not JSON */ }
+  if (body?.tools?.[0]?.name !== "style_trip") return route.abort();
+  const prompt = String(body.messages?.[0]?.content?.[0]?.text ?? body.messages?.[0]?.content ?? "");
+  const lines = prompt.split("\n").filter(l => /^P\d{3} \| /.test(l));
+  const dayCount = (prompt.match(/^D\d+ /gm) || []).length;
+  const pickFor = (tag, cats) => cats.map(cat => lines.find(l => l.includes(`| ${cat}`) && (!/\| only: /.test(l) || new RegExp(`only: [^|]*\\b${tag}\\b`).test(l))))
+    .filter(Boolean).map(l => l.slice(0, 4));
+  const days = Array.from({ length: dayCount }, (_, i) => ({
+    day: i + 1, look: pickFor(`D${i + 1}`, ["Tops", "Bottoms", "Shoes"]), note: `Walk note for day ${i + 1}.`,
+  }));
+  const nameOf = sid => (lines.find(l => l.startsWith(sid)) || "").split(" | ")[2] || "";
+  styleTripCalls.push({ dayCount, lines: lines.length, names: days.map(d => d.look.map(nameOf)) });
+  return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+    id: "msg_walk", type: "message", role: "assistant", model: body.model, stop_reason: "tool_use",
+    content: [{ type: "tool_use", id: "tu_walk", name: "style_trip", input: { story: "Walk story: navy, cream and camel.", days } }],
+    usage: { input_tokens: 1, output_tokens: 1 },
+  }) });
+});
 await page.route("**/api.open-meteo.com/**", route =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ daily: { time: [], temperature_2m_max: [] } }) }));
 // The trip sheet geocodes its destination before it forecasts; answer with one
@@ -914,12 +941,54 @@ await check("Planner → Plan a trip sheet opens", async () => {
   const text = await page.evaluate(() => document.body.innerText);
   if (!/PLAN A TRIP/.test(text)) throw new Error("the Plan a trip sheet did not open");
 });
+// Owner, 2026-11-02: "It's making me scroll left and right instead of up and
+// down when choosing pieces I know I want to bring, and all the filters are
+// gone." The Bringing-for-sure picker must scroll one way — down — with its
+// filters on screen, at phone width.
+await check("Plan a trip → + Pick pieces scrolls down only, with its filters showing", async () => {
+  await clickText("button", "+ Pick pieces");
+  await page.waitForTimeout(600);
+  const m = await page.evaluate(() => {
+    const head = [...document.querySelectorAll("div")].find(d => d.textContent.trim() === "BRINGING FOR SURE" && d.children.length === 0);
+    let sheet = head; while (sheet && getComputedStyle(sheet).overflowY !== "auto") sheet = sheet.parentElement;
+    if (!sheet) return null;
+    const chips = [...sheet.querySelectorAll("button")].filter(b => /^(All|Tops|Shoes|Dresses|Bottoms)$/.test(b.textContent.trim()));
+    const vw = window.innerWidth;
+    return {
+      sheetW: sheet.clientWidth, sheetScrollW: sheet.scrollWidth, docScrollW: document.documentElement.scrollWidth, vw,
+      chips: chips.length, chipsOnScreen: chips.filter(b => { const r = b.getBoundingClientRect(); return r.right <= vw && r.left >= 0 && r.width > 0; }).length,
+      search: !!sheet.querySelector('input[placeholder^="Search"]'),
+    };
+  });
+  if (!m) throw new Error("the Bringing-for-sure sheet did not open");
+  if (m.sheetScrollW > m.sheetW + 1) throw new Error(`the picker scrolls sideways (content ${m.sheetScrollW}px in a ${m.sheetW}px sheet)`);
+  if (m.docScrollW > m.vw + 1) throw new Error(`the page scrolls sideways (${m.docScrollW}px on a ${m.vw}px screen)`);
+  if (!m.search) throw new Error("the picker lost its search");
+  if (m.chips < 2 || m.chipsOnScreen < m.chips) throw new Error(`the category filters are missing or off screen (${m.chipsOnScreen}/${m.chips} visible)`);
+  // Scrolled to the bottom of the grid, search and filters are still there.
+  const stuck = await page.evaluate(() => {
+    const input = document.querySelector('input[placeholder="Search your closet…"]');
+    let sheet = input; while (sheet && getComputedStyle(sheet).overflowY !== "auto") sheet = sheet.parentElement;
+    sheet.scrollTop = sheet.scrollHeight;
+    const s = sheet.getBoundingClientRect(), r = input.getBoundingClientRect();
+    return { scrolled: sheet.scrollTop, inside: r.top >= s.top - 1 && r.bottom <= s.bottom };
+  });
+  if (stuck.scrolled > 0 && !stuck.inside) throw new Error("search and filters scrolled away with the grid");
+  await clickText("button", "Done");
+  await page.waitForTimeout(300);
+});
 await check("Plan a trip → Preview looks builds every day", async () => {
   await page.fill('input[placeholder^="e.g. Disneyland"]', "Paris");
   await page.waitForTimeout(600);
   await clickText("button", "Preview looks");
-  await page.waitForTimeout(2500);
-  const text = await page.evaluate(() => document.body.innerText);
+  // With a key, Preview asks for the destination brief first; the walk aborts
+  // that call and the client's retry backoff runs before the draft builds.
+  let text = "";
+  for (let i = 0; i < 60; i++) {
+    await page.waitForTimeout(500);
+    text = await page.evaluate(() => document.body.innerText);
+    if (/ITEMS TO PACK|Couldn't build the preview|No outfits could be built/.test(text)) break;
+  }
   const err = text.match(/(Couldn't build the preview[^\n]*|No outfits could be built[^\n]*)/);
   if (err) throw new Error(`the preview reported an error: ${err[1]}`);
   if (!/ITEMS TO PACK/.test(text)) throw new Error("no day cards rendered after Preview looks");
@@ -944,6 +1013,29 @@ await check("Plan a trip → Preview looks builds every day", async () => {
   if (!tiles.length) throw new Error("the day cards hold no piece tiles");
   const blank = tiles.filter(t => !t.painted);
   if (blank.length) throw new Error(`${blank.length} of ${tiles.length} tiles never painted their photo (${blank.slice(0, 3).map(t => t.name).join(", ")})`);
+});
+// Owner, 2026-11-02: "It also selected really ugly outfits! … How can we make
+// this smarter?" Preview shows the packer's draft, then Atelier styles the
+// whole trip in one pass and its looks replace the draft on every untouched
+// day, with its colour story above the cards and a line on each day.
+await check("Plan a trip → Atelier's pass replaces the draft, with its story and a line per day", async () => {
+  let text = "";
+  for (let i = 0; i < 20; i++) {
+    text = await page.evaluate(() => document.body.innerText);
+    if (/Walk story/.test(text)) break;
+    await page.waitForTimeout(300);
+  }
+  if (!styleTripCalls.length) throw new Error("Preview never asked Atelier to style the trip");
+  if (styleTripCalls[0].lines < 3) throw new Error(`the trip prompt carried ${styleTripCalls[0].lines} inventory lines`);
+  if (!/Walk story: navy, cream and camel/.test(text)) throw new Error("Atelier's colour story never reached the preview");
+  if (!/Walk note for day 2/.test(text)) throw new Error("Atelier's line for a day never reached its card");
+  if (/couldn't style the trip/.test(text)) throw new Error("the preview reported the Atelier pass as failed");
+  // Day 2's look is now the pieces Atelier picked.
+  const want = styleTripCalls[0].names[1] || [];
+  if (want.length < 3) throw new Error("the walk's answer for day 2 was not a whole look");
+  const titles = await page.evaluate(() => [...document.querySelectorAll('button[title^="Swap "]')].map(b => b.title));
+  const missing = want.filter(n => !titles.some(t => t.includes(n)));
+  if (missing.length) throw new Error(`Atelier's day-2 pieces are not on the cards: ${missing.join(", ")}`);
 });
 await check("Plan a trip → a day switched to Vegas gains an Evening look", async () => {
   // The second day card's activity select (the trip-level one sits in a

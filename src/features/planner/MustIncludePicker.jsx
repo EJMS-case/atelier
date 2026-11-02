@@ -39,6 +39,7 @@ export default function MustIncludePicker({
 }) {
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState("All");
+  const [sub, setSub] = useState("");
 
   const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
 
@@ -56,10 +57,19 @@ export default function MustIncludePicker({
     return ["All", ...[...set].sort((a, b) => catRank(a) - catRank(b) || a.localeCompare(b))];
   }, [items]);
 
+  // The chosen category's subcategories, the second filter row the builder's
+  // picker has too (a 70-piece Tops shelf is a long scroll without it).
+  const subcategories = useMemo(() => {
+    if (cat === "All") return [];
+    const set = new Set((items || []).filter(it => it.category === cat).map(it => it.subcategory).filter(Boolean));
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [items, cat]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (items || [])
       .filter(it => cat === "All" || it.category === cat)
+      .filter(it => !sub || it.subcategory === sub)
       .filter(it => !q || `${it.name || ""} ${it.brand || ""} ${it.subcategory || ""} ${it.color || ""}`.toLowerCase().includes(q))
       .sort((a, b) =>
         // Pinned pieces float to the top so the current selection is always
@@ -68,7 +78,7 @@ export default function MustIncludePicker({
         catRank(a.category) - catRank(b.category) ||
         (a.name || "").localeCompare(b.name || ""));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, query, cat, selectedIds]);
+  }, [items, query, cat, sub, selectedIds]);
 
   const toggle = (id) => {
     const next = new Set(selected);
@@ -92,6 +102,10 @@ export default function MustIncludePicker({
           <button onClick={onClose} style={closeBtn}>×</button>
         </div>
 
+        {/* Search and filters stay on screen while the grid scrolls under them
+            (owner, 2026-11-02: "all the filters are gone" — they scrolled away
+            with the first few rows of a 300-piece closet). */}
+        <div style={stickyBar}>
         <input
           type="text"
           value={query}
@@ -105,10 +119,21 @@ export default function MustIncludePicker({
             meant swiping a row you couldn't tell was scrollable. */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 0 10px" }}>
           {categories.map(c => (
-            <button key={c} onClick={() => setCat(c)} style={{ ...chip, ...(cat === c ? chipOn : null) }}>
+            <button key={c} onClick={() => { setCat(c); setSub(""); }} style={{ ...chip, ...(cat === c ? chipOn : null) }}>
               {c}
             </button>
           ))}
+        </div>
+        {subcategories.length > 1 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "0 0 10px" }}>
+            {subcategories.map(sc => (
+              <button key={sc} onClick={() => setSub(sub === sc ? "" : sc)}
+                style={{ ...chip, ...subChip, ...(sub === sc ? chipOn : null) }}>
+                {sc}
+              </button>
+            ))}
+          </div>
+        )}
         </div>
 
         {selected.size > 0 && (
@@ -119,10 +144,14 @@ export default function MustIncludePicker({
 
         {visible.length === 0 ? (
           <div style={{ padding: 28, textAlign: "center", color: PALETTE.muted, fontSize: 12 }}>
-            Nothing matches “{query}”.
+            {query.trim() ? <>Nothing matches “{query}”.</> : "Nothing here."}
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: 4 }}>
+          // minmax(0, 1fr), not 1fr: a 1fr track never shrinks below its
+          // content, and a card name that does not wrap made each column as
+          // wide as the longest name — the grid ran past the sheet and the
+          // picker scrolled sideways (owner, 2026-11-02).
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 4 }}>
             {visible.map(it => {
               const on = selected.has(it.id);
               return (
@@ -166,7 +195,7 @@ const backdrop = {
 };
 const sheet = {
   background: PALETTE.bg, width: "100%", maxWidth: 520, maxHeight: "90vh",
-  overflowY: "auto", borderRadius: "14px 14px 0 0", padding: 20,
+  overflowY: "auto", overflowX: "hidden", borderRadius: "14px 14px 0 0", padding: 20,
   boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
 };
 const closeBtn = {
@@ -183,13 +212,19 @@ const chip = {
   border: `1px solid ${PALETTE.line}`, borderRadius: 999,
   fontSize: 11, color: PALETTE.soft, cursor: "pointer", whiteSpace: "nowrap",
 };
+const subChip = { padding: "3px 8px", fontSize: 10, borderStyle: "dashed" };
+// Pinned under the sheet's top padding (20) so nothing shows above it.
+const stickyBar = {
+  position: "sticky", top: -20, zIndex: 2, background: PALETTE.bg,
+  margin: "0 -20px", padding: "10px 20px 0",
+};
 const chipOn = { background: PALETTE.ink, color: PALETTE.bg, borderColor: PALETTE.ink };
 const clearBtn = {
   background: "none", border: "none", color: PALETTE.accent,
   fontSize: 11, cursor: "pointer", padding: "0 0 8px", textDecoration: "underline",
 };
 const card = {
-  padding: 6, background: "#fff", border: `1px solid ${PALETTE.line}`,
+  minWidth: 0, padding: 6, background: "#fff", border: `1px solid ${PALETTE.line}`,
   borderRadius: 6, cursor: "pointer", textAlign: "left", position: "relative",
 };
 const cardOn = { borderColor: PALETTE.ink, boxShadow: `0 0 0 1px ${PALETTE.ink}` };

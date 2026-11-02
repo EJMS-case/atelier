@@ -21,6 +21,7 @@ import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCov
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES, buildDailyOutfits, activityEvening } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
+import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { homeClosetFor, poolForTripDay, defaultTripDayOccasion, destinationClosetFor } from "./tripPools.js";
@@ -891,65 +892,89 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     }
   };
 
-  // Generate looks for every day that doesn't have one yet. Runs sequentially
-  // so each call sees the previous days' picks via a running plans snapshot —
-  // that's what gives us variety across the trip without a single megaprompt.
-  const [generatingAll, setGeneratingAll] = useState(false);
-  const handleGenerateAll = async () => {
+  // Generate looks for every day that doesn't have one yet: Atelier styles
+  // all of them in ONE pass as a capsule (tripStylist.js), with the days
+  // already planned as context, so the colours, shoes and bags hold together
+  // across the trip (owner, 2026-11-02: "really ugly outfits … None of which
+  // are suited for the trip"). A day that pass leaves unusable falls back to
+  // the single-day look, which sees the days before it. It is a background run
+  // (backgroundRun.js) and saves as it goes, so leaving the trip loses nothing.
+  const generateAllKey = `${RUN_KEYS.tripStyle}:${trip.id}`;
+  const generateAllRun = useRun(generateAllKey);
+  const generatingAll = generateAllRun.status === "running";
+  const handleGenerateAll = () => {
     if (!apiKey) { setError("Add your Anthropic API key in Settings first."); return; }
     const empty = days.filter(iso => outfitsOf(plans[iso]).length === 0);
     if (empty.length === 0) return;
-    setGeneratingAll(true);
     setError("");
-    let running = { ...plans };
-    for (const iso of empty) {
-      setGeneratingDay(iso);
-      try {
-        const occasion  = occasionFor(iso);
-        const weather   = weatherForDay(iso);
-        const priorDays = buildPriorDays(iso, running);
-        const activity  = dayActivity[iso] || trip.activity || "Sightseeing";
-        const look = await generateTripDayLook(poolForDay(iso, occasion), occasion, weather, trip.destination, apiKey, {
-          priorDays, brief, activity, preferItemIds,
-          // `running` grows as days are generated, so each day is told about
-          // only the pins the earlier days didn't already use.
-          mustIncludeIds: unplacedPins(running),
-        });
-        if (!look) continue;
-        const outfits = [{ id: newOutfitId(), label: "", occasion, items: look.items }];
-        // An activity with an evening look of its own (Vegas): a second look
-        // for the evening on every day between the travel days, the way the
-        // Plan a trip preview builds it. The day look is a prior day to it.
-        const evening = activityEvening(activity);
-        const dayIdx = days.indexOf(iso);
-        if (evening && dayIdx > 0 && dayIdx < days.length - 1) {
-          const eve = await generateTripDayLook(poolForDay(iso, evening), evening, weather, trip.destination, apiKey, {
-            priorDays: [...priorDays, { occasion, weather, itemIds: look.items.map(it => it.id) }],
-            brief, activity, preferItemIds,
-            mustIncludeIds: unplacedPins(running),
-          });
-          if (eve) outfits.push({ id: newOutfitId(), label: DAYPART_EVENING, occasion: evening, items: eve.items });
-        }
+    const start = { ...plans };
+    startRun(generateAllKey, async () => {
+      let running = start;
+      const save = async (iso, outfits, weather) => {
         const payload = buildPlanPayload({
-          date: iso,
-          outfits,
-          source: "trip",
-          notes: trip.destination || null,
-          weather,
-          activity: dayActivity[iso] || null,
-          day_label: dayLabel[iso] || null,
+          date: iso, outfits, source: "trip", notes: trip.destination || null, weather,
+          activity: dayActivity[iso] || null, day_label: dayLabel[iso] || null,
         });
         const saved = await savePlan(payload);
-        const newPlan = { ...(Array.isArray(saved) ? saved[0] : saved || {}), ...payload };
-        running = { ...running, [iso]: newPlan };
+        running = { ...running, [iso]: { ...(Array.isArray(saved) ? saved[0] : saved || {}), ...payload } };
         setPlans(running);
+      };
+      const spec = empty.map(iso => {
+        const dayIdx = days.indexOf(iso);
+        const activity = dayActivity[iso] || trip.activity || "Sightseeing";
+        const occasion = occasionFor(iso);
+        const evening = dayIdx > 0 && dayIdx < days.length - 1 ? activityEvening(activity) : null;
+        return {
+          iso, label: new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }),
+          occasion, activity, weather: weatherForDay(iso),
+          pool: poolForDay(iso, occasion), evening, eveningPool: evening ? poolForDay(iso, evening) : null,
+          travel: occasion === "Travel Day",
+        };
+      });
+      const byId = new Map(wardrobe.map(it => [it.id, it]));
+      const fixed = days.filter(iso => !empty.includes(iso)).flatMap(iso => outfitsOf(plans[iso]).map(o => ({
+        label: iso, occasion: o.occasion || occasionFor(iso),
+        names: (o.items || []).map(id => byId.get(id)?.name).filter(Boolean),
+      })));
+      let styled = null;
+      try {
+        const { styleTrip } = await import("./tripStylist.js");
+        const pins = unplacedPins(start);
+        styled = await styleTrip({ days: spec, fixed, destination: trip.destination, brief, prefer: preferItemIds, pins: pins.size ? pins : null, apiKey });
       } catch (e) {
-        setError(e.message || `Generation failed for ${iso}.`);
+        if (e?.status === 401 || e?.status === 429) throw e;
       }
-    }
-    setGeneratingDay(null);
-    setGeneratingAll(false);
+      let filled = 0;
+      for (let k = 0; k < spec.length; k++) {
+        const d = spec[k];
+        const s = styled?.days?.[k];
+        const outfits = [];
+        if (s?.look) outfits.push({ id: newOutfitId(), label: "", occasion: d.occasion, items: s.look.map(it => it.id) });
+        if (d.evening && s?.evening) outfits.push({ id: newOutfitId(), label: DAYPART_EVENING, occasion: d.evening, items: s.evening.map(it => it.id) });
+        // The single-day look for whatever the trip pass left unusable.
+        if (!s?.look) {
+          const look = await generateTripDayLook(d.pool, d.occasion, d.weather, trip.destination, apiKey, {
+            priorDays: buildPriorDays(d.iso, running), brief, activity: d.activity, preferItemIds, mustIncludeIds: unplacedPins(running),
+          });
+          if (look) outfits.unshift({ id: newOutfitId(), label: "", occasion: d.occasion, items: look.items });
+        }
+        if (d.evening && !s?.evening && outfits.length) {
+          const eve = await generateTripDayLook(d.eveningPool, d.evening, d.weather, trip.destination, apiKey, {
+            priorDays: [...buildPriorDays(d.iso, running), { occasion: d.occasion, weather: d.weather, itemIds: outfits[0].items }],
+            brief, activity: d.activity, preferItemIds, mustIncludeIds: unplacedPins(running),
+          });
+          if (eve) outfits.push({ id: newOutfitId(), label: DAYPART_EVENING, occasion: d.evening, items: eve.items });
+        }
+        if (!outfits.length) continue;
+        await save(d.iso, outfits, d.weather);
+        filled++;
+      }
+      return { filled, story: styled?.story || "" };
+    });
   };
+  useEffect(() => {
+    if (generateAllRun.status === "error") setError(generateAllRun.error || "Generation failed.");
+  }, [generateAllRun.status, generateAllRun.error]);
 
   const handleClearDay = async (iso) => {
     try {
@@ -1314,7 +1339,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
             </div>
             {pinnedItems.length > 0 ? (
               <>
-                <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 0 2px", scrollbarWidth: "none" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 0 2px" }}>
                   {pinnedItems.map(it => (
                     <div key={it.id} title={it.name}
                       style={{ position: "relative", flexShrink: 0, width: 46, height: 46, padding: 2, background: "#fff", border: `1px solid ${PALETTE.ink}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
