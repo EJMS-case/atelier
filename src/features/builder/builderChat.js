@@ -108,7 +108,8 @@ HOW TO WORK:
 - If LOOK FACTS lists anything that runs against how she wears things, say so in your FIRST reply, unprompted, before answering what she asked — she should never have to ask whether her look is right for the office. She has said it is not obvious enough; make it obvious.
 - Have a real conversation, not a form. Give the verdict and the "why" — proportion, colour, texture, register, the room she's dressing for — and then the move: what to swap, what to wear differently. A sharp question is allowed only when its answer genuinely changes your advice.
 - The one hard line: only suggest pieces from HER CLOSET below — name them specifically. Never invent items, never suggest shopping. If the perfect thing isn't there, say so and offer the closest thing she owns, and say what it costs the look.
-- Length follows the question: a quick question gets a quick, complete answer. Light markdown is welcome — **bold** the pieces you're recommending, use a short dash-list only when comparing 2–3 options — never headers, and never bullet-point a conversation that wants a sentence.
+- In the chat, say the conclusion, not the deliberation (owner, 2026-11-02: "It is explaining a lot about its thoughts that I don't need"). Lead with the verdict in a sentence, then the move and its one-line why. Don't walk her through options you weighed and rejected, don't argue against something she didn't raise, don't list what stays as it is, and don't give a score unless she asks or the score is the answer. Most replies are 60–120 words; go longer only when she asks for a comparison. Light markdown is welcome — **bold** the pieces you're recommending, a short dash-list only when she asked to compare options — never headers.
+- Talk about the canvas as it is NOW and the pieces you propose. A piece that has left the canvas since an earlier turn is out of the look: don't mention it, compare against it, or re-score the look it was in. Her newest message may say what she took off.
 ${personal.length ? `\n${personal.join("\n\n")}\n` : ""}
 HER CLOSET — everything she owns here (grouped by category; suggest swaps from anywhere in it). Lines may carry her curated formality as f1 (most casual) to f8 (most formal), a sleeve tag [L]/[S]/[3Q]/[N], a knit weight, and a "seen:" read of the garment's photo.
 
@@ -117,7 +118,7 @@ ${availableReference(available)}`;
 
 // Per-turn state — deliberately OUTSIDE the cached system block. Rebuilt on
 // every send so mid-conversation edits are always visible. Pure, for the test.
-export function currentLookBlock({ assembledItems = [], emptySlots = [], occasions = [], weathers = [], available = [], colorPairs = [], inspirations = [], origin = null } = {}) {
+export function currentLookBlock({ assembledItems = [], emptySlots = [], occasions = [], weathers = [], available = [], colorPairs = [], inspirations = [], origin = null, previousIds = null } = {}) {
   const occ = (occasions || []).filter(Boolean);
   const wx = (weathers || []).filter(Boolean);
   const brief = [occ.join(" + "), wx.join(" / ")].filter(Boolean).join(" · ");
@@ -131,6 +132,7 @@ export function currentLookBlock({ assembledItems = [], emptySlots = [], occasio
     `On the canvas now:`,
     assembledItems.map(it => describeItem(it)).join("\n") || "(nothing placed yet)",
     (emptySlots || []).length > 0 ? `Open slots: ${emptySlots.join(", ")}` : `Every slot is filled.`,
+    canvasChange(previousIds, assembledItems, available),
     occasionText ? `\n${occasionText}` : null,
     weatherText ? `\n${weatherText}` : null,
     inspoText ? `\n${inspoText}` : null,
@@ -139,6 +141,33 @@ export function currentLookBlock({ assembledItems = [], emptySlots = [], occasio
     // block Evaluate reads, so the chat and the score answer one intent.
     origin ? `\n${originBlock(origin, assembledItems)}` : null,
   ].filter(Boolean).join("\n");
+}
+
+// What changed on the canvas since the stylist's last reply, in names. The
+// history still carries the earlier replies, and without this the model kept
+// talking about pieces she had already taken off (owner, 2026-11-02: "It also
+// mentioned garments that are no longer being considered"). Pure, exported for
+// the test; null when there was no earlier reply or nothing changed.
+export function canvasChange(previousIds, assembledItems = [], available = []) {
+  if (!Array.isArray(previousIds)) return null;
+  const now = new Set((assembledItems || []).map(it => it?.id).filter(Boolean));
+  const before = new Set(previousIds.filter(Boolean));
+  const byId = new Map();
+  for (const it of [...(available || []), ...(assembledItems || [])]) if (it?.id) byId.set(it.id, it);
+  const name = id => {
+    const it = byId.get(id);
+    if (!it) return null;
+    const n = String(it.name || "").trim();
+    return it.color && !n.toLowerCase().includes(String(it.color).toLowerCase()) ? `${it.color} ${n}` : n;
+  };
+  const off = [...before].filter(id => !now.has(id)).map(name).filter(Boolean);
+  const on = [...now].filter(id => !before.has(id)).map(name).filter(Boolean);
+  if (!off.length && !on.length) return null;
+  return [
+    `Since your last reply:`,
+    off.length ? `she took off ${off.join(", ")} — out of the look; don't discuss them` : null,
+    on.length ? `she put on ${on.join(", ")}` : null,
+  ].filter(Boolean).join("; ") + ".";
 }
 
 /**
@@ -157,13 +186,13 @@ export function currentLookBlock({ assembledItems = [], emptySlots = [], occasio
  * @param {Function} params.onDelta        - (textSoFar) => void, called as tokens arrive
  * @returns {Promise<string>}              - final assistant reply text
  */
-export async function sendBuilderMessage({ messages, assembledItems, available, emptySlots, occasions = [], weathers = [], origin = null, apiKey, onDelta }) {
+export async function sendBuilderMessage({ messages, assembledItems, available, emptySlots, occasions = [], weathers = [], origin = null, previousIds = null, apiKey, onDelta }) {
   if (!apiKey) throw new Error("API key required.");
   if (!assembledItems?.length) throw new Error("Assemble at least one item first.");
 
   const { blocks: personal, pairs, inspirations } = await personalGrounding({ available });
   const system = composeSystemBlock({ personal, available });
-  const stateBlock = currentLookBlock({ assembledItems, emptySlots, occasions, weathers, available, colorPairs: pairs, inspirations, origin });
+  const stateBlock = currentLookBlock({ assembledItems, emptySlots, occasions, weathers, available, colorPairs: pairs, inspirations, origin, previousIds });
 
   // Fresh state rides the LAST user message; earlier messages stay raw so the
   // conversation history reads clean and the system block stays cacheable.

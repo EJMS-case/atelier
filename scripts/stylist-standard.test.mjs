@@ -776,3 +776,49 @@ test("one language: Evaluate and the chat read the look's origin as their own ea
   assert.equal(originBlock(null, [b]), "");
   assert.match(originBlock({ source: "chat", text: "A solid 8." }, [b]), /YOUR LAST READ OF THIS CANVAS IN THE CHAT/);
 });
+
+// ── Where the hem meets the boot (owner, 2026-11-02) ─────────────────────────
+test("a bootie under a skirt or dress is a note on how, never a violation; a knee boot is not flagged", async () => {
+  const { isAnkleBootItem } = await import("../src/utils/item-helpers.js");
+  const skirt = normalizeItem({ id: "h-skirt", name: "Pencil Skirt", category: "Skirts", subcategory: "Pencil", color: "Navy" });
+  const bootie = normalizeItem({ id: "h-boot", name: "Hendrix Ankle Boot", category: "Shoes", subcategory: "Ankle", color: "Espresso" });
+  const bareBoot = normalizeItem({ id: "h-boot2", name: "Ankle Boots", category: "Shoes", subcategory: "Boots", color: "Black" });
+  const knee = normalizeItem({ id: "h-knee", name: "Wally Foldover Boot", category: "Shoes", subcategory: "Knee-High", color: "Black" });
+  const tall = normalizeItem({ id: "h-tall", name: "Giano Fringe Tall Boots", category: "Shoes", subcategory: "Boots", color: "Brown" });
+  assert.ok(isAnkleBootItem(bootie) && isAnkleBootItem(bareBoot));
+  assert.ok(!isAnkleBootItem(knee) && !isAnkleBootItem(tall));
+
+  const r = readLook([blouse(), skirt, bootie], { occasions: ["Work"] });
+  assert.match(r.text, /An ankle boot \(.*Hendrix.*\) meets a hem/);
+  assert.match(r.text, /No tights on the canvas/);
+  assert.ok(!r.against.some(a => /ankle boot/i.test(a)), "the hem note is never a violation");
+  assert.doesNotMatch(readLook([blouse(), skirt, knee], { occasions: ["Work"] }).text, /meets a hem/);
+  assert.doesNotMatch(readLook([blouse(), trouser(), bootie], { occasions: ["Work"] }).text, /meets a hem/);
+});
+
+test("her proportion directive carries how a boot meets a hem", async () => {
+  const { summarizeSilhouette } = await import("../src/features/stylist/silhouette.js");
+  const out = JSON.stringify(summarizeSilhouette({ torsoLength: "long torso" }) ?? "");
+  assert.match(out, /knee boot the hem meets/);
+  assert.doesNotMatch(JSON.stringify(summarizeSilhouette({ torsoLength: "short torso" })), /bootie/);
+});
+
+// ── The chat says the conclusion, about the canvas as it is now ─────────────
+test("the chat is told to skip the deliberation and keep to the canvas now", () => {
+  const sys = composeSystemBlock({});
+  assert.match(sys, /say the conclusion, not the deliberation/);
+  assert.match(sys, /don't argue against something she didn't raise/);
+  assert.match(sys, /has left the canvas since an earlier turn is out of the look/);
+});
+
+test("the turn names what she took off since the last reply", async () => {
+  const { canvasChange } = await import("../src/features/builder/builderChat.js");
+  const b = blouse(), t = trouser(), p = pump(), k = pick("Tops", "Blouses", { color: "Black", name: "Brook Peplum Cardigan" });
+  const line = canvasChange([b.id, k.id, p.id], [b, t, p], [b, t, p, k]);
+  assert.match(line, /took off Black Brook Peplum Cardigan — out of the look/);
+  assert.match(line, /put on Burgundy Trousers/);
+  assert.doesNotMatch(line, /Burgundy Burgundy/);
+  assert.equal(canvasChange(null, [b]), null);
+  assert.equal(canvasChange([b.id], [b]), null);
+  assert.match(currentLookBlock({ assembledItems: [b, t, p], available: [k], previousIds: [b.id, k.id, p.id] }), /Since your last reply/);
+});

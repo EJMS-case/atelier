@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Builder chat says the conclusion; a bootie under a hem is a note on how — 2026-11-02
+
+### Why
+
+Owner: *"Review the notes from my latest chat in build mode. It is explaining a lot about its thoughts that I don't need and I think it wastes tokens. It also mentioned garments that are no longer being considered. Also … aren't I not supposed to wear booties with skirts or dresses? They keep showing up."*
+
+Her latest chat (2026-11-02, two turns) ran about 380 words per reply. It argued against options she never raised ("Over the burgundy crepe blazer…", "On the coat versus the blazer…", "the bodysuit would technically stand on its own…"), listed everything that stays, and scored two versions. Its second turn still discussed "the brown-and-black look we were patching" after she had rebuilt the canvas in navy. The prompt's only length guidance was "length follows the question", and nothing told the model which pieces had left the canvas.
+
+On booties: stylists don't ban them with skirts or dresses. What matters is how the hem meets the boot. The leg needs to run into the boot unbroken, through opaque tights in the boot's colour or a hem that meets the shaft. A knee boot under the hem does that on its own. For a long torso and shorter legs (her profile) or a petite frame, a bare or contrasting leg into a bootie cuts the leg at its narrowest point. No surface in the app knew any of this, so Style Me paired whatever passed the weather check. In her saved and planned looks, booties sit under a skirt only once (the Marrgo, in a saved look), so they are coming from generated results.
+
+### Changed
+
+- **Builder chat** (`builderChat.js`): replies say the conclusion, not the deliberation: verdict, move, one-line why. No rejected options, no arguing against what she didn't raise, no list of what stays, and no score unless asked. Most replies run 60–120 words. A piece that has left the canvas is out of the look. Each turn now carries **"Since your last reply: she took off … ; she put on …"** (`canvasChange`, from the canvas ids at the last reply, tracked in `SilhouetteBuilder`).
+- **Proportion directive** (`silhouette.js`): a petite or long-torso profile adds one line, "skirt or dress + boot: a knee boot the hem meets, or a bootie into tights of its colour; a bare leg into a bootie cuts the leg". It reaches Style Me (`lib/ai/stylist.js`) and every `personalGrounding()` surface. It rides after her own fit notes, so the line cap drops it before her words.
+- **LOOK FACTS** (`standard.js readLook`): an ankle boot (`isAnkleBootItem`, the one reader, in `item-helpers.js`) meeting a skirt or dress becomes a note on how. It names whether tights are on, or tells the stylist to offer the knee boot or tonal tights she owns. It is never a violation and never moves a score. The chat and Evaluate read it.
+
+### Downstream, four ways
+
+*Efficiency:* chat output should drop to roughly a third, and the canvas-change line is about 30 tokens on the uncached turn. The system block changes once, a single cache miss. *Effectiveness:* the boot preference reaches generation (Style Me's prompt) and both judges, as taste. There is no gate, so no pool can empty. *Speed:* shorter replies stream faster. *Education:* chat lessons now distil from replies about the live canvas, not stale pieces.
+
+### Tests
+
+`test:standard` +4 (bootie note, not a violation; knee boot and trousers unflagged; directive line; chat brevity + canvas-now lines; `canvasChange` names). `test:silhouette` updated so petite carries the hem line. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Every screen opens at its top — 2026-11-02
 
 ### Why
