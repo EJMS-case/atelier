@@ -780,7 +780,10 @@ test("one language: Evaluate and the chat read the look's origin as their own ea
 // ── Where the hem meets the boot (owner, 2026-11-02) ─────────────────────────
 test("a bootie under a skirt or dress is a note on how, never a violation; a knee boot is not flagged", async () => {
   const { isAnkleBootItem } = await import("../src/utils/item-helpers.js");
-  const skirt = normalizeItem({ id: "h-skirt", name: "Pencil Skirt", category: "Skirts", subcategory: "Pencil", color: "Navy" });
+  // Filed as she files them: a skirt under Bottoms, by its length.
+  const skirt = normalizeItem({ id: "h-skirt", name: "Uma Skirt", category: "Bottoms", subcategory: "Midi", color: "Brown" });
+  const dress = normalizeItem({ id: "h-dress", name: "Knit Dress", category: "Dresses", subcategory: "Midi", color: "Black" });
+  const shorts = normalizeItem({ id: "h-shorts", name: "Linen Shorts", category: "Bottoms", subcategory: "Shorts", color: "White" });
   const bootie = normalizeItem({ id: "h-boot", name: "Hendrix Ankle Boot", category: "Shoes", subcategory: "Ankle", color: "Espresso" });
   const bareBoot = normalizeItem({ id: "h-boot2", name: "Ankle Boots", category: "Shoes", subcategory: "Boots", color: "Black" });
   const knee = normalizeItem({ id: "h-knee", name: "Wally Foldover Boot", category: "Shoes", subcategory: "Knee-High", color: "Black" });
@@ -794,6 +797,8 @@ test("a bootie under a skirt or dress is a note on how, never a violation; a kne
   assert.ok(!r.against.some(a => /ankle boot/i.test(a)), "the hem note is never a violation");
   assert.doesNotMatch(readLook([blouse(), skirt, knee], { occasions: ["Work"] }).text, /meets a hem/);
   assert.doesNotMatch(readLook([blouse(), trouser(), bootie], { occasions: ["Work"] }).text, /meets a hem/);
+  assert.match(readLook([dress, bootie], { occasions: ["Dinner"] }).text, /meets a hem/);
+  assert.doesNotMatch(readLook([blouse(), shorts, bootie], { occasions: ["Casual"] }).text, /meets a hem/);
 });
 
 test("her proportion directive carries how a boot meets a hem", async () => {
@@ -821,4 +826,18 @@ test("the turn names what she took off since the last reply", async () => {
   assert.equal(canvasChange(null, [b]), null);
   assert.equal(canvasChange([b.id], [b]), null);
   assert.match(currentLookBlock({ assembledItems: [b, t, p], available: [k], previousIds: [b.id, k.id, p.id] }), /Since your last reply/);
+});
+
+test("every surface that BUILDS a look reads the one standard (source contract)", () => {
+  // Owner, 2026-10-20: "the evaluator doesn't speak the same language as the
+  // builder"; 2026-11-02, of the trip looks: "really ugly outfits". A builder
+  // with no rubric builds looks that only cover the day.
+  const builders = {
+    "src/prompts/styling-system-prompt.js": /STANDARD_LINES/,       // Style Me
+    "src/lib/ai/tripAdvisor.js": /STANDARD_LINES/,                  // a trip day's AI look
+    "src/features/planner/tripStylist.js": /STYLIST_STANDARD/,     // the whole trip
+  };
+  for (const [rel, re] of Object.entries(builders)) {
+    assert.match(readFileSync(join(ROOT, rel), "utf8"), re, `${rel} builds looks without the standard`);
+  }
 });

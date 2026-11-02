@@ -33,7 +33,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
    - Role classifiers: `getGarmentRole` (validator), `slotForItem` (item-helpers) and the collage's own reader still disagree at the edges, for example Occasionwear non-dresses. Unify on `slotForItem` with visual checks.
    - `reconcilePlanDay`: six fetch → rebuild → `savePlan` sites in App, CalendarView and TripDetailView repeat the same reconcile. One helper in `outfits.js`.
    - The hosiery force-include trap: "style me with my sheer tights", if paired with trousers, could empty a look. It needs a repro first, and must be fixed together with the force-include fix.
-6. **Backlog ideas, none started:** normalise the mixed L2/L3 subcategory labels; colour coherence across a trip capsule; About Me as chips plus a `prefs.direction` editor; "what changed" in the fingerprint text; shopping favourites.
+6. **Backlog ideas, none started:** normalise the mixed L2/L3 subcategory labels; About Me as chips plus a `prefs.direction` editor; "what changed" in the fingerprint text; shopping favourites.
 7. **Unverified:** eight pieces moved to Arizona took sixteen July NYC looks out of "Wearable now". Check whether any came home before calling it a problem.
 
 ## 3. Watch on your phone (confirms recent fixes, nothing to build)
@@ -45,6 +45,8 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 - **Work looks (#272):** single Work looks should mix trousers back in, and the chat should stop flagging hosiery on the Quince ponte skirt.
 - **Counts (#272):** the badge counts garments, not every piece. Home's line shows garments + finishing = pieces.
 - **Vegas trips (2026-11-01):** Planner › Plan a trip › Default activity: Vegas, closet "None — pack from NYC". Every middle day gets a Casual day look plus an "Evening" dinner look in a heel, no blazer unless pinned, evening shoes and bag repeating across the trip, Travel Days dressed from NYC, "already at destination" 0. On the saved trip, "Generate all empty days" also writes an Evening look per middle day.
+- **Trip looks styled by Atelier (2026-11-02):** Planner › Plan a trip › Preview looks shows quick drafts at once, then a banner "Atelier is styling the trip as one capsule". Within about a minute, each untouched day takes Atelier's look, the banner shows the trip's colour story, and each day gets a line on why it works. On a saved trip, "Generate all empty days" styles every empty day in the same single pass. If a day's look still reads wrong for the trip, screenshot it. The `style_trip:*` rows in `ai_errors` will say whether that day fell back to the draft.
+- **Bringing for sure (2026-11-02):** the picker scrolls only up and down. Search, categories and a subcategory row stay pinned at the top while you scroll.
 - **Casual and Dinner (2026-10-31):** no trousers, blazers or f5 pieces at Casual, and no f5 work pieces at Dinner, unless you name one. A piece you wear to both rooms keeps its seat when its line names the room (the f5 cardigan with "work or elevated casual" still shows at Casual).
 - **Add Items (#267):** the Formality select arrives pre-filled for clothing as a proposal. If its guesses run high or low, say so.
 

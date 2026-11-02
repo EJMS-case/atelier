@@ -505,3 +505,45 @@ export const VisionTool = {
     required: ["color", "color_secondary", "pattern", "fabric", "formality", "sleeve", "vibe", "confidence"],
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. styleTrip — the whole trip in one stylist's pass (features/planner/tripStylist.js)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Lenient on shape (a day number as a string, a missing evening or note), strict
+// on nothing the acceptor does not re-check: every id is resolved and gated by
+// acceptTripStyle, so the schema only has to hand it lists.
+export const TripStyleSchema = z.object({
+  story: z.string().default(""),
+  days: z.array(z.object({
+    day: z.coerce.number().int(),
+    look: z.array(z.string()).default([]),
+    evening: z.array(z.string()).nullable().optional(),
+    note: z.string().default(""),
+  })).default([]),
+});
+
+export const TripStyleTool = {
+  name: "style_trip",
+  description: "Return the trip's colour story and one entry per trip day: its look (and evening look, when the day has one) as P-ids from the inventory.",
+  input_schema: {
+    type: "object",
+    required: ["story", "days"],
+    properties: {
+      story: { type: "string", description: "The trip's colour story in one line, written to her." },
+      days: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["day", "look"],
+          properties: {
+            day: { type: "integer", description: "The day number (D1 = 1)." },
+            look: { type: "array", items: { type: "string", pattern: "^P[0-9]{3}$" }, description: "The day look's P-ids." },
+            evening: { type: "array", items: { type: "string", pattern: "^P[0-9]{3}$" }, description: "The evening look's P-ids — only on a day with an evening look." },
+            note: { type: "string", description: "One line, to her ('you'), on why the day works." },
+          },
+        },
+      },
+    },
+  },
+};

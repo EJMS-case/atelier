@@ -180,8 +180,12 @@ Conventions worth knowing:
   how "What the numbers say" read as wrong (2026-09-17).
 - **A look is built in three places, and a preference reaches all three:**
   Style Me's sampler (`closet-sampler.js`, also a calendar day), the trip
-  packer (`tripPacker.scoreForOccasion`), and the trip screen's AI day look
-  (`tripAdvisor.eligibleForTripDay`). `readsAsOffice` (`item-helpers`) is
+  packer (`tripPacker.scoreForOccasion`), and the trip's AI looks
+  (`tripAdvisor.eligibleForTripDay`, which gates both a single day's look and
+  the whole-trip pass in `features/planner/tripStylist.js`). The packer is
+  the instant draft and the fallback; Atelier's one-call trip pass (a colour
+  story, a capsule, every look to THE STANDARD) replaces it on every day she
+  hasn't touched (owner, 2026-11-02: "really ugly outfits"). `readsAsOffice` (`item-helpers`) is
   the pattern: one reader, applied in each (owner, 2026-11-01: "Are you
   thinking big picture?" after #278 reached only the sampler). A pin or a
   named piece wins in every one of them.

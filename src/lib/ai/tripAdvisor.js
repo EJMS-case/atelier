@@ -14,6 +14,7 @@ import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
 import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND, formalityOf, readsAsOffice } from "../../utils/item-helpers.js";
 import { isGarment } from "../../constants/taxonomy.js";
 import { personalGrounding, occasionBrief } from "../../features/stylist/standard.js";
+import { STANDARD_LINES } from "../../features/stylist/standardLines.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
 
@@ -154,6 +155,25 @@ export function eligibleForTripDay(items, occasion, weather, { allowSwim = false
 }
 const OFF_DUTY_FLOOR = 8;
 
+// Lifestyle context per trip activity (Theme Park = comfortable shoes + no
+// jeans, Beach = swim + cover-ups, Active = no silk or heels). Read by the
+// single-day look below and by the whole-trip stylist (features/planner/
+// tripStylist.js), so a day and a trip hear the same thing.
+export const ACTIVITY_NOTES = {
+  "Theme Park": "All-day walking and standing. PRIORITIZE sneakers / comfortable flats / sturdy sandals. NO heels, pumps, stilettos, mules, cocktail dresses, gowns, or silk gowns. NO jeans (too restrictive for ride lines and long days). Lean into breathable cotton, athletic-leaning silhouettes, and casual layered pieces. Bag should be a crossbody or backpack.",
+  "Beach": "Pool / beach / waterfront day. Swim, cover-ups, sundresses, sandals, and lightweight sun-protective layers are first-class. NO wool, cashmere, chunky knits, boots, or heels. Raffia / canvas bag.",
+  "Resort": "Pool + poolside dinner. Mix swim / cover-ups with elevated easy pieces (linen, silk, flowy fabrics). NO boots, NO stilettos.",
+  "Family Visit": "Staying at family's home — pool swims, remote-work days, casual dinners out, playing with young kids. Comfortable, washable, low-fuss pieces; swim + cover-ups welcome. NO stilettos, sequins, or fragile dry-clean-only pieces — a kitten heel or wedge is fine for dinner out.",
+  "Active": "Hiking, sport, gym, or city walking. Range of motion is mandatory. NO heels, pumps, stilettos, cocktail dresses, gowns, formal separates, silk, satin, lace, or sequin. Sneakers + athleisure + technical fabrics.",
+  "Vegas": "Las Vegas, her way: a show (Cirque du Soleil and the like) or a nice dinner most evenings, and a remote-work day in the hotel by day. The DAY look is Casual with a camera-ready top — a knit, a blouse, a clean tee under a cardigan — easy below; it is a work-from-the-room day, never an office look, and she rarely brings a blazer (use one only if she pinned it). The EVENING look is a Dinner look and Vegas runs DRESSIER than her usual dinner: a dress, a skirt, or an evening trouser with sheen or skin, always a heel (never a flat, loafer or sneaker), a small bag — her dressiest dinner pieces, not the easy ones. Pack light across the trip — the evening pieces are the point, the day pieces repeat.",
+  "City Walking": "Sightseeing in a city — walking 5-10 miles. Polished but practical. NO heels, NO stilettos. Jeans + blazers + comfortable boots/flats welcome.",
+  "Sightseeing": "Default — minimal lifestyle constraints. Build for the occasion + weather + destination.",
+};
+// Activities whose days pack swim and loungewear (the pool days).
+export function allowsSwim(activity) {
+  return activity === "Beach" || activity === "Resort" || activity === "Family Visit";
+}
+
 export async function generateTripDayLook(items, occasion, weather, destination, apiKey, opts = {}) {
   if (!apiKey || !items?.length) return null;
 
@@ -165,7 +185,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // "swim and cover-ups are first-class" but the AI never saw any swimwear
   // and would fall back to a knit maxi skirt.
   const activity = opts.activity || "Sightseeing";
-  const allowSwim = activity === "Beach" || activity === "Resort" || activity === "Family Visit";
+  const allowSwim = allowsSwim(activity);
 
   // Pinned pieces skip the weather + swim gates entirely. Same call the local
   // packer and Style Me's explicit-request override make: she named the piece,
@@ -245,19 +265,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
     destBlock = `\nDESTINATION:\n${bits.join(" ")}\n`;
   }
 
-  // ── Activity block: lifestyle context for the day (Theme Park = comfortable
-  // shoes + no jeans, Beach = swim + cover-ups, Active = no silk or heels).
-  // `activity` is declared above where it gates the swim/loungewear filter.
-  const ACTIVITY_NOTES = {
-    "Theme Park": "All-day walking and standing. PRIORITIZE sneakers / comfortable flats / sturdy sandals. NO heels, pumps, stilettos, mules, cocktail dresses, gowns, or silk gowns. NO jeans (too restrictive for ride lines and long days). Lean into breathable cotton, athletic-leaning silhouettes, and casual layered pieces. Bag should be a crossbody or backpack.",
-    "Beach": "Pool / beach / waterfront day. Swim, cover-ups, sundresses, sandals, and lightweight sun-protective layers are first-class. NO wool, cashmere, chunky knits, boots, or heels. Raffia / canvas bag.",
-    "Resort": "Pool + poolside dinner. Mix swim / cover-ups with elevated easy pieces (linen, silk, flowy fabrics). NO boots, NO stilettos.",
-    "Family Visit": "Staying at family's home — pool swims, remote-work days, casual dinners out, playing with young kids. Comfortable, washable, low-fuss pieces; swim + cover-ups welcome. NO stilettos, sequins, or fragile dry-clean-only pieces — a kitten heel or wedge is fine for dinner out.",
-    "Active": "Hiking, sport, gym, or city walking. Range of motion is mandatory. NO heels, pumps, stilettos, cocktail dresses, gowns, formal separates, silk, satin, lace, or sequin. Sneakers + athleisure + technical fabrics.",
-    "Vegas": "Las Vegas, her way: a show (Cirque du Soleil and the like) or a nice dinner most evenings, and a remote-work day in the hotel by day. The DAY look is Casual with a camera-ready top — a knit, a blouse, a clean tee under a cardigan — easy below; it is a work-from-the-room day, never an office look, and she rarely brings a blazer (use one only if she pinned it). The EVENING look is a Dinner look and Vegas runs DRESSIER than her usual dinner: a dress, a skirt, or an evening trouser with sheen or skin, always a heel (never a flat, loafer or sneaker), a small bag — her dressiest dinner pieces, not the easy ones. Pack light across the trip — the evening pieces are the point, the day pieces repeat.",
-    "City Walking": "Sightseeing in a city — walking 5-10 miles. Polished but practical. NO heels, NO stilettos. Jeans + blazers + comfortable boots/flats welcome.",
-    "Sightseeing": "Default — minimal lifestyle constraints. Build for the occasion + weather + destination.",
-  };
+  // ── Activity block: ACTIVITY_NOTES (module level, shared with the trip stylist).
   // Swim-friendly activities get one extra packing rule: a "swimsuit" must be
   // complete — a one-piece OR a matching top+bottom pair, never a lone
   // separate — and 1-2 suits cover the whole trip, reused across pool days.
@@ -348,7 +356,12 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // trip is still her business-professional office (this generator used to
   // send the bare word "Work" and nothing about how she dresses for it).
   const occasionText = occasionBrief([occasion], weather);
+  // The one rubric every look is built to (owner, 2026-10-20: "the evaluator
+  // doesn't speak the same language as the builder") — this generator was the
+  // last one with no standard at all, and her trip looks read that way.
   const prompt = `You are her personal stylist building ONE complete outfit for a trip day${destNote}.
+
+${STANDARD_LINES}
 
 OCCASION: ${occasion}
 ${occasionText ? `${occasionText}\n` : ""}WEATHER: ${weather} (around ${highF}°F)${heatNote}
@@ -356,7 +369,7 @@ ${destBlock}${activityBlock}${mustBlock}${preferBlock}${varietyBlock}${personalB
 WARDROBE (use ONLY these IDs — lines may carry her curated formality as f1 (most casual) to f8 (most formal); match the day's register. A line ending in "| AT DESTINATION" is already in her closet at the destination and costs nothing to pack — see PACKING PREFERENCE above. A line ending in "| MUST INCLUDE" is a piece she has already decided to bring — see the MUST-INCLUDE block above. ${NOTES_NEGATION_LEGEND}):
 ${inventory}
 
-Build exactly 1 polished, complete outfit appropriate for ${occasion} in ${weather} weather.
+Build exactly 1 polished, complete outfit appropriate for ${occasion} in ${weather} weather, to the standard above — a look with a hero, a colour story and a texture pair, not just pieces that cover the day.
 The look must include at minimum: a top or dress, bottoms (unless dress), and shoes.
 Add a bag where the occasion calls for one. A layer follows the OCCASION brief above first and the weather second — a Work day takes a knit or blazer over a short-sleeve or sleeveless top in every weather (the lightest one when it's hot); elsewhere add outerwear only when the weather wants it.
 

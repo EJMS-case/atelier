@@ -2,6 +2,32 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trip looks styled by Atelier as one capsule; the bringing-for-sure picker scrolls one way — 2026-11-02
+
+### Why
+
+Owner: *"the vacation outfit needs work. It's making me scroll left and right instead of up and down when choosing pieces I know I want to bring, and all the filters are gone. It also selected really ugly outfits! None of which are suited for the trip. How can we make this smarter?"*
+
+- **Sideways scroll:** the Bringing-for-sure grid was `repeat(3, 1fr)`. A `1fr` track never shrinks below its content, and a card name that doesn't wrap made each column as wide as its longest name. The walk measured 461px of grid in a 390px sheet with the fixture's short names; hers are longer. **Filters gone:** search and categories were not pinned, so they scrolled away with the first rows of a 300-piece closet. The pinned strips on both trip screens also scrolled sideways.
+- **Ugly looks:** Plan a trip's preview was the local packer alone, a scoring pass with no sense of taste. Her saved Vegas trip (Nov 13–16) has a "Take a Hike" tee with baggy jeans, a burgundy peasant blouse over the black half of a set with navy shoes, and the same trench and bucket bag every day. The trip screen's "Generate all" asked the AI one day at a time, so no call could plan a capsule. The single-day AI look was also the one look generator without THE STANDARD.
+
+### Changed
+
+- **`MustIncludePicker`:** `minmax(0, 1fr)` columns with `minWidth: 0` cards and `overflowX: hidden`. Search, categories and a new subcategory row sit in a sticky bar. The pinned strips (`CalendarView`, `TripDetailView`) wrap.
+- **`features/planner/tripStylist.js` (new):** the whole trip in one call. The prompt carries the persona, STYLIST_STANDARD, every room's brief, the activity notes (`ACTIVITY_NOTES`, now exported from `tripAdvisor.js` and shared), the destination brief, `personalGrounding()` and an inventory with short P-ids. Each line says which days it may join (`only: D2,D2pm`), so travel days, forecasts and Vegas evenings stay honest. The method asks for a colour story first, then the capsule, then every look to the standard. `acceptTripStyle` keeps a look only if every piece is in that look's eligible set and the look is complete: a stray piece is dropped, one pair of shoes, and an incomplete look is refused. Runs on MODEL_TOP at medium effort, with a MODEL_STRONG fallback, through `invokeTool` + `TripStyleSchema` (schemas.js §11).
+- **Plan a trip → Preview:** the packer's draft shows at once. Atelier's pass runs in the background (`RUN_KEYS.tripStyle`, bound to its preview by id) and replaces the draft on every day she hasn't touched. A packer look that seats a pin Atelier left out is kept, as are pool suits. The trip's colour story shows above the cards and Atelier's line on each day.
+- **Trip screen → Generate all empty days:** one Atelier pass over the empty days, with the planned days as context. The per-day look fills any day the pass leaves unusable. It is a background run that saves as it goes, so leaving the trip loses nothing. This also fixes the old evening call, which received the day look's pieces as `undefined` and so could not see them.
+- **`generateTripDayLook`:** carries STANDARD_LINES and builds "to the standard". A source contract in `test:standard` now holds every look builder to the rubric.
+- **`isSkirtOrDressItem` (`item-helpers.js`):** a skirt is filed Bottoms › Mini/Midi/Maxi, never under a "Skirts" category. #286's bootie note read `category === "Skirts"` and fired on none of her 27 skirts. LOOK FACTS now reads the helper.
+
+### Downstream, four ways
+
+*Efficiency:* one call per trip instead of one or two per day. Short P-ids cut the inventory's tokens. *Effectiveness:* a trip's looks share one colour story and one capsule, judged to the same standard as Style Me and Evaluate, and every piece is checked against that day's pool before she sees it. *Speed:* the draft is instant and Atelier's looks land in about a minute in the background. Generate all is one call plus fallbacks, not 2N sequential calls. *Education:* the pass reads `personalGrounding()` (fingerprint, lessons, loved looks, trend brief), and she edits the result as before.
+
+### Tests
+
+New `test:trip-stylist` (5): per-look eligibility, the prompt's standard, rooms, activity and `only:` tags with no raw ids, the acceptor's stray-piece and shoe handling, refusal of an incomplete look, pins. `test:standard`: the builders' source contract, plus the hem note on real taxonomy (a Bottoms › Midi skirt, a dress, shorts not flagged). The render walk: the picker scrolls one way with filters pinned (fails without the sticky bar), and the preview's Atelier pass (a mocked `style_trip`) replaces day 2 with its pieces, story and line. `npm test`, `npm run build`, `npm run smoke` (49 steps) green.
+
 ## [Unreleased] — Builder: ⇋ Flip mirrors a piece — 2026-11-02
 
 ### Why

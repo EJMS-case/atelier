@@ -498,6 +498,21 @@ export function leavesLegBare(item) {
   return /\b(mini|midi|maxi)\b/.test(text);
 }
 
+// A piece with a HEM where a boot meets the leg: a dress, or a skirt. A skirt
+// is not a category — it files under Bottoms > Skirts, or as its length
+// (Mini / Midi / Maxi), or as Athleisure > Skirts — so a category test misses
+// every one of hers (the 2026-11-02 bootie note shipped reading
+// `category === "Skirts"` and fired on no skirt at all). Shorts are not a hem.
+export function isSkirtOrDressItem(item) {
+  if (!item) return false;
+  const slot = slotForItem(item);
+  if (slot === "dress") return true;
+  if (slot !== "bottom" && item.category !== "Athleisure") return false;
+  const text = `${item.name || ""} ${item.subcategory || ""}`.toLowerCase();
+  if (/\b(shorts?|skort)\b/.test(text)) return false;
+  return leavesLegBare(item);
+}
+
 // ── STATEMENT-PIECE DETECTOR ────────────────────────────────────────────────
 // Single source of truth for "is this a statement piece" — used by the
 // styling-validator's HC8 check (one statement per look) and the trip

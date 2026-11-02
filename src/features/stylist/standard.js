@@ -44,7 +44,7 @@ import { effectiveColorFamily } from "../../constants/color.js";
 import { formatWeather } from "../../prompts/styling-system-prompt.js";
 import { runAllChecks } from "../../utils/styling-validator.js";
 import {
-  isStatementPiece, isHosieryItem, isCompleteSetItem, isBlazerItem, isAnkleBootItem, slotForItem,
+  isStatementPiece, isHosieryItem, isCompleteSetItem, isBlazerItem, isAnkleBootItem, isSkirtOrDressItem, slotForItem,
   getSleeveType, classifierNotes, promptNotes, NOTES_NEGATION_LEGEND,
   formalityOf, lineWearsTo,
   readKnitWeight,
@@ -419,7 +419,7 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
   // up."). Not a ban — a bootie under a hem works when the leg runs into it
   // unbroken — so it is a note on HOW, with the two fixes she may own.
   const booties = list.filter(isAnkleBootItem);
-  const hems = list.filter(it => it.category === "Skirts" || it.category === "Dresses");
+  const hems = list.filter(isSkirtOrDressItem);
   if (booties.length && hems.length) {
     const tights = list.filter(isHosieryItem);
     let line = `An ankle boot (${booties.map(shortName).join(", ")}) meets a hem (${hems.map(shortName).join(", ")}). A bootie under a skirt or dress keeps the leg long only when the leg runs into it unbroken — opaque tights in the boot's colour, or a hem that meets the shaft; a bare or contrasting leg into the bootie cuts the line at its narrowest. A knee boot under the hem does it with no help.`;

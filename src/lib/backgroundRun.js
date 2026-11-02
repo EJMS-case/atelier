@@ -23,6 +23,9 @@ export const RUN_KEYS = {
   brandScout: "discovery:scout",
   // Evaluate look in the builder: one run, bound to the canvas it read.
   builderEvaluate: "builder:evaluate",
+  // Plan a trip: Atelier's pass over the whole trip (planner/tripStylist.js),
+  // bound to the preview that started it by its previewId.
+  tripStyle: "planner:trip-style",
   // The look-back judge, one run per window: `${recapStylish}:${period}`.
   recapStylish: "recap:stylish",
 };
