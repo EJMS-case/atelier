@@ -432,6 +432,17 @@ export function isBootItem(item) {
   return BOOT_SUBS.has(item.subcategory) ||
     /\bboot(s|ie|ies)?\b/i.test(item.name || "");
 }
+// An ANKLE-height boot — a bootie — as opposed to a knee or over-the-knee
+// boot: the one boot whose top meets a skirt or dress hem mid-leg. One
+// reader for LOOK FACTS' hem note (standard.js readLook). Filed knee-high /
+// over-the-knee, or named tall/knee, is not one; a boot filed under the bare
+// L2 "Boots" is one unless its name or line says otherwise.
+const TALL_BOOT_RE = /\b(tall|knee|over[- ]the[- ]knee|otk|thigh)\b/i;
+export function isAnkleBootItem(item) {
+  if (!isBootItem(item)) return false;
+  if (item.subcategory === "Knee-High" || item.subcategory === "Over-the-Knee") return false;
+  return !TALL_BOOT_RE.test(`${item.name || ""} ${item.stylist_line || ""}`);
+}
 // Blazer predicate shared by the Blazers filter chip and the validator's
 // winter outerwear-layering rule (blazer under coat/jacket in Cool/Cold) —
 // one definition so the chip and the layering pair test can't drift.

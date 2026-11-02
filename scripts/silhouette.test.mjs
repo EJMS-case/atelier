@@ -34,7 +34,10 @@ const has = (lines, re) => lines.some(l => re.test(l));
   assert(has(summarizeSilhouette({ height: "1.57m" }), PETITE), "1.57m reads petite");
   assert(has(summarizeSilhouette({ height: "petite" }), PETITE), "the word petite reads petite");
   const lines = summarizeSilhouette({ height: "5'2\"" });
-  assert(lines.length === 1 && !has(lines, /height:/), "petite height is consumed, not re-passed raw");
+  assert(!has(lines, /height:/), "petite height is consumed, not re-passed raw");
+  // The one other line a petite frame carries: how a boot meets a hem
+  // (owner, 2026-11-02). It rides after her own words so the cap drops it first.
+  assert(lines.length === 2 && has(lines, /bootie into tights/), "petite adds the hem-and-boot line, and nothing else");
 }
 
 // ── Tall / neutral heights ───────────────────────────────────────────────────

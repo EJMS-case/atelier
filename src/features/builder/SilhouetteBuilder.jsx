@@ -802,6 +802,7 @@ export default function SilhouetteBuilder({
     })
     .map(s => s.key);
 
+  const lastReplyIdsRef = useRef(null);
   async function handleChat(e) {
     e?.preventDefault();
     const text = chatInput.trim();
@@ -826,9 +827,14 @@ export default function SilhouetteBuilder({
         return copy;
       });
 
+    // The canvas the stylist's last reply was about, so this turn can tell it
+    // what she took off since (builderChat.canvasChange).
+    const sentIds = pickedItems.map(p => p.item.id);
+    const hadReply = chatMessages.some(m => m.role === "assistant" && m.content);
     try {
       const reply = await sendBuilderMessage({
         messages: next,
+        previousIds: hadReply ? lastReplyIdsRef.current : null,
         assembledItems: pickedItems.map(p => p.item),
         available: builderPool,
         emptySlots,
@@ -841,6 +847,7 @@ export default function SilhouetteBuilder({
         onDelta: setLastAssistant,
       });
       setLastAssistant(reply);
+      lastReplyIdsRef.current = sentIds;
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       // The app learns from the conversation (owner, 2026-09-10): the
       // transcript is kept, and any preference she expressed this turn is

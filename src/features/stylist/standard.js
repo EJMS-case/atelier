@@ -44,7 +44,7 @@ import { effectiveColorFamily } from "../../constants/color.js";
 import { formatWeather } from "../../prompts/styling-system-prompt.js";
 import { runAllChecks } from "../../utils/styling-validator.js";
 import {
-  isStatementPiece, isHosieryItem, isCompleteSetItem, isBlazerItem, slotForItem,
+  isStatementPiece, isHosieryItem, isCompleteSetItem, isBlazerItem, isAnkleBootItem, slotForItem,
   getSleeveType, classifierNotes, promptNotes, NOTES_NEGATION_LEGEND,
   formalityOf, lineWearsTo,
   readKnitWeight,
@@ -411,6 +411,21 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     const hasDress = list.some(it => slotForItem(it) === "dress" || slotForItem(it) === "set");
     let line = `Blazer on the canvas (${blazers.map(shortName).join(", ")}) — she wears a blazer OPEN, always; style what's under it to be seen, and never suggest buttoning or belting it closed.`;
     if (belt && !hasDress) line += ` The ${shortName(belt)} sits on the trouser/skirt waist under the open blazer, not over it.`;
+    notes.push(line);
+  }
+
+  // ── Where the hem meets the boot (owner, 2026-11-02: "aren't I not
+  // supposed to wear booties with skirts or dresses? They keep showing
+  // up."). Not a ban — a bootie under a hem works when the leg runs into it
+  // unbroken — so it is a note on HOW, with the two fixes she may own.
+  const booties = list.filter(isAnkleBootItem);
+  const hems = list.filter(it => it.category === "Skirts" || it.category === "Dresses");
+  if (booties.length && hems.length) {
+    const tights = list.filter(isHosieryItem);
+    let line = `An ankle boot (${booties.map(shortName).join(", ")}) meets a hem (${hems.map(shortName).join(", ")}). A bootie under a skirt or dress keeps the leg long only when the leg runs into it unbroken — opaque tights in the boot's colour, or a hem that meets the shaft; a bare or contrasting leg into the bootie cuts the line at its narrowest. A knee boot under the hem does it with no help.`;
+    line += tights.length
+      ? ` Tights on the canvas (${tights.map(shortName).join(", ")}): say whether they carry the boot's colour.`
+      : " No tights on the canvas: name the knee boot or the tonal tights she owns, as taste.";
     notes.push(line);
   }
 

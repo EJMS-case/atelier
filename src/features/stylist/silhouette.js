@@ -42,15 +42,20 @@ const TALL_MIN_INCHES = 68;   // 5'8"+ reads tall
 //     skim not cling; tall → can carry volume and long lines.
 //   · fuller bust → open necklines beat high crews with volume up top.
 const DIRECTIVES = {
-  petite: "petite frame — favor cropped or tucked tops, high-rise bottoms, and column lines that lengthen the leg; skip volume-on-volume",
+  petite: "petite frame — favor cropped or tucked tops, high-rise bottoms, and column lines that lengthen the leg; skip volume-on-volume.",
   tall: "tall frame — she can carry volume, long lines, and midi/maxi lengths; strong proportions welcome",
   shortTorso: "short torso, longer legs — lengthen the torso: mid/lower rises, untucked or half-tucked tops, tonal top-to-bottom dressing",
-  longTorso: "long torso, shorter legs — raise the visual waist: high-rise bottoms, cropped tops/jackets, waist emphasis to lengthen the leg",
+  longTorso: "long torso, shorter legs — raise the visual waist: high-rise bottoms, cropped tops/jackets, waist emphasis to lengthen the leg.",
   broadShoulders: "broad shoulders — favor soft, relaxed shoulder lines and V or scoop necklines; skip heavy shoulder structure",
   narrowShoulders: "narrow shoulders — structured shoulders, boat necks, and crisp tailoring up top build balance",
   hourglass: "hourglass/curvy — define the waist (wrap shapes, belting, fitted-through-the-middle); skip boxy volume that hides it",
   pear: "pear shape — draw the eye up with detail and structure on top; A-line or fluid bottoms that skim the hip",
   midsection: "softer midsection — pieces that skim, not cling, through the middle; open necklines and structure up top balance",
+  // Owner, 2026-11-02: "aren't I not supposed to wear booties with skirts or
+  // dresses?" Not a ban — how the boot meets the hem — for the two frames
+  // where an ankle-height break shortens the leg most. Its own line: every
+  // line is clipped at MAX_LINE_CHARS.
+  hemBoot: "skirt or dress + boot: a knee boot the hem meets, or a bootie into tights of its colour; a bare leg into a bootie cuts the leg",
   bust: "fuller bust — favor open V or scoop necklines over high crews; keep extra volume and heavy detail off the top",
 };
 
@@ -156,6 +161,9 @@ export function summarizeSilhouette(aboutMe) {
   if (height && !used.height) passthroughs.push(`height: ${clip(height, SHORT_FIELD_CHARS)}`);
 
   const lines = [...directives, ...passthroughs];
+  // The hem-and-boot line rides AFTER her own words, so the line cap drops
+  // it before it ever drops a note she wrote.
+  if (directives.includes(DIRECTIVES.petite) || directives.includes(DIRECTIVES.longTorso)) lines.push(DIRECTIVES.hemBoot);
 
   // One compact register line — age + work context, never a directive.
   const ctx = [age, work].filter(Boolean).map(s => clip(s, SHORT_FIELD_CHARS));
