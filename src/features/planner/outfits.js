@@ -189,3 +189,15 @@ export function planRowOver(existing, { date, outfits, source, notes = null, wea
   if (logId !== undefined && (logId !== null || outfitLogId !== undefined)) merged.outfit_log_id = logId;
   return merged;
 }
+
+// Which look on `date` a builder save writes: the look being edited when the
+// builder was opened ON this day (a planner Edit or a trip day's ⊞ Build —
+// `tripOutfitIdx`, or the first look), otherwise a NEW look after the ones
+// already there. A fresh build, a Style Me look, or an edit moved to another
+// date adds; it never replaces (owner, 2026-11-02: "Did selecting a new
+// outfit on a day that already had one planned delete what existed on that
+// day entirely?"). An index past the end appends.
+export function scheduleSlot(editingPlan, date, current = []) {
+  const editingThisDay = !!editingPlan && (editingPlan.iso || editingPlan.plan?.date) === date;
+  return editingThisDay ? (editingPlan.tripOutfitIdx ?? 0) : (current || []).length;
+}
