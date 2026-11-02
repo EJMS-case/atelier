@@ -4,9 +4,10 @@
 // derived packing list (union of items actually used).
 //
 // CAPSULE PACKING (2026-08-08): the packer packs like a stylist packs a
-// suitcase — a small capsule of shoes/bags/outerwear reused across days,
-// bottoms repeating up to 3 wears (never back-to-back), fresh tops each day,
-// and statement garments appearing at most once per trip. Reuse is bounded
+// suitcase — a small capsule of shoes/belts/bags/outerwear reused across
+// days, bottoms repeating up to 4 wears, tops that may return on a later day
+// (neither ever two days running), and statement garments at most once per
+// trip (owner, 2026-11-02: "reuse items across different outfits and days"). Reuse is bounded
 // by per-slot targets that scale with trip length, with an escape hatch: a
 // day whose occasion the capsule can't serve (dinner needing a heel on an
 // all-sneaker trip) is still allowed to add the right new piece. See
@@ -452,6 +453,9 @@ export function scoreForOccasion(item, occasion, opts = {}) {
 // This also fixes the old drift where Athleisure/Loungewear returned null and
 // could never pack — slotForItem routes them to top/bottom/dress by sub.
 function itemSlot(it) {
+  // slotForItem files a belt as an accessory; on a trip it is a capsule slot
+  // of its own (BELT_ROOMS below).
+  if (it?.category === "Belts") return "belts";
   switch (slotForItem(it)) {
     case "top":       return "tops";
     case "bottom":    return "bottoms";
@@ -621,13 +625,20 @@ export function capsuleTargets(dayCount) {
     // swim counts SUITS, not pieces: a suit is one one-piece OR one matching
     // top+bottom pair, so a 2-suit trip may pack up to 4 swim ITEMS.
     swim:      dayCount <= 4 ? 1 : 2,
-    bottoms:   Math.min(4, Math.max(1, Math.ceil(dayCount / 2.5))),
+    // Owner, 2026-11-02: "reuse items across different outfits and days to
+    // help me pack better and smarter. Shoes, belts, outerwear, bottoms."
+    belts:     dayCount <= 5 ? 1 : 2,
+    bottoms:   Math.min(4, Math.max(1, Math.ceil(dayCount / 3))),
   };
 }
 
-// Slots where reuse across days is the POINT (wear the same loafers all
-// trip). Everything else (tops/dresses) stays fresh day to day.
-const CAPSULE_SLOTS = new Set(["shoes", "bags", "outerwear", "swim"]);
+// Slots where reuse across days is the POINT (wear the same loafers, the same
+// belt all trip). Bottoms repeat by design too (BOTTOM_* below); tops and
+// dresses repeat less, but they may ("Less with tops but don't exclude those
+// on rewear for trips because I can").
+const CAPSULE_SLOTS = new Set(["shoes", "bags", "belts", "outerwear", "swim"]);
+// The rooms a belt finishes separates in — never a gym, lounge or travel day.
+const BELT_ROOMS = /^(work|work dinner|casual|dinner|occasion|vacation)$/i;
 
 // Destination-closet preference (Phase B). Items already at the trip's
 // destination cost NOTHING to pack, so they should be the FIRST choice for any
@@ -912,11 +923,12 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   //   · statement stacking — a day that already holds a statement piece
   //     heavily penalizes further statements (fringe bag + argyle skirt)
   //   · slot-aware capsule policy:
-  //       tops/dresses  → fresh every day (-6 per prior wear); a statement
-  //                       garment appears at most ONCE per trip (extra -6)
-  //       bottoms       → reuse encouraged up to 3 wears (+1.5), never on
-  //                       consecutive days (-4), tired after 3 (-6)
-  //       shoes/bags/outerwear/swim → reuse-first (+1.5 once worn). When the
+  //       tops/dresses  → may return (-3 per prior wear, -2 plentiful), never
+  //                       two days running (-6); a statement garment appears
+  //                       at most ONCE per trip (extra -6)
+  //       bottoms       → reuse encouraged up to 4 wears (+2.5), never on
+  //                       consecutive days (-5), tired after 4 (-6)
+  //       shoes/belts/bags/outerwear/swim → reuse-first (+1.5 once worn). When the
   //                       slot has already committed to its target count of
   //                       distinct items, NEW items take -7 — but ONLY if an
   //                       already-packed item serves this day nearly as well
@@ -931,9 +943,9 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
 
   // ── Plentiful mode ─────────────────────────────────────────────────────────
   // A trip WITHOUT a destination closet is a suitcase-minimisation problem:
-  // everything worn must be carried, so the packer rations hard — fresh top
-  // every day, a statement piece once per trip, a hard ceiling on distinct
-  // shoes and bags.
+  // everything worn must be carried, so the packer packs small — re-wear first
+  // (shoes, belts, bags, layers, bottoms; a top now and then), a statement
+  // piece once per trip, a hard ceiling on distinct shoes, belts and bags.
   //
   // A trip WITH one is not that problem. Most of the wardrobe is already there;
   // the binding constraint is taste, not luggage. Rationing it produced narrow,
@@ -947,7 +959,10 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
   // consecutive days, and never two statement pieces in one look — those read
   // as sloppy however full the closet is.
   const plentiful = !!prefer;
-  const FRESH_TOP_PENALTY = plentiful ? 2.5 : 6;        // a 2nd wear is fine; a 3rd still costs
+  // A top may come back (owner, 2026-11-02: "don't exclude those on rewear"):
+  // a second wear costs a little, never two days running. Packing light, a
+  // repeat is the point — so carrying costs only slightly more than plentiful.
+  const FRESH_TOP_PENALTY = plentiful ? 2 : 3;
   const REPEAT_STATEMENT_PENALTY = plentiful ? 3 : 6;   // the hero may return once, styled anew
 
   const pick = (candidates, occasion, currentOutfit = [], slot = null, dayIdx = 0) => {
@@ -975,12 +990,15 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
         // in the closet. Neutral there; still reuse-first for carried pieces.
         if (wears > 0 && !(plentiful && atDest)) s += 1.5;
       } else if (slot === "bottoms") {
-        if (wears >= 3) s -= 6;
-        else if (wears > 0) s += 1.5;
-        if (wears > 0 && lastWorn.get(c.id) === dayIdx - 1) s -= 4;
+        // Bottoms are a capsule too: the same trouser or skirt across several
+        // looks, restyled — up to four wears, never two days running.
+        if (wears >= 4) s -= 6;
+        else if (wears > 0) s += 2.5;
+        if (wears > 0 && lastWorn.get(c.id) === dayIdx - 1) s -= 5;
         if (wears > 0 && isStatement(c)) s -= REPEAT_STATEMENT_PENALTY;
       } else { // tops / dresses
         s -= FRESH_TOP_PENALTY * wears;
+        if (wears > 0 && lastWorn.get(c.id) === dayIdx - 1) s -= 6;
         if (wears > 0 && isStatement(c)) s -= REPEAT_STATEMENT_PENALTY;
       }
       return { c, s, wears, atDest };
@@ -1155,6 +1173,17 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
 
     const bag = forced.bags || pick(bags, occasion, day, "bags", d);
     if (bag) day.push(bag);
+
+    // A belt finishes SEPARATES (never a dress — a dress is resolved), in the
+    // rooms that wear one, and it is a capsule piece: the same one or two
+    // belts across the trip.
+    const belts = inSlot("belts");
+    const separates = day.some(it => itemSlot(it) === "bottoms") && !day.some(it => itemSlot(it) === "dresses");
+    if (forced.belts) day.push(forced.belts);
+    else if (separates && belts.length && BELT_ROOMS.test(occasion || "")) {
+      const belt = pick(belts, occasion, day, "belts", d);
+      if (belt) day.push(belt);
+    }
 
     // Accessories have no pick() of their own — the packer never proposes them
     // — but a pinned one still has to land somewhere, so it rides the day that

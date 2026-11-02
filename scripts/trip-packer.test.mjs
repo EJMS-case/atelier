@@ -87,7 +87,8 @@ section("7-day Casual capsule");
   dailyOutfits.flat().filter(it => it.category === "Tops").forEach(it => { topWear[it.id] = (topWear[it.id] || 0) + 1; });
   assert(Object.values(topWear).every(n => n === 1), "no top worn twice");
 
-  // Bottoms: never the same bottom two days running, never more than 3 wears.
+  // Bottoms: never the same bottom two days running, never more than 4 wears
+  // (owner, 2026-11-02: re-wear bottoms across the trip).
   const bottomWear = {};
   let backToBack = false;
   let prevBottoms = new Set();
@@ -100,7 +101,7 @@ section("7-day Casual capsule");
     prevBottoms = new Set(todays.map(it => it.id));
   }
   assert(!backToBack, "no bottom worn on consecutive days");
-  assert(Object.values(bottomWear).every(n => n <= 3), "no bottom worn more than 3×");
+  assert(Object.values(bottomWear).every(n => n <= 4), "no bottom worn more than 4×");
 
   // The whole point: the packing list is a capsule, not a wardrobe dump.
   // Old behavior packed ~4 fresh items/day (28 for a week); capsule packing
@@ -1516,9 +1517,17 @@ section("plentiful mode (destination closet)");
   const items = [better, plain, ...filler];
   const opts = { occasions: ["Casual"], priorUse: { [better.id]: 1 }, tripDayCount: 6 };
 
+  // Owner, 2026-11-02: "Less with tops but don't exclude those on rewear for
+  // trips because I can." Packing light, a once-worn top that suits the day
+  // clearly better comes back; between two tops that suit it equally, the
+  // fresh one still wins (rotation).
   const packLight = buildDailyOutfits(items, [76], opts);
-  assert(packLight.dailyOutfits[0].find(it => it.category === "Tops")?.id === plain.id,
-    "control: packing light takes the fresh top even though it suits the day less");
+  assert(packLight.dailyOutfits[0].find(it => it.category === "Tops")?.id === better.id,
+    "packing light, a once-worn top that suits the day clearly better is worn again");
+  const twin = mk("Tops", "T-Shirts", "Cotton Tee C");
+  const even = buildDailyOutfits([plain, twin, ...filler], [76], { occasions: ["Casual"], priorUse: { [plain.id]: 1 }, tripDayCount: 6 });
+  assert(even.dailyOutfits[0].find(it => it.category === "Tops")?.id === twin.id,
+    "between equal tops, the fresh one wins");
 
   // Both at the destination, so the destination bonus cancels and the only
   // difference left is what a second wear costs.
@@ -1527,6 +1536,48 @@ section("plentiful mode (destination closet)");
   });
   assert(plentiful.dailyOutfits[0].find(it => it.category === "Tops")?.id === better.id,
     "with a destination closet the better top is worn a second time instead");
+}
+
+// ── Re-wear across the trip (owner, 2026-11-02) ─────────────────────────────
+// "reuse items across different outfits and days to help me pack better and
+// smarter. Shoes, belts, outerwear, bottoms. Less with tops but don't exclude
+// those on rewear."
+section("re-wear: belts join the capsule, tops may return, nothing two days running");
+{
+  const items = [
+    ...Array.from({ length: 3 }, (_, i) => mk("Tops", "Blouses", `Blouse ${i + 1}`)),
+    ...Array.from({ length: 3 }, (_, i) => mk("Bottoms", "Pants", `Trouser ${i + 1}`)),
+    mk("Shoes", "Flats", "Loafer"),
+    mk("Bags", "", "Tote"),
+    mk("Belts", "", "Leather Belt"),
+    mk("Belts", "", "Suede Belt"),
+    mk("Belts", "", "Chain Belt"),
+  ];
+  const days = 6;
+  const { dailyOutfits, packingList } = buildDailyOutfits(items, Array(days).fill(76), { occasions: Array(days).fill("Casual") });
+  const belts = new Set(dailyOutfits.flat().filter(it => it.category === "Belts").map(it => it.id));
+  assert(dailyOutfits.every(d => d.some(it => it.category === "Belts")), "a belt finishes every separates look in a room that wears one");
+  assert(belts.size <= capsuleTargets(days).belts, `belts are a capsule: ≤${capsuleTargets(days).belts} distinct (got ${belts.size})`);
+  const topWear = {};
+  dailyOutfits.flat().filter(it => it.category === "Tops").forEach(it => { topWear[it.id] = (topWear[it.id] || 0) + 1; });
+  assert(Object.values(topWear).some(n => n > 1), "with three tops for six days, tops are re-worn rather than leaving days bare");
+  let consecutive = 0;
+  for (let d = 1; d < dailyOutfits.length; d++) {
+    const prev = new Set(dailyOutfits[d - 1].filter(it => it.category === "Tops" || it.category === "Bottoms").map(it => it.id));
+    if (dailyOutfits[d].some(it => (it.category === "Tops" || it.category === "Bottoms") && prev.has(it.id))) consecutive++;
+  }
+  assert(consecutive === 0, `no top or bottom two days running (got ${consecutive})`);
+  assert(packingList.length <= 10, `six days pack from a small capsule (got ${packingList.length})`);
+}
+{
+  // A dress is resolved: no belt on it; a Travel Day wears none either.
+  const dressItems = [mk("Dresses", "Midi", "Satin Midi Dress"), mk("Shoes", "Heels", "Pump"), mk("Belts", "", "Belt")];
+  const dress = buildDailyOutfits(dressItems, [70], { occasions: ["Dinner"] });
+  assert(dress.dailyOutfits[0].some(it => it.category === "Dresses"), "control: the dinner is a dress look");
+  const items = [mk("Shoes", "Flats", "Flat"), mk("Belts", "", "Belt"), mk("Tops", "T-Shirts", "Tee"), mk("Bottoms", "Pants", "Jogger")];
+  assert(!dress.dailyOutfits[0].some(it => it.category === "Belts"), "no belt on a dress");
+  const travel = buildDailyOutfits(items, [70], { occasions: ["Travel Day"] });
+  assert(!travel.dailyOutfits[0].some(it => it.category === "Belts"), "no belt on a travel day");
 }
 
 // What does NOT relax: never the same piece two days running.

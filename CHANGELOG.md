@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trips re-wear: shoes, belts, layers and bottoms carry several looks; tops may return — 2026-11-02
+
+### Why
+
+Owner: *"For the travel packer I would like to reuse items across different outfits and days to help me pack better and smarter. Shoes, belts, outerwear, bottoms. Less with tops but don't exclude those on rewear for trips because I can."* The packer re-wore shoes, bags and outerwear. It capped bottoms at 3 wears, priced a second wear of a top at −6 (in practice never), and packed **no belts at all**: `slotForItem` files a belt as an accessory, and the packer only seated pinned accessories. The AI rules said "Tops should not repeat."
+
+### Changed
+
+- **`tripPacker.js`:** belts are a capsule slot (`itemSlot` reads the category). A belt finishes separates (never a dress) in the rooms that wear one (`BELT_ROOMS`: Work, Work Dinner, Casual, Dinner, Occasion, Vacation; never a gym, lounge or travel day). Capsule target is 1 belt for ≤5 days and 2 beyond, so the same belt repeats. Bottoms repeat up to 4 wears (+2.5 once worn), with the capsule target down from ⌈n/2.5⌉ to ⌈n/3⌉. A top may return: −3 a prior wear when packing light, −2 with a destination closet. Neither a top nor a bottom is worn two days running (−6 / −5). The statement-piece rules are unchanged.
+- **Atelier's trip pass (`tripStylist.js`)** and **the single-day look (`tripAdvisor.js`)** say the same thing: re-wear shoes, belts, layers and bottoms across looks, restyled; a top may come back on a later day; never two days running; the hero once; never a whole look twice. The pack-light capsule now counts 1–2 belts.
+
+### Downstream, four ways
+
+*Efficiency / speed:* none. *Effectiveness:* a smaller suitcase that still dresses every day; belts finish separates for the first time on a trip. *Education:* none new.
+
+### Tests
+
+`test:packer` 334/334 across five runs. The 3-wear assertion is now 4 (her new rule). The "packing light takes the fresh top" control becomes: a once-worn top that clearly suits the day better comes back, and between equal tops the fresh one wins. New: belts finish every separates look and stay within the capsule, three tops over six days are re-worn, no top or bottom two days running, the six-day list stays ≤10 pieces, and no belt on a dress or a travel day. `test:trip-stylist`: the prompt carries the re-wear method. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — A flipped piece draws flipped on every card — 2026-11-02
 
 ### Why
