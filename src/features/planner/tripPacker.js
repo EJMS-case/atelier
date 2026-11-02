@@ -523,6 +523,14 @@ export function activityEvening(activity) {
   return ACTIVITY_FILTERS[activity]?.eveningOccasion || null;
 }
 
+// The evening look a trip DAY takes: the activity's, on a day between the
+// travel days (the first and last day dress for the journey). The one reader
+// every surface that builds a trip day asks — the preview, a per-day activity
+// switch, Atelier's pass and the trip screen's Generate all.
+export function eveningForDay(activity, dayIdx, dayCount) {
+  return dayIdx > 0 && dayIdx < dayCount - 1 ? activityEvening(activity) : null;
+}
+
 // Heel / boot bans go through the shared HEEL_SUBS / isBootItem helpers
 // (utils/item-helpers) instead of per-activity subcategory lists — the local
 // lists missed the L3 heel labels (Kitten / Block / Slingback / Wedges), so

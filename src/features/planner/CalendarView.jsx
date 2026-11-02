@@ -5,7 +5,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchPlansBetween, fetchAllPlans, fetchOutfitLogLayouts, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
-import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor, activityEvening } from "./tripPacker.js";
+import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor, eveningForDay } from "./tripPacker.js";
 import { unionTags, newOutfitId, buildPlanPayload, planRowOver, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
 import { nyToday, todayInTz, dayPart, friendlyDate, shortDayLabel, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { startOfMonth, endOfMonth, addMonths, addDays, monthGridDays } from "./monthGrid.js";
@@ -1574,7 +1574,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
       // draws from nothing here and so gets no evening look.
       const eveningOutfits = Array.from({ length: dayCount }, () => null);
       const eveningOcc = activities.map((act, i) =>
-        i === 0 || i === dayCount - 1 ? null : activityEvening(act));
+        eveningForDay(act, i, dayCount));
       const eveningItems = dayIsos.map((_, i) => eveningOcc[i] ? poolForTripDay({
         pool: tripPool, wardrobe: source, homeClosetId, destClosetId: destClosetId || null,
         pins: mustIncludeIds, occasion: eveningOcc[i], dayIdx: i, dayCount, mode: "pack",
@@ -1684,7 +1684,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
         return { ...o, items };
       });
       // The packer may have found no evening look the pool could dress; Atelier's stands.
-      const eveningOcc = i > 0 && i < prev.length - 1 ? activityEvening(dayActivities?.[i] || activity) : null;
+      const eveningOcc = eveningForDay(dayActivities?.[i] || activity, i, prev.length);
       if (eveningOcc && styled.evening?.length && !next.some(o => o.label === DAYPART_EVENING)) {
         const items = resolve(styled.evening);
         if (items.length === styled.evening.length) next.push({ id: newOutfitId(), label: DAYPART_EVENING, occasion: eveningOcc, items });
@@ -1762,9 +1762,8 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
     // An activity with an evening look of its own (Vegas) gives this day one
     // too, when it is not a travel day and does not have one yet — the same
     // second look the preview builds for the whole trip.
-    const evening = activityEvening(act);
-    const isEnd = dayIdx === 0 || dayIdx === dayCount - 1;
-    if (evening && !isEnd && !rebuilt.some(o => o.label === DAYPART_EVENING)) {
+    const evening = eveningForDay(act, dayIdx, dayCount);
+    if (evening && !rebuilt.some(o => o.label === DAYPART_EVENING)) {
       const built = buildOneOutfit({ dayIso, dayAct: act, occasion: evening, label: DAYPART_EVENING, dayIdx, excludeOutfitIdx: "*" });
       if (built) rebuilt.push(built);
     }

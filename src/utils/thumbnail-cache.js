@@ -407,18 +407,10 @@ export function createThumbnailCache({ storage, env: envOverride, memoryMax = ME
   }
 
   /**
-   * One thumbnail for one URL, keyed and fetched as that URL alone.
-   * @param {string} url
-   * @returns {Promise<ImageBitmap|HTMLImageElement|null>}
-   */
-  function getThumbnail(url) {
-    return typeof url === "string" ? resolveSubject(url) : Promise.resolve(null);
-  }
-
-  /**
    * One thumbnail for one wardrobe item: the server thumb first, the full
-   * photo on error, keyed by the thumb URL. Same contract as getThumbnail.
+   * photo on error, keyed by the thumb URL.
    * @param {{id?: string, image?: string}} item
+   * @returns {Promise<ImageBitmap|HTMLImageElement|null>}
    */
   function getItemThumbnail(item) {
     return resolveSubject(item);
@@ -594,7 +586,7 @@ export function createThumbnailCache({ storage, env: envOverride, memoryMax = ME
     return { memory: memory.size, inFlight: inFlight.size, storage: store.kind };
   }
 
-  return { getThumbnail, getItemThumbnail, loadThumbnails, warmThumbnails, invalidateThumbnail, pruneThumbnails, stats };
+  return { getItemThumbnail, loadThumbnails, warmThumbnails, invalidateThumbnail, pruneThumbnails, stats };
 }
 
 // ── DEFAULT INSTANCE ─────────────────────────────────────────────────────────
@@ -607,7 +599,6 @@ function instance() {
   return defaultInstance;
 }
 
-export const getThumbnail        = (url)          => instance().getThumbnail(url);
 export const getItemThumbnail    = (item)         => instance().getItemThumbnail(item);
 export const loadThumbnails      = (subjects, o)  => instance().loadThumbnails(subjects, o);
 export const warmThumbnails      = (items, o)     => instance().warmThumbnails(items, o);

@@ -68,7 +68,7 @@ export function isNotableCondition(condition) {
 
 // Returns { [iso]: { high, low, bucket, code, precip, condition } } for the
 // next ~16 days at NYC. Falls back to null on network failure.
-export async function fetchNycForecast() {
+async function fetchNycForecast() {
   return fetchForecastAt(LAT, LON, "America/New_York", NYC_CACHE_KEY);
 }
 

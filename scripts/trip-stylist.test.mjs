@@ -117,3 +117,11 @@ test("a trip day's room keeps out what Style Me's room does — her lines lead, 
   assert.equal(inTheRoom(roomy, "Dinner").length, ROOM_FLOOR, "with room to spare, the tees go");
   assert.equal(inTheRoom(roomy, "Dinner", new Set(["x0"])).length, ROOM_FLOOR + 1, "a pin always passes");
 });
+
+test("one reader decides which trip days take an evening look", async () => {
+  const { eveningForDay } = await import("../src/features/planner/tripPacker.js");
+  assert.equal(eveningForDay("Vegas", 0, 4), null, "the arrival day dresses for the journey");
+  assert.equal(eveningForDay("Vegas", 1, 4), "Dinner");
+  assert.equal(eveningForDay("Vegas", 3, 4), null, "the last day dresses for the journey");
+  assert.equal(eveningForDay("Sightseeing", 1, 4), null, "an activity without evenings of its own");
+});
