@@ -284,6 +284,7 @@ export default function SilhouetteBuilder({
     const pos = {};
     const z = {};
     const fitted = new Set();
+    const flipped = new Set();
     for (const entry of arr) {
       if (!entry || !entry.id) continue;
       const it = (builderPool || []).find(i => i.id === entry.id);
@@ -296,8 +297,9 @@ export default function SilhouetteBuilder({
         fitted.add(key);
       }
       if (typeof entry.z === "number") z[key] = entry.z;
+      if (entry.flip === true) flipped.add(key);
     }
-    return { positions: pos, zOrders: z, autoFitted: fitted };
+    return { positions: pos, zOrders: z, autoFitted: fitted, flips: flipped };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLook?.id]);
 
@@ -354,6 +356,12 @@ export default function SilhouetteBuilder({
   // Per-(slot,itemId) zIndex override — only used when the user has
   // Brought-to-Front or Sent-to-Back. Falls back to a default stacking order.
   const [zOrders, setZOrders] = useState(() => restoredLayout?.zOrders || {});
+  // Mirror-flipped pieces on the canvas (owner, 2026-11-02: "a garment that
+  // appears to face the left side can be flipped to face the right side").
+  // Builder only: the flag rides layout_data as `flip: true` so the builder
+  // restores it on reopen and the saved composite matches the canvas; no
+  // other surface reads it.
+  const [flips, setFlips] = useState(() => restoredLayout?.flips || new Set());
   // The canvas item the user last touched — anchors the layering
   // controls so they know which item to raise/lower. Key = posKey(slot, itemId).
   const [activeCanvasKey, setActiveCanvasKey] = useState(null);
@@ -689,7 +697,18 @@ export default function SilhouetteBuilder({
           const scale = Math.min(zone.w / srcW, zone.h / srcH);
           const w = srcW * scale;
           const h = srcH * scale;
-          ctx.drawImage(img, srcX, srcY, srcW, srcH, zone.x + (zone.w - w) / 2, zone.y + (zone.h - h) / 2, w, h);
+          const dx = zone.x + (zone.w - w) / 2;
+          const dy = zone.y + (zone.h - h) / 2;
+          if (flips.has(posKey(slot, item.id))) {
+            // Mirror about the piece's own centre, as the canvas shows it.
+            ctx.save();
+            ctx.translate(dx + w, dy);
+            ctx.scale(-1, 1);
+            ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, w, h);
+            ctx.restore();
+          } else {
+            ctx.drawImage(img, srcX, srcY, srcW, srcH, dx, dy, w, h);
+          }
           resolve();
         };
         img.onerror = () => resolve();
@@ -716,7 +735,7 @@ export default function SilhouetteBuilder({
       const key = posKey(p.slot, p.item.id);
       const pos = positions[key] || defaultPosFor(p.slot, p.item.id);
       const z = zOrders[key] ?? DEFAULT_Z[p.slot] ?? 3;
-      return { id: p.item.id, x: pos.x, y: pos.y, w: pos.w, h: pos.h, z };
+      return { id: p.item.id, x: pos.x, y: pos.y, w: pos.w, h: pos.h, z, ...(flips.has(key) ? { flip: true } : {}) };
     });
   }
 
@@ -1065,7 +1084,7 @@ export default function SilhouetteBuilder({
                     imgDims.current[key] = { w: meta.naturalWidth, h: meta.naturalHeight };
                     fitBoxToImage(slot, item.id, meta.naturalWidth, meta.naturalHeight);
                   }}
-                  style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block" }}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none", display: "block", transform: flips.has(key) ? "scaleX(-1)" : undefined }}
                 />
               )}
               {/* Resize handle — bottom-right corner */}
@@ -1140,6 +1159,17 @@ export default function SilhouetteBuilder({
                     style={{ background: "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
                     ↓ Back
                   </button>
+                  <button
+                    aria-label="Flip image"
+                    aria-pressed={flips.has(activeCanvasKey)}
+                    onClick={() => setFlips(prev => {
+                      const n = new Set(prev);
+                      if (n.has(activeCanvasKey)) n.delete(activeCanvasKey); else n.add(activeCanvasKey);
+                      return n;
+                    })}
+                    style={{ background: flips.has(activeCanvasKey) ? "rgba(28,24,20,0.06)" : "none", border: `1px solid ${PALETTE.line}`, borderRadius: 12, padding: "3px 9px", fontSize: 10, color: PALETTE.soft, cursor: "pointer", letterSpacing: "0.04em" }}>
+                    ⇋ Flip
+                  </button>
                   {/* Direct remove — way faster than reopening the slot picker
                       to un-toggle. Clears the canvas active-key after the
                       item is gone so the toolbar collapses. */}
@@ -1155,7 +1185,7 @@ export default function SilhouetteBuilder({
               );
             })()}
           </div>
-          <button onClick={() => { setPositions({}); setAutoFitted(new Set()); setZOrders({}); setActiveCanvasKey(null); }}
+          <button onClick={() => { setPositions({}); setAutoFitted(new Set()); setZOrders({}); setFlips(new Set()); setActiveCanvasKey(null); }}
             style={{ background: "none", border: "none", fontSize: 10, color: PALETTE.muted, cursor: "pointer", letterSpacing: "0.06em" }}>
             Reset layout
           </button>
