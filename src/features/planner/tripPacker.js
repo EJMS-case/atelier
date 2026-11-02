@@ -23,6 +23,7 @@ import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem,
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 import { defaultTripDayOccasion } from "./tripPools.js";
+import { inTheRoom } from "./roomKeepOuts.js";
 
 // ── Default occasion seed ──────────────────────────────────────────────────
 // We used to gate this through a "vibe" concept (Casual / Theme Park / Beach
@@ -750,6 +751,10 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
       }
       return true;
     });
+    // What the day's room keeps out — the same lists Style Me reads, through
+    // the one trip reader (roomKeepOuts.js; a floor keeps a small pool whole).
+    // Pins are unioned back in below.
+    pool = inTheRoom(pool, occasions[d]);
     return { pool, occasion: occasions[d], wxBucket, hi, dressier: !!actFilter.dressierEvening };
   });
 
