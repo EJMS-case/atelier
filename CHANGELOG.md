@@ -2,6 +2,29 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A new look on a planned day adds to it; a trip moves what it displaces to Saved — 2026-11-02
+
+### Why
+
+Owner: *"Did selecting a new outfit on a day that already had one planned delete what existed on that day entirely? Let's fix that. Maybe move it to saved?"* Yes, on two paths.
+- **Builder → Schedule.** `onSchedule` chose the look to write by `editingPlan?.tripOutfitIdx ?? 0`. With no edit in progress (a fresh build, or a Style Me look opened in the builder), or an edit whose date she changed, that was look #0 of the target day, and it was overwritten. Live: Nov 4 was planned on Nov 1 (06:39) and rewritten today at 07:57 with the look built in the builder. Its earlier look is in no table (not in Saved, not in `look_edits`), so it cannot be restored. Nov 2 (planned 05:06, rewritten 07:37) may be the same.
+- **Plan a trip → Save trip** wrote every trip day as a fresh row, erasing any look already planned on those dates.
+
+Every other path that puts a look on a day already appended: Saved → Schedule, the day modal's Pick and Generate, and a worn look.
+
+### Fixed
+
+- **`scheduleSlot(editingPlan, date, current)` (`outfits.js`):** a builder save replaces a look only when the builder was opened ON that day (a planner Edit, or a trip day's ⊞ Build and its own look). Anything else ADDS a look to the day.
+- **`displaced.js` (new):** before Save trip writes, each look on those dates that the trip would erase is saved to **Saved**, with source `planner`, a note "Planned for <date>", and the row's arrangement on its first look. That happens unless Saved already holds the same pieces (`sigOf`) or the look is the trip's own earlier draft (a re-saved trip replaces its own looks). The calendar, and the trip screen it opens into, says how many looks were moved.
+
+### Downstream, four ways
+
+*Efficiency:* two reads (the range's plans, Saved) on Save trip. *Effectiveness:* no path erases a look she planned. *Speed:* negligible. *Education:* a displaced look in Saved still feeds `personalGrounding()` like any saved look.
+
+### Tests
+
+`test:trippool` +12: `scheduleSlot` appends for a fresh build and for an edit moved to another date, and replaces only the look being edited on its own day. `displacedLooks` / `displacedLogRows`: a trip on a Work day displaces it, a re-saved trip does not, a kept look is not displaced, a look already in Saved is not saved twice, and the same look on two days is saved once. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Back from a trip lands on the Planner, and the planner stops reopening a trip she left — 2026-11-02
 
 ### Why

@@ -20,6 +20,7 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import RouteFallback from "../../components/RouteFallback.jsx";
 import { sb } from "../../lib/supabase.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
+import { displacedLogRows } from "./displaced.js";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
@@ -225,6 +226,9 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
     setActiveTripRaw(t);
   };
   const [syncError, setSyncError] = useState("");
+  // What a write did with her looks, said once (displaced.js: looks a trip
+  // displaced went to Saved).
+  const [dayNotice, setDayNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   // Active-closet daily-high forecast for the next ~16 days, keyed by iso
   // date (falls back to NYC when the closet lacks coords). Used to (a) auto-
@@ -613,6 +617,7 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   if (activeTrip) {
     return (
       <Suspense fallback={<RouteFallback/>}>
+        {dayNotice && <div style={{ padding: "12px 16px 0" }}><DayNotice text={dayNotice} onDismiss={() => setDayNotice("")}/></div>}
         <TripDetailView
           trip={activeTrip}
           available={available}
@@ -680,6 +685,7 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
           </button>
         </div>
       )}
+      {dayNotice && <DayNotice text={dayNotice} onDismiss={() => setDayNotice("")}/>}
       {syncError && (
         <div style={{ background: "#FBE9E7", border: `1px solid ${PALETTE.accent}`, color: PALETTE.accent, padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 11, lineHeight: 1.5 }}>
           {syncError}
@@ -863,9 +869,29 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
           apiKey={apiKey}
           onClose={() => setShowTrip(false)}
           onAssign={async (rangePlans, savedTrip) => {
+            // A trip landing on days that already hold her looks keeps them:
+            // each look a day gives up goes to Saved first (displaced.js).
+            const dates = rangePlans.map(p => p.date).sort();
+            let moved = 0;
+            if (dates.length) {
+              try {
+                const [rows, logs] = await Promise.all([
+                  fetchPlansBetween(dates[0], dates[dates.length - 1]),
+                  sb.fetchOutfitLogs(),
+                ]);
+                const nextByDate = Object.fromEntries(rangePlans.map(p => [p.date, p.outfits || []]));
+                const keep = displacedLogRows(Array.isArray(rows) ? rows : [], nextByDate, logs, { byTrip: true });
+                for (const log of keep) {
+                  try { await sb.saveOutfitLog(log); moved++; } catch { /* the trip still saves */ }
+                }
+              } catch { /* a read blip must not block the trip; nothing was overwritten yet */ }
+            }
             for (const p of rangePlans) {
               await savePlan(p).catch(() => {});
             }
+            setDayNotice(moved
+              ? `${moved} look${moved === 1 ? "" : "s"} already planned on these days ${moved === 1 ? "was" : "were"} moved to Saved, so nothing was lost.`
+              : "");
             setShowTrip(false);
             await refreshPlans();
             // Navigate directly into the trip detail view after creation
@@ -873,6 +899,15 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
           }}
         />
       )}
+    </div>
+  );
+}
+
+function DayNotice({ text, onDismiss }) {
+  return (
+    <div role="status" style={{ background: "#fff", border: `1px solid ${PALETTE.line}`, color: PALETTE.soft, padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 11, lineHeight: 1.5 }}>
+      {text}
+      <button onClick={onDismiss} style={{ marginLeft: 8, background: "none", border: "none", color: PALETTE.muted, cursor: "pointer", fontSize: 11 }}>✕</button>
     </div>
   );
 }

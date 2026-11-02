@@ -251,5 +251,30 @@ section("planRowOver: the one change-a-day reconcile");
   assert(!("layout_data" in bare) && !("outfit_log_id" in bare), "nothing to carry, nothing written: the column keeps its value");
 }
 
+// ── A day never silently loses a look (2026-11-02) ───────────────────────────
+section("a new look on a planned day adds; a trip moves what it displaces to Saved");
+{
+  const { scheduleSlot } = await import("../src/features/planner/outfits.js");
+  const { displacedLooks, displacedLogRows } = await import("../src/features/planner/displaced.js");
+  const day = [{ id: "o1", items: ["a", "b", "c"] }];
+  assert(scheduleSlot(null, "2026-11-14", day) === 1, "a fresh build scheduled onto a planned day appends");
+  assert(scheduleSlot({ iso: "2026-11-14", plan: {} }, "2026-11-14", day) === 0, "an edit of this day replaces the look being edited");
+  assert(scheduleSlot({ iso: "2026-11-14", tripOutfitIdx: 1 }, "2026-11-14", [...day, { id: "o2" }]) === 1, "a trip day's Build edits its own look");
+  assert(scheduleSlot({ iso: "2026-11-14" }, "2026-11-20", day) === 1, "an edit moved to another date adds there");
+  assert(scheduleSlot(null, "2026-11-14", []) === 0, "an empty day takes the first look");
+
+  const work = { date: "2026-11-14", source: "planner", weather: "Mild", outfits: [{ id: "w", occasion: "Work", items: ["t", "p", "s"] }], layout_data: [{ id: "t" }] };
+  const tripDay = [{ id: "v", items: ["x", "y", "z"] }];
+  assert(displacedLooks(work, tripDay, { byTrip: true }).length === 1, "a trip landing on a planned Work day displaces the Work look");
+  assert(displacedLooks({ ...work, source: "trip" }, tripDay, { byTrip: true }).length === 0, "a re-saved trip replaces its own looks");
+  assert(displacedLooks(work, [{ items: ["s", "p", "t"] }], { byTrip: true }).length === 0, "a look the new day keeps is not displaced");
+  const rows = displacedLogRows([work], { "2026-11-14": tripDay }, [], { byTrip: true });
+  assert(rows.length === 1 && rows[0].notes === "Planned for 2026-11-14" && rows[0].occasion === "Work", "the displaced look becomes a saved look that says where it came from");
+  assert(JSON.stringify(rows[0].layout_data) === JSON.stringify(work.layout_data), "the first look keeps its arrangement");
+  assert(displacedLogRows([work], { "2026-11-14": tripDay }, [{ garment_ids: ["p", "t", "s"] }], { byTrip: true }).length === 0, "a look already in Saved is not saved twice");
+  const twice = displacedLogRows([work, { ...work, date: "2026-11-15" }], {}, [], { byTrip: true });
+  assert(twice.length === 1, "the same look on two days is saved once");
+}
+
 console.log(`\ntrip-pool: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

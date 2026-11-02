@@ -68,7 +68,7 @@ const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView
 const BrandDiscoveryView = lazy(() => import("./features/discovery/BrandDiscoveryView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
-import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf } from "./features/planner/outfits.js";
+import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf, scheduleSlot } from "./features/planner/outfits.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -2358,7 +2358,13 @@ export default function App() {
               // "build another look for this day" path, which carries the
               // picked daypart in newOutfitLabel (appendOutfit back-labels the
               // existing lone look "Day" when an Evening one joins it).
-              const idx = editingPlan?.tripOutfitIdx ?? 0;
+              // Only an EDIT of this very day replaces a look on it. A fresh
+              // build, a Style Me look opened in the builder, or an edit moved
+              // to another date ADDS a look to that day (owner, 2026-11-02:
+              // "Did selecting a new outfit on a day that already had one
+              // planned delete what existed on that day entirely?" — it did:
+              // with no edit in progress this indexed look #0 and replaced it).
+              const idx = scheduleSlot(editingPlan, plan.date, current);
               let outfits;
               if (current.length === 0) {
                 outfits = [{ id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] }];
