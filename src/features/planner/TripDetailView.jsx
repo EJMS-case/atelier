@@ -13,7 +13,7 @@ import { reconcileTripItems } from "./packingSync.js";
 import { analyzeTripDestination, generateTripDayLook } from "../../lib/ai/tripAdvisor.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
-import { SEASONAL_HIGHS, nyToday } from "../../lib/time.js";
+import { SEASONAL_HIGHS, nyToday, shortDayLabel } from "../../lib/time.js";
 import { tripStatusActions, statusOf, isTripUnderway } from "./tripStatus.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
@@ -25,7 +25,7 @@ import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { homeClosetFor, poolForTripDay, defaultTripDayOccasion, destinationClosetFor } from "./tripPools.js";
-import { OCCASIONS, normalizeOccasion } from "../../constants/taxonomy.js";
+import { OCCASIONS, normalizeOccasion, PACKING_ORDER } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 
 // In-flight label per transition. `statusBusy` holds the status being written
@@ -37,7 +37,6 @@ const BUSY_LABEL = { active: "Starting…", complete: "Completing…", planning:
 // var() reference can't do.
 const PALETTE = PALETTE_STRONG;
 
-const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Sets", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts", "Occasionwear"];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,9 +52,7 @@ function tripDays(startIso, endIso) {
 }
 
 function friendlyDay(iso, index) {
-  const d = new Date(iso + "T00:00:00Z");
-  const label = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-  return `Day ${index + 1} · ${label}`;
+  return `Day ${index + 1} · ${shortDayLabel(iso)}`;
 }
 
 function parseBrief(notes) {
@@ -925,7 +922,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
         const occasion = occasionFor(iso);
         const evening = dayIdx > 0 && dayIdx < days.length - 1 ? activityEvening(activity) : null;
         return {
-          iso, label: new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }),
+          iso, label: shortDayLabel(iso),
           occasion, activity, weather: weatherForDay(iso),
           pool: poolForDay(iso, occasion), evening, eveningPool: evening ? poolForDay(iso, evening) : null,
           travel: occasion === "Travel Day",
@@ -1168,10 +1165,10 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
       byCategory[cat].push({ item: it, days: [...itemDays[it.id]].sort((a, b) => a - b), atDest });
     });
 
-    const sorted = CAT_ORDER
+    const sorted = PACKING_ORDER
       .filter(c => byCategory[c])
       .map(c => ({ category: c, entries: byCategory[c] }));
-    const extra = Object.keys(byCategory).filter(c => !CAT_ORDER.includes(c))
+    const extra = Object.keys(byCategory).filter(c => !PACKING_ORDER.includes(c))
       .map(c => ({ category: c, entries: byCategory[c] }));
 
     // Coverage warnings — one row per outfit slot that's missing a core piece.

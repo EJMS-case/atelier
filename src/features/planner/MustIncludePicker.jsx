@@ -17,16 +17,9 @@ import { useMemo, useState } from "react";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { PALETTE_STRONG as PALETTE } from "../../constants/palette.js";
 import { filterByWeather } from "../../utils/item-helpers.js";
-
-// Category order mirrors how the closet lists itself; anything unexpected
+// Categories list in closet order (taxonomy's one order); anything unexpected
 // falls to the end rather than disappearing.
-const CAT_ORDER = ["Dresses", "Tops", "Knits", "Bottoms", "Sets", "Jumpsuits",
-  "Outerwear", "Shoes", "Bags", "Accessories", "Belts", "Swim", "Loungewear", "Athleisure"];
-
-const catRank = (c) => {
-  const i = CAT_ORDER.indexOf(c);
-  return i === -1 ? CAT_ORDER.length : i;
-};
+import { categoryRank as catRank } from "../../constants/taxonomy.js";
 
 export default function MustIncludePicker({
   items,

@@ -37,6 +37,13 @@ export function dayPart(iso) {
 }
 
 // "Mon, Oct 13" / "Tomorrow" / "Today" / "Yesterday". Useful for headers.
+// "Fri, Nov 13" for an ISO day, read at noon UTC so no timezone moves it a
+// day (the trip cards, the trip stylist's day list, friendlyDate below).
+export function shortDayLabel(iso) {
+  if (!iso) return "";
+  return new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 export function friendlyDate(iso) {
   if (!iso) return "";
   const today = nyToday();
@@ -49,7 +56,7 @@ export function friendlyDate(iso) {
   const diff = Math.round((d - now) / 86400000);
   if (diff === 1)  return "Tomorrow";
   if (diff === -1) return "Yesterday";
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  return shortDayLabel(iso);
 }
 
 // TZ-safe "YYYY-MM-DD" for a Date object — built from LOCAL year/month/day

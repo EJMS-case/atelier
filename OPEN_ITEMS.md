@@ -11,7 +11,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 | # | What | Why it is open (checked 10-25) | What to do |
 |---|---|---|---|
 | 1.1 | **Delete the old `api_keys` row and rotate the Anthropic key it holds** | The app stopped reading and writing it on 2026-08-29. The row still exists (1 row), and its key is the one that was once readable through the old public policy. | In the Anthropic console, make a new key, paste it in Settings on each device, and revoke the old one. Then say "delete the api_keys row" and a session will run it. |
-| 1.2 | **Clear 35 old picture blobs in saved looks (~4 MB)** | Saved looks store a base64 JPEG in `collage_url` that nothing displays. Every Saved, Style Me and Planner load skips it, but it sits in the table. 10 of the 35 were written this month (see 2.2). | Say "null the base64 collages". It touches only that column, and no saved look changes on screen. |
+| 1.2 | **Clear 37 old picture blobs in saved looks (~4 MB)** | Saved looks store a base64 JPEG in `collage_url` that nothing displays. Every Saved, Style Me and Planner load skips it, but it sits in the table. Since 2026-11-02 nothing writes them any more, so the count only falls. | Say "null the base64 collages". It touches only that column, and no saved look changes on screen. |
 | 1.3 | **The Arizona trip pins a piece you deleted** | 1 `must_include_ids` entry on the completed Arizona trip names no `wardrobe_items` row. Harmless, because the trip is complete. | Remove the pin or leave it. Your call. |
 | 1.4 | **Two pieces to tidy (raised 09-18)** | A Tory Burch sandal is still named "IMG 1887". The white Banana Republic Crinkle Knit Cardigan is filed Knits › Pullovers while its black twin is under Cardigans. | Fix both on the Edit screen, or say so and a session will. |
 | 1.5 | **About 3 same-closet duplicate rows (raised 09-25)** | 15 name + colour pairs repeat. 12 of them span both closets, which is deliberate (you own the piece twice). About 3 repeat inside one closet. | Merge them in the closet or keep them. |
@@ -26,15 +26,13 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 ## 2. Work for a future session, in priority order
 
 1. **The trend brief claims research it did not do.** The live `trend_brief` (season Oct) is flagged `web: true`, but its sources read "unavailable … search was down and nothing was verified." Evaluate's *current* score, Style Me and the chat all read it as researched. Fix it so a refresh that got no search results stores `web: false` and retries soon, rather than waiting 35 days. Then refresh it. The automatic refresh is otherwise about 2026-11-09.
-2. **Stop writing the base64 picture on every builder save.** `SilhouetteBuilder.jsx` (`compositeSaveImage` → `collage_url`, around line 755) writes a JPEG that nothing renders. Drop the write and keep the `{mood, styling}` metadata path. Pairs with 1.2.
-3. **Read the Style Me timing rows before any speed work.** There are 441 `stylist_outfit:timing` rows (09-11 → 10-23), and no session has analysed them. They decide between stabilising the inventory order (prompt-cache hits) and cutting output tokens. Also worth reading: on 10-21 one stream sat about 10 minutes (`totalMs` 622 081) before the idle watchdog gave up. Most likely the phone suspended the app mid-call.
-4. **Refresh `ATELIER_STATE.md`.** It still says "as of 2026-09-18". Bring it to #276 and drop its stale §9.
-5. **The deferred refactors (from the 08-07 audit, still open):**
+2. **Read the Style Me timing rows before any speed work.** There are 441 `stylist_outfit:timing` rows (09-11 → 10-23), and no session has analysed them. They decide between stabilising the inventory order (prompt-cache hits) and cutting output tokens. Also worth reading: on 10-21 one stream sat about 10 minutes (`totalMs` 622 081) before the idle watchdog gave up. Most likely the phone suspended the app mid-call.
+3. **Refresh `ATELIER_STATE.md`.** It still says "as of 2026-09-18". Bring it to #276 and drop its stale §9.
+4. **The deferred refactors (from the 08-07 audit, still open):**
    - Role classifiers: `getGarmentRole` (validator), `slotForItem` (item-helpers) and the collage's own reader still disagree at the edges, for example Occasionwear non-dresses. Unify on `slotForItem` with visual checks.
-   - `reconcilePlanDay`: six fetch → rebuild → `savePlan` sites in App, CalendarView and TripDetailView repeat the same reconcile. One helper in `outfits.js`.
    - The hosiery force-include trap: "style me with my sheer tights", if paired with trousers, could empty a look. It needs a repro first, and must be fixed together with the force-include fix.
-6. **Backlog ideas, none started:** normalise the mixed L2/L3 subcategory labels; About Me as chips plus a `prefs.direction` editor; "what changed" in the fingerprint text; shopping favourites.
-7. **Unverified:** eight pieces moved to Arizona took sixteen July NYC looks out of "Wearable now". Check whether any came home before calling it a problem.
+5. **Backlog ideas, none started:** normalise the mixed L2/L3 subcategory labels; About Me as chips plus a `prefs.direction` editor; "what changed" in the fingerprint text; shopping favourites.
+6. **Unverified:** eight pieces moved to Arizona took sixteen July NYC looks out of "Wearable now". Check whether any came home before calling it a problem.
 
 ## 3. Watch on your phone (confirms recent fixes, nothing to build)
 

@@ -3,8 +3,8 @@
 // set/swim/shoes/outerwear/bag/accessory) picked from a searchable bottom-
 // sheet grid; multi-slots stack. Pieces drag, aspect-locked resize, and
 // re-layer; boxes auto-fit each garment's trimmed image (boxMath.js). Save
-// composites the arrangement to a 600×800 JPEG and snapshots layout_data so
-// viewers and future edits rebuild the exact arrangement.
+// snapshots layout_data so viewers and future edits rebuild the exact
+// arrangement from the piece thumbs.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
@@ -16,7 +16,6 @@ import MarkdownLite from "../../components/MarkdownLite.jsx";
 import { OCCASIONS, WEATHER_SHORTS, getL3Options, getSubcatL2, subcatMatches } from "../../constants/taxonomy.js";
 import { slotForItem, itemIdIndex, resolveItemIds, shelfSortComparator } from "../../utils/item-helpers.js";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
-import { getAlphaBbox } from "../../utils/images.js";
 import { nyToday } from "../../lib/time.js";
 import { asArray, tagsFor } from "../../lib/multitag.js";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
@@ -75,8 +74,8 @@ const MULTI_SLOTS = new Set(["top", "bottom", "outerwear", "swim", "shoes", "bag
 // item in a multi-slot has its own canvas slot.
 const posKey = (slot, itemId) => `${slot}__${itemId}`;
 
-// Default stacking order (back → front) shared by the live canvas, the saved
-// collage compositing, and the exported layout snapshot. Sets and swim wear
+// Default stacking order (back → front) shared by the live canvas and the
+// exported layout snapshot. Sets and swim wear
 // like a dress (full-body base layer), so they take the dress z. Unknown
 // slots fall back to 3 at each use site.
 const DEFAULT_Z = { outerwear: 1, dress: 2, set: 2, swim: 2, top: 3, bottom: 2, belt: 4, bag: 4, shoes: 5, accessory: 6 };
@@ -359,8 +358,7 @@ export default function SilhouetteBuilder({
   // Mirror-flipped pieces on the canvas (owner, 2026-11-02: "a garment that
   // appears to face the left side can be flipped to face the right side").
   // Builder only: the flag rides layout_data as `flip: true` so the builder
-  // restores it on reopen and the saved composite matches the canvas; no
-  // other surface reads it.
+  // restores it on reopen; no other surface reads it.
   const [flips, setFlips] = useState(() => restoredLayout?.flips || new Set());
   // The canvas item the user last touched — anchors the layering
   // controls so they know which item to raise/lower. Key = posKey(slot, itemId).
@@ -656,77 +654,6 @@ export default function SilhouetteBuilder({
     });
   };
 
-  async function compositeSaveImage() {
-    const canvas = document.createElement("canvas");
-    canvas.width = 600;
-    canvas.height = 800;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Convert % positions to absolute pixels on the 600×800 save canvas.
-    // Keyed per (slot, itemId) so layered tops and multi-bag/shoe options
-    // each composite at their own placement.
-    const zoneFor = (slot, itemId) => {
-      const key = posKey(slot, itemId);
-      const p = positions[key] || defaultPosFor(slot, itemId);
-      if (!p) return null;
-      return {
-        x: p.x / 100 * 600,
-        y: p.y / 100 * 800,
-        w: p.w / 100 * 600,
-        h: p.h / 100 * 800,
-      };
-    };
-
-    async function drawItem({ slot, item }) {
-      if (!item.image) return;
-      const zone = zoneFor(slot, item.id);
-      if (!zone) return;
-      await new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => {
-          // Trim transparent padding before scaling — without this the zone
-          // shows a piece centered inside surrounding empty space.
-          const bbox = getAlphaBbox(img);
-          const srcX = bbox?.x ?? 0;
-          const srcY = bbox?.y ?? 0;
-          const srcW = bbox?.w ?? img.width;
-          const srcH = bbox?.h ?? img.height;
-          const scale = Math.min(zone.w / srcW, zone.h / srcH);
-          const w = srcW * scale;
-          const h = srcH * scale;
-          const dx = zone.x + (zone.w - w) / 2;
-          const dy = zone.y + (zone.h - h) / 2;
-          if (flips.has(posKey(slot, item.id))) {
-            // Mirror about the piece's own centre, as the canvas shows it.
-            ctx.save();
-            ctx.translate(dx + w, dy);
-            ctx.scale(-1, 1);
-            ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, w, h);
-            ctx.restore();
-          } else {
-            ctx.drawImage(img, srcX, srcY, srcW, srcH, dx, dy, w, h);
-          }
-          resolve();
-        };
-        img.onerror = () => resolve();
-        img.src = item.image;
-      });
-    }
-
-    // Draw back→front using the same z-resolution as the live canvas so the
-    // saved image matches what the user sees (including any Front/Back overrides).
-    const sorted = [...pickedItems].sort((a, b) => {
-      const za = zOrders[posKey(a.slot, a.item.id)] ?? DEFAULT_Z[a.slot] ?? 3;
-      const zb = zOrders[posKey(b.slot, b.item.id)] ?? DEFAULT_Z[b.slot] ?? 3;
-      return za - zb;
-    });
-    for (const sel of sorted) await drawItem(sel);
-    return canvas.toDataURL("image/jpeg", 0.9);
-  }
-
   // Build a portable layout snapshot — [{ id, x, y, w, h, z }, …] — so the
   // viewer (LookCard, planner cells) can rebuild the same arrangement and the
   // builder can restore it on reopen.
@@ -772,7 +699,10 @@ export default function SilhouetteBuilder({
         return;
       }
 
-      const collageUrl = await compositeSaveImage();
+      // No composite picture: every surface draws a saved look from
+      // layout_data and the piece thumbs, and the JPEG this used to write into
+      // collage_url was read by nothing — while an EDIT overwrote the
+      // {mood, styling} note a Style Me look keeps there (2026-11-02 audit).
       const log = {
         garment_ids: garmentIds,
         date_worn: initialLook?.date_worn || null,
@@ -781,7 +711,6 @@ export default function SilhouetteBuilder({
         occasions: occList,
         weathers:  wxList,
         notes: name || null,
-        collage_url: collageUrl,
         layout_data: layoutData,
         // When set, the parent's onSave updates the existing log instead of
         // inserting a new one. Lets users edit a saved look in place.

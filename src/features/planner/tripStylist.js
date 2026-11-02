@@ -30,12 +30,8 @@ import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
 import { eligibleForTripDay, ACTIVITY_NOTES, allowsSwim } from "../../lib/ai/tripAdvisor.js";
 import { formalityOf, promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 import { outfitCoverageGaps } from "./outfits.js";
-
-// Category order for the inventory — how a stylist reads a closet: the
-// pieces that set a look first, the finishing last.
-const CAT_ORDER = ["Dresses", "Jumpsuits", "Sets", "Tops", "Knits", "Bottoms", "Skirts", "Outerwear",
-  "Shoes", "Bags", "Accessories", "Belts", "Athleisure", "Loungewear", "Swim"];
-const catRank = c => { const i = CAT_ORDER.indexOf(c); return i === -1 ? CAT_ORDER.length : i; };
+// The inventory lists in closet order (taxonomy's one order).
+import { categoryRank as catRank } from "../../constants/taxonomy.js";
 
 /**
  * Who may wear what, per look. A trip day carries a day look and, for an
