@@ -6,7 +6,7 @@
 // composites the arrangement to a 600×800 JPEG and snapshots layout_data so
 // viewers and future edits rebuild the exact arrangement.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
 import { evalFingerprint, recallEval, rememberEval } from "./evalMemory.js";
 import { resolveEvalMoves, pieceLabel } from "./evalResolve.js";
@@ -444,6 +444,15 @@ export default function SilhouetteBuilder({
 
   // Reset search + subcategory filter + comfort section when the active slot changes
   useEffect(() => { setSearch(""); setSubcatFilter(""); setComfortOpen(false); }, [activeSlot]);
+  // The picker grid is one scroller shared by every slot tab, so a tab
+  // switched after scrolling deep into Tops kept that offset and clamped to
+  // the bottom of the shorter shelf (owner, 2026-11-02: "sometimes when I
+  // open a category in builder it starts at the bottom"). A new shelf — a
+  // slot, a subcategory, a search — starts at its top.
+  const pickerGridRef = useRef(null);
+  useLayoutEffect(() => {
+    if (pickerGridRef.current) pickerGridRef.current.scrollTop = 0;
+  }, [activeSlot, subcatFilter, search, pickerOpen]);
 
   const slotDef = SLOTS.find(s => s.key === activeSlot);
 
@@ -1237,7 +1246,7 @@ export default function SilhouetteBuilder({
                 closet-sized — her TOP slot alone is 173 pieces, BOTTOM 103 —
                 and eagerly fetching and decoding that many thumbnails is a
                 visible stall on a phone the moment a slot chip is tapped. */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 32px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignContent: "start" }}>
+            <div ref={pickerGridRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px 32px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignContent: "start" }}>
               {/* SET slot shows coordinated sets (+ one-piece "Sets" items).
                   Tapping a coordinated set drops all its pieces onto the canvas. */}
               {activeSlot === "set" ? (

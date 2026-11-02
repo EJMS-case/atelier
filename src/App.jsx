@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useDeferredValue, useRef, lazy, Suspense } from "react";
 import { restoreScroll } from "./utils/restoreScroll.js";
 // The stylist pipeline is dynamic-imported at its call sites (see
 // generateAndAppendLooks) so the AI chunk stays off the cold-start path —
@@ -240,6 +240,19 @@ export default function App() {
   // synthetic log for SilhouetteBuilder's initialSelections, plus the original
   // id list so onSave can diff the result into A1 look_edits lessons.
   const [builderSeed, setBuilderSeed] = useState(null);
+  // Every other screen opens at its top (owner, 2026-11-02: "every time I
+  // open an item in my closet … it starts at the bottom of the page"). No
+  // view reset the offset, so a screen opened from far down the closet
+  // inherited that scrollY and the browser clamped it to the new page's
+  // bottom. A layout effect runs after the new view commits and before it
+  // paints; a screen that scrolls itself to a target (Saved's focus look,
+  // the planner's preview) does it in a passive effect, which runs after
+  // this and still wins. The closet keeps its own restore (restoreScroll
+  // above); opening the builder from Style Me is a screen change too.
+  useLayoutEffect(() => {
+    if (view === "closet") return;
+    window.scrollTo(0, 0);
+  }, [view, manualBuilderOpen]);
   // When the user taps Edit on a planner day, we open the SilhouetteBuilder
   // pre-populated with that plan. Schedule mode + the original date are
   // pre-selected so hitting Save updates the same pin in place.

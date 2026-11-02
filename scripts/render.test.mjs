@@ -355,6 +355,45 @@ await check("Closet → Select mode: the bar files a formality across the select
   await page.waitForTimeout(200);
 });
 
+// A screen opened from far down the closet opens at ITS top (owner,
+// 2026-11-02: "every time I open an item in my closet … it starts at the
+// bottom of the page"). No view reset scrollY, so Edit inherited the grid's
+// offset and the browser clamped it to the bottom. Back still lands where she
+// was in the grid (restoreScroll).
+await check("Closet, scrolled deep → a piece's Edit opens at the top; Back returns to the spot", async () => {
+  // The fixture closet is a few pieces; a short window gives it room to scroll.
+  await page.setViewportSize({ width: 390, height: 360 });
+  await page.waitForTimeout(200);
+  try { await deepOpen(); } finally { await page.setViewportSize({ width: 390, height: 844 }); }
+});
+async function deepOpen() {
+  // A shelf carries the cards (the landing view does not, for the fixture).
+  await clickText("button", "Tops");
+  await page.waitForTimeout(400);
+  const deep = await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    return window.scrollY;
+  });
+  if (deep < 150) throw new Error(`the fixture closet is too short to scroll (scrollY ${deep}) — the check proves nothing`);
+  const clicked = await page.evaluate(() => {
+    const all = [...document.querySelectorAll('button[aria-label="Edit"]')];
+    const b = all[all.length - 1];
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!clicked) throw new Error("no Edit button on the grid");
+  await page.waitForTimeout(600);
+  const y = await page.evaluate(() => window.scrollY);
+  if (y > 2) throw new Error(`Edit opened at scrollY ${y}, not the top`);
+  await clickText("button", "← Back");
+  await page.waitForTimeout(900);
+  const back = await page.evaluate(() => window.scrollY);
+  if (Math.abs(back - deep) > 40) throw new Error(`Back landed at scrollY ${back}, not the grid spot ${deep}`);
+  await clickText("button", "All");
+  await page.waitForTimeout(200);
+}
+
 // A garment's Edit screen (owner, 2026-09-18): the stylist line is the ONE
 // text field — no Notes box, no "≤200" instruction — and every "In Your
 // Looks" row is a way out. The fixture's NYC look (log-nyc, 2026-08-01) is
