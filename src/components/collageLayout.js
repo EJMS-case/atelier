@@ -301,7 +301,9 @@ export function buildFromLayout(items, layout, isMobile) {
     const entry = byId.get(it.id);
     if (entry && typeof entry.x === "number") {
       const zIndex = entry.z ?? CAT_Z[it.category] ?? 5;
-      positioned.push({ ...it, x: entry.x, y: entry.y, w: entry.w, h: entry.h, rotate: 0, zIndex });
+      // `flip`: she mirrored the piece in the builder (⇋ Flip); every card
+      // that draws her arrangement draws it facing the way she set it.
+      positioned.push({ ...it, x: entry.x, y: entry.y, w: entry.w, h: entry.h, rotate: 0, zIndex, flip: entry.flip === true });
     } else {
       missing.push(it);
     }

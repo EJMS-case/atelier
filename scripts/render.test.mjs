@@ -108,6 +108,10 @@ const PLANS = [{
   date: iso(3), source: "trip", notes: "",
   items: LOOK_IDS,
   outfits: [{ id: "o1", label: "", occasion: "Casual", items: LOOK_IDS }],
+  // Her arrangement, one piece mirrored with the builder's ⇋ Flip: the square
+  // must draw it mirrored too (owner, 2026-11-02: "Match the flip in the
+  // saved, favorites, and calendar thumbnail view").
+  layout_data: LOOK_IDS.map((id, i) => ({ id, x: 5 + (i % 2) * 45, y: 5 + Math.floor(i / 2) * 45, w: 40, h: 40, z: 2 + i, ...(i === 0 ? { flip: true } : {}) })),
 }, {
   // A Work day she built herself, with her arrangement saved: the square
   // must draw THAT arrangement, and the occasion filter must find it.
@@ -576,11 +580,16 @@ await check("Planner → a planned square draws the look as composed, not as a g
     const cell = document.querySelector(`button[aria-label^="${day},"]`);
     if (!cell) return { err: `no planned square for ${day}` };
     const imgs = [...cell.querySelectorAll("img")];
-    return { imgs: imgs.length, positioned: imgs.filter(i => getComputedStyle(i.parentElement).position === "absolute").length };
+    return {
+      imgs: imgs.length,
+      positioned: imgs.filter(i => getComputedStyle(i.parentElement).position === "absolute").length,
+      mirrored: [...cell.querySelectorAll("img, canvas")].filter(el => /^matrix\(-1, 0, 0, 1/.test(getComputedStyle(el).transform)).length,
+    };
   }, iso(3));
   if (r.err) throw new Error(r.err);
   if (r.imgs !== LOOK_IDS.length) throw new Error(`the square shows ${r.imgs} pieces of a ${LOOK_IDS.length}-piece look`);
   if (r.positioned !== LOOK_IDS.length) throw new Error("the square's pieces are not composed (not positioned)");
+  if (r.mirrored !== 1) throw new Error(`the piece she flipped is not drawn flipped on the square (${r.mirrored} mirrored)`);
 });
 // "Would it be too much to filter by occasion and/or weather?" — a day outside
 // the pick fades, the line under the filters counts the days inside it, this

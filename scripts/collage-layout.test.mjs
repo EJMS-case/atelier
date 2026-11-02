@@ -79,3 +79,16 @@ test("the builder saves no picture into collage_url", async () => {
   assert.doesNotMatch(src, /collage_url\s*:/);
   assert.doesNotMatch(src, /toDataURL\(/);
 });
+
+test("a piece she flipped in the builder draws flipped on every card", () => {
+  const items = [
+    { id: "a", category: "Tops", name: "Blouse", image: "x" },
+    { id: "b", category: "Bottoms", name: "Skirt", image: "y" },
+  ];
+  const slots = buildFromLayout(items, [
+    { id: "a", x: 10, y: 10, w: 40, h: 40, z: 3, flip: true },
+    { id: "b", x: 10, y: 50, w: 40, h: 40, z: 2 },
+  ], true);
+  assert.equal(slots.find(s => s.id === "a").flip, true);
+  assert.equal(slots.find(s => s.id === "b").flip, false);
+});
