@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Builder: ⇋ Flip mirrors a piece — 2026-11-02
+
+### Why
+
+Owner: *"Can you add a 'flip image' in builder? So a garment that appears to face the left side can be flipped to face the right side? Like a mirror image. Nothing else should change and this only in builder."*
+
+### Added
+
+- **⇋ Flip** on the builder canvas toolbar, beside ↑ Front / ↓ Back / ✕ Remove. It mirrors the selected piece's picture left to right; a second tap restores it. The box, size and layer stay put. **Reset layout** clears flips with the rest of the arrangement.
+- A flipped piece is saved as `flip: true` on its `layout_data` entry, so the builder restores it when she reopens the look and the saved composite draws it mirrored as the canvas showed it. No other surface reads the flag: collages, planner squares and thumbs stay as they were. Unflipped entries are unchanged.
+- **Render walk**: a step flips the selected piece, expects `scaleX(-1)` on its picture with the box unmoved, and expects a second tap to restore it.
+
+### Downstream, four ways
+
+*Efficiency / speed:* a CSS transform, no network, no AI. *Effectiveness / education:* none. The flip is presentation only and never reaches a prompt.
+
+### Tests
+
+`npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Builder chat says the conclusion; a bootie under a hem is a note on how — 2026-11-02
 
 ### Why

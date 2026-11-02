@@ -764,6 +764,31 @@ await check("Builder → a piece sent behind every other piece still paints on t
   }
 });
 
+// Owner, 2026-11-02: "add a 'flip image' in builder … like a mirror image."
+// The piece selected above flips on ⇋ Flip and flips back on a second tap;
+// only its picture mirrors, never its box.
+await check("Builder → ⇋ Flip mirrors the selected piece and a second tap restores it", async () => {
+  const read = () => page.evaluate(() => {
+    const active = [...document.querySelectorAll("[data-resize]")].map(h => h.parentElement)
+      .find(b => getComputedStyle(b).outlineStyle === "dashed");
+    const img = active?.querySelector("img, canvas");
+    const r = active?.getBoundingClientRect();
+    return active ? { t: img ? getComputedStyle(img).transform : "no-img", box: `${Math.round(r.left)},${Math.round(r.width)}` } : null;
+  });
+  const before = await read();
+  if (!before) throw new Error("no selected piece to flip");
+  await clickText("button", "⇋ Flip");
+  await page.waitForTimeout(200);
+  const flipped = await read();
+  if (flipped.t === "no-img") throw new Error("the selected piece has no picture to flip");
+  if (!/^matrix\(-1, 0, 0, 1/.test(flipped.t)) throw new Error(`Flip did not mirror the picture (transform ${flipped.t})`);
+  if (flipped.box !== before.box) throw new Error("Flip moved or resized the piece's box");
+  await clickText("button", "⇋ Flip");
+  await page.waitForTimeout(200);
+  const back = await read();
+  if (back.t !== before.t) throw new Error(`a second Flip did not restore the picture (transform ${back.t})`);
+});
+
 await check("Saved → the builder's picker offers the wardrobe, the look's own piece included", async () => {
   // The look fills two slots (the camisole's and its top's); open each filled
   // chip in turn until the picker for the camisole's slot is on screen.
