@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Boots and Booties are two Style Me chips — 2026-11-02
+
+### Why
+
+Owner: *"split boots and booties in the exclusions in style me. Make sure it's fixed everywhere."* One "Boots" chip matched every boot (`isBootItem`), so "No Boots" took her ankle booties out with her knee boots, and "Only Boots" could not ask for one without the other.
+
+### Changed
+
+- **`style-filters.js FILTER_TYPES`:** **Boots** (tall: knee-high, over-the-knee, a tall boot on the bare Boots shelf) and **Booties** (`isAnkleBootItem`, the one ankle reader that LOOK FACTS' hem note already uses). Every surface reads this table: Style Me's chips (`computeFilterChips`), the sampler's pool filter, the validator's retry reasons (`explainFilterViolation`), the prompt's filter lines (`describeStyleFilters`) and the occasion-ban rescue (`matchesActiveOnly`). So the split reaches all of them at once. The weather gates still keep both out of Hot and Warm, and the trip activity bans (Beach, Resort) still cover both.
+- Live: **Boots** holds the two Wally Foldover, two Naples, the Giano Fringe Tall and the black suede over-the-knee (6). **Booties** holds the Caster Platform, Classic Short, Marrgo, black Ankle Boots, camel suede classic and both Hendrix (7).
+
+### Downstream, four ways
+
+None for tokens or speed. *Effectiveness:* each exclusion now does what its word says.
+
+### Tests
+
+`test:filters` +1: No Boots keeps booties, No Booties keeps boots, each Only bans the other, the violation names Booties, and both chips show. The old fixture's ankle boot is a bootie now, so its two uses moved to the Booties key. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Trips re-wear: shoes, belts, layers and bottoms carry several looks; tops may return — 2026-11-02
 
 ### Why
