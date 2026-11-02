@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { evaluateLook } from "./evaluateLook.js";
+import { evalFingerprint, recallEval, rememberEval } from "./evalMemory.js";
 import { resolveEvalMoves, pieceLabel } from "./evalResolve.js";
 import { sendBuilderMessage, rememberChat } from "./builderChat.js";
 import { sb } from "../../lib/supabase.js";
@@ -943,7 +944,10 @@ export default function SilhouetteBuilder({
     });
   }
 
-  function handleEvaluate() {
+  // `fresh` is the card's "Ask for a fresh read": the one way to roll the
+  // same look again. Otherwise the same look gets the same read
+  // (evalMemory.js — owner, 2026-11-02: "same outfit 3x … all different").
+  function handleEvaluate({ fresh = false } = {}) {
     if (pickedItems.length < 2) { setEvalErr("Pick at least 2 items first."); return; }
     if (!apiKey) { setEvalErr("Add your Anthropic API key in Settings."); return; }
     setEvalErr(""); setAppliedMoves(new Set()); setMoveChoice({});
@@ -963,9 +967,14 @@ export default function SilhouetteBuilder({
         ? { source: "styleme", text: initialLook.stylist_read, ids: initialLook.garment_ids || [] }
         : null;
     const brief = { occasions: asArray(occasions), weathers: asArray(weathers), available: builderPool, origin };
+    const fp = evalFingerprint({ canvasIds, occasions: brief.occasions, weathers: brief.weathers, origin, available: builderPool || [] });
+    const remembered = fresh ? null : recallEval(fp);
     startRun(RUN_KEYS.builderEvaluate, async () => {
+      if (remembered) return { ...remembered, recalled: true };
       const evaluation = await evaluateLook(items, apiKey, brief);
-      return { evaluation, canvasIds, canvasKey: [...canvasIds].sort().join("|"), occasions: brief.occasions, weathers: brief.weathers };
+      const result = { evaluation, canvasIds, canvasKey: [...canvasIds].sort().join("|"), occasions: brief.occasions, weathers: brief.weathers, readAt: Date.now() };
+      rememberEval(fp, result);
+      return result;
     });
   }
 
@@ -1381,7 +1390,7 @@ export default function SilhouetteBuilder({
       )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button onClick={handleEvaluate} disabled={evaluating}
+        <button onClick={() => handleEvaluate()} disabled={evaluating}
           style={{ flex: 1, padding: 12, background: "transparent", border: `1px solid ${PALETTE.ink}`, borderRadius: 6, color: PALETTE.ink, fontSize: 12, letterSpacing: "0.08em", cursor: "pointer" }}>
           {evaluating ? "Evaluating…" : "✦ Evaluate look"}
         </button>
@@ -1405,8 +1414,16 @@ export default function SilhouetteBuilder({
             )}
             <div style={{ fontSize: 13, color: PALETTE.soft, fontStyle: "italic" }}>{evaluation.headline}</div>
           </div>
-          {evalRun.finishedAt && (
-            <div style={{ fontSize: 9, letterSpacing: "0.12em", color: PALETTE.muted, marginBottom: 8 }}>EVALUATED {agoLabel(evalRun.finishedAt)}</div>
+          {(evalRun.result?.readAt || evalRun.finishedAt) && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 9, letterSpacing: "0.12em", color: PALETTE.muted }}>
+                EVALUATED {agoLabel(evalRun.result?.readAt || evalRun.finishedAt)}{evalRun.result?.recalled ? " · YOUR READ OF THIS LOOK" : ""}
+              </div>
+              <button onClick={() => handleEvaluate({ fresh: true })} disabled={evaluating}
+                style={{ background: "none", border: "none", padding: 0, fontSize: 10, color: PALETTE.soft, textDecoration: "underline", cursor: "pointer" }}>
+                Ask for a fresh read
+              </button>
+            </div>
           )}
           {/* Every section says what it IS before what it says (owner,
               2026-10-02: "I'm not sure what my ai is referencing here … more
