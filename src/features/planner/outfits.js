@@ -162,3 +162,30 @@ export function buildPlanPayload({ date, outfits, source, notes, weather, activi
     day_label: day_label || null,
   };
 }
+
+// A day's row rebuilt OVER the row already there — the one reconcile every
+// "change a day" path shares (wear a look, unpin a wear, schedule from the
+// builder or Saved, assign a saved look, generate for a day, remove one look).
+// Seven sites each re-typed this, and each drift (a dropped day_label, a
+// layout lost on an empty day) was found on her phone. What the day already
+// says wins (source, notes, weather, activity, label) over the caller's
+// fallback; the linked look and its layout are carried unless the caller
+// names them (`layoutData` / `outfitLogId`: undefined carries the row's, any
+// other value — null included — sets it). `occasions` / `weathers` pass
+// straight to buildPlanPayload (omitted = derived from the outfits).
+export function planRowOver(existing, { date, outfits, source, notes = null, weather = null, occasions, weathers, layoutData, outfitLogId } = {}) {
+  const merged = buildPlanPayload({
+    date, outfits,
+    source: existing?.source || source,
+    notes: existing?.notes ?? notes,
+    weather: existing?.weather ?? weather,
+    activity: existing?.activity ?? null,
+    day_label: existing?.day_label ?? null,
+    occasions, weathers,
+  });
+  const layout = layoutData !== undefined ? layoutData : existing?.layout_data;
+  const logId = outfitLogId !== undefined ? outfitLogId : existing?.outfit_log_id;
+  if (layout !== undefined && (layout !== null || layoutData !== undefined)) merged.layout_data = layout;
+  if (logId !== undefined && (logId !== null || outfitLogId !== undefined)) merged.outfit_log_id = logId;
+  return merged;
+}

@@ -220,5 +220,36 @@ section("Misc is never readmitted");
   assert(Array.isArray(poolForTripDay({})), "no arguments → an empty pool, no throw");
 }
 
+// ── planRowOver: the one "change a day" reconcile (2026-11-02 audit) ─────────
+section("planRowOver: the one change-a-day reconcile");
+{
+  const { planRowOver } = await import("../src/features/planner/outfits.js");
+  const existing = {
+    source: "trip", notes: "Vegas", weather: "Mild", activity: "Vegas", day_label: "Show night",
+    layout_data: [{ id: "a", x: 1, y: 1, w: 10, h: 10 }], outfit_log_id: "log-1",
+  };
+  const outfits = [{ id: "o1", label: "", occasion: "Dinner", items: ["a", "b"] }];
+  const carried = planRowOver(existing, { date: "2026-11-14", outfits, source: "saved", weather: "Hot" });
+  assert((carried.source) === ("trip"), "the day's own source wins over the caller's fallback");
+  assert((carried.weather) === ("Mild"), "planRowOver: carried.weather");
+  assert((carried.day_label) === ("Show night"), "planRowOver: carried.day_label");
+  assert((carried.activity) === ("Vegas"), "planRowOver: carried.activity");
+  assert(JSON.stringify(carried.layout_data) === JSON.stringify(existing.layout_data), "layout carried when the caller names none");
+  assert((carried.outfit_log_id) === ("log-1"), "planRowOver: carried.outfit_log_id");
+
+  const fresh = planRowOver(null, { date: "2026-11-14", outfits, source: "saved", weather: "Hot", layoutData: [{ id: "b" }], outfitLogId: "log-2" });
+  assert((fresh.source) === ("saved"), "planRowOver: fresh.source");
+  assert((fresh.weather) === ("Hot"), "planRowOver: fresh.weather");
+  assert(JSON.stringify(fresh.layout_data) === JSON.stringify([{ id: "b" }]), "planRowOver: fresh.layout_data");
+  assert((fresh.outfit_log_id) === ("log-2"), "planRowOver: fresh.outfit_log_id");
+
+  const cleared = planRowOver(existing, { date: "2026-11-14", outfits, source: "planner", layoutData: null, outfitLogId: null });
+  assert((cleared.layout_data) === (null), "an explicit null clears the layout");
+  assert((cleared.outfit_log_id) === (null), "planRowOver: cleared.outfit_log_id");
+
+  const bare = planRowOver({ source: "worn" }, { date: "2026-11-14", outfits, source: "worn" });
+  assert(!("layout_data" in bare) && !("outfit_log_id" in bare), "nothing to carry, nothing written: the column keeps its value");
+}
+
 console.log(`\ntrip-pool: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -6,14 +6,14 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import { fetchPlansBetween, fetchAllPlans, fetchOutfitLogLayouts, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor, activityEvening } from "./tripPacker.js";
-import { unionTags, newOutfitId, buildPlanPayload, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
-import { nyToday, todayInTz, dayPart, friendlyDate, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
+import { unionTags, newOutfitId, buildPlanPayload, planRowOver, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
+import { nyToday, todayInTz, dayPart, friendlyDate, shortDayLabel, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { startOfMonth, endOfMonth, addMonths, addDays, monthGridDays } from "./monthGrid.js";
 import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
 import { geocodeDestination } from "../../lib/geocode.js";
 import { tagsFor, joinTags, rowMatchesTag } from "../../lib/multitag.js";
 import { analyzeTripDestination, generateTripDayLook, tempToBucket } from "../../lib/ai/tripAdvisor.js";
-import { OCCASIONS, WEATHER_SHORTS } from "../../constants/taxonomy.js";
+import { OCCASIONS, WEATHER_SHORTS, PACKING_ORDER, categoryRank } from "../../constants/taxonomy.js";
 import { NO_FILTERS, hasActiveFilters, planMatchesFilters, matchingDays, matchingDaysBetween } from "./planFilters.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
@@ -488,24 +488,19 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         occasion: planOccasion,
         items: log.garment_ids || [],
       });
-      const merged = buildPlanPayload({
+      const merged = planRowOver(existing, {
         date: iso,
         outfits,
-        source: existing?.source || "saved",
-        notes: existing?.notes ?? null,
-        weather: existing?.weather ?? pickedWx,
-        activity: existing?.activity ?? null,
-        day_label: existing?.day_label ?? null,
+        source: "saved",
+        weather: pickedWx,
         // Union with the row's stored plurals — replacing them with only the
         // new look's tags dropped the day's other outfits' contexts.
         occasions: unionTags(existing?.occasions, overrides.occasion ? [overrides.occasion] : logOcc),
         weathers:  unionTags(existing?.weathers,  overrides.weather  ? [overrides.weather]  : logWx),
+        // Only link the saved look's layout when it becomes the day's primary
+        // outfit — the linked-log layout only round-trips for outfit #0.
+        outfitLogId: current.length === 0 ? log.id : undefined,
       });
-      // Only link the saved look's layout when it becomes the day's primary
-      // outfit — the linked-log layout only round-trips for outfit #0.
-      if (current.length === 0) merged.outfit_log_id = log.id;
-      else if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
-      if (existing?.layout_data) merged.layout_data = existing.layout_data;
       const saved = await savePlan(merged);
       setPlans(p => ({ ...p, [iso]: { ...merged, id: saved[0]?.id ?? existing?.id } }));
       setSyncError("");
@@ -534,19 +529,14 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       occasion,
       items: look.items || [],
     });
-    const merged = buildPlanPayload({
+    const merged = planRowOver(existing, {
       date: iso,
       outfits,
-      source: existing?.source || "generated",
-      notes: existing?.notes ?? null,
-      weather: existing?.weather ?? (wxBucket || null),
-      activity: existing?.activity ?? null,
-      day_label: existing?.day_label ?? null,
+      source: "generated",
+      weather: wxBucket || null,
       occasions: unionTags(existing?.occasions, outfits.map(o => o.occasion)),
       weathers:  unionTags(existing?.weathers, existing?.weather ?? wxBucket),
     });
-    if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
-    if (existing?.layout_data) merged.layout_data = existing.layout_data;
     const saved = await savePlan(merged);
     setPlans(p => ({ ...p, [iso]: { ...merged, id: saved[0]?.id ?? existing?.id } }));
     setSyncError("");
@@ -578,27 +568,17 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       if (remaining.length === 1 && (remaining[0].label === DAYPART_DAY || remaining[0].label === DAYPART_EVENING)) {
         remaining[0] = { ...remaining[0], label: "" };
       }
-      const merged = buildPlanPayload({
+      const merged = planRowOver(existing, {
         date: iso,
         outfits: remaining,
-        source: existing?.source || "planner",
-        notes: existing?.notes ?? null,
-        weather: existing?.weather ?? null,
-        activity: existing?.activity ?? null,
-        day_label: existing?.day_label ?? null,
+        source: "planner",
         weathers: existing?.weathers,
         // occasions intentionally re-derived from the remaining outfits —
         // the removed look's occasion should leave with it.
+        // The linked-log layout only describes outfit #0 — drop both when the
+        // primary look is the one being removed.
+        ...(removedIdx === 0 ? { layoutData: null, outfitLogId: null } : {}),
       });
-      // The linked-log layout only describes outfit #0 — drop both when the
-      // primary look is the one being removed.
-      if (removedIdx === 0) {
-        merged.outfit_log_id = null;
-        merged.layout_data = null;
-      } else {
-        if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
-        if (existing?.layout_data) merged.layout_data = existing.layout_data;
-      }
       const saved = await savePlan(merged);
       setPlans(p => ({ ...p, [iso]: { ...merged, id: saved[0]?.id ?? existing?.id } }));
       setSyncError("");
@@ -1597,7 +1577,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
         const previewId = newOutfitId();
         previewIdRef.current = previewId;
         const days = dayIsos.map((iso, i) => ({
-          label: new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }),
+          label: shortDayLabel(iso),
           occasion: occasions[i],
           activity: activities[i],
           weather: perDayBucket(iso),
@@ -2124,9 +2104,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
                 const dayIso = addDaysIso(start, dayIdx);
                 // Label from the SAME iso the day saves under, so the card can
                 // never again claim a date the database disagrees with.
-                const dateLabel = new Date(dayIso + "T12:00:00Z").toLocaleDateString("en-US", {
-                  weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
-                });
+                const dateLabel = shortDayLabel(dayIso);
                 const dayAct = dayActivities?.[dayIdx] || activity;
                 const dayHi = displayHigh(dayIso);
                 const dayLo = perDayLow(dayIso);
@@ -2256,8 +2234,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
                 const c = it.category || "Other";
                 (byCat[c] ||= []).push(it);
               });
-              const CAT_ORDER = ["Outerwear","Dresses","Jumpsuits","Tops","Knits","Bottoms","Shoes","Bags","Accessories","Belts","Occasionwear","Swim","Loungewear"];
-              const cats = [...CAT_ORDER.filter(c => byCat[c]), ...Object.keys(byCat).filter(c => !CAT_ORDER.includes(c))];
+              const cats = Object.keys(byCat).sort((a, b) => categoryRank(a, PACKING_ORDER) - categoryRank(b, PACKING_ORDER));
               const carryOnOk = packingList.length <= 15;
               // How many packed pieces work more than one day — the visible
               // payoff of capsule packing ("your loafers cover 5 days").

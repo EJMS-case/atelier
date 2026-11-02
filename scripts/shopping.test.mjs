@@ -5,7 +5,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spendBands, brandTier, describeSpend, describeBrandTier } from "../src/features/shopping/spend.js";
 import { verifyGaps, ownedMatches, canonicalCategory, suggestionFamily, gapKey, MENSWEAR_RE } from "../src/features/shopping/verifyGaps.js";
-import { describeBrandFinds, findsForCategory } from "../src/features/shopping/brandFinds.js";
 import { withVerdict, describeVerdicts } from "../src/features/shopping/verdicts.js";
 import { describeWearRooms, WOMENSWEAR_LINE } from "../src/features/shopping/gapAnalysis.js";
 
@@ -108,20 +107,6 @@ test("an 'I own this' verdict covers the same category + family whatever the wor
   const text = describeVerdicts([...twice, ...withVerdict([], { category: "Belts", suggestion: "Wide western belt" }, "no")]);
   assert.doesNotMatch(text, /Deep navy leather work tote/, "wants live on her list, not in the verdict block");
   assert.match(text, /NOT her taste: Wide western belt/);
-});
-
-test("her brand finds compose into a block and filter by category", () => {
-  const finds = [
-    { name: "Vagabond", categories: ["Shoes"], url: "https://example.com", note: "" },
-    { name: "Sézane", categories: [], note: "everything" },
-    { name: "", categories: ["Bags"] },
-  ];
-  assert.deepEqual(findsForCategory(finds, "shoes").map(f => f.name), ["Vagabond", "Sézane"]);
-  assert.deepEqual(findsForCategory(finds, "Bags").map(f => f.name), ["Sézane"]);
-  const text = describeBrandFinds(finds);
-  assert.match(text, /• Vagabond — Shoes/);
-  assert.match(text, /• Sézane — any category \(everything\)/);
-  assert.equal(describeBrandFinds([]), "");
 });
 
 test("the rooms she dresses for come from worn logs inside the window, and the womenswear line is structural", () => {

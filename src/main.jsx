@@ -4,6 +4,9 @@ import './styles/tokens.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import AuthGate from './components/AuthGate.jsx'
+// Static: ErrorBoundary already brings it into the boot chunk, so a dynamic
+// import here split nothing (and Vite warned about it on every build).
+import { logAiError } from './lib/ai/logError.js'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -27,7 +30,7 @@ window.addEventListener("vite:preloadError", (event) => {
   event.preventDefault();
   // Recorded so a deploy that strands an open page is told apart from a
   // render error in the table (both end at the same "Something hiccuped").
-  import("./lib/ai/logError.js").then(({ logAiError }) => logAiError("chunk:preload", { href: location.href }, event?.payload || event?.reason || "preload error")).catch(() => {});
+  try { logAiError("chunk:preload", { href: location.href }, event?.payload || event?.reason || "preload error"); } catch { /* never block the reload */ }
   let last = 0;
   try { last = Number(sessionStorage.getItem("atelier:chunkReloadAt")) || 0; } catch { /* private mode */ }
   if (Date.now() - last < 120000) return;

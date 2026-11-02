@@ -85,6 +85,21 @@ export function countCloset(list) {
 // breakdown, must read these instead of CATEGORY_ORDER / TAXONOMY so the AI
 // can never classify anything as Misc and no styling surface can name it.
 export const STYLING_CATEGORY_ORDER = CATEGORY_ORDER.filter(c => c !== MISC_CATEGORY);
+
+// A suitcase reads top-down from the layer that goes on last: the packing
+// lists on Plan a trip and on the trip screen. One list (2026-11-02 audit —
+// the two screens typed their own, and disagreed on Sets and Swim).
+export const PACKING_ORDER = [
+  "Outerwear", "Dresses", "Jumpsuits", "Sets", "Occasionwear", "Tops", "Knits", "Bottoms",
+  "Athleisure", "Loungewear", "Swim", "Shoes", "Bags", "Belts", "Accessories",
+];
+
+// Sort rank of a category in an order (closet order by default); a category
+// the order does not name sorts last rather than disappearing.
+export function categoryRank(category, order = CATEGORY_ORDER) {
+  const i = order.indexOf(category);
+  return i === -1 ? order.length : i;
+}
 export const STYLING_TAXONOMY = Object.fromEntries(
   Object.entries(TAXONOMY).filter(([cat]) => cat !== MISC_CATEGORY),
 );

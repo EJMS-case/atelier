@@ -2,9 +2,9 @@
 // Brands she found herself, mapped to the categories she'd buy from them
 // ("Vagabond → Shoes"). Owner, 2026-09-17: "can I add my own brand finds that
 // map to a category?" Stored cross-device in user_settings (key brand_finds)
-// like the standing preferences; read by the gap analysis and Complete-a-Look
-// (prefer her finds in their categories) and by Brand Atlas (never re-scout a
-// brand she already found). Pure composition exported for the test.
+// like the standing preferences. Every AI surface reads them through
+// learning.js (composeShoppingBlock — the one place they become prompt text),
+// and Brand Atlas reads them so it never re-scouts a brand she already found.
 
 import { sb } from "../../lib/supabase.js";
 
@@ -35,14 +35,3 @@ export async function saveBrandFinds(list) {
   return sb.saveSettingJson(BRAND_FINDS_KEY, c);
 }
 
-export function findsForCategory(finds, category) {
-  const cat = String(category || "").toLowerCase();
-  return clean(finds).filter(f => !f.categories.length || f.categories.some(c => c.toLowerCase() === cat));
-}
-
-export function describeBrandFinds(finds) {
-  const list = clean(finds);
-  if (!list.length) return "";
-  const lines = list.map(f => `• ${f.name}${f.categories.length ? ` — ${f.categories.join(", ")}` : " — any category"}${f.note ? ` (${f.note})` : ""}`);
-  return `HER OWN BRAND FINDS (labels she found and wants to buy from, with the categories she'd shop there): \n${lines.join("\n")}\nWhen a suggestion falls in one of these categories, name her find as the make when it genuinely fits the piece — she has already vetted the brand.`;
-}

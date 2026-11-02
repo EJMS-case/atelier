@@ -2,6 +2,36 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Audit: one day-reconcile, one category order, no dead picture write, one date label — 2026-11-02
+
+### Why
+
+Owner: *"Once everything is live and fixed, run an audit and remove dead and duplicative code, etc so everything works properly and runs quickly. Think big picture always."* Scanned every `src/` export for importers, every file for an importer, and every local definition for a reader, then swept the duplicate families that rule 4 names ("never leave … a second copy of a predicate behind").
+
+### Removed / unified
+
+- **`planRowOver` (`outfits.js`)** replaces seven hand-typed fetch → rebuild → `savePlan` reconciles: App's pin/unpin of a worn look, its two schedule-from-builder/Saved paths, and CalendarView's assign-saved, generate-for-a-day and remove-a-look. What the day already says wins (source, notes, weather, activity, label). The linked look and layout are carried unless the caller names them, and an explicit `null` clears. Closes the deferred `reconcilePlanDay` refactor.
+- **The builder's base64 picture write** (`compositeSaveImage` → `collage_url`) is gone. Nothing rendered it, every look draws from `layout_data` and thumbs, and an **edit** of a saved Style Me look overwrote the `{mood, styling}` note that Saved reads from that column. Live: 16 builder rows hold base64 (~2.2 MB) and some were Style Me looks, whose notes are not recoverable. Saves are faster (no 600×800 decode-and-encode on the phone, no ~130 kB upload). Closes work item 2.2.
+- **Five hand-typed category lists** become `CATEGORY_ORDER` (the closet's; picker, trip stylist, trip-day inventory) and a new `PACKING_ORDER` (both packing lists, which disagreed on Sets and Swim), with `categoryRank()` in `taxonomy.js`. The trip-day inventory no longer pushes Sets, Athleisure and Swim to a tail of their own.
+- **`generateTripDayLook`** goes through `invokeTool` plus a Zod schema (`trip_day_look:*` rows on a miss), not `invokeToolRaw`, and resolves ids through a Map.
+- **`describeBrandFinds` / `findsForCategory`** (`brandFinds.js`) were a second, unused rendering of her brand finds, reached only by a test. `learning.js composeShoppingBlock` is the one place they become prompt text, and it is tested.
+- **`shortDayLabel` (`lib/time.js`)** replaces four copies of the `toLocaleDateString` day-label options. `friendlyDate` uses it.
+- **`main.jsx`** imports `logAiError` statically. ErrorBoundary already put it in the boot chunk, so the dynamic import split nothing and Vite warned on every build.
+
+### Checked, left as is
+
+- About 140 exports are reached only by tests. They are pure helpers a suite pins, and that is by design. `poolInvariants.js` is imported only by `npm run doctor`, as intended. No unimported source file and no unread local definition.
+- Boot chunk: 503 kB minified, most of it `@supabase/auth-js` (needed) and React. Nothing from today's trip work rides it (`tripStylist` loads on call).
+- `BulkAddView`'s raw `<img>` is a pre-upload queue preview with no thumb yet, which is correct.
+
+### Downstream, four ways
+
+*Efficiency:* fewer bytes per builder save; one reconcile to keep right. *Effectiveness:* a saved look keeps its stylist note through an edit. *Speed:* builder save skips a full-canvas composite on the main thread. *Education:* none.
+
+### Tests
+
+`test:trippool`: `planRowOver` carries, sets, clears and leaves untouched. `test:collage`: the builder writes no `collage_url` and no `toDataURL`. `npm test`, `npm run build` (no `logError` warning), `npm run smoke` green.
+
 ## [Unreleased] — Trip looks styled by Atelier as one capsule; the bringing-for-sure picker scrolls one way — 2026-11-02
 
 ### Why

@@ -68,7 +68,7 @@ const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView
 const BrandDiscoveryView = lazy(() => import("./features/discovery/BrandDiscoveryView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
-import { unionTags, outfitsOf, buildPlanPayload, newOutfitId, appendOutfit, sigOf } from "./features/planner/outfits.js";
+import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf } from "./features/planner/outfits.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -99,13 +99,8 @@ async function pinWornToDate({ date, itemIds, occasion }) {
     const outfits = current.some(o => sameItemSet(o.items, itemIds))
       ? current
       : [...current, { id: newOutfitId(), label: "", occasion: occasion || null, items: itemIds }];
-    const merged = buildPlanPayload({
-      date, outfits,
-      source: existing?.source || "worn",
-      notes: existing?.notes ?? null,
-      weather: existing?.weather ?? null,
-      activity: existing?.activity ?? null,
-      day_label: existing?.day_label ?? null,
+    const merged = planRowOver(existing, {
+      date, outfits, source: "worn",
       // Preserve the row's stored multi-tags and add this wear's occasion —
       // omitting these re-derived occasions from outfits and collapsed
       // builder-authored plurals to singletons (same trap the onSchedule
@@ -113,8 +108,6 @@ async function pinWornToDate({ date, itemIds, occasion }) {
       occasions: unionTags(existing?.occasions, outfits.map(o => o.occasion), occasion),
       weathers:  unionTags(existing?.weathers, existing?.weather),
     });
-    if (existing?.layout_data) merged.layout_data = existing.layout_data;
-    if (existing?.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
     await savePlan(merged);
   } catch {
     // Last-resort fallback keeps the old behavior so a fetch blip still records something.
@@ -136,18 +129,11 @@ async function unpinWornFromDate({ date, itemIds }) {
       await deletePlan(date);
       return;
     }
-    const merged = buildPlanPayload({
-      date, outfits: remaining,
-      source: existing.source || "worn",
-      notes: existing.notes ?? null,
-      weather: existing.weather ?? null,
-      activity: existing.activity ?? null,
-      day_label: existing.day_label ?? null,
+    const merged = planRowOver(existing, {
+      date, outfits: remaining, source: "worn",
       occasions: unionTags(existing.occasions, remaining.map(o => o.occasion)),
       weathers:  unionTags(existing.weathers, existing.weather),
     });
-    if (existing.layout_data) merged.layout_data = existing.layout_data;
-    if (existing.outfit_log_id) merged.outfit_log_id = existing.outfit_log_id;
     await savePlan(merged);
   } catch { /* leave the row untouched on failure */ }
 }
@@ -2380,24 +2366,21 @@ export default function App() {
                 outfits = appendOutfit(current, { id: newOutfitId(), label: editingPlan?.newOutfitLabel || "", occasion: plan.occasion || null, items: plan.items || [] });
               }
               const isTrip = editingPlan?.tripOutfitIdx != null || existing?.source === "trip";
-              const merged = buildPlanPayload({
+              const merged = planRowOver(existing, {
                 date: plan.date,
                 outfits,
-                source: existing?.source || (isTrip ? "trip" : plan.source) || "planner",
-                notes: existing?.notes ?? plan.notes ?? null,
-                weather: existing?.weather ?? plan.weather ?? null,
-                activity: existing?.activity ?? null,
-                day_label: existing?.day_label ?? null,
+                source: (isTrip ? "trip" : plan.source) || "planner",
+                notes: plan.notes ?? null,
+                weather: plan.weather ?? null,
                 // Forward the builder's multi-tag selections — without these,
                 // buildPlanPayload rederives singletons and the extra
                 // occasion/weather chips picked in the builder were dropped.
                 occasions: plan.occasions,
                 weathers: plan.weathers,
+                // Persist the manual canvas arrangement for the primary outfit
+                // (the only slot whose layout currently round-trips at the row).
+                layoutData: idx === 0 && plan.layout_data ? plan.layout_data : undefined,
               });
-              // Persist the manual canvas arrangement for the primary outfit
-              // (the only slot whose layout currently round-trips at the row).
-              if (idx === 0 && plan.layout_data) merged.layout_data = plan.layout_data;
-              else if (existing?.layout_data) merged.layout_data = existing.layout_data;
               await savePlan(merged);
             } catch {
               // Last-resort fallback so a fetch hiccup still saves *something*.
@@ -2746,26 +2729,23 @@ export default function App() {
               const current = outfitsOf(existing);
               const newOutfit = { id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] };
               const outfits = current.length === 0 ? [newOutfit] : [...current, newOutfit];
-              const merged = buildPlanPayload({
+              const merged = planRowOver(existing, {
                 date: plan.date, outfits,
-                source: existing?.source || plan.source || "saved",
-                notes: existing?.notes ?? plan.notes ?? null,
-                weather: existing?.weather ?? plan.weather ?? null,
-                activity: existing?.activity ?? null,
-                day_label: existing?.day_label ?? null,
+                source: plan.source || "saved",
+                notes: plan.notes ?? null,
+                weather: plan.weather ?? null,
                 // Forward multi-tags from the scheduled look (see builder
                 // onSchedule above) so they aren't collapsed to singletons.
                 occasions: plan.occasions,
                 weathers: plan.weathers,
+                // Persist the builder's canvas arrangement when this look becomes
+                // the day's primary outfit (#0 is the only slot whose layout
+                // round-trips at the row) — this handler used to keep only the
+                // EXISTING row's layout, so scheduling a manual build onto an
+                // empty day silently dropped the arrangement and the planner
+                // review fell back to the auto collage (owner report 2026-08-05).
+                layoutData: current.length === 0 && plan.layout_data ? plan.layout_data : undefined,
               });
-              // Persist the builder's canvas arrangement when this look becomes
-              // the day's primary outfit (#0 is the only slot whose layout
-              // round-trips at the row) — this handler used to keep only the
-              // EXISTING row's layout, so scheduling a manual build onto an
-              // empty day silently dropped the arrangement and the planner
-              // review fell back to the auto collage (owner report 2026-08-05).
-              if (current.length === 0 && plan.layout_data) merged.layout_data = plan.layout_data;
-              else if (existing?.layout_data) merged.layout_data = existing.layout_data;
               await savePlan(merged);
             } catch {
               await savePlan(plan); // last-resort fallback

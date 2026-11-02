@@ -67,3 +67,15 @@ test("a saved partial layout renders the positioned pieces where saved and place
   const top = slots.find(s => s.id === items[0].id);
   assert.deepEqual([top.x, top.y, top.w, top.h, top.zIndex], [10, 10, 40, 40, 3]);
 });
+
+// A saved look is drawn from layout_data and the piece thumbs, never from a
+// stored picture (2026-11-02 audit): the builder used to write a base64 JPEG
+// into collage_url that nothing rendered, and an edit overwrote the
+// {mood, styling} note a Style Me look keeps in that column.
+test("the builder saves no picture into collage_url", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/features/builder/SilhouetteBuilder.jsx", import.meta.url), "utf8")
+    .replace(/\/\/.*$/gm, "");
+  assert.doesNotMatch(src, /collage_url\s*:/);
+  assert.doesNotMatch(src, /toDataURL\(/);
+});

@@ -9,10 +9,10 @@
 
 import { z } from "zod";
 import { WEATHER_HIGH } from "../weather.js";
-import { invokeTool, invokeToolRaw } from "./toolUse.js";
+import { invokeTool } from "./toolUse.js";
 import { MODEL_STANDARD, MODEL_FAST } from "../../constants/models.js";
 import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND, formalityOf, readsAsOffice } from "../../utils/item-helpers.js";
-import { isGarment } from "../../constants/taxonomy.js";
+import { isGarment, categoryRank } from "../../constants/taxonomy.js";
 import { personalGrounding, occasionBrief } from "../../features/stylist/standard.js";
 import { STANDARD_LINES } from "../../features/stylist/standardLines.js";
 
@@ -106,6 +106,16 @@ const TripLooksTool = {
     required: ["looks"],
   },
 };
+// Its validator: lenient on what the reader below re-checks (every id is
+// resolved against the pool), so a dropped title or rationale never costs the
+// look. Through invokeTool, a miss logs `trip_day_look:*` to ai_errors.
+const TripLooksSchema = z.object({
+  looks: z.array(z.object({
+    title: z.string().default(""),
+    items: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).default([]),
+    rationale: z.string().default(""),
+  }).passthrough()).min(1),
+});
 
 /**
  * Generate a single outfit look for one trip day.
@@ -211,8 +221,10 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // pool. The old per-category numbers were tuned for prompt size alone and
   // hid real pieces from her real trip: Athleisure fell to the 4-item
   // fallback with 19 in the closet — on a vacation — Shoes 13 → 8, Dresses
-  // 10 → 8. Measured 2026-09-07. Ordering is unchanged; only the cut is.
-  const CAT_ORDER = ["Outerwear", "Dresses", "Jumpsuits", "Tops", "Knits", "Bottoms", "Shoes", "Bags", "Accessories", "Belts"];
+  // 10 → 8. Measured 2026-09-07. Every category gets the same cap, listed in
+  // closet order (taxonomy's CATEGORY_ORDER; one the order does not name
+  // still comes, last) — the old local list left Sets, Athleisure and Swim to
+  // a tail of their own.
   const PER_CATEGORY_CAP = 40;
   const byCat = {};
   eligible.forEach(it => { (byCat[it.category] ||= []).push(it); });
@@ -229,13 +241,9 @@ export async function generateTripDayLook(items, occasion, weather, destination,
       arr.sort((a, b) => rank(b) - rank(a));
     }
   }
-  const sampled = [
-    ...CAT_ORDER.flatMap(cat => (byCat[cat] || []).slice(0, PER_CATEGORY_CAP)),
-    // categories not in CAT_ORDER (Sets, Athleisure, Swim on beach days…) —
-    // these took the harshest cut of all at 4, which on her Arizona trip meant
-    // 15 of 19 athleisure pieces were invisible to every day's look.
-    ...Object.keys(byCat).filter(cat => !CAT_ORDER.includes(cat)).flatMap(cat => byCat[cat].slice(0, PER_CATEGORY_CAP)),
-  ];
+  const sampled = Object.keys(byCat)
+    .sort((a, b) => categoryRank(a) - categoryRank(b))
+    .flatMap(cat => byCat[cat].slice(0, PER_CATEGORY_CAP));
 
   // Inventory lines carry the same signals Style Me sends (2026-08-13 audit:
   // this path was signal-blind) — curated formality f#, non-solid pattern, and
@@ -376,22 +384,20 @@ Add a bag where the occasion calls for one. A layer follows the OCCASION brief a
 Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:xxxx format stripped to just the UUID).`;
 
   try {
-    const { toolBlock } = await invokeToolRaw({
+    const input = await invokeTool({
       apiKey,
       model: MODEL_STANDARD,
       maxTokens: 800,
       content: prompt,
       tool: TripLooksTool,
+      schema: TripLooksSchema,
+      kind: "trip_day_look",
     });
-    if (!toolBlock?.input?.looks?.[0]) return null;
-
-    const raw = toolBlock.input.looks[0];
+    const raw = input.looks[0];
     // Resolve item IDs back to item objects
+    const byId = new Map(items.map(w => [w.id, w]));
     const resolvedItems = (raw.items || [])
-      .map(it => {
-        const id = typeof it === "object" ? it.id : String(it).replace(/^ID:/i, "").trim();
-        return items.find(w => w.id === id);
-      })
+      .map(it => byId.get(typeof it === "object" ? it.id : String(it).replace(/^ID:/i, "").trim()))
       .filter(Boolean);
 
     if (resolvedItems.length < 2) return null;
