@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Back from a trip lands on the Planner, and the planner stops reopening a trip she left — 2026-11-02
+
+### Why
+
+Owner: *"I clicked into my Vegas trip from the calendar. When I click back it takes me to the homepage. I can't get back to the planner."* Inside a trip the screen carried two Backs: App's header "← Back", which goes Home by the top-level rule, and the trip's own "← Back to Calendar" further down. She took the header's. Then the planner's trip memo (`lastTripId`, there so ⊞ Build → builder → close returns to the trip) reopened the trip on every planner mount, so tapping Planner again put her straight back in Vegas with the calendar unreachable.
+
+### Fixed
+
+- **Header Back inside a trip** reads "← Planner" and closes the trip to the calendar. CalendarView reports `onTripOpenChange` and hands App a `closeTripRef`. Everywhere else it is "← Back" to Home, as before.
+- **The trip memo resumes only after ⊞ Build** (`resumeTripOnMount`, set by the Build handler CalendarView passes to TripDetailView). Leaving the planner any other way forgets the trip and its scroll, so the next visit opens the calendar.
+- **Render walk** +2: inside a trip the header reads "← Planner" and lands on the calendar, and Home → Planner opens the calendar, not the trip (fails on the old code: the header read "← Back"). Closing the builder opened from a trip day returns to that trip.
+
+### Downstream, four ways
+
+None for tokens or AI. *Speed:* one fewer dead end. *Effectiveness:* the Build round-trip keeps working.
+
+### Tests
+
+`npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — A trip day keeps out what its room keeps out — 2026-11-02
 
 ### Why

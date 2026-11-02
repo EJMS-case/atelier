@@ -1099,6 +1099,33 @@ await check("Planner → open the trip", async () => {
     /Packing|Looks|Suitcase|Start trip/i.test(document.body.innerText));
   if (!onTrip) throw new Error("the trip detail screen did not mount after View →");
 });
+// Owner, 2026-11-02: "I clicked into my Vegas trip from the calendar. When I
+// click back it takes me to the homepage. I can't get back to the planner."
+// Inside a trip the header's Back says "← Planner" and lands on the calendar;
+// a trip left for Home does not reopen itself when she comes back.
+await check("Trip → the header's ← Planner returns to the calendar, and Home → Planner opens the calendar", async () => {
+  const label = await page.evaluate(() => [...document.querySelectorAll("button")].map(b => b.textContent.trim()).find(t => /^← (Planner|Back)$/.test(t)));
+  if (label !== "← Planner") throw new Error(`inside a trip the header's back reads "${label}", not "← Planner"`);
+  await clickText("button", "← Planner");
+  await page.waitForTimeout(800);
+  let text = await page.evaluate(() => document.body.innerText);
+  if (/Back to Calendar/.test(text)) throw new Error("← Planner left the trip open");
+  if (!/PLAN A TRIP|Plan a trip/i.test(text)) throw new Error("← Planner did not land on the planner's calendar");
+  // Into the trip again, then out through Home: the planner must not reopen it.
+  await page.evaluate(() => [...document.querySelectorAll("*")].filter(e => /^View\s*→?$/.test((e.textContent || "").trim())).pop()?.click());
+  await page.waitForTimeout(1000);
+  await clickText("button", "← Planner");
+  await page.waitForTimeout(500);
+  await clickText("button", "← Back");
+  await page.waitForTimeout(600);
+  await tab("Planner")();
+  await page.waitForTimeout(1200);
+  text = await page.evaluate(() => document.body.innerText);
+  if (/Back to Calendar/.test(text)) throw new Error("the planner reopened the trip after she went Home");
+  // Leave the walk inside the trip for the ⊞ Build step below.
+  await page.evaluate(() => [...document.querySelectorAll("*")].filter(e => /^View\s*→?$/.test((e.textContent || "").trim())).pop()?.click());
+  await page.waitForTimeout(1200);
+});
 // ⊞ Build on a trip day hands the builder the DAY'S pool (tripPools.js:
 // destination ∪ suitcase ∪ the look's own pieces) and nothing else. The
 // canvas must still land the look — a pool that dropped the look's pieces
@@ -1122,6 +1149,15 @@ await check("Trip → ⊞ Build opens the builder on the day's look", async () =
   }));
   if (!state.mounted) throw new Error("⊞ Build did not open the builder");
   if (state.onCanvas < 2) throw new Error(`the day's look did not land on the canvas (${state.onCanvas} pieces)`);
+});
+
+// …and closing the builder puts her back IN the trip (the one round-trip the
+// planner's trip memo is for; ⊞ Build is the only way to edit a trip look).
+await check("Builder ← Back from a trip day returns to the trip", async () => {
+  await clickText("button", "← Back");
+  await page.waitForTimeout(1500);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Back to Calendar/.test(text)) throw new Error("closing the builder did not reopen the trip it came from");
 });
 
 await browser.close();
