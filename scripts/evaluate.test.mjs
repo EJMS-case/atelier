@@ -129,3 +129,54 @@ test("the card's label names the piece, then what tells it apart, without repeat
   assert.equal(pieceLabel(row("x", "Theory Sheath Dress", "Black", "Theory", "Dresses")), "Theory Sheath Dress · Black");
   assert.equal(pieceLabel(null), "");
 });
+
+// ── One look, one read (evalMemory.js; owner, 2026-11-02: "same outfit 3x …
+// all different options"). A stub localStorage so the store runs offline.
+{
+  const mem = new Map();
+  globalThis.localStorage = globalThis.localStorage || {
+    getItem: k => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: k => mem.delete(k),
+  };
+}
+const { evalFingerprint, recallEval, rememberEval, MAX_AGE_MS } = await import("../src/features/builder/evalMemory.js");
+
+const base = {
+  canvasIds: ["b", "a", "c"], occasions: ["Work"], weathers: ["Mild"],
+  origin: { source: "styleme", text: "A tonal column." }, available: [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }],
+};
+
+test("the same look fingerprints the same, whatever order the pieces landed in", () => {
+  const fp = evalFingerprint(base);
+  assert.equal(evalFingerprint({ ...base, canvasIds: ["c", "a", "b"], available: [...base.available].reverse() }), fp);
+});
+
+test("a changed look is a new question: a piece, a chip, the origin's word, or the closet", () => {
+  const fp = evalFingerprint(base);
+  assert.notEqual(evalFingerprint({ ...base, canvasIds: ["a", "b", "d"] }), fp);
+  assert.notEqual(evalFingerprint({ ...base, occasions: ["Casual"] }), fp);
+  assert.notEqual(evalFingerprint({ ...base, weathers: ["Hot"] }), fp);
+  assert.notEqual(evalFingerprint({ ...base, origin: { source: "chat", text: "Try the loafer." } }), fp);
+  assert.notEqual(evalFingerprint({ ...base, origin: null }), fp);
+  assert.notEqual(evalFingerprint({ ...base, available: [...base.available, { id: "e" }] }), fp);
+});
+
+test("a remembered read comes back for the same look, and expires", () => {
+  const fp = evalFingerprint(base);
+  const result = { evaluation: { score: 8, headline: "h", swaps: [], adds: [], tips: [] }, canvasIds: base.canvasIds, readAt: 1000 };
+  rememberEval(fp, result, 1000);
+  assert.deepEqual(recallEval(fp, 2000), result);
+  assert.equal(recallEval(evalFingerprint({ ...base, occasions: ["Dinner"] }), 2000), null);
+  assert.equal(recallEval(fp, 1000 + MAX_AGE_MS + 1), null);
+});
+
+test("a fresh read replaces the remembered one; the store keeps only the newest 40", () => {
+  const fp = evalFingerprint(base);
+  rememberEval(fp, { evaluation: { score: 6 } }, 5000);
+  assert.equal(recallEval(fp, 5001).evaluation.score, 6);
+  for (let i = 0; i < 45; i++) rememberEval(`k${i}`, { evaluation: { score: 5 } }, 6000 + i);
+  assert.equal(recallEval(fp, 7000), null);
+  assert.ok(recallEval("k44", 7000));
+  assert.equal(recallEval("k0", 7000), null);
+});

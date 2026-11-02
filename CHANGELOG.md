@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Evaluate gives the same look the same read — 2026-11-02
+
+### Why
+
+Owner: *"I just ran the evaluator on build me with the same outfit 3x and it gave me all different options. Can we fix that?"* The 5.5 models reject `temperature`, so every tap of Evaluate was a fresh sample of the same question: a new score, new swaps, new tips. Three answers to one outfit read as no opinion.
+
+### Fixed
+
+- **`features/builder/evalMemory.js`** (new): a read is remembered per device by what it read — the canvas pieces, the room and weather chips, the look's origin (Style Me's card or the chat's latest reply), and the closet the swaps come from. Re-evaluating the same look returns the same card instantly with no API call. Changing the look (an applied swap, a new chip, a new chat turn, a new piece in the closet) asks again. Reads expire after 30 days, and the device keeps the newest 40.
+- **Builder card**: shows when the read was made ("· YOUR READ OF THIS LOOK" when it came from memory) and gains **Ask for a fresh read**, the one deliberate way to re-roll. The fresh read then becomes the look's answer.
+
+### Downstream, four ways
+
+*Efficiency:* a repeat tap costs no tokens. The prompt and the cached system block are unchanged. *Effectiveness:* one consistent opinion per look, so a swap she applies comes from the read she saw. *Speed:* a repeat tap is instant. *Education:* unchanged. Applied moves still record `look_edits`. The memory key leaves out learning and the trend brief on purpose, so new lessons reach the next changed look or a fresh read, not a repeat of the same one.
+
+### Tests
+
+`test:evaluate` +4 (fingerprint order-insensitive, every input that changes the question, recall + expiry, fresh-read replace + cap). `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — A Vegas evening look wherever a Vegas day is built — 2026-11-01
 
 ### Why
