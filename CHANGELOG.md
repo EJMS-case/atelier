@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Every screen opens at its top — 2026-11-02
+
+### Why
+
+Owner: *"Every time I open an item in my closet and sometimes when I open a category in builder it starts at the bottom of the page."* No view reset the scroll offset. A piece's Edit screen opened from far down the grid inherited that `scrollY`, and the browser clamped it to the bottom of the shorter page. The builder's picker is one scroller shared by every slot tab, so switching from a long-scrolled Tops shelf to a shorter one clamped to its bottom too.
+
+### Fixed
+
+- **`App.jsx`**: a layout effect scrolls to the top whenever the view changes or the builder opens, except the closet, which keeps its `restoreScroll` return-to-spot. Screens that scroll to a target themselves (Saved's focus look, the planner preview) do it in a passive effect, which runs after this one and still wins.
+- **Builder picker**: the grid resets to its top on a new slot, subcategory, search or picker open.
+- **Render walk**: a new step scrolls the Tops shelf deep, opens the last piece's Edit, expects scrollY 0, then Back and expects the grid spot. Without the fix it fails at scrollY 1516.
+
+### Downstream, four ways
+
+*Efficiency / speed:* one `scrollTo` per navigation, no network. *Effectiveness:* every view, not just Edit. *Education:* none.
+
+### Tests
+
+`npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Evaluate gives the same look the same read — 2026-11-02
 
 ### Why
