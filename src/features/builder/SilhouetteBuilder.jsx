@@ -357,8 +357,11 @@ export default function SilhouetteBuilder({
   const [zOrders, setZOrders] = useState(() => restoredLayout?.zOrders || {});
   // Mirror-flipped pieces on the canvas (owner, 2026-11-02: "a garment that
   // appears to face the left side can be flipped to face the right side").
-  // Builder only: the flag rides layout_data as `flip: true` so the builder
-  // restores it on reopen; no other surface reads it.
+  // The flag rides layout_data as `flip: true`: the builder restores it on
+  // reopen, and every card that draws her arrangement (Saved, Favorites, the
+  // planner square and day sheet — collageLayout.buildFromLayout) mirrors the
+  // piece the same way (owner, 2026-11-02: "Match the flip in the saved,
+  // favorites, and calendar thumbnail view").
   const [flips, setFlips] = useState(() => restoredLayout?.flips || new Set());
   // The canvas item the user last touched — anchors the layering
   // controls so they know which item to raise/lower. Key = posKey(slot, itemId).

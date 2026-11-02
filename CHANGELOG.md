@@ -2,6 +2,24 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A flipped piece draws flipped on every card — 2026-11-02
+
+### Why
+
+Owner: *"Match the flip in the saved, favorites, and calendar thumbnail view."* #287's ⇋ Flip mirrored a piece on the builder canvas and saved `flip: true` on its `layout_data` entry, but no card read it. Saved, Favorites, the planner square and the day sheet drew the piece facing its photo.
+
+### Changed
+
+- **`collageLayout.buildFromLayout`**, the one engine behind every card that draws her arrangement (SavedLookCard for Saved and Favorites, LookCard, LookTile, the planner square, the day sheet), carries `flip`. **`EditorialCollage`** mirrors the piece's picture with `scaleX(-1)`, so the box and position are unchanged. A Style Me recipe layout has no flip and draws as before.
+
+### Downstream, four ways
+
+None for tokens, speed or learning. *Effectiveness:* the look she arranged is the look every surface shows.
+
+### Tests
+
+`test:collage` +1 (`buildFromLayout` carries the flip). The render walk's planned square now has a saved arrangement with one flipped piece, and the step requires exactly one mirrored picture: it failed with 0 before the engine change. `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — A new look on a planned day adds to it; a trip moves what it displaces to Saved — 2026-11-02
 
 ### Why

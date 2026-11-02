@@ -164,10 +164,10 @@ export default function EditorialCollage({ lookItems, onItemClick, canvasStyle, 
             // PNG's transparent halo would otherwise dominate.
             (tile || thumbs) ? (
               <TrimmedImage item={slot} alt={slot.name}
-                style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
+                style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block", transform: slot.flip ? "scaleX(-1)" : undefined}}/>
             ) : (
               <TrimmedImage src={slot.image} alt={slot.name}
-                style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block"}}/>
+                style={{width:"100%", height:"100%", objectFit:"contain", objectPosition:"center top", display:"block", transform: slot.flip ? "scaleX(-1)" : undefined}}/>
             )
           ) : (
             <div style={{...s.collagePh, height:"100%"}}>
