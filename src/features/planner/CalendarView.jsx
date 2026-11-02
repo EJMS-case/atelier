@@ -129,13 +129,19 @@ const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
 // next time the planner mounts.
 let lastTripId = null;
 let lastTripScrollY = 0;
+// Set ONLY by ⊞ Build from inside a trip — the one round-trip the memo is for.
+// Owner, 2026-11-02: "I clicked into my Vegas trip from the calendar. When I
+// click back it takes me to the homepage. I can't get back to the planner."
+// The memo used to reopen the trip on EVERY planner mount, so after the
+// header's ← Back went Home, Planner dropped her straight back in the trip.
+let resumeTripOnMount = false;
 
 // `wardrobe` (the FULL wardrobe) + `closets` feed trip planning across both
 // closets; `onRefreshActiveTrip` re-syncs App's trip-mode pool — wave 2's
 // activation / suitcase-close flows call it after flipping trip status.
 // `onItemsClosetChanged` patches App's local items after the trip-complete
 // flow reassigns left-behind pieces to the destination closet (B5).
-export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, isFav, toggleFav, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed }) {
+export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, isFav, toggleFav, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed, onTripOpenChange, closeTripRef }) {
   // `focusDay` (iso) opens the planner ON that day — the way in from a
   // garment's "In Your Looks" row. It wins over the remembered month and the
   // remembered trip, is consumed once on mount (so a later plain open of the
@@ -376,11 +382,20 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // ⊞ Build round-trip). Runs once per trips fetch and only while nothing is
   // open, so it can never fight a deliberate navigation.
   useEffect(() => {
-    if (activeTrip || !lastTripId) return;
+    if (activeTrip || !lastTripId || !resumeTripOnMount) return;
     const again = trips.find(t => t.id === lastTripId);
-    if (again) setActiveTripRaw(again);
+    if (again) { resumeTripOnMount = false; setActiveTripRaw(again); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trips]);
+  // Any other way out of the planner (Home, another tab) forgets the trip.
+  useEffect(() => () => { if (!resumeTripOnMount) { lastTripId = null; lastTripScrollY = 0; } }, []);
+
+  // App's header Back closes an open trip (back to the calendar) instead of
+  // leaving the planner; it reads whether one is open, and calls this.
+  const closeTrip = () => { setActiveTrip(null); refreshPlans(); };
+  useEffect(() => { onTripOpenChange?.(!!activeTrip); }, [activeTrip, onTripOpenChange]);
+  useEffect(() => () => onTripOpenChange?.(false), [onTripOpenChange]);
+  if (closeTripRef) closeTripRef.current = closeTrip;
 
   // Remember where she was inside the trip, recorded as the trip view is torn
   // down. This MUST be a layout effect: a passive (useEffect) cleanup runs
@@ -390,7 +405,8 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // the document is still full height.
   useLayoutEffect(() => {
     if (!activeTrip) return;
-    return () => { lastTripScrollY = window.scrollY; };
+    // Only for the ⊞ Build round-trip: a trip left any other way opens at its top next time.
+    return () => { if (resumeTripOnMount) lastTripScrollY = window.scrollY; };
   }, [activeTrip]);
 
   // …and put her back there. The converge/cancel logic lives in
@@ -603,8 +619,8 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
           wardrobe={wardrobe}
           closets={closets}
           apiKey={apiKey}
-          onBack={() => { setActiveTrip(null); refreshPlans(); }}
-          onBuildDay={onBuildDay}
+          onBack={closeTrip}
+          onBuildDay={onBuildDay && ((...args) => { resumeTripOnMount = true; onBuildDay(...args); })}
           onRefreshActiveTrip={onRefreshActiveTrip}
           onItemsClosetChanged={onItemsClosetChanged}
         />

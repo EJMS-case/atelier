@@ -264,6 +264,10 @@ export default function App() {
   // open, restore it on close — otherwise saving a planner edit dumps you
   // on the empty Style Me screen instead of the page you came from.
   const [builderReturnView, setBuilderReturnView] = useState(null);
+  // Whether the Planner has a trip open, and how to close it — the header's
+  // Back returns to the calendar while one is (CalendarView reports both).
+  const [plannerTripOpen, setPlannerTripOpen] = useState(false);
+  const closePlannerTripRef = useRef(null);
   const [closetSearch, setClosetSearch] = useState("");  // global closet search
   const [favorites,  setFavorites]  = useState([]);
   // Hearted outfits, resolved to {garment_ids, occasion} — fed to the stylist
@@ -2580,7 +2584,13 @@ export default function App() {
       {view === "planner" && (
         <div style={s.page}>
           <div style={s.pageHeader}>
-            <button style={s.backBtn} onClick={() => setView("home")}>← Back</button>
+            {/* Inside a trip, Back returns to the calendar, not Home (owner,
+                2026-11-02: "When I click back it takes me to the homepage. I
+                can't get back to the planner."). */}
+            <button style={s.backBtn}
+              onClick={() => plannerTripOpen && closePlannerTripRef.current ? closePlannerTripRef.current() : setView("home")}>
+              {plannerTripOpen ? "← Planner" : "← Back"}
+            </button>
             <h2 style={s.pageTitle}>Planner</h2>
           </div>
           <CalendarView
@@ -2596,6 +2606,8 @@ export default function App() {
             onGoToStyleMe={() => setView("style")}
             focusDay={plannerFocusDay}
             onFocusDayConsumed={() => setPlannerFocusDay(null)}
+            onTripOpenChange={setPlannerTripOpen}
+            closeTripRef={closePlannerTripRef}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}
             onEditPlan={(iso, plan) => {
               setEditingPlan({ iso, plan });
