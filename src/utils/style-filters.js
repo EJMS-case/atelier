@@ -16,7 +16,7 @@
 // every retry burns).
 
 import { getSubcatL2 } from "../constants/taxonomy.js";
-import { slotForItem, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, SANDAL_FORM_RE, classifierNotes } from "./item-helpers.js";
+import { slotForItem, isBootItem, isAnkleBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, isSandalFormItem, SANDAL_FORM_RE, classifierNotes } from "./item-helpers.js";
 
 // Trouser-family allow-list carried over from the legacy "trousers-only"
 // toggle — includes the L3 labels rows actually store ("Satin/Silk", "Ponte",
@@ -105,10 +105,20 @@ export const FILTER_TYPES = {
       (PUMP_SUBS.has(it.subcategory) || PUMP_NAME_RE.test(it.name || "")) &&
       !NON_PUMP_RE.test(it.name || ""),
   },
+  // Boots and booties are two chips (owner, 2026-11-02: "split boots and
+  // booties in the exclusions in style me"): a knee or over-the-knee boot and
+  // an ankle bootie are different shoes in a look. One reader decides which is
+  // which (item-helpers isAnkleBootItem — the same one LOOK FACTS' hem note
+  // reads); the weather gates still keep BOTH out of Hot and Warm.
   boots: {
     label: "Boots",
     group: "shoes",
-    match: isBootItem,
+    match: (it) => isBootItem(it) && !isAnkleBootItem(it),
+  },
+  booties: {
+    label: "Booties",
+    group: "shoes",
+    match: isAnkleBootItem,
   },
   flats: {
     // Sneakers/sandals sometimes get filed under the Flats subcategory (or

@@ -33,7 +33,10 @@ const setBottom    = { id: "setbot",   category: "Sets", subcategory: "Day Sets"
 const blouse       = { id: "blouse",   category: "Tops", subcategory: "Blouses",      name: "Silk Blouse" };
 const knit         = { id: "knit",     category: "Knits", subcategory: "Pullovers",   name: "Cashmere Crew" };
 const heels        = { id: "heels",    category: "Shoes", subcategory: "Stiletto",    name: "Black Stilettos" };
+// An ankle boot is a BOOTIE; a knee boot is a BOOT (owner, 2026-11-02).
 const boots        = { id: "boots",    category: "Shoes", subcategory: "Ankle",       name: "Ankle Boots" };
+const kneeBoots    = { id: "knee",     category: "Shoes", subcategory: "Knee-High",   name: "Wally Foldover Boot" };
+const tallBoots    = { id: "tall",     category: "Shoes", subcategory: "Boots",       name: "Giano Fringe Tall Boots" };
 const flats        = { id: "flats",    category: "Shoes", subcategory: "Flats",       name: "Ballet Flats" };
 const loafers      = { id: "loafers",  category: "Shoes", subcategory: "Loafers",     name: "Penny Loafers" };
 const sneakers     = { id: "sneaks",   category: "Shoes", subcategory: "Flats",       name: "Leather Sneakers" };
@@ -115,7 +118,7 @@ test("only-knits is include-mode: it bans NOTHING (a tank layers under a knit)",
 });
 
 test("'only' in one group composes with 'no' in another", () => {
-  const keys = ["only-jeans", "no-boots"];
+  const keys = ["only-jeans", "no-booties"];
   assert.equal(excluded(keys, jeans), false);
   assert.equal(excluded(keys, boots), true);
   assert.equal(excluded(keys, heels), false);
@@ -261,7 +264,7 @@ test("most-worn types lead within their group; group order is preserved", () => 
   const chips = computeFilterChips(closet, stats);
   const keys = chips.map(c => c.key);
   assert.ok(keys.indexOf("skirts") < keys.indexOf("jeans"), "skirts out-worn jeans");
-  assert.ok(keys.indexOf("boots") < keys.indexOf("heels"), "boots out-worn heels");
+  assert.ok(keys.indexOf("booties") < keys.indexOf("heels"), "booties out-worn heels");
   // Structural group blocks stay in order: all lower before all shoes before upper.
   const groups = chips.map(c => c.group);
   assert.deepEqual(groups, [...groups].sort((a, b) =>
@@ -400,4 +403,19 @@ test("matchesActiveInclude: true only for active include-mode toggles", async ()
   assert.equal(matchesActiveInclude(heels, ["only-heels"]), false, "restrict-mode toggles are not includes");
   assert.equal(matchesActiveInclude(blazer, ["no-blazers"]), false, "a No toggle is not an include");
   assert.equal(activeIncludeTypes(["only-blazers", "only-stockings", "only-heels"]).map(t => t.label).sort().join(","), "Blazers,Stockings");
+});
+
+// ── Boots and booties are two chips (owner, 2026-11-02) ─────────────────────
+test("No Boots keeps booties; No Booties keeps boots; each Only keeps the other out", () => {
+  assert.equal(excluded(["no-boots"], kneeBoots), true);
+  assert.equal(excluded(["no-boots"], tallBoots), true, "a tall boot filed under the bare Boots shelf is a boot");
+  assert.equal(excluded(["no-boots"], boots), false, "No Boots leaves the booties");
+  assert.equal(excluded(["no-booties"], boots), true);
+  assert.equal(excluded(["no-booties"], kneeBoots), false, "No Booties leaves the knee boots");
+  assert.equal(excluded(["only-booties"], kneeBoots), true, "Only Booties bans other footwear, knee boots included");
+  assert.equal(excluded(["only-boots"], boots), true, "Only Boots bans booties");
+  assert.equal(excluded(["only-boots"], kneeBoots), false);
+  assert.match(explainFilterViolation(boots, ["no-booties"]), /No Booties/);
+  const chips = computeFilterChips([boots, kneeBoots, heels], {}).map(c => c.label);
+  assert.ok(chips.includes("Boots") && chips.includes("Booties"), "both chips show when she owns both");
 });
