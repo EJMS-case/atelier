@@ -19,7 +19,7 @@ import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds, DAYPART_EVENING } from "./outfits.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
-import { TRIP_ACTIVITIES, buildDailyOutfits, activityEvening } from "./tripPacker.js";
+import { TRIP_ACTIVITIES, buildDailyOutfits, eveningForDay } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { closetOf } from "../closet/closets.js";
@@ -920,7 +920,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
         const dayIdx = days.indexOf(iso);
         const activity = dayActivity[iso] || trip.activity || "Sightseeing";
         const occasion = occasionFor(iso);
-        const evening = dayIdx > 0 && dayIdx < days.length - 1 ? activityEvening(activity) : null;
+        const evening = eveningForDay(activity, dayIdx, days.length);
         return {
           iso, label: shortDayLabel(iso),
           occasion, activity, weather: weatherForDay(iso),

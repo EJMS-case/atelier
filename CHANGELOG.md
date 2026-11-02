@@ -2,6 +2,29 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Audit after the trip, flip, re-wear and boots work — 2026-11-02
+
+### Why
+
+Owner: *"Once done with all this, run the audit."* This pass sweeps what landed since #289 (#290–#295) and the codebase once more.
+
+### Removed / unified
+
+- **`eveningForDay(activity, dayIdx, dayCount)` (`tripPacker.js`)** replaces four inline copies of "an evening look on a day between the travel days": the preview, its evening re-apply, the per-day activity switch, and the trip screen's Generate all. A copy that drifted would give one surface a Vegas evening on the arrival day.
+- **`thumbnail-cache.getThumbnail`** (instance method and default-instance wrapper): read by nothing in the app or the tests. Items resolve through `getItemThumbnail` / `loadThumbnails`.
+- **`weather.fetchNycForecast`** is no longer exported; it is the module's own fallback.
+- **CLAUDE.md:** `npm test` is 56 suites and the render walk 51 steps (was 54 / 40).
+
+### Checked, left as is
+
+- Scans: every `src/` export has a reader (about 140 are reached only by tests, as pure helpers they pin), no unimported file except `main.jsx` and the doctor's `poolInvariants.js`, no unread local definition, every `scripts/*.test.mjs` in `npm test` except the live matrix and the render walk (which `smoke` runs), and no stale reference to anything removed today.
+- The boot chunk (503 kB, mostly `@supabase/auth-js` and React) is unchanged. Today's trip work (`tripStylist`, `displaced`, `roomKeepOuts`) loads with the planner or on call.
+- Three activity-keyed tables (`TRIP_ACTIVITIES`, `ACTIVITY_NOTES`, `ACTIVITY_FILTERS`) answer different questions (the list she picks from, what the model is told, what the packer gates), so they stay apart.
+
+### Tests
+
+`test:trip-stylist` +1 (`eveningForDay`). `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Boots and Booties are two Style Me chips — 2026-11-02
 
 ### Why
