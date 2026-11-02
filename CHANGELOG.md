@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A trip day keeps out what its room keeps out — 2026-11-02
+
+### Why
+
+Checked on her live closet after #288: built the Vegas trip (Nov 13–16, packing from NYC) through the real pools and composed Atelier's trip prompt from her 576 rows. It ran to 6 looks, 326 inventory lines and about 18.5k tokens. The acceptor kept every travel-day piece in the home closet. One finding: the trip's eligibility never read her rooms. The "Take a Hike" tee and all 48 athleisure pieces were candidates for the Vegas **show-night Dinner** looks, and cocktail dresses were candidates for the **Travel Days**. Style Me's sampler keeps those out through `OCCASION_SLOTS.banned`, but neither trip path, the packer or the AI, did. CLAUDE.md: *"A look is built in three places, and a preference reaches all three."*
+
+### Changed
+
+- **`features/planner/roomKeepOuts.js` (new):** `roomKeepsOut(item, occasion)` reads the same `banned` lists (categories, subcategories, denim under a Jeans ban, sandal forms). Her lines lead: a veto keeps the piece out, and a line that names the room lets it in. Swim and loungewear stay the activity's call, so a Beach day is a Casual day that packs a suit. `inTheRoom(pool, occasion, pins)` applies it with pins always passing and a floor of 8 garments, below which the day keeps its whole set.
+- **`tripAdvisor.eligibleForTripDay`** (the single-day AI look, and the whole-trip pass through `tripLookSlots`) and **`tripPacker.buildDailyOutfits`** (the draft and fallback) both apply it.
+- On her live Vegas trip, a show-night Dinner look offers 245 pieces, not 322, with no tees, shorts or athleisure, and a travel day offers 302, not 326, with no cocktail dresses or heels.
+
+### Downstream, four ways
+
+*Efficiency:* fewer, more relevant inventory lines per look. *Effectiveness:* a trip's rooms keep out what Style Me's do, on every trip surface; it is a preference held by the floor and never empties a pool. *Speed:* none. *Education:* her lines decide, as in Style Me.
+
+### Tests
+
+`test:trip-stylist` +1: Dinner keeps out a tee and leggings, Travel Day a cocktail dress, Casual keeps swim, a line naming the room wins, the floor, a pin passes. `test:packer` 325/325, run three times (the four swim cases that a naive Casual ban broke are held). `npm test`, `npm run build`, `npm run smoke` green.
+
 ## [Unreleased] — Audit: one day-reconcile, one category order, no dead picture write, one date label — 2026-11-02
 
 ### Why

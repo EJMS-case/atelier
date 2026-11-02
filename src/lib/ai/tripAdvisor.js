@@ -15,6 +15,7 @@ import { filterByWeather, promptNotes, NOTES_NEGATION_LEGEND, formalityOf, reads
 import { isGarment, categoryRank } from "../../constants/taxonomy.js";
 import { personalGrounding, occasionBrief } from "../../features/stylist/standard.js";
 import { STANDARD_LINES } from "../../features/stylist/standardLines.js";
+import { inTheRoom } from "../../features/planner/roomKeepOuts.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
 
@@ -154,12 +155,15 @@ const TripLooksSchema = z.object({
 // packer apply), unless so few garments would be left that the day could
 // not be dressed; then every piece stays and the brief decides.
 export function eligibleForTripDay(items, occasion, weather, { allowSwim = false, mustInclude = null } = {}) {
-  const fits = (items || []).filter(it => {
+  const weatherFit = (items || []).filter(it => {
     if (!it.category) return false;
     if (mustInclude?.has(it.id)) return true;
     if (!allowSwim && (it.category === "Swim" || it.category === "Loungewear")) return false;
     return filterByWeather([it], weather).length > 0;
   });
+  // What the room keeps out (planner/roomKeepOuts.js — Style Me's room lists,
+  // with her lines leading and a floor so a small pool is never emptied).
+  const fits = inTheRoom(weatherFit, occasion, mustInclude);
   const offDuty = fits.filter(it => mustInclude?.has(it.id) || !readsAsOffice(it, occasion));
   return offDuty.filter(isGarment).length >= OFF_DUTY_FLOOR ? offDuty : fits;
 }

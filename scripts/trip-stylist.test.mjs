@@ -91,3 +91,26 @@ test("a pinned piece passes the weather gate and is marked", () => {
   assert.match(prompt.split("\n").find(l => l.includes("Camel Coats")), /PINNED/);
   assert.match(prompt, /Every PINNED piece goes in at least one look/);
 });
+
+// ── What a room keeps out on a trip (planner/roomKeepOuts.js) ───────────────
+test("a trip day's room keeps out what Style Me's room does — her lines lead, swim is the activity's", async () => {
+  const { roomKeepsOut, inTheRoom, ROOM_FLOOR } = await import("../src/features/planner/roomKeepOuts.js");
+  const graphicTee = { id: "t", name: "Take a Hike Tee", category: "Tops", subcategory: "T-Shirts", color: "Tan" };
+  const leggings = { id: "l", name: "Leggings", category: "Athleisure", subcategory: "Leggings", color: "Black" };
+  const cocktail = { id: "c", name: "Creole Dress", category: "Occasionwear", subcategory: "Cocktail Dresses", color: "Black" };
+  const suit = { id: "s", name: "One-Piece", category: "Swim", subcategory: "Swimsuits", color: "Black" };
+  const namedTee = { ...graphicTee, id: "t2", stylist_line: "silk tee; works for dinner under a blazer" };
+  assert.ok(roomKeepsOut(graphicTee, "Dinner"), "a tee is kept out of a dinner");
+  assert.ok(roomKeepsOut(leggings, "Dinner"));
+  assert.ok(roomKeepsOut(cocktail, "Travel Day"), "a cocktail dress is kept off a travel day");
+  assert.ok(!roomKeepsOut(graphicTee, "Casual"));
+  assert.ok(!roomKeepsOut(suit, "Casual"), "swim is the activity's call on a trip, not the room's");
+  assert.ok(!roomKeepsOut(namedTee, "Dinner"), "a line that names the room lets the piece in");
+
+  // The floor: a pool the keep-outs would leave thin stays whole.
+  const tees = Array.from({ length: ROOM_FLOOR }, (_, i) => ({ ...graphicTee, id: `x${i}` }));
+  assert.equal(inTheRoom(tees, "Dinner").length, ROOM_FLOOR, "a preference never empties a small pool");
+  const roomy = [...tees, ...Array.from({ length: ROOM_FLOOR }, (_, i) => ({ id: `b${i}`, name: "Silk Blouse", category: "Tops", subcategory: "Blouses" }))];
+  assert.equal(inTheRoom(roomy, "Dinner").length, ROOM_FLOOR, "with room to spare, the tees go");
+  assert.equal(inTheRoom(roomy, "Dinner", new Set(["x0"])).length, ROOM_FLOOR + 1, "a pin always passes");
+});
