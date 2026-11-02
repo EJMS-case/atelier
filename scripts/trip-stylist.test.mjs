@@ -49,6 +49,9 @@ test("the prompt carries the standard, the rooms, the activity, and where a piec
   assert.match(prompt, /plus an EVENING look \(Dinner\)/);
   assert.match(prompt, /travel day, dressed from home/);
   assert.match(prompt, /colour story first/);
+  // Re-wear is the method (owner, 2026-11-02).
+  assert.match(prompt, /same shoes, belts, layers and bottoms across several looks and days/);
+  assert.match(prompt, /a top may come back on a later day/);
   assert.match(prompt, /WHAT READS CURRENT — test/);
   // The blouse may not travel: its line says which looks it may join.
   const line = prompt.split("\n").find(l => l.includes("Navy Blouses"));

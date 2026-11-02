@@ -122,9 +122,13 @@ export function composeTripStylePrompt({ days = [], fixed = [], destination = ""
   if (brief?.weatherNotes) destBits.push(brief.weatherNotes);
   if (brief?.packingTip) destBits.push(`Local note: ${brief.packingTip}`);
 
+  // Re-wear is the method (owner, 2026-11-02: "reuse items across different
+  // outfits and days to help me pack better and smarter. Shoes, belts,
+  // outerwear, bottoms. Less with tops but don't exclude those on rewear").
+  const rewear = `Re-wear is how she packs: the same shoes, belts, layers and bottoms across several looks and days, each time restyled with different partners. Tops repeat less often, but a top may come back on a later day when it earns it. The same top or bottom is never worn two days running, the hero piece appears once, and no whole look repeats.`;
   const capsule = prefer?.size
-    ? `She keeps a closet AT THE DESTINATION (marked) and carries a suitcase for the rest. This is not a pack-light problem: reach for the AT DESTINATION pieces first, and pull from home only where a day genuinely needs it. A piece may return on a second day restyled; never two days running, never the same whole look twice.`
-    : `Everything is carried in one suitcase. Pack like a stylist: 2–3 pairs of shoes and 1–2 day bags (plus one evening bag if there are evening looks) for the whole trip, one or two layers that work over everything. Bottoms and layers repeat, restyled; tops rarely; the hero piece once. Never the same piece two days running except shoes, bags and outerwear; never the same whole look twice.`;
+    ? `She keeps a closet AT THE DESTINATION (marked) and carries a suitcase for the rest: reach for the AT DESTINATION pieces first, and pull from home only where a day genuinely needs it. ${rewear}`
+    : `Everything is carried in one suitcase, so pack small: 2–3 pairs of shoes, 1–2 belts, 1–2 day bags (plus one evening bag if there are evening looks), one or two layers that work over everything, and a few bottoms that each carry several looks. ${rewear}`;
 
   return {
     inventory,
