@@ -20,7 +20,7 @@
 // filters the way Style Me's explicit-request override does. See
 // assignMustIncludes() + MUST_BONUS.
 
-import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind, formalityOf, lineWearsTo, readsAsOffice } from "../../utils/item-helpers.js";
+import { filterByWeather, slotForItem, isCompleteSetItem, HEEL_SUBS, isBootItem, isHosieryItem, isStatementPiece, isSandalFormItem, classifierNotes, swimPieceKind, formalityOf, lineWearsTo, readsAsOffice, workhorseAtDinner } from "../../utils/item-helpers.js";
 import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 import { defaultTripDayOccasion } from "./tripPools.js";
@@ -233,6 +233,7 @@ const DEST_ADEQUATE_DIST = 2;
 // occasion tag (+4) and the preferred-shoe term (+3), so only a pin brings
 // one past an easy alternative; the formality-distance term stacks on top.
 export const OFFICE_PENALTY = 5;
+export const WORKHORSE_PENALTY = 1.5;
 // A dressier evening (Vegas): the swing between a heel and a flat on a
 // Dinner day, on top of the room's own shoe terms — a heel ends 12 above a
 // ballet flat (+3+3 vs +3-3), far past the 0.6 jitter.
@@ -419,6 +420,9 @@ export function scoreForOccasion(item, occasion, opts = {}) {
   // a preference held by score, so a thin trip pool can still dress the
   // day, and a pin still seats (the pin's natural-fit term, not this one).
   if (readsAsOffice(item, occasion)) s -= OFFICE_PENALTY;
+  // A work-and-dinner workhorse (her line names both, no evening texture)
+  // seats behind an evening piece at Dinner, and still dresses a thin day.
+  else if (workhorseAtDinner(item, occasion)) s -= WORKHORSE_PENALTY;
   const dist = formalityDistance(item, occasion);
   if (dist > 0) {
     let penalty = Math.min(4.5, 1.5 * dist);

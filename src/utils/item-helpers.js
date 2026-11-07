@@ -237,6 +237,27 @@ export function readsAsOffice(item, occasion) {
   return slot === "bottom" && TROUSER_RE.test(`${item.name || ""} ${item.subcategory || ""}`);
 }
 
+// ── The workhorse at Dinner ──────────────────────────────────────────────────
+// Most of her blouses and ponte pieces carry "work, dinners" in their line, so
+// readsAsOffice (rightly) lets them into Dinner — she wears them there. But
+// they outnumber her evening pieces several to one, and a Dinner inventory led
+// by forty work-and-dinner pieces came back as the office (owner, 2026-11-07:
+// "lots of work looks for a nice dinner … not chic at all"). A garment whose
+// line names Work and that carries no evening texture is a SUPPORTING piece at
+// Dinner: it stays in every pool, trails its bucket in Style Me (one band,
+// behind the office's two), scores a little lower in the packer, and the
+// Dinner brief pairs at most one of them with something evening in itself.
+// A preference held by order and score, never by removal.
+export const EVENING_TEXTURE_RE = /\b(silk|satin|charmeuse|lace|leather|suede|velvet|sequins?|mesh|sheer|metallic|lam[eé]|organza|chiffon|georgette|slip|cocktail|date.?night|drinks)\b/i;
+export function workhorseAtDinner(item, occasion) {
+  if (occasion !== "Dinner" || !item) return false;
+  const slot = slotForItem(item);
+  if (slot !== "top" && slot !== "bottom" && slot !== "dress") return false;
+  if (!lineWearsTo(item, "Work")) return false;
+  const text = `${item.name || ""} ${classifierNotes(item)} ${item.material || ""} ${item.subcategory || ""}`;
+  return !EVENING_TEXTURE_RE.test(text);
+}
+
 // A value someone proposes for the column — the photo read, the Add Items
 // select, the closet's bulk filer — is kept only if it is an integer on the
 // scale. 0 and 9 have no band; a string is not a filing.

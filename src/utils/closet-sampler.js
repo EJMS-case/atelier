@@ -7,7 +7,7 @@
 // rarely-suggested-first (step 5) so lifetime heroes trail the inventory.
 
 import { normalizeOccasion, weatherMatches } from "../constants/taxonomy.js";
-import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, formalityOf, noteNamesOccasion, noteVetoesOccasion, lineWearsTo, readsAsOffice, OFFICE_GATED_ROOMS } from "./item-helpers.js";
+import { slotForItem, isCompleteSetItem, isHosieryItem, isBootItem, isSandalFormItem, isBlazerItem, classifierNotes, promptNotes, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, formalityOf, noteNamesOccasion, noteVetoesOccasion, lineWearsTo, readsAsOffice, workhorseAtDinner, OFFICE_GATED_ROOMS } from "./item-helpers.js";
 // The room vocabulary lives beside classifierNotes in item-helpers.js (it is
 // read by the stylist's LOOK FACTS and the trip packer too); re-exported so
 // existing importers keep working.
@@ -493,6 +493,12 @@ export function sampleClosetItems({
   // boots out lets the floor backfill the least-recently-used real options.
   if (hotOrWarm) pool = pool.filter(it => !isBootItem(it));
   if (coolOrCold) pool = pool.filter(it => !isSandalFormItem(it)); // form-aware: thongs filed under Kitten/Block too
+  // Mild too (owner, 2026-11-07: "Why is the style me giving me sandals for a
+  // casual outfit in mild weather?"). The planner's reader (item-helpers
+  // filterByWeather, which the trip packer and the pin picker use) has kept
+  // sandals out of Mild all along; Style Me was the one surface that didn't.
+  // A sandal she names or toggles in still comes back (the re-unions below).
+  if (weatherMatches(wRaw, "Mild")) pool = pool.filter(it => !isSandalFormItem(it));
   // Same principle, remaining buckets (2026-08-07): everything below mirrors a
   // rule checkWeatherCompliance rejects 100% of the time — no taste involved —
   // so keeping these in the pool is retry-bait, and (the 0y starvation lesson)
@@ -810,8 +816,10 @@ export function sampleClosetItems({
   // leading the bucket as if it were new. Feedback and hearts stay per-item.
   // An office piece that survived step 3c (named, toggled, or on the floor)
   // trails its bucket by two bands: the model reads list order as salience.
+  // A work-and-dinner workhorse trails by one at Dinner (workhorseAtDinner),
+  // so the evening pieces lead the list the model reads.
   const bandOf = (it) =>
-    Math.max(0, freshnessBand(famCount[famOf(it)] ?? (itemSuggestionCounts[it.id] || 0)) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0) + (readsAsOffice(it, occasion) ? 2 : 0);
+    Math.max(0, freshnessBand(famCount[famOf(it)] ?? (itemSuggestionCounts[it.id] || 0)) - (feedbackScores[it.id] > 0 ? 1 : 0) + (feedbackScores[it.id] < 0 ? 1 : 0)) - (heartedIds.has(it.id) ? 0.25 : 0) + (readsAsOffice(it, occasion) ? 2 : workhorseAtDinner(it, occasion) ? 1 : 0);
   for (const key of Object.keys(buckets)) {
     buckets[key] = seededShuffle(buckets[key], rng);
     // Precompute each item's band once — recomputing inside the comparator
