@@ -1169,6 +1169,55 @@ await check("Builder ← Back from a trip day returns to the trip", async () => 
   if (!/Back to Calendar/.test(text)) throw new Error("closing the builder did not reopen the trip it came from");
 });
 
+// Owner, 2026-11-02: "Did selecting a new outfit on a day that already had
+// one planned delete what existed on that day entirely?" It did — a fresh
+// builder look scheduled onto a planned day replaced that day's look. A fresh
+// build now ADDS a look (outfits.scheduleSlot): the row the app writes for
+// iso(3) must carry the fixture's existing look AND the new one.
+await check("Builder → a fresh look scheduled onto a planned day adds to it, never replaces", async () => {
+  await tab("Style Me")();
+  await page.waitForTimeout(600);
+  const opened = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(x => /^(Build a look manually|⊞ Build manually)$/.test((x.textContent || "").trim()));
+    if (!b) return false; b.click(); return true;
+  });
+  if (!opened) throw new Error("no manual-build button on Style Me");
+  await page.waitForTimeout(1200);
+  for (const slot of ["TOP", "BOTTOM"]) {
+    await page.evaluate((label) => [...document.querySelectorAll("button")].find(b => (b.textContent || "").trim().startsWith(label))?.click(), slot);
+    await page.waitForTimeout(500);
+    const picked = await page.evaluate(() => {
+      const sheet = [...document.querySelectorAll("div")].find(d => d.style.height === "68vh");
+      const card = sheet && [...sheet.querySelectorAll("button")].find(b => b.querySelector("img") && getComputedStyle(b).backgroundColor === "rgb(255, 255, 255)");
+      if (!card) return false; card.click(); return true;
+    });
+    if (!picked) throw new Error(`no piece to pick in the ${slot} sheet`);
+    await page.waitForTimeout(300);
+    await clickText("button", "Done");
+    await page.waitForTimeout(300);
+  }
+  await clickText("button", "Schedule");
+  await page.waitForTimeout(300);
+  await page.fill('input[type="date"]', iso(3));
+  await page.waitForTimeout(300);
+  const before = restWrites.length;
+  const saved = await page.evaluate(() => {
+    const btns = [...document.querySelectorAll("button")].filter(b => (b.textContent || "").trim() === "Schedule");
+    const save = btns[btns.length - 1];
+    if (!save || save.disabled) return false; save.click(); return true;
+  });
+  if (!saved) throw new Error("the builder's Schedule button was not ready (fewer than two pieces?)");
+  let row = null;
+  for (let i = 0; i < 20 && !row; i++) {
+    await page.waitForTimeout(250);
+    row = restWrites.slice(before).map(w => w.row).flat().find(r => r && r.date === iso(3));
+  }
+  if (!row) throw new Error("scheduling wrote no planner row for the day");
+  const looks = row.outfits || [];
+  if (looks.length !== 2) throw new Error(`the day holds ${looks.length} look(s) after scheduling onto it, not its old look plus the new one`);
+  if (!looks.some(o => o.id === "o1")) throw new Error("the day's existing look was replaced");
+});
+
 await browser.close();
 server.close();
 

@@ -28,7 +28,7 @@ npm run build      # production build + service-worker cache stamp
 npm test           # full suite (56 suites, no network)
 npm run test:taxonomy   # any single suite; see package.json for the list
 npm run smoke      # build, then a blank-screen check AND the signed-in render walk
-npm run test:render     # just the render walk (51 steps, headless, mocked REST)
+npm run test:render     # just the render walk (52 steps, headless, mocked REST)
 npm run doctor     # check the LIVE data against the app's own invariants
 ```
 
