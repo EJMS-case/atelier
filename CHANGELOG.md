@@ -2,6 +2,37 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Dinner leads with evening pieces; no sandals in Mild — 2026-11-07
+
+### Why
+
+Owner: *"Why is the style me giving me sandals for a casual outfit in mild weather? And lots of work looks for a nice dinner I had planned tonight? Can these outfits for dinner and casual be better? They're not chic at all. Is the code too heavy??"*
+
+Live rows (`ai_errors` `stylist_outfit:timing`, 11-06/07, build 3bba767): sixteen Dinner taps sent 191–215 pieces each, and five Casual taps sent 260–270, all at Mild.
+
+- **Sandals.** The planner's weather reader (`filterByWeather`, used by the packer and the pin picker) has kept sandal forms out of Mild all along. Style Me's own gate didn't, the Mild brief said nothing about shoes, and the Casual brief offered "a great sandal" whatever the weather.
+- **Dinner.** The office gate (`readsAsOffice`) yields, correctly, to a line that names Dinner. Most of her blouses and ponte pieces say "work, dinners", so about 42 NYC garments (23 tops, 15 bottoms, 4 dresses) entered Dinner level with her evening pieces, and the model built from the majority.
+
+### Changed
+
+- **`workhorseAtDinner(item, occasion)`** (`item-helpers`): a top, bottom or dress whose line names Work (and doesn't veto it) and that carries no evening texture (`EVENING_TEXTURE_RE`: silk, satin, lace, leather, suede, velvet, sequin, mesh, sheer, chiffon, georgette, slip…). There is one reader, used in three places:
+  - **Style Me:** the piece trails its bucket by one band (the office trails by two), so the evening pieces lead the list.
+  - **Packer:** `WORKHORSE_PENALTY` (1.5) at Dinner, so a thin trip day still dresses.
+  - **Dinner brief:** at most one such piece per look, beside something evening in itself.
+
+  Nothing is removed from a pool.
+- **Mild:** the Style Me sampler drops sandal forms (a named or toggled-in sandal comes back through the existing re-unions). The Mild brief now leads with closed shoes, and Casual's brief offers "a great sandal when it's warm".
+
+### Downstream
+
+- *Efficiency:* the Dinner note adds about 70 tokens to the uncached body. The Mild line changes the weather block once. The pool shrinks by her sandals in Mild.
+- *Effectiveness:* the ordering and the brief reach Style Me and the trip's AI looks (same `promptNote`), and the score reaches the packer.
+- *Speed:* no new call.
+- *Education:* the read comes from her own lines. Adding "evening" or "date night" to a piece's line moves it to the front at Dinner.
+
+### Tests
+
+`test:casual-register` +2 (the workhorse read and order; Mild sandals with a named rescue). `npm test`, `npm run build`, `npm run smoke` green.
 ## [Unreleased] — The walk holds a fresh look scheduled onto a planned day — 2026-11-07
 
 ### Why

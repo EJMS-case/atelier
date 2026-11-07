@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import { strategiesFor, STYLING_STRATEGIES, OCCASION_SLOTS } from "../src/constants/styling.js";
 import { STYLIST_STANDARD } from "../src/features/stylist/standard.js";
 import { sampleClosetItems, readsAsOffice } from "../src/utils/closet-sampler.js";
+import { workhorseAtDinner } from "../src/utils/item-helpers.js";
 
 test("Casual gets its own hero and proportion briefs; Work keeps the tailored defaults", () => {
   const casual = strategiesFor("Casual");
@@ -124,4 +125,52 @@ test("readsAsOffice yields to a line that names Casual, never to one that vetoes
   assert.equal(readsAsOffice({ ...cardigan, stylist_line: "weekend and office" }, "Casual"), false, "'weekend' is a Casual word");
   assert.equal(readsAsOffice({ ...cardigan, stylist_line: "work only, not for casual" }, "Casual"), true, "a veto is not a rescue");
   assert.equal(readsAsOffice({ ...cardigan, stylist_line: "" }, "Casual"), true, "f5 with no room word still trails at Casual");
+});
+
+// Her blouses and ponte pieces say "work, dinners" (owner, 2026-11-07: "lots
+// of work looks for a nice dinner … not chic at all"). They stay in Dinner —
+// she wears them there — but as the supporting cast: behind every evening
+// piece in the list, and the brief allows one per look beside something
+// evening in itself.
+test("a work-and-dinner piece with no evening texture is a workhorse at Dinner, and trails its bucket", () => {
+  const ponte = { id: "p", category: "Bottoms", subcategory: "Ponte", name: "Ponte Knit Pant", formality: 6, stylist_line: "Navy ponte knit wide-leg pants; work, meetings, dinners" };
+  const blouse = { id: "b", category: "Tops", subcategory: "Blouses", name: "Cece Blouse", stylist_line: "Navy crepe blouse, ruffle V-neck; work, dinners, travel" };
+  const silk = { id: "s", category: "Bottoms", subcategory: "Trousers", name: "Rosalie Silk Trouser", stylist_line: "black silk wide leg trouser; work and evening" };
+  const satin = { id: "t", category: "Bottoms", subcategory: "Satin/Silk", name: "Dayna Pant", stylist_line: "black satin wide-leg pants; evening, dinners" };
+  const cami = { id: "c", category: "Tops", subcategory: "Tanks", name: "Lace-trimmed Camisole", stylist_line: "black camisole, lace trim" };
+  assert.equal(workhorseAtDinner(ponte, "Dinner"), true);
+  assert.equal(workhorseAtDinner(blouse, "Dinner"), true);
+  assert.equal(workhorseAtDinner(silk, "Dinner"), false, "silk is evening in itself");
+  assert.equal(workhorseAtDinner(satin, "Dinner"), false, "no work in the line");
+  assert.equal(workhorseAtDinner(ponte, "Casual"), false, "Dinner only");
+  assert.equal(workhorseAtDinner({ ...ponte, stylist_line: "ponte pant, not for work, dinners" }, "Dinner"), false, "a veto is not a work line");
+
+  const items = [ponte, blouse, silk, satin, cami];
+  for (let i = 0; i < 6; i++) {
+    const ids = sampleClosetItems({ items, occasion: "Dinner", occasionSlots: {}, weather: "" }).sampled.map(it => it.id);
+    for (const id of ["p", "b"]) assert.ok(ids.includes(id), `${id} stays in the pool`);
+    assert.ok(ids.indexOf("c") < ids.indexOf("b"), `the cami leads the blouse: ${ids}`);
+    assert.ok(ids.indexOf("s") < ids.indexOf("p") && ids.indexOf("t") < ids.indexOf("p"), `evening bottoms lead the ponte: ${ids}`);
+  }
+  assert.match(OCCASION_SLOTS.Dinner.promptNote, /at most ONE per look/);
+});
+
+// Mild weather (owner, 2026-11-07: "Why is the style me giving me sandals for
+// a casual outfit in mild weather?") — the planner's reader kept sandals out
+// of Mild; Style Me now does too, and a sandal she names still comes back.
+test("Style Me keeps sandals out of Mild unless she names one", () => {
+  const items = [
+    { id: "tee", category: "Tops", subcategory: "T-Shirts", name: "White Tee" },
+    { id: "jean", category: "Bottoms", subcategory: "Jeans", name: "Straight Jean" },
+    { id: "sandal", category: "Shoes", subcategory: "Sandals", name: "Strappy Sandal" },
+    { id: "thong", category: "Shoes", subcategory: "Kitten", name: "Heeled Thong Sandal" },
+    { id: "loafer", category: "Shoes", subcategory: "Loafers", name: "Penny Loafer" },
+  ];
+  const ids = (weather, freeTextRequest = "") => sampleClosetItems({ items, occasion: "Casual", occasionSlots: {}, weather, freeTextRequest }).sampled.map(it => it.id);
+  const mild = ids("Mild (55-69°F)");
+  assert.ok(!mild.includes("sandal") && !mild.includes("thong"), `no sandal form in Mild: ${mild}`);
+  assert.ok(mild.includes("loafer"));
+  assert.ok(ids("Warm (70-84°F)").includes("sandal"), "Warm keeps them");
+  assert.ok(ids("Mild (55-69°F)", 'with my "Strappy Sandal"').includes("sandal"), "a named sandal comes back");
+  assert.match(OCCASION_SLOTS.Casual.promptNote, /great sandal when it's warm/);
 });
