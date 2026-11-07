@@ -2,6 +2,20 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The walk holds a fresh look scheduled onto a planned day — 2026-11-07
+
+### Why
+
+#292 fixed the builder replacing a planned day's look when a fresh build was scheduled onto it, and its test was `scheduleSlot`, a pure helper. Nothing walked the real path: the builder opened from Style Me, two pieces picked, Schedule onto a day that already holds a look, and the row the app writes. Live, the only builder schedule since (Nov 6) landed on an empty day, so it did not exercise the fix either.
+
+### Added
+
+- **Render walk step:** Style Me → *Build a look manually* → a top and a bottom → Schedule on the fixture's planned day `iso(3)`. The `planned_outfits` row the app POSTs must hold two looks, with the day's existing look (`o1`) among them. With `scheduleSlot` reverted to the pre-#292 rule (always look #0), it fails: "the day holds 1 look(s) after scheduling onto it".
+
+### Tests
+
+`npm test`, `npm run build`, `npm run smoke` (52 steps) green. No app code changed.
+
 ## [Unreleased] — Audit after the trip, flip, re-wear and boots work — 2026-11-02
 
 ### Why
