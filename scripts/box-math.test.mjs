@@ -134,3 +134,34 @@ test("fallback: no image dims yet → locks to the box's own current aspect", ()
   const next = aspectLockedResize({ startPos, cW: CW, cH: CH, imgAR: 0, dx: 40, dy: 40 });
   close(pxAR(next), ownAR, 1e-6);
 });
+
+test("belt: a thin wide piece resizes both ways and never leaves the canvas (2026-11-09)", () => {
+  // An 8:1 belt at the builder's default belt spot. Requiring BOTH sides to
+  // clear the 8% floor forced it to ~85% wide — off the canvas — and every
+  // pull returned that same box, so the belt jumped and froze.
+  const imgAR = 8;
+  const startPos = containedRect({ x: 30, y: 40, w: 40, h: 12 }, CW, CH, imgAR);
+  const still = aspectLockedResize({ startPos, cW: CW, cH: CH, imgAR, dx: 0, dy: 0 });
+  close(still.w, startPos.w, 1e-6); // touching the handle doesn't move it
+  const smaller = aspectLockedResize({ startPos, cW: CW, cH: CH, imgAR, dx: -40, dy: -5 });
+  const bigger  = aspectLockedResize({ startPos, cW: CW, cH: CH, imgAR, dx: 40, dy: 5 });
+  assert.ok(smaller.w < startPos.w, "shrinks");
+  assert.ok(bigger.w > startPos.w, "grows");
+  for (const p of [still, smaller, bigger]) {
+    close(pxAR(p), imgAR, 1e-6);
+    assert.ok(p.x + p.w <= 100 + 1e-9 && p.y + p.h <= 100 + 1e-9, "stays on canvas");
+  }
+  // Floor: the long side holds 8%.
+  const tiny = aspectLockedResize({ startPos, cW: CW, cH: CH, imgAR, dx: -5000, dy: -5000 });
+  close(tiny.w, 8, 1e-6);
+  // Ceiling: the right edge stops it.
+  const huge = aspectLockedResize({ startPos, cW: CW, cH: CH, imgAR, dx: 5000, dy: 5000 });
+  close(huge.x + huge.w, 100, 1e-6);
+});
+
+test("edge beats floor: a box already past the edge is pulled back in, not frozen", () => {
+  const imgAR = 8;
+  const over = { x: 30, y: 40, w: 85.33, h: 8 }; // what the old math saved
+  const next = aspectLockedResize({ startPos: over, cW: CW, cH: CH, imgAR, dx: 0, dy: 0 });
+  assert.ok(next.x + next.w <= 100 + 1e-9);
+});

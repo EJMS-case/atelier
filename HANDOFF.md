@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-09 · Belts resize on the builder canvas
+
+**Owner:** *"I'm having trouble resizing my belts."* The resize floor asked both sides to clear 8%, which put a thin belt past the canvas edge and froze it. The floor now holds the longer side and the edge wins (`boxMath.js`, CHANGELOG).
+
+**Watch-item:** on the phone, drag a belt's corner handle both ways in the builder; it should track her finger and stay on the canvas.
+
 ### 2026-11-01 · A Vegas trip packs from NYC; its evenings wear a heel
 
 **Owner:** Arizona pieces on a Vegas Travel Day; evening looks too casual. Picking NYC as the "Closet at destination" made Arizona home. `destinationClosetFor` (tripPools) now reads every destination pick: the home closet is never a destination. The Dinner shoe preference now reads `HEEL_SUBS` (her heels are filed Kitten/Block/Stiletto/Slingback, and a ballet flat had been outscoring them at every dinner). Vegas is `dressierEvening`.

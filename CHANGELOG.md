@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Belts resize on the builder canvas — 2026-11-09
+
+### Why
+
+Owner: *"I'm having trouble resizing my belts."*
+
+The corner handle's size floor (`aspectLockedResize`, `boxMath.js`) asked BOTH sides of a piece to stay at least 8% of the canvas. A belt cutout is a strip (about 8:1), so 8% tall meant about 85% wide, which runs past the canvas edge. The floor then beat the canvas edge, and every pull returned the same oversized box. The belt jumped off the right edge on first touch and then froze. Any piece thinner than about 1:2.7 hit the same problem, but belts are the only common one.
+
+### Changed
+
+- The floor now binds the piece's **longer** side only, and **the canvas edge outranks the floor**. A belt now shrinks until it is 8% wide and grows until it reaches the edge. A box saved oversized by the old maths is pulled back inside on its next resize.
+- `test:box-math` has two new cases: the 8:1 belt resizing both ways and staying on the canvas, and edge-over-floor.
+
+### Downstream
+
+- *Efficiency / speed:* pure geometry; no new render, call or bundle weight.
+- *Effectiveness:* one function serves every piece on the builder canvas; nothing else on the canvas has its own resize maths.
+- *Education:* layouts save as before, so a belt sized as she wants it reaches the planner square and the collage through `layoutFor`.
+
 ## [Unreleased] — Dinner leads with evening pieces; no sandals in Mild — 2026-11-07
 
 ### Why
