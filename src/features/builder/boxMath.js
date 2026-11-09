@@ -10,6 +10,8 @@
 //   2. aspectLockedResize — the corner handle scales the box uniformly at the
 //      image's aspect ratio; the SCALE (never each dimension) is clamped to
 //      the size floor and canvas edges, so clamping can't break the ratio.
+//      The floor binds the longer side only, and the edge beats the floor —
+//      otherwise a thin piece (a belt) has no legal size and freezes.
 //
 // All positions are { x, y, w, h } in PERCENT of the canvas, which is why
 // every function needs the canvas pixel size: percent-space is anisotropic
@@ -44,8 +46,8 @@ export function normalizeBoxToContent(pos, cW, cH, imgAR, epsilon = 0.02) {
 // pointer's diagonal pull (dx/dy in px since drag start), anchored at the
 // content rect's own top-left — which equals the box's top-left once the box
 // hugs, and avoids a visual jump in the brief window before an image decodes
-// and normalization runs. minFrac is the floor each dimension keeps relative
-// to its canvas dimension (mirrors the old 8% clamp).
+// and normalization runs. minFrac is the floor the piece's longer side keeps
+// relative to its canvas dimension; the canvas edge outranks it.
 export function aspectLockedResize({ startPos, cW, cH, imgAR, dx, dy, minFrac = 0.08 }) {
   if (!startPos?.w || !startPos?.h || !cW || !cH) return startPos;
   const ar = imgAR || (((startPos.w / 100) * cW) / ((startPos.h / 100) * cH));
@@ -54,12 +56,19 @@ export function aspectLockedResize({ startPos, cW, cH, imgAR, dx, dy, minFrac = 
   const bh = (base.h / 100) * cH;
   if (!bw || !bh) return startPos;
   let s = ((bw + dx) / bw + (bh + dy) / bh) / 2;
-  const sMin = Math.max((minFrac * cW) / bw, (minFrac * cH) / bh);
+  // The floor holds the piece's LONGER side, not both sides. Requiring both
+  // to clear minFrac asked a belt (an 8:1 strip) to be 8% of the canvas
+  // tall, i.e. ~85% wide — past the canvas edge — so the floor beat the
+  // ceiling and every pull returned the same oversized box: the belt jumped
+  // and froze ("trouble resizing my belts", 2026-11-09). A tall dress or a
+  // wide belt now shrinks until its long side reaches the floor.
+  const sMin = Math.min((minFrac * cW) / bw, (minFrac * cH) / bh);
   const sMax = Math.min(
     (((100 - base.x) / 100) * cW) / bw,
     (((100 - base.y) / 100) * cH) / bh,
   );
-  s = Math.max(sMin, Math.min(sMax, s));
+  // The canvas edge wins over the floor: a box never grows off the canvas.
+  s = Math.min(sMax, Math.max(Math.min(sMin, sMax), s));
   return {
     x: base.x, y: base.y,
     w: ((bw * s) / cW) * 100,
