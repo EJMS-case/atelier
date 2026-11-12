@@ -6,7 +6,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import { fetchPlansBetween, fetchAllPlans, fetchOutfitLogLayouts, savePlan, deletePlan, saveTrip, fetchTripsBetween, replaceTripItems } from "./plannerApi.js";
 import { DEFAULT_CLOSET_ID, closetOf } from "../closet/closets.js";
 import { buildDailyOutfits, TRIP_ACTIVITIES, tripDayOccasions, isRelaxedDestinationCloset, alternativesFor, eveningForDay } from "./tripPacker.js";
-import { unionTags, newOutfitId, buildPlanPayload, planRowOver, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING } from "./outfits.js";
+import { unionTags, newOutfitId, buildPlanPayload, planRowOver, outfitsOf, outfitCoverageGaps, appendOutfit, daypartGlyph, DAYPART_DAY, DAYPART_EVENING, occasionsOfLook } from "./outfits.js";
 import { nyToday, todayInTz, dayPart, friendlyDate, shortDayLabel, isoDate, addDaysIso, SEASONAL_HIGHS, CITY } from "../../lib/time.js";
 import { startOfMonth, endOfMonth, addMonths, addDays, monthGridDays } from "./monthGrid.js";
 import { fetchClosetForecast, fetchTripForecast, bucketFromHigh, isNotableCondition, WEATHER_HIGH } from "../../lib/weather.js";
@@ -506,6 +506,9 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         // when an Evening one joins it.
         label: overrides.label || "",
         occasion: planOccasion,
+        // The saved look's own tags travel with it — the day's list is
+        // derived from its looks (outfits.js dayOccasions).
+        occasions: overrides.occasion ? [overrides.occasion] : logOcc,
         items: log.garment_ids || [],
       });
       const merged = planRowOver(existing, {
@@ -513,9 +516,6 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         outfits,
         source: "saved",
         weather: pickedWx,
-        // Union with the row's stored plurals — replacing them with only the
-        // new look's tags dropped the day's other outfits' contexts.
-        occasions: unionTags(existing?.occasions, overrides.occasion ? [overrides.occasion] : logOcc),
         weathers:  unionTags(existing?.weathers,  overrides.weather  ? [overrides.weather]  : logWx),
         // Only link the saved look's layout when it becomes the day's primary
         // outfit — the linked-log layout only round-trips for outfit #0.
@@ -554,7 +554,6 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
       outfits,
       source: "generated",
       weather: wxBucket || null,
-      occasions: unionTags(existing?.occasions, outfits.map(o => o.occasion)),
       weathers:  unionTags(existing?.weathers, existing?.weather ?? wxBucket),
     });
     const saved = await savePlan(merged);
@@ -593,8 +592,8 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
         outfits: remaining,
         source: "planner",
         weathers: existing?.weathers,
-        // occasions intentionally re-derived from the remaining outfits —
-        // the removed look's occasion should leave with it.
+        // The day's occasions derive from the remaining looks, so the
+        // removed look's occasion leaves with it.
         // The linked-log layout only describes outfit #0 — drop both when the
         // primary look is the one being removed.
         ...(removedIdx === 0 ? { layoutData: null, outfitLogId: null } : {}),
@@ -845,7 +844,7 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
             // layout); every other slot opens the builder targeted at its
             // index in outfits[] — same path trip-day edits use.
             if (idx === 0 && onEditPlan) onEditPlan(activeDay, p);
-            else if (onBuildDay) onBuildDay(activeDay, outfit.items || [], idx);
+            else if (onBuildDay) onBuildDay(activeDay, outfit.items || [], idx, null, null, occasionsOfLook(outfit));
           } : undefined}
           onBuildDay={onBuildDay ? (label) => {
             // "Build manually" — on an empty day it starts the day's first

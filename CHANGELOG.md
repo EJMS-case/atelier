@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Two looks on one day keep their own occasions — 2026-11-12
+
+### Why
+
+Owner: *"When I have two looks in one day, it seems the occasion auto fixes to the other one so if I'm working all day and traveling all night they both read as the outfit I made most recently."*
+
+The live rows confirmed it. Nov 12 holds a Work look and a Travel Day look, and the day's tags read `["Work"]`. On Nov 14 she edited the first look to Casual; the look was saved as its old "Dinner" and only the day's tags read Casual. There were two causes:
+
+- **The day's `occasions` was one shared list, and every save overwrote it** with the look just saved. Seven write paths each composed it their own way. The builder opened *every* look on the day with that list, so both looks showed the last one's occasion.
+- **An edit kept the look's old occasion**, because `onSchedule` replaced the items with `occasion: o.occasion || plan.occasion`.
+
+### Changed
+
+- **A look owns its occasions** (`features/planner/outfits.js`). Each look carries `occasion` plus an `occasions` list when it has more than one tag (e.g. Work and Work Dinner). `occasionsOfLook` is the reader. A single `occasion` set by a screen beats a stale list. **The day's list is always derived** (`dayOccasions`, the union of its looks). `buildPlanPayload` / `planRowOver` no longer accept a list from a caller, and all four callers that composed one now put the tags on the look instead. A lone legacy look inherits the row's multi-tags, so a "Work, Work Dinner" day keeps both.
+- **The builder opens a look on its own occasion** (`editedLookTags`). The calendar and the trip day's ⊞ Build hand in the look's tags, and an edit saves the chips she set onto that look.
+- **Live repair**: 14 two-look days (May 24 → Nov 13) had a look's occasion missing from the day's tags; it is now added. Only missing tags were added, and none removed. On Nov 14, the first look takes the Casual she picked.
+- **Doctor §5** flags any day whose tags leave out one of its looks' occasions. `test:day-looks` is new.
+
+### Downstream
+
+- *Efficiency / speed:* pure reshaping of the row on write; no new call.
+- *Effectiveness:* the planner's occasion filter and the wear record's rooms (`wearRoomsOf`) read the day's list, so the second look's room now counts: a Travel Day or a Dinner after Work.
+- *Education:* trip memory and the fingerprint read each look with its own occasion.
+
 ## [Unreleased] — Trips teach; Houndstooth; capitalised fields; a ✕ to clear — 2026-11-12
 
 ### Why
