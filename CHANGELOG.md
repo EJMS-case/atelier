@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Trips teach; Houndstooth; capitalised fields; a ✕ to clear — 2026-11-12
+
+### Why
+
+Owner, packing for Vegas: *"Can you add houndstooth to the patterns please and make it so colors and patterns and materials are auto capitalized and titles have an X to easily remove what exists? Also add that X to the style me text box as well. I'm packing for Vegas and want to make sure it learns from what I'm choosing to wear on that trip when I'm done as well."*
+
+Live rows: 65 colours and 69 materials are stored lowercase (most from the photo read, whose prompt asks for lowercase). Every Vegas trip item is `suggested`, and the trip is still `planning`. Nothing read a finished trip as a whole. A day rebuilt in the builder (`editingPlan`, schedule mode) recorded no `look_edits`, so changes to Atelier's trip looks taught nothing.
+
+### Changed
+
+- **One pattern list:** `PATTERNS` + `patternLabel` in `constants/taxonomy.js`, now with **houndstooth**. Edit, Add Items and the auto-detect prompt read it, and the vision tool's enum adds it too. Values stay stored lowercase because every reader compares `"solid"`. She sees them capitalised. A legacy value outside the list stays selectable, so it is never silently dropped.
+- **Colour and material are capitalised** by `capitalizeWords`, which only changes the first letter of each word, so "DVF" stays as typed. This runs on blur, on save (Edit and Add Items), on what the photo read proposes (`applyDetection`), and when the Edit form opens. Every reader is case-insensitive (`resolveFamily` lowercases; the material readers use `/i`), so this changes appearance only. Existing rows are not rewritten; they pick up the change the next time she saves them.
+- **`components/ClearableInput.jsx`**: a text field with a ✕ that clears it and refocuses. Used for Style Me's "Anything specific?", Edit's name / brand / colour / material / set name, the Add Items row's name / colour / brand / material, the builder's look name, and the set modal's name.
+- **Trips teach** (`features/planner/tripMemory.js`): this loads her last three trips whose end date has passed, whatever their status, plus each trip's calendar days. `composeTripsBlock` (learning.js) turns them into a TRIPS SHE HAS TAKEN block: looks by day, pieces worn on 2+ days, and her pins. `learnedContext` gathers it, so the trip pass, trip-day looks, the chat and Evaluate all receive it through `personalGrounding()`.
+- **A rebuilt planner / trip day records its edits:** `onSchedule` diffs the day's previous look against what she saved. **One diff** (`diffLookEdits`, lookEdits.js) replaces App's hand-rolled copy and SilhouetteBuilder's.
+- `test:trip-memory` (new, in `npm test`).
+
+### Downstream
+
+- *Efficiency:* one trips read plus at most three small range reads, in the same `Promise.all` as the other signals and memoised for 10 minutes. The block is capped at 8 looks, 6 repeats and 8 pins per trip, a few hundred tokens, and rides the uncached personal blocks. ClearableInput is ~1 kB, and lookEdits.js was already in the boot graph's dependencies.
+- *Effectiveness:* reaches every surface that reads `personalGrounding()`. The deterministic packer does not read it; Atelier's trip pass replaces the packer's draft on every untouched day.
+- *Speed:* no new call on any tap. The trips read happens inside the existing learning gather.
+- *Education:* trips are a new signal, and a rebuilt trip day now yields swap lessons like any other edit.
+
 ## [Unreleased] — Belts resize on the builder canvas — 2026-11-09
 
 ### Why

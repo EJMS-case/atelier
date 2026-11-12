@@ -43,6 +43,7 @@ import { loadTrendBrief, composeTrendBlock } from "./trendBrief.js";
 import { describeInspirationRead } from "../inspiration/inspirationApi.js";
 import { loadBrandFinds } from "../shopping/brandFinds.js";
 import { loadShoppingList, describeShoppingList } from "../shopping/shoppingList.js";
+import { loadTripMemory } from "../planner/tripMemory.js";
 
 // The last verified gap analysis, saved cross-device by
 // features/shopping/gapAnalysis.js so every surface knows what her closet is
@@ -69,6 +70,45 @@ export function composeLastGapsBlock(last) {
   if (!gaps.length) return "";
   const when = last.at ? new Date(last.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
   return `WHAT HER CLOSET IS MISSING (the last gap analysis${when ? `, ${when}` : ""} — verified against what she owns): ${gaps.slice(0, 6).map(g => `${g.suggestion}${g.category ? ` [${g.category}]` : ""}`).join("; ")}. Style around a gap when it shows (a bag family she lacks, a texture she is thin on) rather than pretending the piece exists.`;
+}
+
+// The trips she has taken, as one block (features/planner/tripMemory.js
+// gathers them): per trip, the looks she wore day by day, the pieces that
+// came back on several days, and the pieces she chose to bring herself.
+// Capped so three trips stay a few hundred tokens. Pure; exported for the test.
+const SHORT_DATE = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+export function composeTripsBlock(memory, wardrobe, { maxLooks = 8, maxRepeat = 6 } = {}) {
+  const byId = new Map((wardrobe || []).map(it => [String(it.id), it]));
+  const piece = (it) => `${it.color || it.color_family || ""} ${it.subcategory || it.category}`.trim().replace(/\s+/g, " ");
+  const sections = [];
+  for (const { trip, looks } of Array.isArray(memory) ? memory : []) {
+    if (!trip || !Array.isArray(looks) || !looks.length) continue;
+    const where = trip.destination || trip.destination_city || "a trip";
+    const days = new Set(looks.map(l => l.date)).size;
+    const head = `${where}${trip.activity ? ` (${trip.activity})` : ""}, ${SHORT_DATE(trip.start_date)}–${SHORT_DATE(trip.end_date)}, ${days} day${days === 1 ? "" : "s"} dressed`;
+    const lines = looks.slice(0, maxLooks)
+      .map(l => describeLookLine(wardrobe, l.items, [l.occasion, l.label && l.label !== l.occasion ? l.label.toLowerCase() : ""].filter(Boolean).join(", ")))
+      .filter(Boolean);
+    // Days a piece was worn on — a piece in two looks on one day is one day.
+    const daysOf = new Map();
+    for (const l of looks) for (const id of l.items) {
+      const k = String(id);
+      if (!byId.has(k)) continue;
+      if (!daysOf.has(k)) daysOf.set(k, new Set());
+      daysOf.get(k).add(l.date);
+    }
+    const repeats = [...daysOf.entries()].filter(([, d]) => d.size >= 2)
+      .sort((a, b) => b[1].size - a[1].size).slice(0, maxRepeat)
+      .map(([id, d]) => `${piece(byId.get(id))} ×${d.size}`);
+    const pins = (trip.must_include_ids || []).map(id => byId.get(String(id))).filter(Boolean).slice(0, 8).map(piece);
+    const parts = [`• ${head}:`];
+    if (lines.length) parts.push(`  wore: ${lines.join("; ")}`);
+    if (repeats.length) parts.push(`  worked hardest (days worn): ${repeats.join(", ")}`);
+    if (pins.length) parts.push(`  she chose to bring: ${pins.join(", ")}`);
+    if (parts.length > 1) sections.push(parts.join("\n"));
+  }
+  if (!sections.length) return "";
+  return `TRIPS SHE HAS TAKEN (what she actually wore away, newest first — the looks she settled on are her packing taste, and a piece worn on several days earned its suitcase space. When she packs for a trip like one of these, start from what worked there and say what you would change):\n${sections.join("\n")}`;
 }
 
 export const STYLE_NOTES_KEY = "style_notes";
@@ -242,6 +282,7 @@ export function composeLearnedBlocks({
   lovedLines = [], dislikedLines = [], swapLessons = [], occasionMemory = [],
   builtLines = [], trendBrief = null,
   inspirations = [], shoppingList = [], finds = [], lastGaps = null,
+  tripsBlock = "",
   dateContext = "", maxLessons = 20,
 } = {}) {
   const blocks = [];
@@ -280,6 +321,7 @@ export function composeLearnedBlocks({
   if (swapLessons.length) {
     blocks.push(`HER EDITS TO SUGGESTED LOOKS (swap = what she took OUT → what she chose INSTEAD; ×N = the same correction N times — a repeated one is a settled preference, a single one is a data point):\n${swapLessons.map((l, i) => `${i + 1}. ${l}`).join("\n")}`);
   }
+  if (tripsBlock) blocks.push(tripsBlock);
   if (occasionMemory.length) {
     blocks.push(`WHAT SHE RETURNS TO, PER OCCASION:\n${occasionMemory.map(l => `• ${l}`).join("\n")}`);
   }
@@ -325,7 +367,7 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
   if (cache && cache.key === key && Date.now() - cache.at < TTL_MS) return cache.value;
 
   const safe = (p) => p.catch(() => null);
-  const [fp, standing, lessons, favs, logs, lovedFb, disliked, edits, inspirations, trendBrief, finds, shoppingList, lastGaps] = await Promise.all([
+  const [fp, standing, lessons, favs, logs, lovedFb, disliked, edits, inspirations, trendBrief, finds, shoppingList, lastGaps, tripMemory] = await Promise.all([
     safe(sb.fingerprintTextCached(fingerprintMax)),
     safe(loadStandingPreferences()),
     safe(loadChatLessons()),
@@ -339,6 +381,7 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
     safe(loadBrandFinds()),
     safe(loadShoppingList()),
     safe(sb.getSettingJson(LAST_GAPS_KEY)),
+    safe(loadTripMemory()),
   ]);
   const resolveAgainst = (wardrobe && wardrobe.length) ? wardrobe : available;
 
@@ -378,6 +421,8 @@ export async function learnedContext({ wardrobe = [], available = [], fingerprin
     shoppingList: shoppingList || [],
     finds: finds || [],
     lastGaps: lastGaps || null,
+    // Trips resolve against the WARDROBE: she carried pieces from home.
+    tripsBlock: composeTripsBlock(tripMemory || [], resolveAgainst),
     dateContext: describeDateContext(),
   });
   value.standing = standing || [];

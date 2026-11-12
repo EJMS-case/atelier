@@ -22,6 +22,8 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { normalizeBoxToContent, aspectLockedResize } from "./boxMath.js";
 import { PALETTE as SHARED_PALETTE } from "../../constants/palette.js";
 import Thumb from "../../components/Thumb.jsx";
+import ClearableInput from "../../components/ClearableInput.jsx";
+import { diffLookEdits } from "../stylist/lookEdits.js";
 
 const WEATHERS = WEATHER_SHORTS;
 
@@ -833,17 +835,8 @@ export default function SilhouetteBuilder({
   // slot arrived; otherwise remove / add). Resolves against the builder pool.
   function recordSavedLookEdits(beforeIds, afterIds, occasion, weather) {
     try {
-      const byId = itemIdIndex(builderPool || []);
-      const before = new Set(beforeIds), after = new Set(afterIds);
-      const removed = beforeIds.filter(id => !after.has(id)).map(id => byId.get(String(id))).filter(Boolean);
-      const added = afterIds.filter(id => !before.has(id)).map(id => byId.get(String(id))).filter(Boolean);
-      const used = new Set();
-      for (const out of removed) {
-        const partner = added.find(it => !used.has(it.id) && slotForItem(it) === slotForItem(out));
-        if (partner) { used.add(partner.id); sb.saveLookEdit({ action: "swap", occasion, weather, outItemId: out.id, inItemId: partner.id }); }
-        else sb.saveLookEdit({ action: "remove", occasion, weather, outItemId: out.id });
-      }
-      for (const it of added) if (!used.has(it.id)) sb.saveLookEdit({ action: "add", occasion, weather, inItemId: it.id });
+      const edits = diffLookEdits(beforeIds, afterIds, itemIdIndex(builderPool || []));
+      for (const e of edits) sb.saveLookEdit({ ...e, occasion, weather });
     } catch { /* a missed lesson costs nothing */ }
   }
 
@@ -1283,9 +1276,10 @@ export default function SilhouetteBuilder({
       )}
 
       {/* Name + actions */}
-      <input type="text" value={name} onChange={e => setName(e.target.value)}
+      <ClearableInput value={name} onChange={setName}
         placeholder={saveMode === "schedule" ? "What you're doing (optional)" : "Name this look (optional)"}
-        style={{ width: "100%", padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, marginBottom: 10, background: "#fff" }}/>
+        aria-label="Look name" clearLabel="Clear name" wrapStyle={{ marginBottom: 10 }}
+        style={{ width: "100%", padding: 10, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 13, background: "#fff" }}/>
 
       {/* Save-mode selector. Save = log to outfit history; Favorite = save +
           add to favorites; Schedule = pin to a specific calendar date (past

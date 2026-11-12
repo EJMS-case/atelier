@@ -14,6 +14,37 @@
 //     consistent, most current corrections first.
 
 import { weatherBucketOf } from "../../constants/taxonomy.js";
+import { slotForItem } from "../../utils/item-helpers.js";
+
+/**
+ * What she changed between two versions of a look, as look_edits rows: a
+ * piece that left and one that arrived in the same slot is a swap; the rest
+ * are removes and adds. The one diff every surface that lets her change a
+ * look records through — a saved look reopened in the builder, a Style Me
+ * look opened in the builder, and a planner or trip day she rebuilt (owner,
+ * 2026-11-12: "make sure it learns from what I'm choosing to wear on that
+ * trip"). Ids that resolve to nothing drop out. Pure.
+ *
+ * @param {string[]} beforeIds
+ * @param {string[]} afterIds
+ * @param {Map<string,Object>} byId  - String(id) → item
+ * @returns {{action:string,outItemId:string|null,inItemId:string|null}[]}
+ */
+export function diffLookEdits(beforeIds, afterIds, byId) {
+  const before = (beforeIds || []).map(String), after = (afterIds || []).map(String);
+  const beforeSet = new Set(before), afterSet = new Set(after);
+  const removed = before.filter(id => !afterSet.has(id)).map(id => byId.get(id)).filter(Boolean);
+  const added = after.filter(id => !beforeSet.has(id)).map(id => byId.get(id)).filter(Boolean);
+  const used = new Set();
+  const edits = [];
+  for (const out of removed) {
+    const inn = added.find(it => !used.has(it.id) && slotForItem(it) === slotForItem(out));
+    if (inn) { used.add(inn.id); edits.push({ action: "swap", outItemId: out.id, inItemId: inn.id }); }
+    else edits.push({ action: "remove", outItemId: out.id, inItemId: null });
+  }
+  for (const it of added) if (!used.has(it.id)) edits.push({ action: "add", outItemId: null, inItemId: it.id });
+  return edits;
+}
 
 // "burgundy Kitten" / "black Ankle boot" — mirrors the loved-looks piece
 // format so the model reads both blocks in one vocabulary.

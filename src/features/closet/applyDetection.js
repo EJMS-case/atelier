@@ -4,7 +4,7 @@
 // clobbering manual input when detection lands after the user has started
 // typing.
 
-import { MISC_CATEGORY } from "../../constants/taxonomy.js";
+import { MISC_CATEGORY, capitalizeWords } from "../../constants/taxonomy.js";
 import { formalityOf, onFormalityScale } from "../../utils/item-helpers.js";
 
 /**
@@ -34,10 +34,12 @@ export function applyDetection(queueItem, detection) {
   // Name defaults to "" on upload (filenames made garbage titles) — the AI's
   // proposed title fills it unless the user already typed one.
   if (detection.name && !queueItem.name) next.name = detection.name;
-  if (detection.primary_color && !queueItem.color) next.color = detection.primary_color;
+  // Colour and material land capitalised, the way she types them (the
+  // photo read answers lowercase); the pattern stays the stored lowercase.
+  if (detection.primary_color && !queueItem.color) next.color = capitalizeWords(detection.primary_color);
   if (detection.brand && !queueItem.brand) next.brand = detection.brand;
-  if (detection.material && !queueItem.material) next.material = detection.material;
-  if (detection.pattern && !queueItem.pattern) next.pattern = detection.pattern;
+  if (detection.material && !queueItem.material) next.material = capitalizeWords(detection.material);
+  if (detection.pattern && !queueItem.pattern) next.pattern = String(detection.pattern).toLowerCase();
   // Formality: a proposal on the app's 1–8 scale, shown in the row's select
   // for her to keep or change. Only a value on the scale lands
   // (onFormalityScale), and only where the row is still unfiled
