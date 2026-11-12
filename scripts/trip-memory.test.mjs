@@ -79,7 +79,7 @@ test("a rebuilt look diffs into swaps, removes and adds", () => {
 test("a rebuilt planner or trip day records what she changed", () => {
   const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
   const onSchedule = app.slice(app.indexOf("onSchedule={async (plan) =>"), app.indexOf("onClose={() => {", app.indexOf("onSchedule={async (plan) =>")));
-  assert.match(onSchedule, /recordLookEdits\(current\[idx\]\.items/);
+  assert.equal(onSchedule.match(/recordLookEdits\(current\[idx\]\.items/g)?.length, 1, "recorded once per save");
   // One diff: no hand-rolled copy left behind.
   assert.doesNotMatch(app, /addedBySlot/);
   const builder = readFileSync(new URL("../src/features/builder/SilhouetteBuilder.jsx", import.meta.url), "utf8");

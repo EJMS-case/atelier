@@ -2370,15 +2370,6 @@ export default function App() {
               if (editingPlan && editingPlan.iso === plan.date && current[idx]?.items?.length) {
                 recordLookEdits(current[idx].items, plan.items || [], current[idx].occasion || plan.occasion || null, plan.weather || null);
               }
-              // A look she REBUILT on a planner or trip day teaches like any
-              // other edit (owner, 2026-11-12: "make sure it learns from what
-              // I'm choosing to wear on that trip"): what she took out of
-              // Atelier's day look and what she wore instead. Only an edit of
-              // a look already on this day — a fresh build or an added look
-              // has nothing to diff against.
-              if (editingPlan && editingPlan.iso === plan.date && current[idx]?.items?.length) {
-                recordLookEdits(current[idx].items, plan.items || [], current[idx].occasion || plan.occasion || null, plan.weather || null);
-              }
               const isTrip = editingPlan?.tripOutfitIdx != null || existing?.source === "trip";
               const merged = planRowOver(existing, {
                 date: plan.date,
