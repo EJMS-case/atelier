@@ -5,7 +5,8 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
 import { blobToDataUrl, compressImage, trimTransparentBorders, PHOTO_MAX_DIM } from "../utils/images.js";
-import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2, PATTERNS, patternLabel, capitalizeWords } from "../constants/taxonomy.js";
+import ClearableInput from "./ClearableInput.jsx";
 
 // Per-file pipeline gate. The heavy steps — decoding a 12MP photo, the
 // matte assessment after remove.bg, the transparent-border trim — all run
@@ -154,6 +155,8 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
     setSaving(true);
     const newItems = valid.map(item => ({
       ...item,
+      color: capitalizeWords((item.color || "").trim()),
+      material: capitalizeWords((item.material || "").trim()),
       id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       created_at: new Date().toISOString(),
     }));
@@ -240,9 +243,9 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                   </div>
 
                   <div style={s.queueFields}>
-                    <input style={{...s.input,...s.queueInput,fontWeight:500}}
-                      placeholder="Name *" value={item.name}
-                      onChange={e=>update(item.id,"name",e.target.value)}/>
+                    <ClearableInput style={{...s.input,...s.queueInput,fontWeight:500}}
+                      placeholder="Name *" aria-label="Name" clearLabel="Clear name" value={item.name}
+                      onChange={v=>update(item.id,"name",v)}/>
                     <div style={s.queueRow2}>
                       <select style={{...s.select,...s.queueSelect}} value={item.category}
                         onChange={e => handleCategoryChange(item.id, e.target.value, item.image)}>
@@ -305,20 +308,26 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
                     })()}
                     {!isMisc && (<>
                     <div style={s.queueRow2}>
-                      <input style={{...s.input,...s.queueInput}} placeholder="Color"
-                        value={item.color} onChange={e=>update(item.id,"color",e.target.value)}/>
-                      <input style={{...s.input,...s.queueInput}} placeholder="Brand"
-                        value={item.brand} onChange={e=>update(item.id,"brand",e.target.value)}/>
+                      <ClearableInput style={{...s.input,...s.queueInput}} wrapStyle={{width:"100%"}} placeholder="Color"
+                        aria-label="Color" clearLabel="Clear color" autoCapitalize="words"
+                        onBlur={() => update(item.id,"color",capitalizeWords(item.color))}
+                        value={item.color} onChange={v=>update(item.id,"color",v)}/>
+                      <ClearableInput style={{...s.input,...s.queueInput}} wrapStyle={{width:"100%"}} placeholder="Brand"
+                        aria-label="Brand" clearLabel="Clear brand"
+                        value={item.brand} onChange={v=>update(item.id,"brand",v)}/>
                     </div>
                     {/* Same fields + widgets as EditItemView, inline — so a
                         bulk-added piece doesn't need a second editing pass. */}
                     <div style={s.queueRow2}>
-                      <input style={{...s.input,...s.queueInput}} placeholder="Material (silk, wool…)"
-                        value={item.material} onChange={e=>update(item.id,"material",e.target.value)}/>
+                      <ClearableInput style={{...s.input,...s.queueInput}} wrapStyle={{width:"100%"}} placeholder="Material (Silk, Wool…)"
+                        aria-label="Material" clearLabel="Clear material" autoCapitalize="words"
+                        onBlur={() => update(item.id,"material",capitalizeWords(item.material))}
+                        value={item.material} onChange={v=>update(item.id,"material",v)}/>
                       <select style={{...s.select,...s.queueSelect}} value={item.pattern}
                         onChange={e=>update(item.id,"pattern",e.target.value)}>
                         <option value="">Pattern</option>
-                        {["solid","striped","plaid","floral","abstract","animal","polka-dot"].map(p=><option key={p}>{p}</option>)}
+                        {PATTERNS.map(p=><option key={p} value={p}>{patternLabel(p)}</option>)}
+                        {item.pattern && !PATTERNS.includes(item.pattern) && <option value={item.pattern}>{patternLabel(item.pattern)}</option>}
                       </select>
                     </div>
                     <div style={s.queueRow2}>

@@ -49,6 +49,8 @@ import ItemCard from "./components/ItemCard.jsx";
 import RouteFallback from "./components/RouteFallback.jsx";
 import Thumb, { forgetThumb } from "./components/Thumb.jsx";
 import LookCard from "./components/LookCard.jsx";
+import ClearableInput from "./components/ClearableInput.jsx";
+import { diffLookEdits } from "./features/stylist/lookEdits.js";
 
 // Code-split everything else. Each chunk only ships when the matching view
 // (or modal) is actually opened — shaves ~150kB off the initial bundle and
@@ -281,6 +283,24 @@ export default function App() {
   // Her in-place editor corrections (look_edits rows, newest first) — fed to
   // the stylist as the SWAP LESSONS block and folded into the fingerprint.
   const [lookEdits, setLookEdits] = useState([]);
+  // Record what she changed in a look (diffLookEdits — the one diff) as
+  // look_edits rows, and fold them into the state Style Me reads. Called by
+  // the builder's save over a Style Me look and by a rebuilt planner / trip
+  // day. Fire-and-forget: a save never waits on its lesson.
+  const recordLookEdits = (beforeIds, afterIds, occasion, weather) => {
+    try {
+      const byId = new Map(wardrobe.map(it => [String(it.id), it]));
+      const edits = diffLookEdits(beforeIds, afterIds, byId);
+      if (!edits.length) return;
+      const at = new Date().toISOString();
+      for (const e of edits) sb.saveLookEdit({ ...e, occasion, weather });
+      setLookEdits(prev => [...edits.map(e => ({
+        action: e.action, occasion, weather,
+        out_item_id: e.outItemId, in_item_id: e.inItemId, created_at: at,
+      })), ...prev].slice(0, 120));
+      import("./features/stylist/learning.js").then(m => m.invalidateLearning()).catch(() => {});
+    } catch { /* a missed lesson costs nothing */ }
+  };
   const [inspirations, setInspirations] = useState([]);
   // { text, source_count, generated_at } | null — loaded from user_settings
   // and refreshed via Style Profile → Refresh the Read (Home → Style Profile).
@@ -1709,9 +1729,11 @@ export default function App() {
           </div>
 
           {/* ANYTHING SPECIFIC? */}
-          <input placeholder="Anything specific? (e.g. 'include my red blazer', 'all black', 'navy and brown')"
-            value={request} onChange={e=>setRequest(e.target.value)}
-            style={{...s.input, width:"100%", fontSize:12, marginBottom:8}}/>
+          <ClearableInput placeholder="Anything specific? (e.g. 'include my red blazer', 'all black', 'navy and brown')"
+            aria-label="Anything specific?" clearLabel="Clear request"
+            value={request} onChange={setRequest}
+            wrapStyle={{marginBottom:8}}
+            style={{...s.input, width:"100%", fontSize:12}}/>
           {request && (
             <RequestReadBack read={requestReadAs} chipStyle={s.chip}
               onPick={(p) => setRequest(requestForPiece(p))}/>
@@ -2283,46 +2305,7 @@ export default function App() {
             // addition in the same slot as a swap; leftovers log as
             // remove/add. Fire-and-forget.
             if (builderSeed?.garment_ids?.length) {
-              try {
-                const seedIds = builderSeed.garment_ids;
-                const savedIds = log.garment_ids || [];
-                const seedSet = new Set(seedIds);
-                const savedSet = new Set(savedIds);
-                const byId = new Map(wardrobe.map(it => [it.id, it]));
-                const removed = seedIds.filter(id => !savedSet.has(id)).map(id => byId.get(id)).filter(Boolean);
-                const added = savedIds.filter(id => !seedSet.has(id)).map(id => byId.get(id)).filter(Boolean);
-                const addedBySlot = new Map();
-                for (const it of added) {
-                  const k = slotForItem(it);
-                  if (!addedBySlot.has(k)) addedBySlot.set(k, []);
-                  addedBySlot.get(k).push(it);
-                }
-                const edits = [];
-                for (const out of removed) {
-                  const pool = addedBySlot.get(slotForItem(out));
-                  const inn = pool?.length ? pool.shift() : null;
-                  edits.push(inn
-                    ? { action: "swap", outItemId: out.id, inItemId: inn.id }
-                    : { action: "remove", outItemId: out.id, inItemId: null });
-                }
-                for (const pool of addedBySlot.values()) {
-                  for (const it of pool) edits.push({ action: "add", outItemId: null, inItemId: it.id });
-                }
-                const occ = log.occasion || null;
-                const wx = log.weather || null;
-                for (const e of edits) {
-                  const edit = { ...e, occasion: occ, weather: wx };
-                  sb.saveLookEdit(edit);
-                  setLookEdits(prev => [{
-                    action: edit.action,
-                    occasion: edit.occasion,
-                    weather: edit.weather,
-                    out_item_id: edit.outItemId,
-                    in_item_id: edit.inItemId,
-                    created_at: new Date().toISOString(),
-                  }, ...prev].slice(0, 120));
-                }
-              } catch { /* the save itself must never wait on the lesson */ }
+              recordLookEdits(builderSeed.garment_ids, log.garment_ids || [], log.occasion || null, log.weather || null);
             }
             const result = editing_log_id
               ? await sb.updateOutfitLog(editing_log_id, patch)
@@ -2374,6 +2357,15 @@ export default function App() {
                   : o);
               } else {
                 outfits = appendOutfit(current, { id: newOutfitId(), label: editingPlan?.newOutfitLabel || "", occasion: plan.occasion || null, items: plan.items || [] });
+              }
+              // A look she REBUILT on a planner or trip day teaches like any
+              // other edit (owner, 2026-11-12: "make sure it learns from what
+              // I'm choosing to wear on that trip"): what she took out of
+              // Atelier's day look and what she wore instead. Only an edit of
+              // a look already on this day — a fresh build or an added look
+              // has nothing to diff against.
+              if (editingPlan && editingPlan.iso === plan.date && current[idx]?.items?.length) {
+                recordLookEdits(current[idx].items, plan.items || [], current[idx].occasion || plan.occasion || null, plan.weather || null);
               }
               const isTrip = editingPlan?.tripOutfitIdx != null || existing?.source === "trip";
               const merged = planRowOver(existing, {

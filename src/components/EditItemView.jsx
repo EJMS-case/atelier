@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { s } from "../ui/styles.js";
-import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2 } from "../constants/taxonomy.js";
+import { CATEGORY_ORDER, MISC_CATEGORY, TAXONOMY, getL3Options, getSubcatL2, PATTERNS, patternLabel, capitalizeWords } from "../constants/taxonomy.js";
+import ClearableInput from "./ClearableInput.jsx";
 import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "../features/closet/closets.js";
 import { costPerWear } from "../features/wear/wearApi.js";
 import { readKnitWeight, KNIT_WEIGHTS, CURATED_NOTES_MAX, notesBeyondLine, formalityOf, FORMALITY_SCALE } from "../utils/item-helpers.js";
@@ -11,12 +12,12 @@ import ItemWearHistory from "./ItemWearHistory.jsx";
 export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans, onOpenDay, onOpenLook }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
-    brand: item.brand || "", color: item.color || "", notes: item.notes || "",
+    brand: item.brand || "", color: capitalizeWords(item.color || ""), notes: item.notes || "",
     stylist_line: item.stylist_line || "",
     image: item.image || "", set_id: item.set_id || "", is_separable: item.is_separable ?? true,
     closet_id: item.closet_id || DEFAULT_CLOSET_ID,
-    material: item.material || "",
-    pattern: item.pattern || "",
+    material: capitalizeWords(item.material || ""),
+    pattern: (item.pattern || "").toLowerCase(),
     knit_weight: item.knit_weight || "",
     knit_fit: item.knit_fit || "",
     // Her filed formality as a number, or null — never "" (a smallint column).
@@ -63,7 +64,8 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
         const existing = (setsMetaProp || {})[form.set_id]?.name || "";
         if (setName.trim() !== existing) onSaveSetMeta(form.set_id, { name: setName.trim() });
       }
-      const result = await onSave(form);
+      // Colour and material are saved capitalised however they were typed.
+      const result = await onSave({ ...form, color: capitalizeWords(form.color.trim()), material: capitalizeWords(form.material.trim()) });
       if (result && result.ok === false) {
         setSaveError(result.error || "Couldn't save. Try again.");
         setSaving(false);
@@ -192,8 +194,11 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
           ]).map(([label,field,placeholder]) => (
           <div key={field}>
             <div style={s.fieldLabel}>{label}</div>
-            <input style={{...s.input,width:"100%"}} placeholder={placeholder}
-              value={form[field]} onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
+            <ClearableInput style={{...s.input,width:"100%"}} placeholder={placeholder}
+              aria-label={label.replace(" *", "")} clearLabel={`Clear ${label.replace(" *", "").toLowerCase()}`}
+              autoCapitalize={field === "color" ? "words" : "sentences"}
+              onBlur={field === "color" ? () => setForm(f => ({ ...f, color: capitalizeWords(f.color) })) : undefined}
+              value={form[field]} onChange={v=>setForm(f=>({...f,[field]:v}))}/>
           </div>
         ))}
 
@@ -249,16 +254,19 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
         <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={s.fieldLabel}>Material</div>
-            <input style={{...s.input,width:"100%"}} placeholder="silk, wool, denim…"
+            <ClearableInput style={{...s.input,width:"100%"}} placeholder="Silk, Wool, Denim…"
+              aria-label="Material" clearLabel="Clear material" autoCapitalize="words"
+              onBlur={() => setForm(f => ({ ...f, material: capitalizeWords(f.material) }))}
               value={form.material}
-              onChange={e=>setForm(f=>({...f,material:e.target.value}))}/>
+              onChange={v=>setForm(f=>({...f,material:v}))}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={s.fieldLabel}>Pattern</div>
             <select style={{...s.select,width:"100%"}} value={form.pattern}
               onChange={e=>setForm(f=>({...f,pattern:e.target.value}))}>
               <option value="">—</option>
-              {["solid","striped","plaid","floral","abstract","animal","polka-dot"].map(p=><option key={p}>{p}</option>)}
+              {PATTERNS.map(p=><option key={p} value={p}>{patternLabel(p)}</option>)}
+              {form.pattern && !PATTERNS.includes(form.pattern) && <option value={form.pattern}>{patternLabel(form.pattern)}</option>}
             </select>
           </div>
         </div>
@@ -469,8 +477,9 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
         {form.set_id && (
           <div style={{marginBottom:10}}>
             <div style={s.fieldLabel}>Set name</div>
-            <input style={{...s.input, width:"100%"}} placeholder="e.g. Navy Tweed Coord"
-              value={setName} onChange={e => setSetName(e.target.value)}/>
+            <ClearableInput style={{...s.input, width:"100%"}} placeholder="e.g. Navy Tweed Coord"
+              aria-label="Set name" clearLabel="Clear set name"
+              value={setName} onChange={setSetName}/>
           </div>
         )}
         {form.category === "Sets" ? (

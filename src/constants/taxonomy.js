@@ -171,6 +171,25 @@ export const BAG_SUBCATEGORIES = new Set([
 ]);
 export const BAG_NAME_RE = /\b(bag|purse|tote|clutch|handbag|satchel|hobo|pouch|wristlet|baguette|crossbody)\b/i;
 
+// ── Pattern + the words she types about a piece ─────────────────────────────
+// The one pattern list (Edit, Add Items, the photo read's prompt). Stored
+// lowercase — every reader compares `pattern !== "solid"` — and shown to her
+// capitalised through patternLabel (owner, 2026-11-12: "add houndstooth to the
+// patterns … make it so colors and patterns and materials are auto
+// capitalized").
+export const PATTERNS = ["solid", "striped", "plaid", "houndstooth", "floral", "abstract", "animal", "polka-dot"];
+export const patternLabel = (p) => (p === "polka-dot" ? "Polka Dot" : capitalizeWords(p));
+
+// "light wash denim" → "Light Wash Denim", "off-white" → "Off-White". Only a
+// word's first letter changes; the rest stays as typed, so "DVF" or "McQueen"
+// survive. Colour and material are read case-insensitively everywhere
+// (resolveFamily lowercases, the material readers are /i), so this is how
+// they look, never what they mean.
+export function capitalizeWords(s) {
+  if (typeof s !== "string") return s;
+  return s.replace(/(^|[\s\-/(&+,])(\p{Ll})/gu, (_, sep, ch) => sep + ch.toUpperCase());
+}
+
 export const SET_TAGS = ["Work","Weekend","Evening","Travel","Casual","Date Night","Seasonal","Formal","Vacation"];
 
 // Occasions the user selects in Style Me, the planner, and the builder. Each

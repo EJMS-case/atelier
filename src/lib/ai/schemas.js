@@ -495,7 +495,7 @@ export const VisionTool = {
     properties: {
       color:           { type: "string", description: "The main colour you SEE, plain name (e.g. 'navy', 'olive green', 'cream')." },
       color_secondary: { type: "string", description: "A second prominent colour, or an empty string." },
-      pattern:         { type: "string", enum: ["solid", "stripe", "plaid", "floral", "polka-dot", "animal", "abstract", "colourblock"] },
+      pattern:         { type: "string", enum: ["solid", "stripe", "plaid", "houndstooth", "floral", "polka-dot", "animal", "abstract", "colourblock"] },
       fabric:          { type: "string", description: "Your read of fabric + drape in a few words (e.g. 'fluid satin', 'chunky cable knit', 'crisp cotton poplin')." },
       formality:       { type: "string", enum: ["loungey", "casual", "elevated-casual", "polished", "formal"] },
       sleeve:          { type: "string", enum: ["sleeveless", "short", "3/4", "long", "n/a"] },

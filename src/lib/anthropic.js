@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { invokeTool } from "./ai/toolUse.js";
 import { AutoDetectSchema, AutoDetectTool } from "./ai/schemas.js";
-import { STYLING_TAXONOMY } from "../constants/taxonomy.js";
+import { STYLING_TAXONOMY, PATTERNS } from "../constants/taxonomy.js";
 import { MODEL_FAST } from "../constants/models.js";
 import { FORMALITY_SCALE, onFormalityScale } from "../utils/item-helpers.js";
 
@@ -56,7 +56,7 @@ RULES:
 - \`primary_color\` is a human word ("navy", "ivory", "burgundy"). One word, lowercase.
 - \`brand\` only if a logo is clearly visible — otherwise null. Don't guess from style.
 - \`material\` one word when obvious ("silk", "cotton", "wool", "leather", "denim", "cashmere", "linen", "satin", "knit"), else null.
-- \`pattern\` one of: "solid", "striped", "plaid", "floral", "abstract", "animal", "polka-dot" — else null.
+- \`pattern\` one of: ${PATTERNS.map(p => `"${p}"`).join(", ")} — else null.
 - \`formality\` is where a stylist would file the piece on the client's scale, from the photo alone: ${FORMALITY_SCALE.map(([v, label]) => `${v} = ${label}`).join("; ")}. An integer 1–8, or null if the photo doesn't say (jewellery, a bag, a belt usually don't).
 - \`confidence\` 0–1 self-rating of overall accuracy.`;
 

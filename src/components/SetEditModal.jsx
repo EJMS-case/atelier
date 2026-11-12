@@ -2,6 +2,7 @@ import { useState } from "react";
 import { s, ss } from "../ui/styles.js";
 import { SET_TAGS } from "../constants/taxonomy.js";
 import Thumb from "./Thumb.jsx";
+import ClearableInput from "./ClearableInput.jsx";
 
 export default function SetEditModal({ setId, meta, groupItems, wardrobe, onSave, onDelete, onClose, onEditItem, onAddItem }) {
   const [name, setName] = useState(meta.name || "");
@@ -42,11 +43,12 @@ export default function SetEditModal({ setId, meta, groupItems, wardrobe, onSave
           {/* Name */}
           <div style={{ marginBottom: 16 }}>
             <div style={s.modalLabel}>SET NAME</div>
-            <input
+            <ClearableInput
               style={s.modalInput}
               placeholder="e.g. Navy Work Set, Weekend Linen"
+              aria-label="Set name" clearLabel="Clear set name"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={setName}
               autoFocus
             />
           </div>
