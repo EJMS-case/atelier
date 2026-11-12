@@ -26,23 +26,79 @@ export const sigOf = (ids) => [...new Set((ids || []).map(String))].sort().join(
 
 export function outfitsOf(plan) {
   if (Array.isArray(plan?.outfits) && plan.outfits.length > 0) {
-    return plan.outfits.map(o => ({
-      id: o.id || newOutfitId(),
-      label: o.label || "",
-      occasion: o.occasion || plan.occasion || null,
-      items: Array.isArray(o.items) ? o.items : [],
-    }));
+    const lone = plan.outfits.length === 1;
+    return plan.outfits.map(o => {
+      const occasion = o.occasion || plan.occasion || null;
+      return {
+        id: o.id || newOutfitId(),
+        label: o.label || "",
+        occasion,
+        occasions: lookOccasions(o.occasions, occasion, lone ? plan.occasions : null),
+        items: Array.isArray(o.items) ? o.items : [],
+      };
+    });
   }
   if (Array.isArray(plan?.items) && plan.items.length > 0) {
+    const occasion = plan.occasion || null;
     return [{
       id: "_legacy",
       label: "",
-      occasion: plan.occasion || null,
+      occasion,
+      occasions: lookOccasions(null, occasion, plan.occasions),
       items: plan.items,
     }];
   }
   return [];
 }
+
+// ── A look's occasions ───────────────────────────────────────────────────────
+// Each look on a day carries its OWN occasion tags (owner, 2026-11-12: "When I
+// have two looks in one day … if I'm working all day and traveling all night
+// they both read as the outfit I made most recently"). The day's `occasions`
+// used to be one row-level list that every save overwrote with the look it
+// had just saved, and the builder opened every look with it. Now a look holds
+// `occasion` (its first tag) and `occasions` (all of them, e.g. "Work, Work
+// Dinner"), and the day's list is only ever DERIVED from its looks
+// (dayOccasions). A row written before this held its multi-tags at the row:
+// a lone look inherits them when they include its own occasion; on a day of
+// several looks they can't be attributed, so each look keeps its own one.
+function lookOccasions(own, occasion, rowTags) {
+  if (Array.isArray(own) && own.filter(Boolean).length) return [...new Set(own.filter(Boolean))];
+  if (Array.isArray(rowTags) && occasion && rowTags.includes(occasion)) return [...new Set([occasion, ...rowTags.filter(Boolean)])];
+  return occasion ? [occasion] : [];
+}
+
+/**
+ * A look's occasion tags, its `occasion` first. The single `occasion` is the
+ * authority: a screen that changes a look with `{ ...o, occasion }` (the trip
+ * day's occasion select) leaves the old list behind, and a list that no
+ * longer holds the look's occasion is stale — the look is that occasion
+ * alone. Pure.
+ */
+export function occasionsOfLook(o) {
+  const list = Array.isArray(o?.occasions) ? [...new Set(o.occasions.filter(Boolean))] : [];
+  const one = o?.occasion || null;
+  if (!one) return list;
+  if (!list.includes(one)) return [one];
+  return [one, ...list.filter(x => x !== one)];
+}
+
+/**
+ * The occasion tags of the look a builder edit opened: what the opener handed
+ * in (`lookOccasions`), else the look at `tripOutfitIdx` (0 = the first) on
+ * the day's row. Never the day's shared list — reading that is how every look
+ * on a two-look day opened as the last one saved. Pure.
+ */
+export function editedLookTags(editingPlan) {
+  if (!editingPlan) return [];
+  const handed = Array.isArray(editingPlan.lookOccasions) ? editingPlan.lookOccasions.filter(Boolean) : [];
+  if (handed.length) return [...new Set(handed)];
+  const look = outfitsOf(editingPlan.plan)[editingPlan.tripOutfitIdx ?? 0];
+  return look ? occasionsOfLook(look) : [];
+}
+
+/** The day's occasions: the union of its looks', in look order. Pure. */
+export const dayOccasions = (outfits) => [...new Set((outfits || []).flatMap(occasionsOfLook))];
 
 // ── Day / evening dayparts ───────────────────────────────────────────────────
 // A second look on a calendar day is usually "the evening outfit" (dinner after
@@ -140,20 +196,26 @@ export function unionTags(...lists) {
 // the legacy fields so anything still reading plan.items / plan.occasion keeps
 // rendering the "primary" look for the day. Calendar grid, DayModal, weekly
 // agenda — none of those needed changes.
-export function buildPlanPayload({ date, outfits, source, notes, weather, activity, day_label, occasions, weathers }) {
+export function buildPlanPayload({ date, outfits, source, notes, weather, activity, day_label, weathers }) {
   const first = outfits[0] || { items: [], occasion: null };
   return {
     date,
     items: first.items || [],
-    occasion: first.occasion || null,
-    outfits: outfits.map(o => ({
-      id: o.id,
-      label: o.label || "",
-      occasion: o.occasion || null,
-      items: o.items || [],
-    })),
-    // Derive plural arrays from the outfits + weather when callers don't pass them.
-    occasions: occasions ?? [...new Set(outfits.map(o => o.occasion).filter(Boolean))],
+    occasion: occasionsOfLook(first)[0] || null,
+    outfits: outfits.map(o => {
+      const tags = occasionsOfLook(o);
+      return {
+        id: o.id,
+        label: o.label || "",
+        occasion: tags[0] || null,
+        ...(tags.length > 1 ? { occasions: tags } : {}),
+        items: o.items || [],
+      };
+    }),
+    // The day's occasions are ALWAYS its looks' (dayOccasions) — a caller
+    // can't hand in a list, because a list handed in is how one look's tags
+    // came to stand for the whole day. Multi-tags ride on the look.
+    occasions: dayOccasions(outfits),
     weathers: weathers ?? (weather ? [weather] : []),
     source,
     notes,
@@ -171,9 +233,10 @@ export function buildPlanPayload({ date, outfits, source, notes, weather, activi
 // says wins (source, notes, weather, activity, label) over the caller's
 // fallback; the linked look and its layout are carried unless the caller
 // names them (`layoutData` / `outfitLogId`: undefined carries the row's, any
-// other value — null included — sets it). `occasions` / `weathers` pass
-// straight to buildPlanPayload (omitted = derived from the outfits).
-export function planRowOver(existing, { date, outfits, source, notes = null, weather = null, occasions, weathers, layoutData, outfitLogId } = {}) {
+// other value — null included — sets it). `weathers` passes straight to
+// buildPlanPayload (omitted = derived from the weather); occasions are always
+// derived from the looks (dayOccasions).
+export function planRowOver(existing, { date, outfits, source, notes = null, weather = null, weathers, layoutData, outfitLogId } = {}) {
   const merged = buildPlanPayload({
     date, outfits,
     source: existing?.source || source,
@@ -181,7 +244,7 @@ export function planRowOver(existing, { date, outfits, source, notes = null, wea
     weather: existing?.weather ?? weather,
     activity: existing?.activity ?? null,
     day_label: existing?.day_label ?? null,
-    occasions, weathers,
+    weathers,
   });
   const layout = layoutData !== undefined ? layoutData : existing?.layout_data;
   const logId = outfitLogId !== undefined ? outfitLogId : existing?.outfit_log_id;

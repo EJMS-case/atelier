@@ -240,7 +240,11 @@ Conventions worth knowing:
   need the whole history to load until I select that month"). A filter is
   the one thing that loads the whole history; the walk reads the REST log
   to hold that a visit reads ranges only. Which days match an
-  occasion / weather pick is one reader, `planFilters.js`.
+  occasion / weather pick is one reader, `planFilters.js`. **A look owns its
+  occasions; the day's are derived** (owner, 2026-11-12: "working all day and
+  traveling all night they both read as the outfit I made most recently"):
+  `occasionsOfLook` / `dayOccasions` in `outfits.js`. Never pass a day a list
+  of occasions — put the tags on the look.
 - **A piece's formality is read through `formalityOf()`** (`utils/item-helpers.js`):
   null, undefined and "" are *unknown*, never f0. `Number(null)` is `0`, and
   a bare `Number(it.formality) <= 2` read every unfiled piece as loungewear —

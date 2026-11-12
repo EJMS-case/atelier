@@ -28,6 +28,7 @@ import {
 import { TAXONOMY, SUBCATEGORY_L3, ATHLEISURE_SUBCATEGORY_ALIASES } from "../src/constants/taxonomy.js";
 import { resolveVisibleWardrobe } from "../src/features/closet/useVisibleWardrobe.js";
 import { SUPABASE_URL, SUPABASE_KEY as ANON_KEY } from "../src/lib/supabaseConfig.js";
+import { outfitsOf, dayOccasions } from "../src/features/planner/outfits.js";
 
 // The committed key is the anon one, and RLS denies anon every table — so it
 // reads 0 rows and the run aborts with a clear message rather than a false
@@ -71,7 +72,7 @@ async function load() {
   const [wardrobe, trips, plans] = await Promise.all([
     get("wardrobe_items?select=id,name,category,subcategory,closet_id,set_id,duplicate_of"),
     get("trips?select=id,destination,status,start_date,end_date,destination_closet_id,must_include_ids"),
-    get("planned_outfits?select=date,items,outfits"),
+    get("planned_outfits?select=date,items,outfits,occasion,occasions"),
   ]);
   return {
     wardrobe, trips, plans,
@@ -158,6 +159,24 @@ async function main() {
   if (leaked.length) {
     note("error", `${leaked.length} Misc piece(s) reached a styling pool`, leaked.join(", "),
       "The holding room must never reach a stylist. This is a bug in resolveVisibleWardrobe.");
+  }
+
+  // ── 5. A day's occasions are its looks' ───────────────────────────────────
+  // The planner filters and the wear record's rooms read the day's list; a
+  // look whose occasion is missing from it is a Travel Day or a Dinner the
+  // record never counts (2026-11-12: every save overwrote the list with the
+  // look it had just saved). The write paths derive it now (dayOccasions);
+  // this catches a row written by anything else.
+  for (const p of plans) {
+    const looks = outfitsOf(p);
+    if (looks.length < 2) continue;
+    const stored = new Set(p.occasions || []);
+    const missing = dayOccasions(looks).filter(o => !stored.has(o));
+    if (missing.length) {
+      note("warn", `${p.date}: the day's occasions leave out ${missing.join(", ")}`,
+        `day: ${(p.occasions || []).join(", ") || "none"} · looks: ${looks.map(l => l.occasion || "?").join(", ")}`,
+        "Re-save the day, or add the missing occasion to planned_outfits.occasions.");
+    }
   }
 
   report();

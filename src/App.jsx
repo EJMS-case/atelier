@@ -70,7 +70,8 @@ const StyleProfileView  = lazy(() => import("./features/profile/StyleProfileView
 const BrandDiscoveryView = lazy(() => import("./features/discovery/BrandDiscoveryView.jsx"));
 
 import { listInspirations, vibesFor } from "./features/inspiration/inspirationApi.js";
-import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf, scheduleSlot } from "./features/planner/outfits.js";
+import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf, scheduleSlot, editedLookTags } from "./features/planner/outfits.js";
+import { tagsFor } from "./lib/multitag.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -103,11 +104,7 @@ async function pinWornToDate({ date, itemIds, occasion }) {
       : [...current, { id: newOutfitId(), label: "", occasion: occasion || null, items: itemIds }];
     const merged = planRowOver(existing, {
       date, outfits, source: "worn",
-      // Preserve the row's stored multi-tags and add this wear's occasion —
-      // omitting these re-derived occasions from outfits and collapsed
-      // builder-authored plurals to singletons (same trap the onSchedule
-      // comment documents).
-      occasions: unionTags(existing?.occasions, outfits.map(o => o.occasion), occasion),
+      // The day's occasions derive from its looks (outfits.js dayOccasions).
       weathers:  unionTags(existing?.weathers, existing?.weather),
     });
     await savePlan(merged);
@@ -133,7 +130,6 @@ async function unpinWornFromDate({ date, itemIds }) {
     }
     const merged = planRowOver(existing, {
       date, outfits: remaining, source: "worn",
-      occasions: unionTags(existing.occasions, remaining.map(o => o.occasion)),
       weathers:  unionTags(existing.weathers, existing.weather),
     });
     await savePlan(merged);
@@ -2283,9 +2279,10 @@ export default function App() {
             // occasion/weather + saved canvas layout so the user's manual
             // arrangement isn't lost between edits.
             garment_ids: editingPlan.plan?.items || [],
-            occasion:    editingPlan.plan?.occasion,
+            // The edited LOOK's occasions, not the day's (editedLookTags).
+            occasion:    editedLookTags(editingPlan)[0] ?? null,
             weather:     editingPlan.plan?.weather,
-            occasions:   editingPlan.plan?.occasions,
+            occasions:   editedLookTags(editingPlan),
             weathers:    editingPlan.plan?.weathers,
             notes:       editingPlan.plan?.notes,
             layout_data: editingPlan.plan?.layout_data,
@@ -2348,15 +2345,21 @@ export default function App() {
               // planned delete what existed on that day entirely?" — it did:
               // with no edit in progress this indexed look #0 and replaced it).
               const idx = scheduleSlot(editingPlan, plan.date, current);
+              // The occasion chips she set in the builder belong to THIS look
+              // (outfits.js occasionsOfLook) — an edit takes them, replacing
+              // the look's old ones (until 2026-11-12 an edit kept the old
+              // occasion and her pick only reached the day's shared tags).
+              const lookTags = tagsFor(plan, "occasions", "occasion");
+              const tagged = lookTags.length ? { occasion: lookTags[0], occasions: lookTags } : {};
               let outfits;
               if (current.length === 0) {
-                outfits = [{ id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] }];
+                outfits = [{ id: newOutfitId(), label: "", occasion: null, ...tagged, items: plan.items || [] }];
               } else if (current[idx]) {
                 outfits = current.map((o, i) => i === idx
-                  ? { ...o, items: plan.items || [], occasion: o.occasion || plan.occasion || null }
+                  ? { ...o, items: plan.items || [], ...tagged }
                   : o);
               } else {
-                outfits = appendOutfit(current, { id: newOutfitId(), label: editingPlan?.newOutfitLabel || "", occasion: plan.occasion || null, items: plan.items || [] });
+                outfits = appendOutfit(current, { id: newOutfitId(), label: editingPlan?.newOutfitLabel || "", occasion: null, ...tagged, items: plan.items || [] });
               }
               // A look she REBUILT on a planner or trip day teaches like any
               // other edit (owner, 2026-11-12: "make sure it learns from what
@@ -2374,10 +2377,8 @@ export default function App() {
                 source: (isTrip ? "trip" : plan.source) || "planner",
                 notes: plan.notes ?? null,
                 weather: plan.weather ?? null,
-                // Forward the builder's multi-tag selections — without these,
-                // buildPlanPayload rederives singletons and the extra
-                // occasion/weather chips picked in the builder were dropped.
-                occasions: plan.occasions,
+                // Occasions ride on the look (above); the day's list derives
+                // from its looks. Weathers are still the day's.
                 weathers: plan.weathers,
                 // Persist the manual canvas arrangement for the primary outfit
                 // (the only slot whose layout currently round-trips at the row).
@@ -2613,7 +2614,7 @@ export default function App() {
               setManualBuilderOpen(true);
               setView("style");
             }}
-            onBuildDay={(iso, existingIds, tripOutfitIdx = null, newOutfitLabel = null, poolIds = null) => {
+            onBuildDay={(iso, existingIds, tripOutfitIdx = null, newOutfitLabel = null, poolIds = null, lookOccasions = null) => {
               // tripOutfitIdx is set when Build is opened from a specific
               // outfit on a trip-detail day. We carry it through editingPlan
               // so the save path can update outfits[idx] in the JSONB array
@@ -2625,7 +2626,9 @@ export default function App() {
               // builder's pool for that day (tripPools.js): destination ∪
               // suitcase ∪ the look's own pieces, or home on a first/last
               // Travel Day. Not widened by the active closet — see builderPool.
-              setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx, newOutfitLabel, poolIds });
+              // lookOccasions: the edited look's own occasion tags, so the
+              // builder opens on them rather than the day's.
+              setEditingPlan({ iso, plan: { date: iso, items: existingIds }, tripOutfitIdx, newOutfitLabel, poolIds, lookOccasions });
               setBuilderReturnView(viewRef.current);
               setManualBuilderOpen(true);
               setView("style");
@@ -2737,16 +2740,15 @@ export default function App() {
               const rows = await fetchPlansBetween(plan.date, plan.date);
               const existing = (Array.isArray(rows) && rows[0]) || null;
               const current = outfitsOf(existing);
-              const newOutfit = { id: newOutfitId(), label: "", occasion: plan.occasion || null, items: plan.items || [] };
+              const lookTags = tagsFor(plan, "occasions", "occasion");
+              const newOutfit = { id: newOutfitId(), label: "", occasion: lookTags[0] || null, occasions: lookTags, items: plan.items || [] };
               const outfits = current.length === 0 ? [newOutfit] : [...current, newOutfit];
               const merged = planRowOver(existing, {
                 date: plan.date, outfits,
                 source: plan.source || "saved",
                 notes: plan.notes ?? null,
                 weather: plan.weather ?? null,
-                // Forward multi-tags from the scheduled look (see builder
-                // onSchedule above) so they aren't collapsed to singletons.
-                occasions: plan.occasions,
+                // The look carries its own occasions (above).
                 weathers: plan.weathers,
                 // Persist the builder's canvas arrangement when this look becomes
                 // the day's primary outfit (#0 is the only slot whose layout

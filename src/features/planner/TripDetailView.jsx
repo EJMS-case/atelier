@@ -17,7 +17,7 @@ import { SEASONAL_HIGHS, nyToday, shortDayLabel } from "../../lib/time.js";
 import { tripStatusActions, statusOf, isTripUnderway } from "./tripStatus.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
-import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds, DAYPART_EVENING } from "./outfits.js";
+import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds, DAYPART_EVENING, occasionsOfLook } from "./outfits.js";
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES, buildDailyOutfits, eveningForDay } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
@@ -1566,7 +1566,7 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                               {outfitItems.length > 0 ? "↺ Regenerate" : "✦ Generate"}
                             </button>
                             {onBuildDay && (
-                              <button onClick={() => onBuildDay(iso, outfit.items || [], outfitIdx, null, editPoolIds(iso, outfit.occasion, outfit.items || []))}
+                              <button onClick={() => onBuildDay(iso, outfit.items || [], outfitIdx, null, editPoolIds(iso, outfit.occasion, outfit.items || []), occasionsOfLook(outfit))}
                                 style={{ flex: 1, padding: "7px 0", background: "transparent", color: PALETTE.soft, border: `1px solid ${PALETTE.line}`, borderRadius: 6, fontSize: 10, letterSpacing: "0.1em", cursor: "pointer" }}>
                                 ⊞ Build
                               </button>
