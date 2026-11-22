@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — ★ Bring next time — 2026-11-22
+
+### Why
+
+Owner, in Arizona: *"a way I can pin or bookmark or star items that I'd like to bring with me next time without it hindering too much or being too invasive."*
+
+### Changed
+
+- **A ☆ on every carried piece of a trip's Packing list** (not on pieces that live at the destination; they are already there). A ★ pins nothing and changes no look. It also works on a completed trip, which is when she reviews what earned its place (the ×N beside it).
+- **`planner/bringNext.js`**: stars are kept per place. A trip with a destination closet uses `closet:<id>`, so every Arizona trip shares them whatever she typed as the destination. Otherwise the key is the place name. Stored cross-device in `user_settings.bring_next` with a local mirror, like brand finds.
+- **The "Bringing for sure" sheet** (trip screen and Plan a trip) puts starred pieces right after what is already pinned, with a *★ Bring next time* badge and one *★ Pin all N you starred* tap. She still decides.
+- Tests: `test:bring-next` (4) and a walk step (star → saved → the sheet marks it and offers it).
+
+### Downstream
+
+- *Efficiency / speed:* one small settings read when a trip screen or the trip sheet opens; one write per tap. No AI call.
+- *Effectiveness:* a star reaches packing only through a pin she makes, so it can never fill a suitcase on its own.
+- *Education:* the stars are her own record of what works at each destination. Reading them into the trip stylist as a soft preference is a natural next step if she wants it.
+
 ## [Unreleased] — Edit picks adds pieces, and a pick stays where she tapped it — 2026-11-22
 
 ### Why

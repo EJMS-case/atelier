@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · ★ Bring next time
+
+**Owner:** she wanted to star pieces to bring on the next trip, without it being invasive. Each carried piece on a trip's Packing list now has a ☆; the next trip to the same place leads its pin sheet with them, plus a "Pin all ★" (CHANGELOG).
+
+**Watch-item:** on the Arizona trip's Packing tab, star two NYC pieces. Open Edit picks: they should lead the sheet with a ★ badge.
+
 ### 2026-11-22 · Edit picks adds pieces; a pick stays put
 
 **Owner:** in Arizona, "Edit picks" could only remove pieces, and each pick jumped the list. The sheet now offers every piece she could carry, read from the wardrobe (`pinPoolFor`), and a tap never reorders the grid (CHANGELOG).

@@ -20,6 +20,7 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import RouteFallback from "../../components/RouteFallback.jsx";
 import { sb } from "../../lib/supabase.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
+import { bringNextKey, starredFor, loadBringNext } from "./bringNext.js";
 import { displacedLogRows } from "./displaced.js";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
@@ -1260,6 +1261,9 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
   const [start, setStart] = useState(isoDate(new Date()));
   const [end, setEnd] = useState(isoDate(addDays(new Date(), 6)));
   const [destination, setDestination] = useState("");
+  // ★ Bring next time: starred on a past trip to this place (bringNext.js).
+  const [bringNextMap, setBringNextMap] = useState({});
+  useEffect(() => { loadBringNext().then(setBringNextMap).catch(() => {}); }, []);
   // Closet at the destination (Phase B). "" = none. Auto-preselected from the
   // typed destination (see the effect below) until the user picks manually.
   const [destClosetId, setDestClosetId] = useState("");
@@ -2342,6 +2346,7 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
             items={pinPool}
             selectedIds={mustIncludeIds}
             onChange={(next) => { setMustIncludeIds(next); invalidatePreview(); }}
+            starredIds={starredFor(bringNextMap, bringNextKey({ destClosetId, destination }))}
             onClose={() => setShowPinPicker(false)}
             preferItemIds={preferItemIds}
             weather={effectiveWeather()}
