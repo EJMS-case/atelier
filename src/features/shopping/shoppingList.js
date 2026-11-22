@@ -25,15 +25,28 @@ export { SHOPPING_LIST_KEY, SOURCES, cleanList, loadShoppingList, saveShoppingLi
 export const RECENT_BUY_DAYS = 45;
 
 /** Pure: append an entry unless an OPEN one already says the same thing. */
-export function addEntry(list, { text, category = "", color = "", note = "", url = "", source = "me" } = {}, { now = new Date() } = {}) {
+export function addEntry(list, { text, category = "", color = "", note = "", url = "", source = "me", image = "", brand = "", store = "", price = null, mustHave = false } = {}, { now = new Date() } = {}) {
   const base = cleanList(list);
   const key = norm(text);
   if (!key) return base;
-  if (base.some(e => e.status === "open" && norm(e.text) === key)) return base;
+  // The same words twice is one entry, unless each names its own product
+  // (two links are two wishes, however alike their names).
+  if (base.some(e => e.status === "open" && norm(e.text) === key && (!url || !e.url || e.url === url))) return base;
   return cleanList([...base, {
-    id: newId(), text, category, color, note, url, source,
+    id: newId(), text, category, color, note, url, source, image, brand, store, price, mustHave,
     status: "open", addedAt: now.toISOString(),
   }]);
+}
+
+/** Pure: merge fields into one entry (a must-have star, an edit, Atelier's read). */
+export function updateEntry(list, id, patch = {}) {
+  return cleanList(list).map(e => e.id !== id ? e : { ...e, ...patch, id: e.id });
+}
+
+/** Pure: what her open wishes add up to: the count and the dollars she named. */
+export function wishTotals(list) {
+  const open = cleanList(list).filter(e => e.status === "open");
+  return { open: open.length, total: open.reduce((t, e) => t + (e.price || 0), 0) };
 }
 
 /** Pure: check an entry off (or back on). `bought` names the piece that answered it. */
@@ -128,7 +141,14 @@ export function describeShoppingList(list, { max = 8, now = new Date() } = {}) {
   const bought = recentBuys(c, now).slice(-4);
   const parts = [];
   if (open.length) {
-    parts.push(`Pieces she is looking for (her own list): ${open.map(e => `${e.text}${e.category ? ` [${e.category}]` : ""}`).join("; ")}. When a look would be finished by one of them, say so — it is a real option on her horizon, not a piece she owns. Never propose one of these as if it were new.`);
+    const wish = (e) => [
+      e.text,
+      e.brand && !norm(e.text).includes(norm(e.brand)) ? `by ${e.brand}` : "",
+      e.price ? `$${Math.round(e.price)}` : "",
+      e.category ? `[${e.category}]` : "",
+      e.mustHave ? "(a must-have for her)" : "",
+    ].filter(Boolean).join(" ");
+    parts.push(`Pieces she is looking for (her own wish list): ${open.map(wish).join("; ")}. When a look would be finished by one of them, say so — it is a real option on her horizon, not a piece she owns. Never propose one of these as if it were new.`);
   }
   if (bought.length) {
     parts.push(`Just bought, from that list: ${bought.map(e => `${e.boughtName || "a piece"} (for "${e.text}")`).join("; ")} — new to the closet and worth a look that uses it.`);

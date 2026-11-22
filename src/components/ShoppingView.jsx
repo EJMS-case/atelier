@@ -6,7 +6,8 @@ import { runShoppingAnalysis } from "../features/shopping/gapAnalysis.js";
 import { loadBrandFinds, saveBrandFinds } from "../features/shopping/brandFinds.js";
 import { recordVerdict, loadVerdicts } from "../features/shopping/verdicts.js";
 import { gapKey } from "../features/shopping/verifyGaps.js";
-import { loadShoppingList, saveShoppingList, addEntry, setDone, removeEntry, entryFromGap } from "../features/shopping/shoppingList.js";
+import { loadShoppingList, saveShoppingList, addEntry, entryFromGap } from "../features/shopping/shoppingList.js";
+import WishList from "../features/shopping/WishList.jsx";
 import { invalidateLearning } from "../features/stylist/learning.js";
 import { STYLING_CATEGORY_ORDER } from "../constants/taxonomy.js";
 import {
@@ -18,83 +19,6 @@ import Thumb from "./Thumb.jsx";
 const label = { fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)" };
 const chip = (on) => ({ ...s.btnSecondary, fontSize: 10, padding: "4px 8px", ...(on ? { background: "var(--color-ink)", color: "var(--color-surface)", borderColor: "var(--color-ink)" } : {}) });
 const addBtn = { ...s.btnSecondary, fontSize: 10, padding: "3px 8px", whiteSpace: "nowrap", flexShrink: 0 };
-const when = (iso) => iso ? new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
-
-// ── Her list ────────────────────────────────────────────────────────────────
-// The centre of the screen (owner, 2026-09-17: "an area I write and check off
-// myself"). Everything else on the page ADDS to it; a closet add checks an
-// entry off (App.addItems → answerShoppingList) and the piece is named here.
-function ShoppingListCard({ list, onChange }) {
-  const [text, setText] = useState("");
-  const [cat, setCat] = useState("");
-  const [note, setNote] = useState("");
-  const [boughtOpen, setBoughtOpen] = useState(false);
-  const open = list.filter(e => e.status === "open");
-  const done = list.filter(e => e.status === "done").sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
-  const add = () => {
-    const v = text.trim();
-    if (!v) return;
-    onChange(addEntry(list, { text: v, category: cat, note: note.trim(), source: "me" }));
-    setText(""); setNote(""); setCat("");
-  };
-  const source = (e) => e.source === "numbers" ? "from your closet's numbers" : e.source === "atelier" ? "Atelier's idea, kept by you" : "";
-  return (
-    <div style={{ ...si.card, marginBottom: 16 }}>
-      <div style={{ ...label, marginBottom: 8 }}>MY LIST{open.length ? ` · ${open.length}` : ""}</div>
-      {open.length === 0 && (
-        <p style={{ fontSize: 12, color: "var(--color-text-2)", margin: "0 0 8px", lineHeight: 1.5 }}>
-          Nothing on it yet. Write what you're looking for — every stylist surface reads this list, and when a piece you add to the closet answers an entry, it's checked off for you.
-        </p>
-      )}
-      {open.map(e => (
-        <div key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-          <input type="checkbox" checked={false} aria-label={`Bought: ${e.text}`} onChange={() => onChange(setDone(list, e.id, true))}
-            style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--color-ink)", flexShrink: 0 }}/>
-          <div style={{ flex: 1, fontSize: 13, color: "var(--color-text)", lineHeight: 1.4 }}>
-            {e.text}
-            {(e.category || e.color) && <span style={{ color: "var(--color-text-muted)", fontSize: 11 }}> · {[e.category, e.color].filter(Boolean).join(" · ")}</span>}
-            {e.note && <div style={{ fontSize: 11, color: "var(--color-text-2)", lineHeight: 1.45 }}>{e.note}</div>}
-            {(source(e) || e.url) && (
-              <div style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
-                {source(e)}{source(e) && e.url ? " · " : ""}{e.url && <a href={e.url} target="_blank" rel="noreferrer" style={{ color: "var(--color-ink)" }}>link</a>}
-              </div>
-            )}
-          </div>
-          <button onClick={() => onChange(removeEntry(list, e.id))} aria-label={`Remove ${e.text}`}
-            style={{ background: "none", border: "none", color: "var(--color-border-muted)", cursor: "pointer", fontSize: 13 }}>✕</button>
-        </div>
-      ))}
-      <input style={{ ...s.input, width: "100%", fontSize: 13, marginTop: 4 }} placeholder="What are you looking for? — e.g. a burgundy suede loafer" value={text}
-        onChange={e => setText(e.target.value)} onKeyDown={e => e.key === "Enter" && add()}/>
-      <input style={{ ...s.input, width: "100%", fontSize: 12, marginTop: 6 }} placeholder="Note (optional) — why, or what it has to go with" value={note} onChange={e => setNote(e.target.value)}/>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-        {STYLING_CATEGORY_ORDER.map(c => (
-          <button key={c} onClick={() => setCat(cat === c ? "" : c)} aria-pressed={cat === c} style={chip(cat === c)}>{c}</button>
-        ))}
-      </div>
-      <button style={{ ...s.btnPrimary, width: "100%", marginTop: 8, fontSize: 12 }} onClick={add} disabled={!text.trim()}>Add to my list</button>
-      {done.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <button onClick={() => setBoughtOpen(o => !o)} aria-expanded={boughtOpen}
-            style={{ width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <span style={label}>BOUGHT · {done.length}</span>
-            <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>{boughtOpen ? "▲" : "▼"}</span>
-          </button>
-          {boughtOpen && done.map(e => (
-            <div key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8 }}>
-              <input type="checkbox" checked aria-label={`Still looking: ${e.text}`} onChange={() => onChange(setDone(list, e.id, false))}
-                style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--color-ink)", flexShrink: 0 }}/>
-              <div style={{ flex: 1, fontSize: 12, color: "var(--color-text-2)", lineHeight: 1.4, textDecoration: "line-through" }}>{e.text}</div>
-              <div style={{ fontSize: 10, color: "var(--color-text-muted)", textAlign: "right", lineHeight: 1.4 }}>
-                {e.boughtName ? <>answered by <span style={{ color: "var(--color-text)" }}>{e.boughtName}</span><br/></> : null}{when(e.doneAt)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── The numbers, as things she can add ──────────────────────────────────────
 // The deterministic read of the wardrobe (utils/wardrobe-coverage.js): which
@@ -266,7 +190,7 @@ function DroppedList({ dropped }) {
   );
 }
 
-export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, onBack }) {
+export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, onBack, pendingWish = null, onPendingWishConsumed }) {
   const [mode, setMode] = useState("gap");
   const [selectedIds, setSelectedIds] = useState([]);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -287,11 +211,14 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
   const [finds, setFinds] = useState([]);
   const [verdicts, setVerdicts] = useState([]);
   const [list, setList] = useState([]);
+  const [listLoaded, setListLoaded] = useState(false);
   useEffect(() => {
     let alive = true;
     loadBrandFinds().then(l => { if (alive) setFinds(l); }).catch(() => {});
     loadVerdicts().then(l => { if (alive) setVerdicts(l); }).catch(() => {});
-    loadShoppingList().then(l => { if (alive) setList(l); }).catch(() => {});
+    // The list loads before a wish Safari sent is offered, so its save never
+    // lands on an empty list and overwrites the real one.
+    loadShoppingList().then(l => { if (alive) setList(l); }).catch(() => {}).finally(() => { if (alive) setListLoaded(true); });
     return () => { alive = false; };
   }, []);
   // Every save teaches: the learning memo is cleared so the chat, Style Me
@@ -339,7 +266,7 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
       </div>
 
       <div style={s.modeTabs}>
-        {[["gap","My List"],["complete","Complete a Look"]].map(([m, name]) => (
+        {[["gap","Wish List"],["complete","Complete a Look"]].map(([m, name]) => (
           <button key={m} onClick={() => { setMode(m); setLocalErr(""); }}
             style={{...s.modeTab, ...(mode === m ? s.modeTabActive : {})}}>{name}</button>
         ))}
@@ -347,8 +274,9 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
 
       {mode === "gap" && (
         <>
-          <div style={s.advisorNote}>Your list, in your words. Style Me, the stylist chat, Evaluate and trips all read it; a piece you add to the closet that answers an entry checks it off. Below it, two sources of ideas you can add or ignore: what the numbers say about the pieces you style, and what Atelier would look for.</div>
-          <ShoppingListCard list={list} onChange={updateList}/>
+          <div style={s.advisorNote}>Your wish list, in your words. Style Me, the stylist chat, Evaluate and trips all read it, ✦ asks Atelier what it thinks of a piece, and a piece you add to the closet that answers a wish checks it off. Below it, two sources of ideas you can add or ignore: what the numbers say about the pieces you style, and what Atelier would look for.</div>
+          <WishList list={list} onChange={updateList} wardrobe={owned} apiKey={apiKey}
+            pendingWish={listLoaded ? pendingWish : null} onPendingConsumed={onPendingWishConsumed}/>
           <NumbersCard items={owned} list={list} onAdd={addToList}/>
           <BrandFindsCard finds={finds} onChange={updateFinds}/>
         </>

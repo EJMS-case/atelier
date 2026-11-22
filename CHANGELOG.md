@@ -2,6 +2,30 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — The wish list moves into Atelier — 2026-11-22
+
+### Why
+
+Owner: *"I'd also like a shopping wish list feature as long as it doesn't overload the code any more. I use the app 'wish list' for this separately … I love that I can add wishes from safari … that when I add something it fills in all the details of the wish including an image … if I could get feedback on the list — like hey, you have things like this already and you do / don't wear them. Or this would work well with xyz … big picture smart, and leverage current styles and MY style … chic and stylish and honest without rules."*
+
+### Changed
+
+- **Her shopping list became the wish list** rather than a second list, so everything that already read the list (every AI surface, and the auto check-off on a closet add) keeps working. New optional fields: `image` (https only), `brand`, `store`, `price` (dollars, `cleanPrice`), `mustHave`, `read` (shoppingListStore). New pure helpers `updateEntry` and `wishTotals`. `describeShoppingList` now gives every prompt the brand, price and must-have of each wish. Two links with alike names are two wishes.
+- **`features/shopping/WishList.jsx`** replaces the text-only card. It has a 2-column photo grid (store images load lazily with `referrerPolicy="no-referrer"`), ★ must-have, Open ↗, ✓ Bought, a two-tap ✕, a header with the open count and total, a ★ Must-haves filter, **Share** (the native share sheet, falling back to the clipboard) and the Add-a-wish sheet (Paste, or type).
+- **`features/shopping/wishCapture.js`**: the **"＋ Atelier" Safari bookmarklet**. A web app cannot join the iOS share sheet, and a store page cannot be fetched from the browser (CORS, and bot walls). The page can read itself, though: the bookmarklet takes schema.org Product JSON-LD, then og:/product: tags, opens `/#wish=<details>` and copies `atelier-wish:{…}` for the home-screen app. `parseWishPayload` reads either one, or a bare link. App opens on the wish list with the sheet filled in when the URL carries `#wish=`, and clears it from the address bar. The sheet's save waits for the list to load, so it can never overwrite the stored list with an empty one.
+- **`features/shopping/wishRead.js`**: **✦ What do you think?** It composes from `standard.js` (persona, THE STANDARD, opinion and voice rules, `personalGrounding`), the same as the evaluator and the chat, and is added to the standard's source contract. The facts come from the app: `similarOwned` (same category, then shape or colour family, both closets, most worn first) with `wearLine` ("worn 40 times, recently" / "never worn"), her spend bands and brand tier, the womenswear line, and the product photo as a URL image block. The output (verdict, take, what she owns like it, what it pairs with) goes through `resolveMovePiece`, so a piece that isn't hers is dropped. It runs in `backgroundRun` (`wish:read:<id>`) at `medium` effort on `MODEL_TOP`. If the store refuses the image fetch it retries without the image, then falls back to `MODEL_STRONG`. The answer is kept on the wish, so it is paid for once.
+- `verifyGaps` `CATEGORY_ALIASES` gained the words product pages use (clutch, crossbody, pump, sandal, mule, slingback, necklace…). The gap verifier gains them too.
+- Home's row is now **Wish List**, and the Shopping screen's tab is **Wish List**.
+- Tests: `test:wish-list` (10, including running the bookmarklet in a `vm` against a fake product page, both JSON-LD and og:-only). Two walk steps: a typed wish, and `#wish=` → filled sheet → saved with photo, brand and price → card and total.
+
+### Downstream
+
+- *Efficiency:* no new boot cost. WishList rides the lazy Shopping chunk. The read's system block (persona, standard, grounding, the full closet) is cached, so a second read in a session costs mostly the wish. One call per tap, never automatic.
+- *Effectiveness:* the read is an opinion surface on the same rubric, so it speaks like the evaluator and the chat. It never cites a rule, and its facts are counted by the app, not guessed by the model.
+- *Speed:* the read runs in the background; she can leave the screen.
+- *Education:* every wish, with its brand, price and must-have, now reaches Style Me, the chat, Evaluate and trips through `personalGrounding`.
+- *Not done, on purpose:* **a public link Mike can open**. Every table is pinned to her user id, and a public link needs a narrowly scoped anon read (a token-guarded RPC plus a migration). That is her call to make, not a side effect of this PR. Share sends him the list today, and each wish's link can be added to Wishlists from its Open ↗.
+
 ## [Unreleased] — ★ Bring next time — 2026-11-22
 
 ### Why

@@ -530,12 +530,16 @@ await check("Home → Style Profile", homeTool("✦ Style Profile"));
 await check("Home → Style Intelligence", homeTool("✦ Style Intelligence"));
 await check("Home → Color Advisor", homeTool("✦ Color Advisor"));
 await check("Home → Visual AI", homeTool("✦ Visual AI"));
-await check("Home → Shopping List", homeTool("◇ Shopping List"));
+await check("Home → Wish List", homeTool("◇ Wish List"));
 await check("Shopping → an entry she writes lands on her list", async () => {
   // The list she writes herself is the screen's centre (owner, 2026-09-17);
   // the add path is the one that must work on the phone.
-  await page.fill('input[placeholder^="What are you looking for"]', "a burgundy suede loafer");
-  await clickText("button", "Add to my list");
+  // Since 2026-11-22 the list is her wish list: + Add wish opens the sheet,
+  // and a wish with nothing but its words is still a wish.
+  await clickText("button", "+ Add wish");
+  await page.waitForTimeout(300);
+  await page.fill('input[aria-label="Wish name"]', "a burgundy suede loafer");
+  await clickText("button", "Add to my wish list");
   await page.waitForTimeout(300);
   const text = await page.evaluate(() => document.body.innerText);
   if (!/a burgundy suede loafer/.test(text)) throw new Error("the entry did not render on the list");
@@ -1321,6 +1325,41 @@ await check("Builder → a fresh look scheduled onto a planned day adds to it, n
   const looks = row.outfits || [];
   if (looks.length !== 2) throw new Error(`the day holds ${looks.length} look(s) after scheduling onto it, not its old look plus the new one`);
   if (!looks.some(o => o.id === "o1")) throw new Error("the day's existing look was replaced");
+});
+
+// The wish list (owner, 2026-11-22: her Wishlists app, moved in). The
+// "＋ Atelier" Safari bookmark opens Atelier at #wish=<details>: the app must
+// land on the wish list with the sheet filled in, clear the address bar, save
+// the wish with its photo, brand and price, and offer Atelier's read on it.
+// Last in the walk because it reloads the app.
+await check("Safari → #wish= opens the wish list with the sheet filled in; saving keeps every detail", async () => {
+  const d = { t: "Twisted Gold Side Handle Clutch | Bloomingdale's", b: "Alexis Bittar", p: "675.00", i: "https://images.example.com/clutch.jpg", u: "https://www.bloomingdales.com/shop/clutch", s: "www.bloomingdales.com" };
+  await page.goto("http://localhost:4322/#wish=" + encodeURIComponent(JSON.stringify(d)), { waitUntil: "domcontentloaded" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  let sheet = null;
+  for (let i = 0; i < 30 && !sheet; i++) {
+    await page.waitForTimeout(250);
+    sheet = await page.evaluate(() => {
+      const dlg = document.querySelector('[role="dialog"][aria-label="Add a wish"]');
+      if (!dlg) return null;
+      const v = (l) => dlg.querySelector(`input[aria-label="${l}"]`)?.value || "";
+      return { name: v("Wish name"), brand: v("Brand"), price: v("Price"), photo: !!dlg.querySelector("img"), hash: location.hash };
+    });
+  }
+  if (!sheet) throw new Error("#wish= did not open the Add-a-wish sheet");
+  if (sheet.name !== "Twisted Gold Side Handle Clutch") throw new Error(`the name read "${sheet.name}"`);
+  if (sheet.brand !== "Alexis Bittar" || sheet.price !== "675") throw new Error(`brand/price read "${sheet.brand}" / "${sheet.price}"`);
+  if (!sheet.photo) throw new Error("the sheet shows no photo");
+  if (sheet.hash) throw new Error(`the wish stayed in the address bar (${sheet.hash.slice(0, 20)}…)`);
+  const before = restWrites.length;
+  await clickText("button", "Add to my wish list");
+  await page.waitForTimeout(600);
+  const wrote = restWrites.slice(before).map(w => JSON.stringify(w.row || "")).find(r => r.includes("shopping_list"));
+  if (!wrote || !wrote.includes("Alexis Bittar") || !wrote.includes("images.example.com")) throw new Error("the wish was not saved with its brand and photo");
+  const card = await page.evaluate(() => document.body.innerText);
+  if (!/Alexis Bittar · \$675/.test(card)) throw new Error("the card does not show brand and price");
+  if (!/What do you think\?/.test(card)) throw new Error("the card does not offer Atelier's read");
+  if (!/MY WISH LIST · \d+ open · \$675/i.test(card)) throw new Error("the list header does not total the wish");
 });
 
 await browser.close();

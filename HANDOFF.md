@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · The wish list moves in
+
+**Owner:** she wanted her Wishlists app inside Atelier: adding from Safari with the photo filled in, Mike able to see it, and honest feedback that leverages her style. The shopping list is now the wish list: photos, brand, price, ★ must-have, totals, Share, a "＋ Atelier" Safari bookmarklet, and ✦ What do you think? (CHANGELOG).
+
+**Watch-items:** (1) She sets up the bookmark once (the screen walks her through it). Try it on a Bloomingdale's and a Louboutin page: if one fills only the link, that store hides its product data, so note which. (2) The first ✦ read on a wish with a photo: if a store blocks the image fetch, the read falls back to the words only; check `ai_errors` `wish_read:%`. (3) **Open, hers:** a public link for Mike needs a scoped anon read (a migration). It was proposed, not built.
+
 ### 2026-11-22 · ★ Bring next time
 
 **Owner:** she wanted to star pieces to bring on the next trip, without it being invasive. Each carried piece on a trip's Packing list now has a ☆; the next trip to the same place leads its pin sheet with them, plus a "Pin all ★" (CHANGELOG).

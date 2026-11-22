@@ -6,7 +6,7 @@
 
 ## 1. What Atelier is
 
-Atelier is a private, single-user wardrobe app. Its owner photographs her clothes, the app files them into two closets (New York and Arizona), and an AI stylist builds outfits from what she actually owns: for a tap of "Style Me", for a day on the calendar, for a trip, or as an opinion on a look she assembled herself. It tracks what she wears, learns from everything she does inside it, and keeps a shopping list she writes herself.
+Atelier is a private, single-user wardrobe app. Its owner photographs her clothes, the app files them into two closets (New York and Arizona), and an AI stylist builds outfits from what she actually owns: for a tap of "Style Me", for a day on the calendar, for a trip, or as an opinion on a look she assembled herself. It tracks what she wears, learns from everything she does inside it, and keeps her wish list.
 
 The register is quiet luxury on a Dark Winter palette (The Row, Totême, Khaite; Sézane and Posse on the easy, feminine side). The stylist is meant to be an exceptional one: it challenges her, names the braver version of a safe look, and holds a position when she pushes back. Her standing word for how it should behave: **preferences, never rules.**
 
@@ -56,7 +56,7 @@ The 5.5 generation thinks by default and the one lever is `effort`: every call r
 - **Coming up**: the next planned days within two weeks.
 - **Look-back**: a Month / Quarter / Year recap of the wear diary (where she went, utilisation, colour story, the pieces she leaned on with "try instead" swaps — same job, same colour, never a trouser for a jean or a blue blazer for a red one — and a three-piece challenge, both dressed for this week's weather). An on-demand "most stylish" judge (top tier, medium effort, in the background and kept per window) reads every distinct outfit of the period as itself — colour, shelf, name, brand, material — against THE STANDARD and her taste, picks the best with a sentence each that names the pieces and the move, and closes with one line on the period. Each pick is drawn as the outfit she wore (her saved arrangement, one pair of shoes) and opens that day in the Planner. The picks are kept; "↻ Judge my month again" under them runs it fresh and says how many looks she has worn since the last judging.
 - **Most worn** (one strip per room — Work with Work Dinner folded in, Casual, Dinner — garments only, in her order: shirts, blazers, pants, skirts, dresses; shoes, bags, belts and jewellery never rank), **cost per wear**, and **Back in Rotation**: pieces resting 60+ days, restricted to restyle-worthy garments, dressed for the colder of today's forecast and the month, rotated daily. Tapping a piece styles it.
-- **Your stylist's file and tools**: rows for Style Profile, Style Intelligence, Color Advisor, Visual AI, Brand Atlas and Shopping List, each with a live subtitle.
+- **Your stylist's file and tools**: rows for Style Profile, Style Intelligence, Color Advisor, Visual AI, Brand Atlas and Wish List, each with a live subtitle.
 
 ### Closet
 - **Two closets**, NYC (default) and Arizona, each with its own location and timezone for weather. A device-remembered switcher picks the active one.
@@ -124,7 +124,9 @@ Upload a garment photo for an undertone read and Dark Winter compatibility, with
 Lesser-known and international labels scouted against her real closet: her owned-brand census, palette and textures ground a web-search-backed call; brands she owns, dismissed, or found herself are excluded. Runs on tap in the background; Home shows the cached result.
 
 ### Shopping
-**Her list is the centre.** She writes entries in her own words (with optional category, colour, note, link) and checks them off. It syncs across devices, every AI surface reads it, and a closet add that answers an open entry checks it off automatically, naming the piece that answered it.
+**Her wish list is the centre** (since 2026-11-22; it replaced her separate Wishlists app). A wish carries a photo, brand, price, store, link, note, category and a ★ must-have; a wish can also be just words. The header totals the open wishes and their prices, a ★ chip filters to must-haves, and **Share** sends the open wishes (names, prices, links) through the phone's share sheet. It syncs across devices, every AI surface reads it (brand, price and must-have included), and a closet add that answers an open wish checks it off automatically, naming the piece that answered it.
+- **From Safari**: a one-time "＋ Atelier" bookmark (a bookmarklet the screen copies for her) reads the product page she is on (its schema.org Product data, else its og: tags) and opens Atelier with the Add-a-wish sheet filled in: name, brand, price, photo, link. It also copies the wish, so in the home-screen app it is one Paste. A bare product link pasted into the sheet fills the store and a name.
+- **✦ What do you think?** on any wish: Atelier's read, composed from the same persona and standard as the evaluator and chat. It is given the app's facts: what she owns like it (same category and shape, both closets) with how often she wears each, her price bands, and the product photo. It returns a verdict, a big-picture take (current and timeless, honest, no rules), the pieces she owns like it, and the pieces it would be best with. Every piece it names is checked against her closet. The read runs in the background, is kept on the wish, and can be re-run.
 
 Two idea sources **add** to the list, never replace it:
 - **From your closet's numbers** (no AI): missing core colours in anchor categories, seasonal textures the closet lacks, and pair unlocks one purchase away. Every number counts only the pieces she styles (gym, lounge, swim and metal-coloured jewellery excluded) and says the count it rests on.

@@ -436,7 +436,9 @@ test("every advisory surface imports the standard (source contract)", () => {
   // standard and the voice from standard.js and reads her grounding, but
   // judges a window of looks, not one look on a canvas — so no readLook or
   // briefs. A judge with a rubric of its own is the 2026-10-02 bug.
-  const judges = ["src/features/recap/recapAI.js"];
+  // The wish read (owner, 2026-11-22) is the same kind of surface: an
+  // opinion on one piece she might buy, from the same persona and standard.
+  const judges = ["src/features/recap/recapAI.js", "src/features/shopping/wishRead.js"];
   for (const rel of judges) {
     const src = readFileSync(join(ROOT, rel), "utf8");
     assert.match(src, /from "\.\.\/stylist\/standard\.js"/, `${rel} does not import the standard`);

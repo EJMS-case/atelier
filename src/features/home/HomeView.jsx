@@ -160,9 +160,9 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
     if (shopRunning) return "Atelier is looking for ideas — it keeps going while you do other things; they wait here.";
     const open = shoppingList.filter(e => e.status === "open");
     const bought = shoppingList.filter(e => e.status === "done" && e.boughtName).sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""))[0];
-    if (!open.length && !bought) return "The list you write and check off yourself — every stylist surface reads it, and a closet add checks it off.";
+    if (!open.length && !bought) return "Your wish list: add a piece from Safari with its photo and price, and ask Atelier what it thinks.";
     const parts = [];
-    if (open.length) parts.push(`${open.length} on your list${open.length ? ` — ${open.slice(-2).map(e => e.text).join(" · ")}` : ""}`);
+    if (open.length) parts.push(`${open.length} on your wish list — ${open.slice(-2).map(e => e.text).join(" · ")}`);
     if (bought) parts.push(`${bought.boughtName} answered "${bought.text}"`);
     return parts.join(". ") + ".";
   }, [shoppingList, shopRunning]);
@@ -421,7 +421,7 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
                   : "Lesser-known, international labels scouted live against your closet."}/>
             )}
             {onOpenShop && (
-              <ToolRow onClick={onOpenShop} icon="◇" title="Shopping List" running={shopRunning} sub={shopSub}/>
+              <ToolRow onClick={onOpenShop} icon="◇" title="Wish List" running={shopRunning} sub={shopSub}/>
             )}
           </div>
         </section>
