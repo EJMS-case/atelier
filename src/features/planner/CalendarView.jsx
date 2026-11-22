@@ -20,6 +20,7 @@ import TrimmedImage from "../../components/TrimmedImage.jsx";
 import RouteFallback from "../../components/RouteFallback.jsx";
 import { sb } from "../../lib/supabase.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
+import { earlierThisWeekIds, withoutWeekRepeats } from "./weekRepeats.js";
 import { bringNextKey, starredFor, loadBringNext } from "./bringNext.js";
 import { displacedLogRows } from "./displaced.js";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
@@ -548,7 +549,10 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   async function handleGenerateForDay(iso, occasion, label = "") {
     if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
     const wxBucket = forecast?.[iso]?.bucket || "";
-    const look = await generateTripDayLook(available, occasion, wxBucket, null, apiKey, {});
+    // Not the garments she wears earlier this week (weekRepeats.js; the
+    // grid's 42 cells always hold the whole week). Later days don't count.
+    const pool = withoutWeekRepeats(available, earlierThisWeekIds(plans, iso));
+    const look = await generateTripDayLook(pool, occasion, wxBucket, null, apiKey, {});
     if (!look) throw new Error("Couldn't generate a look — try again.");
     // Same reconcile-and-append as handleAssignSaved — never overwrite a
     // multi-outfit day with a fresh single-outfit row.

@@ -135,7 +135,9 @@ export function buildStylingPrompt({
   // closet is missing — the same three signals every advisory surface reads
   // (features/stylist/learning.js), so Style Me sees what the chat sees.
   const drawnToBlock = drawnTo ? `\n🖼️ ${drawnTo}\n` : "";
-  const shoppingListBlock = shoppingBlock ? `\n🛍️ ${shoppingBlock}\nNever place a wanted piece in a look — it is not in the inventory. A rationale may note when a look would be finished by one.\n` : "";
+  // Her wish list is NOT in this block (stylist.js strips it, 2026-11-22): a
+  // look and its rationale are about what she owns. What she just bought is.
+  const shoppingListBlock = shoppingBlock ? `\n🛍️ ${shoppingBlock}\n` : "";
   const missingBlock = lastGapsBlock ? `\n◇ ${lastGapsBlock}\n` : "";
   const stylePrefsBlock = formatStylePrefs(stylePreferences);
 

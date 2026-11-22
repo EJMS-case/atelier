@@ -42,6 +42,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getAlphaBbox, isEncodedImage, releaseCanvas, PHOTO_MAX_DIM } from "../utils/images.js";
 import { thumbSourceFor, ensureThumb, forgetThumb } from "./Thumb.jsx";
+import MissingPhoto from "./MissingPhoto.jsx";
 
 // Cropped transparent PNGs are cached as data URLs; cap their dimension so a
 // 2000px source doesn't sit in memory at full size (collage slots are ≤ ~300px).
@@ -120,6 +121,9 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
   // flips once when a remembered thumb 404s, so the piece falls back to its
   // photo for this mount and the registry forgets the thumb.
   const [thumbFailed, setThumbFailed] = useState(false);
+  // The photo itself failed too (an old host dropped it): say so in words
+  // rather than draw the browser's broken "?" (2026-11-22).
+  const [dead, setDead] = useState(false);
   const full = item ? item.image : src;
   const thumb = item && !thumbFailed ? thumbSourceFor(item) : null;
   const source = thumb || full || null;
@@ -157,8 +161,12 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
     if (url && url !== source && source) {
       if (cache.get(source)?.url === url) cache.delete(source);
       setUrl(source);
+      return;
     }
+    if (thumb && !thumbFailed) { forgetThumb(item.id); setThumbFailed(true); return; }
+    setDead(true);
   };
+  if (dead) return <MissingPhoto alt={alt} style={style}/>;
 
   // Render the original immediately as a fallback while the crop resolves —
   // keeps layout from popping in.

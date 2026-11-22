@@ -183,3 +183,28 @@ test("a read keeps only pieces she owns", () => {
   assert.deepEqual(r.pairs, [{ id: "d1", why: "the gold against black silk" }]);
   assert.equal(r.at, NOW.toISOString());
 });
+
+// ── Style Me never sees a wish she hasn't bought (owner, 2026-11-22) ─────────
+import { withoutWishes } from "../src/features/shopping/shoppingList.js";
+import { composeShoppingBlock } from "../src/features/stylist/learning.js";
+import { readFileSync } from "node:fs";
+
+test("the look-building surfaces get the shopping block without her open wishes", () => {
+  const now = new Date();
+  let list = addEntry([], { text: "Twisted Gold Side Handle Clutch", brand: "Alexis Bittar", price: 675 });
+  list = addEntry(list, { text: "black loafer" });
+  list = list.map((e, i) => i === 1 ? { ...e, status: "done", doneAt: now.toISOString(), boughtName: "Gucci Horsebit Loafer" } : e);
+  const full = composeShoppingBlock({ list, finds: [{ name: "Khaite", categories: ["Knits"] }] });
+  assert.match(full, /Twisted Gold Side Handle Clutch/);
+  const cut = withoutWishes(full);
+  assert.doesNotMatch(cut, /Twisted Gold Side Handle Clutch/, "the unbought wish is gone");
+  assert.match(cut, /Gucci Horsebit Loafer/, "what she just bought stays");
+  assert.match(cut, /Khaite/, "her brand finds stay");
+  assert.equal(withoutWishes(composeShoppingBlock({ list: [list[0]] })), "", "a block of nothing but wishes disappears");
+  // Wiring: Style Me strips it; the trip passes ask for grounding without it.
+  const root = new URL("../", import.meta.url);
+  assert.match(readFileSync(new URL("src/lib/ai/stylist.js", root), "utf8"), /withoutWishes\(fullShoppingBlock\)/);
+  for (const f of ["src/features/planner/tripStylist.js", "src/lib/ai/tripAdvisor.js"]) {
+    assert.match(readFileSync(new URL(f, root), "utf8"), /personalGrounding\(\{[^}]*wishes: false/, `${f} reads her wishes`);
+  }
+});

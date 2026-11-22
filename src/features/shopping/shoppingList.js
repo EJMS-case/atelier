@@ -24,6 +24,19 @@ import { cleanList, loadShoppingList, saveShoppingList, newId } from "./shopping
 export { SHOPPING_LIST_KEY, SOURCES, cleanList, loadShoppingList, saveShoppingList } from "./shoppingListStore.js";
 export const RECENT_BUY_DAYS = 45;
 
+// The line of the shopping block that names pieces she does NOT own yet. The
+// surfaces that BUILD a look (Style Me, a trip's looks) are handed the block
+// without it (owner, 2026-11-22: "Make sure style me doesn't include wishlist
+// items that I don't own!"): a look is what she can put on today. The
+// advisory surfaces (chat, Evaluate, the wish read) keep it, labelled as
+// pieces on her horizon. One prefix, so the cut can never miss the line.
+export const WISHES_LINE = "Pieces she is looking for (her own wish list, NOT owned yet):";
+/** A shopping block with the not-yet-owned wishes taken out; "" when nothing else is left. */
+export function withoutWishes(block) {
+  const kept = String(block || "").split("\n").filter(l => !l.startsWith(WISHES_LINE));
+  return kept.some(l => l.trim() && l.trim() !== "HER SHOPPING LIST:") ? kept.join("\n") : "";
+}
+
 /** Pure: append an entry unless an OPEN one already says the same thing. */
 export function addEntry(list, { text, category = "", color = "", note = "", url = "", source = "me", image = "", brand = "", store = "", price = null, mustHave = false } = {}, { now = new Date() } = {}) {
   const base = cleanList(list);
@@ -148,7 +161,7 @@ export function describeShoppingList(list, { max = 8, now = new Date() } = {}) {
       e.category ? `[${e.category}]` : "",
       e.mustHave ? "(a must-have for her)" : "",
     ].filter(Boolean).join(" ");
-    parts.push(`Pieces she is looking for (her own wish list): ${open.map(wish).join("; ")}. When a look would be finished by one of them, say so — it is a real option on her horizon, not a piece she owns. Never propose one of these as if it were new.`);
+    parts.push(`${WISHES_LINE} ${open.map(wish).join("; ")}. When a look would be finished by one of them, say so — it is a real option on her horizon, not a piece she owns. Never propose one of these as if it were new.`);
   }
   if (bought.length) {
     parts.push(`Just bought, from that list: ${bought.map(e => `${e.boughtName || "a piece"} (for "${e.text}")`).join("; ")} — new to the closet and worth a look that uses it.`);

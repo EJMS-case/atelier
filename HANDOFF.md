@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · Wishes out of Style Me; a week without repeats; no "?" tiles
+
+**Owner:** Style Me must not use wishes she doesn't own; a planner day must not repeat that week's earlier garments; the cardigan tile showed "?". All three are fixed (CHANGELOG).
+
+**Open, hers:** the **Black cardigan Top**'s photo is gone from its old host (Cloudinary); it needs a new photo. **54 pieces still have photos on Cloudinary** rather than in her bucket. Moving them in is a one-tap job to offer her (it rewrites `image` on 54 rows, so it is hers to approve).
+
 ### 2026-11-22 · The wish list moves in
 
 **Owner:** she wanted her Wishlists app inside Atelier: adding from Safari with the photo filled in, Mike able to see it, and honest feedback that leverages her style. The shopping list is now the wish list: photos, brand, price, ★ must-have, totals, Share, a "＋ Atelier" Safari bookmarklet, and ✦ What do you think? (CHANGELOG).

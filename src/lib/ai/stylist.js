@@ -8,6 +8,7 @@ import { SHOPPING_STYLE_PROFILE, STYLING_PRINCIPLES, strategiesFor, OCCASION_SLO
 import { STYLING_TAXONOMY, normalizeOccasion } from "../../constants/taxonomy.js";
 import { weatherAdjustedSlots } from "../../features/stylist/standard.js";
 import { learnedForStyleMe, describeDateContext } from "../../features/stylist/learning.js";
+import { withoutWishes } from "../../features/shopping/shoppingList.js";
 import { describeInspirationRead } from "../../features/inspiration/inspirationApi.js";
 import { personalGrounding } from "../../features/stylist/standard.js";
 import { COLOR_FAMILIES } from "../../constants/color.js";
@@ -253,8 +254,11 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
   // How she wears things — her standing preferences and what she has told
   // her stylist in conversation (features/stylist/learning.js). The one
   // personal signal App did not already hold in state; memoised, soft-fail.
-  const { standing: standingPreferences, lessons: chatLessons, trendBrief, builtLines: builtLooks, shoppingBlock, lastGapsBlock } =
+  const { standing: standingPreferences, lessons: chatLessons, trendBrief, builtLines: builtLooks, shoppingBlock: fullShoppingBlock, lastGapsBlock } =
     await learnedForStyleMe({ wardrobe, logs: outfitLogs }).catch(() => ({ standing: [], lessons: [], trendBrief: null, builtLines: [], shoppingBlock: "", lastGapsBlock: "" }));
+  // Style Me dresses her in what she owns: the wishes she has not bought are
+  // taken out of its block (owner, 2026-11-22). What she just bought stays.
+  const shoppingBlock = withoutWishes(fullShoppingBlock);
   // What she's drawn to, beyond today's brief: every saved inspiration the
   // per-brief block above did not already carry (App hands the rows over).
   const drawnTo = describeInspirationRead(extras.inspirations || [], { exclude: inspirationVibes });
