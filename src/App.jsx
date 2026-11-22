@@ -179,9 +179,18 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [moveBusy, setMoveBusy] = useState(false);
   const [bulkFormality, setBulkFormality] = useState("");
-  const [view,       setViewRaw]    = useState("home");
+  // A wish the "＋ Atelier" Safari bookmark sent (features/shopping/
+  // wishCapture.js) arrives as #wish=<details>: open on the wish list with
+  // the sheet filled in, and take the details out of the address bar.
+  const [pendingWish, setPendingWish] = useState(() =>
+    typeof window !== "undefined" && window.location.hash.startsWith("#wish=") ? window.location.hash : null);
+  useEffect(() => {
+    if (pendingWish) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [view,       setViewRaw]    = useState(() => pendingWish ? "shop" : "home");
   const closetScrollRef = useRef(0);
-  const viewRef = useRef("home");
+  const viewRef = useRef(pendingWish ? "shop" : "home");
   const cancelClosetRestoreRef = useRef(null);
   const setView = useCallback((v) => {
     // Save scroll position when leaving closet. Read here, in the click
@@ -2790,7 +2799,8 @@ export default function App() {
 
       {/* ── SHOPPING ── */}
       {view === "shop" && (
-        <ShoppingView items={available} wardrobe={wardrobe} logs={wearData.logs || []} apiKey={apiKey} onBack={() => setView("home")}/>
+        <ShoppingView items={available} wardrobe={wardrobe} logs={wearData.logs || []} apiKey={apiKey} onBack={() => setView("home")}
+          pendingWish={pendingWish} onPendingWishConsumed={() => setPendingWish(null)}/>
       )}
 
       {/* ── SETTINGS ── */}

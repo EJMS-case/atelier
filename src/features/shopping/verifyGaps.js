@@ -22,6 +22,16 @@ const CATEGORY_ALIASES = {
   outerwear: "Outerwear", coat: "Outerwear", jacket: "Outerwear", blazer: "Outerwear",
   belt: "Belts", belts: "Belts",
   accessory: "Accessories", accessories: "Accessories", jewelry: "Accessories", jewellery: "Accessories", scarf: "Accessories",
+  // The words a product page names (a wish's title, 2026-11-22): "Twisted
+  // Gold Side Handle Clutch", "Cassia Nodo flats", "YSL Cassandra belt".
+  clutch: "Bags", crossbody: "Bags", satchel: "Bags", hobo: "Bags", shoulder: "Bags",
+  pump: "Shoes", pumps: "Shoes", sandal: "Shoes", sandals: "Shoes", mule: "Shoes", mules: "Shoes", slingback: "Shoes", slingbacks: "Shoes", ballerina: "Shoes", ballerinas: "Shoes",
+  necklace: "Accessories", earrings: "Accessories", earring: "Accessories", bracelet: "Accessories", ring: "Accessories", sunglasses: "Accessories", watch: "Accessories",
+  trench: "Outerwear", parka: "Outerwear",
+  cardigans: "Knits", sweaters: "Knits", pullover: "Knits",
+  skirts: "Bottoms", short: "Bottoms", shorts: "Bottoms",
+  blouses: "Tops", shirts: "Tops", tank: "Tops", bodysuit: "Tops", camisole: "Tops",
+  gown: "Dresses",
 };
 
 /** Map the model's free-text category ("Bag", "Shoes > Loafers") onto the taxonomy. */

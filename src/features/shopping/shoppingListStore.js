@@ -28,9 +28,43 @@ export function cleanList(list) {
       doneAt: String(e.doneAt || ""),
       boughtId: String(e.boughtId || ""),
       boughtName: String(e.boughtName || "").slice(0, 120),
+      // Wish fields (owner, 2026-11-22: her Wishlists app, moved in). All
+      // optional; a text-only entry is still an entry.
+      image: String(e.image || "").startsWith("https://") ? String(e.image).slice(0, 800) : "",
+      brand: String(e.brand || "").trim().slice(0, 80),
+      store: String(e.store || "").trim().slice(0, 80),
+      price: cleanPrice(e.price),
+      mustHave: e.mustHave === true,
+      read: cleanRead(e.read),
     } : null)
     .filter(e => e && e.text)
     .slice(-CAP);
+}
+
+/** A price as a number of dollars (2 dp), or null. "$1,524.60" reads as 1524.6. */
+export function cleanPrice(v) {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+}
+
+// Atelier's read of a wish (wishRead.js), kept on the entry so it is paid for
+// once and reads the same on every device. Pieces are kept as ids and resolve
+// against the wardrobe when drawn.
+function cleanRead(r) {
+  if (!r || typeof r !== "object") return null;
+  const str = (v, n) => String(v ?? "").trim().slice(0, n);
+  const ids = (list, key) => (Array.isArray(list) ? list : [])
+    .filter(x => x && x.id).slice(0, 6)
+    .map(x => ({ id: String(x.id), [key]: str(x[key], 300) }));
+  const out = {
+    headline: str(r.headline, 300),
+    take: str(r.take, 1600),
+    owns: ids(r.owns, "note"),
+    pairs: ids(r.pairs, "why"),
+    at: str(r.at, 40),
+  };
+  return out.headline || out.take ? out : null;
 }
 
 function readLocal() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || "null"); } catch { return null; } }
