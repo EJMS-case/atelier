@@ -349,6 +349,20 @@ await check("Home → Most worn is split by room", async () => {
 await check("Closet grid (the closet chip)", async () => {
   await page.evaluate(() => document.querySelector('button[aria-label="Go to closet"]')?.click());
 });
+// "All" is the whole closet (owner, 2026-11-22: "I can't view my whole
+// Arizona closet under all"). It showed only the two landing shelves (two
+// weeks of adds + uncategorized), so a closet with no recent adds read as
+// empty. The fixture's rows carry no created_at — exactly her Arizona case.
+await check("Closet → All shows every piece in the closet", async () => {
+  await page.waitForTimeout(300);
+  const { label, cards } = await page.evaluate(() => ({
+    label: (document.body.innerText.match(/All pieces · (\d+)/i) || [])[1],
+    cards: document.querySelectorAll('button[aria-label="Edit"]').length,
+  }));
+  if (!label) throw new Error('"All pieces · n" did not render under All');
+  if (Number(label) === 0) throw new Error("All counts no pieces — the check proves nothing");
+  if (cards < Number(label)) throw new Error(`All shows ${cards} cards for ${label} pieces`);
+});
 await check("Closet switcher opens from the chip's arrow", async () => {
   await page.evaluate(() => document.querySelector('button[aria-label="Switch closet"]')?.click());
   await page.waitForTimeout(300);

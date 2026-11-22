@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · "All" shows the whole closet
+
+**Owner:** *"I can't view my whole Arizona closet under 'all'."* "All" showed only the landing shelves (two weeks of adds and uncategorized pieces). It now shows every piece, under *All pieces · n*, with the shelves above it (CHANGELOG).
+
+**Watch-item:** on the phone, open Arizona and tap All. The count should match the nav badge, and the grid should scroll smoothly.
+
 ### 2026-11-09 · Belts resize on the builder canvas
 
 **Owner:** *"I'm having trouble resizing my belts."* The resize floor asked both sides to clear 8%, which put a thin belt past the canvas edge and froze it. The floor now holds the longer side and the edge wins (`boxMath.js`, CHANGELOG).
