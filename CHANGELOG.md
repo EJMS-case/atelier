@@ -2,6 +2,27 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Share with Mike; Bought → closet; a look's echo; copy any piece — 2026-11-22
+
+### Why
+
+Owner: *"I'd like to share the wishlist with Mike."* · *"Can you make it an option to add a wishlist item as something I own when I select 'purchase'?"* · *"is the app ever … reminding me of previous outfits … I don't want it to change the recommendations … from over 3-4 weeks ago"* · *"I can't find the duplicate button."*
+
+### Changed
+
+- **A link Mike can open** (migration **0040, applied live**). `public.shared_wishlist(share_token)` is a security-definer function that returns the open wishes' public fields (text, brand, price, image, url, note, mustHave) only for the current token in `user_settings.wishlist_share` (24+ characters). It adds no policy and no table grant. As anon, `user_settings` is still "permission denied", a wrong token returns null, and the success path was checked in a rolled-back transaction. `features/shopping/wishShare.js` (token, link, start/stop, fetch) and `SharedWishList.jsx`, rendered by `main.jsx` instead of the app before the sign-in gate (its own 1.3 kB chunk). Share panel: *Share a link* / *Send as a message* / *Stop sharing* (blanking the token kills every sent link).
+- **✓ Bought → Add to my closet.** `BulkAddView` takes a `seed`: the store's photo is fetched and run through the same pipeline as a photo she takes, with name, brand, category and price pre-filled. A store that refuses its photo leaves the details for the first photo she adds. On save, App checks the wish off with the new piece named BEFORE `addItems`' own matcher runs, so the two never race on the list. Backing out changes nothing. *Just mark bought* is still there.
+- **↺ Echoes** (`features/stylist/lookEcho.js`): a Style Me card names the past look it most resembles. That is a saved, worn or hearted look at least 28 days old with two or more garments in common, finishing pieces not counted, and a heart breaks ties. Display only; `test:look-echo` asserts it never reaches the prompt or the sampler.
+- **Copy any piece to the other closet** from its Edit screen (two taps, hidden once a twin exists, `hasTwin` in duplicate.js). The closet card's ⧉ stays on athleisure and lounge only.
+- Cleanup: one `formatPrice` (shoppingListStore) for the list and the shared page; `main.jsx` reads the share token through `tokenFromHash`; App's unused `closetOf` import removed.
+- Tests: `test:look-echo` (3) and `test:wish-list` +2 (token, signed-out fetch). Walk steps: Bought → Add Items carries the wish and Back changes nothing; `#list=` renders read-only and a dead link says so; the Edit screen offers the copy.
+
+### Downstream
+
+- *Efficiency:* boot +4 kB (the share-token reader). The shared page and the share code are lazy. The echo is one pass over logs she already holds.
+- *Effectiveness:* a bought wish becomes a real piece with a real photo, so every surface styles it from the next tap. The echo can't change a recommendation by construction.
+- *Education:* a bought wish lands as a closet piece AND a checked-off wish naming it, the same signal a normal add gives.
+
 ## [Unreleased] — Speed: the thumbnail flood — 2026-11-22
 
 ### Why

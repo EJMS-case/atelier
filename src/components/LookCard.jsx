@@ -10,7 +10,7 @@ import SaveLookModal from "./SaveLookModal.jsx";
 // SwapItemSheet were removed; the builder already does all of it with full
 // canvas control, and App diffs the result for the A1 "learn from her edits"
 // signal.
-export default function LookCard({ look, wardrobe, onSaveLook, onRate, onStyleItem, onEditItem, onEditInBuilder }) {
+export default function LookCard({ look, wardrobe, onSaveLook, onRate, onStyleItem, onEditItem, onEditInBuilder, echo = "" }) {
   const [expanded,      setExpanded]      = useState(false);
   const [showSave,      setShowSave]      = useState(false);
   const [rated,         setRated]         = useState(0);
@@ -73,6 +73,11 @@ export default function LookCard({ look, wardrobe, onSaveLook, onRate, onStyleIt
         <div style={s.lookTeaser}>
           <span style={s.teaserDiamond}>✦</span> {look.rationale || look.styling}
         </div>
+      )}
+      {/* A past look it resembles, 4+ weeks old (features/stylist/lookEcho.js).
+          Display only: it never reached the stylist. */}
+      {echo && (
+        <div style={{ fontSize: 11, color: "var(--color-text-muted)", padding: "0 16px 10px", lineHeight: 1.45 }}>↺ {echo}</div>
       )}
 
       {expanded && (

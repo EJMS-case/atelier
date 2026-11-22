@@ -17,19 +17,21 @@ import { useRun, startRun } from "../../lib/backgroundRun.js";
 import Thumb from "../../components/Thumb.jsx";
 import { STYLING_CATEGORY_ORDER } from "../../constants/taxonomy.js";
 import { addEntry, setDone, removeEntry, updateEntry, wishTotals } from "./shoppingList.js";
+import { formatPrice } from "./shoppingListStore.js";
 import { parseWishPayload, bookmarkletFor } from "./wishCapture.js";
 import { readWish } from "./wishRead.js";
 
 const label = { fontSize: 10, letterSpacing: "0.16em", color: "var(--color-text-muted)" };
 const chip = (on) => ({ ...s.btnSecondary, fontSize: 10, padding: "4px 8px", ...(on ? { background: "var(--color-ink)", color: "var(--color-surface)", borderColor: "var(--color-ink)" } : {}) });
-const money = (n) => n == null ? "" : `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+const money = formatPrice;
 const when = (iso) => iso ? new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
 export const wishRunKey = (id) => `wish:read:${id}`;
 
 // ── One wish ─────────────────────────────────────────────────────────────────
-function WishCard({ e, list, onChange, wardrobe, apiKey }) {
+function WishCard({ e, list, onChange, wardrobe, apiKey, onAddToCloset }) {
   const run = useRun(wishRunKey(e.id));
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [bought, setBought] = useState(false);
   const [readOpen, setReadOpen] = useState(false);
   // A finished run lands on the entry, so it is kept (and paid for) once.
   useEffect(() => {
@@ -71,10 +73,19 @@ function WishCard({ e, list, onChange, wardrobe, apiKey }) {
         )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: "auto", paddingTop: 6 }}>
           {e.url && <a href={e.url} target="_blank" rel="noreferrer" style={{ ...chip(false), textDecoration: "none", color: "var(--color-ink)" }}>Open ↗</a>}
-          <button style={chip(false)} onClick={() => onChange(setDone(list, e.id, true))} aria-label={`Bought: ${e.text}`}>✓ Bought</button>
+          <button style={chip(bought)} onClick={() => onAddToCloset ? setBought(b => !b) : onChange(setDone(list, e.id, true))} aria-label={`Bought: ${e.text}`}>✓ Bought</button>
           <button style={chip(false)} onClick={() => confirmRemove ? onChange(removeEntry(list, e.id)) : setConfirmRemove(true)}
             aria-label={`Remove ${e.text}`}>{confirmRemove ? "Remove?" : "✕"}</button>
         </div>
+        {bought && (
+          <div style={{ marginTop: 6, padding: 8, background: "var(--color-bg)", borderRadius: 6, fontSize: 11, lineHeight: 1.4 }}>
+            <div style={{ marginBottom: 6 }}>Congratulations. Add it to your closet?</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button style={chip(true)} onClick={() => onAddToCloset(e)}>Add to my closet</button>
+              <button style={chip(false)} onClick={() => onChange(setDone(list, e.id, true))}>Just mark bought</button>
+            </div>
+          </div>
+        )}
         {read && !reading ? (
           <button onClick={() => setReadOpen(o => !o)} aria-expanded={readOpen}
             style={{ ...chip(readOpen), marginTop: 6, textAlign: "left", whiteSpace: "normal", lineHeight: 1.35 }}>
@@ -206,7 +217,7 @@ function SafariSetup() {
 }
 
 // ── The list ─────────────────────────────────────────────────────────────────
-export default function WishList({ list, onChange, wardrobe, apiKey, pendingWish = null, onPendingConsumed }) {
+export default function WishList({ list, onChange, wardrobe, apiKey, pendingWish = null, onPendingConsumed, onAddToCloset }) {
   const [adding, setAdding] = useState(null);       // null | initial fields
   const [mustOnly, setMustOnly] = useState(false);
   const [boughtOpen, setBoughtOpen] = useState(false);
@@ -229,29 +240,67 @@ export default function WishList({ list, onChange, wardrobe, apiKey, pendingWish
     onChange(addEntry(list, { ...f, source: "me" }));
     setAdding(null);
   };
-  // For Mike (owner: "Mike can see my wish list"): her open wishes as a
-  // message through the phone's share sheet — names, prices, links.
-  const share = async () => {
-    const lines = open.map(e => [`${e.mustHave ? "★ " : ""}${e.text}`, [e.brand, e.price != null ? money(e.price) : ""].filter(Boolean).join(", "), e.url].filter(Boolean).join(" — "));
-    const text = `My wish list\n\n${lines.join("\n")}`;
+  // For Mike (owner, 2026-11-22: "I'd like to share the wishlist with Mike").
+  // A LINK to a live, read-only page (wishShare.js, migration 0040) that
+  // stays current as she adds and buys, and that she can turn off; or the
+  // list as a one-off message. Both go out through the phone's share sheet.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const sendOut = async (payload, copied) => {
     try {
-      if (navigator.share) { await navigator.share({ title: "My wish list", text }); return; }
-      await navigator.clipboard.writeText(text);
-      setShareMsg("Copied — paste it into a message.");
+      if (navigator.share) { await navigator.share(payload); return; }
+      await navigator.clipboard.writeText(payload.url || payload.text);
+      setShareMsg(copied);
     } catch (err) {
       if (err?.name !== "AbortError") setShareMsg("Couldn't open sharing on this device.");
     }
   };
+  const shareLinkNow = async () => {
+    setShareMsg("");
+    try {
+      const { startSharing, shareLink } = await import("./wishShare.js");
+      const token = await startSharing();
+      setSharing(true);
+      await sendOut({ title: "My wish list", url: shareLink(window.location.origin, token) }, "Link copied. Paste it into a message.");
+    } catch (err) { setShareMsg(err.message || "Couldn't turn on sharing."); }
+  };
+  const shareText = () => {
+    const lines = open.map(e => [`${e.mustHave ? "★ " : ""}${e.text}`, [e.brand, e.price != null ? money(e.price) : ""].filter(Boolean).join(", "), e.url].filter(Boolean).join(" — "));
+    return sendOut({ title: "My wish list", text: `My wish list\n\n${lines.join("\n")}` }, "Copied. Paste it into a message.");
+  };
+  const stopShare = async () => {
+    const { stopSharing } = await import("./wishShare.js");
+    const ok = await stopSharing();
+    setSharing(false);
+    setShareMsg(ok ? "Sharing is off. Links you've sent no longer open the list." : "Couldn't turn sharing off. Try again.");
+  };
+  useEffect(() => {
+    if (!shareOpen) return;
+    import("./wishShare.js").then(m => m.loadShareToken()).then(t => setSharing(!!t)).catch(() => {});
+  }, [shareOpen]);
 
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
         <div style={label}>MY WISH LIST · {open.length} open{total > 0 ? ` · ${money(Math.round(total))}` : ""}</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {open.length > 0 && <button style={chip(false)} onClick={share}>Share</button>}
+          <button style={chip(shareOpen)} onClick={() => setShareOpen(o => !o)} aria-expanded={shareOpen}>Share</button>
           <button style={{ ...chip(true) }} onClick={() => setAdding({})}>+ Add wish</button>
         </div>
       </div>
+      {shareOpen && (
+        <div style={{ padding: 10, marginBottom: 10, background: "#fff", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12, lineHeight: 1.5, color: "var(--color-text-2)" }}>
+          <div style={{ marginBottom: 8 }}>
+            A link opens a read-only page of your open wishes (photo, brand, price, link and note). It stays up to date as you add and buy. No account needed, and nothing else in Atelier is visible.
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button style={chip(true)} onClick={shareLinkNow}>{sharing ? "Send the link" : "Share a link"}</button>
+            <button style={chip(false)} onClick={shareText} disabled={!open.length}>Send as a message</button>
+            {sharing && <button style={chip(false)} onClick={stopShare}>Stop sharing</button>}
+          </div>
+          {sharing && <div style={{ fontSize: 11, marginTop: 6 }}>Sharing is on.</div>}
+        </div>
+      )}
       {shareMsg && <div style={{ fontSize: 11, color: "var(--color-text-2)", marginBottom: 6 }}>{shareMsg}</div>}
       {open.some(e => e.mustHave) && (
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
@@ -265,7 +314,7 @@ export default function WishList({ list, onChange, wardrobe, apiKey, pendingWish
         </p>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-          {shown.map(e => <WishCard key={e.id} e={e} list={list} onChange={onChange} wardrobe={wardrobe} apiKey={apiKey}/>)}
+          {shown.map(e => <WishCard key={e.id} e={e} list={list} onChange={onChange} wardrobe={wardrobe} apiKey={apiKey} onAddToCloset={onAddToCloset}/>)}
         </div>
       )}
       <SafariSetup/>

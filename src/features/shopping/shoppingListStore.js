@@ -41,6 +41,13 @@ export function cleanList(list) {
     .slice(-CAP);
 }
 
+/** A price for her to read: "$675", "$1,524.60"; "" when there is none. */
+export function formatPrice(n) {
+  return typeof n === "number" && n > 0
+    ? `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`
+    : "";
+}
+
 /** A price as a number of dollars (2 dp), or null. "$1,524.60" reads as 1524.6. */
 export function cleanPrice(v) {
   if (v == null || v === "") return null;

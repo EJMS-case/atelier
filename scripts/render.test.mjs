@@ -245,6 +245,14 @@ await page.route("**/rest/v1/**", route => {
       restWrites.push({ table, row });
       return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify([row]) });
     }
+    // The shared wish list (migration 0040): the token the walk shares with.
+    if (method === "POST" && table === "rpc/shared_wishlist") {
+      const { share_token } = JSON.parse(route.request().postData() || "{}");
+      const body = share_token === "walk-share-token-0123456789abcdef"
+        ? { wishes: [{ text: "Cassia Nodo", brand: "Christian Louboutin", price: 895, image: "", url: "https://example.com/cassia", note: "Size 40", mustHave: true }] }
+        : null;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
     if (method === "POST") restWrites.push({ table, row: JSON.parse(route.request().postData() || "null") });
     return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
   }
@@ -487,6 +495,9 @@ await check("Closet → a garment's Edit screen: one stylist-line field, no Note
   const tiles = await page.evaluate(() => [...document.querySelectorAll('button[aria-label$="in the Planner"]')]
     .filter(b => b.querySelector("img")).length);
   if (tiles === 0) throw new Error("no worn-look tile draws the outfit as a collage");
+  // Any piece without a twin can be copied to the other closet from here
+  // (owner, 2026-11-22: "I can't find the duplicate button").
+  if (!/I have this in both closets: add a copy to Arizona/.test(text)) throw new Error("the Edit screen does not offer the copy to the other closet");
 });
 await check("Edit → a worn date opens that day in the Planner", async () => {
   const clicked = await page.evaluate(() => {
@@ -1360,6 +1371,43 @@ await check("Safari → #wish= opens the wish list with the sheet filled in; sav
   if (!/Alexis Bittar · \$675/.test(card)) throw new Error("the card does not show brand and price");
   if (!/What do you think\?/.test(card)) throw new Error("the card does not offer Atelier's read");
   if (!/MY WISH LIST · \d+ open · \$675/i.test(card)) throw new Error("the list header does not total the wish");
+});
+
+// ✓ Bought on a wish offers to add it to the closet (owner, 2026-11-22:
+// "make it an option to add a wishlist item as something I own when I select
+// purchase"): Add Items opens carrying the wish, and Back returns to the list.
+await check("Wish → ✓ Bought → Add to my closet opens Add Items carrying the wish", async () => {
+  await page.evaluate(() => document.querySelector('button[aria-label="Bought: Twisted Gold Side Handle Clutch"]')?.click());
+  await page.waitForTimeout(300);
+  await clickText("button", "Add to my closet");
+  await page.waitForTimeout(800);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Add Items/.test(text)) throw new Error("Add Items did not open");
+  if (!/Bought: Twisted Gold Side Handle Clutch by Alexis Bittar/.test(text)) throw new Error("Add Items does not carry the wish");
+  await clickText("button", "← Back");
+  await page.waitForTimeout(600);
+  const back = await page.evaluate(() => document.body.innerText);
+  if (!/MY WISH LIST/i.test(back)) throw new Error("Back from Add Items did not return to the wish list");
+  if (!/Twisted Gold Side Handle Clutch/.test(back)) throw new Error("backing out checked the wish off");
+});
+
+// A wish list shared with Mike (owner, 2026-11-22): #list=<token> renders a
+// read-only page INSTEAD of the app, before the sign-in gate; a token that is
+// off shows that the link is off and nothing else. Last: it leaves the app.
+await check("Shared wish list → #list= opens read-only, signed out; a dead link says so", async () => {
+  await page.goto("http://localhost:4322/#list=walk-share-token-0123456789abcdef", { waitUntil: "domcontentloaded" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  let text = await page.evaluate(() => document.body.innerText);
+  if (!/Wish list/.test(text) || !/Cassia Nodo/.test(text)) throw new Error("the shared list did not render its wish");
+  if (!/Christian Louboutin · \$895/.test(text) || !/Size 40/.test(text)) throw new Error("the shared wish lost its brand, price or note");
+  if (/Style Me|Planner|MY WISH LIST/.test(text)) throw new Error("the shared page shows the app around the list");
+  await page.goto("http://localhost:4322/#list=turned-off-token-0123456789abcdef", { waitUntil: "domcontentloaded" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  text = await page.evaluate(() => document.body.innerText);
+  if (!/turned off/.test(text)) throw new Error("a dead link does not say it is off");
+  if (/Cassia Nodo/.test(text)) throw new Error("a dead link still shows wishes");
 });
 
 await browser.close();
