@@ -1805,7 +1805,7 @@ export default function App() {
   // What the grid is showing right now — the bar's "Select all" / "Select
   // unfiled" read it, so a category chip + one tap selects a whole shelf.
   const closetFilterActive = !!(closetSearch.trim() || activeFilters.category?.length || activeFilters.subcategory?.length || activeFilters.color?.length || activeFilters.brand?.length || activeFilters.sets || activeFilters.lastWorn);
-  const shownForSelect = isSetView ? [] : closetFilterActive ? filtered : [...recentItems, ...uncategorized];
+  const shownForSelect = isSetView ? [] : filtered;
   const unfiledShown = shownForSelect.filter(it => formalityOf(it) == null);
 
   return (
@@ -2138,17 +2138,26 @@ export default function App() {
             );
           })()}
 
-          {/* Regular grid — when a category/filter is selected OR search is active */}
-          {!isSetView && (closetSearch.trim() || activeFilters.category?.length > 0 || activeFilters.subcategory?.length > 0 || activeFilters.color?.length > 0 || activeFilters.brand?.length > 0 || !!activeFilters.sets || !!activeFilters.lastWorn) && (filtered.length === 0 ? (
+          {/* The grid. "All" (no chip, no search) is the whole closet she is
+              in, under the two landing shelves — it used to show only the
+              shelves, so a closet with nothing added in two weeks read as
+              empty under "All" (owner, 2026-11-22: "I can't view my whole
+              Arizona closet under all"). */}
+          {!isSetView && (available.length > 0 || isMiscView) && (filtered.length === 0 ? (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
               <p style={s.emptyText}>No items match your filters.</p>
             </div>
-          ) : (
+          ) : (<>
+            {!closetFilterActive && !isMiscView && (
+              <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "var(--color-text-2)", marginBottom: 10, textTransform: "uppercase" }}>
+                All pieces · {availableCount.pieces}
+              </div>
+            )}
             <div style={s.grid}>
               {filtered.map(renderClosetGridItem)}
             </div>
-          ))}
+          </>))}
 
           {/* Empty closet state — a closet holding nothing but Misc items is
               not "empty" while she's standing in the holding room. */}
@@ -2172,14 +2181,7 @@ export default function App() {
                 {selectedIds.length} selected
               </span>
               {/* Whole-shelf selection: everything the grid shows, or just the
-                  pieces with no formality yet — a category chip narrows both.
-                  The landing view shows cards only for two weeks after an add,
-                  so with nothing on screen the bar says what to tap. */}
-              {shownForSelect.length === 0 && (
-                <span style={{ fontSize:12, color:"var(--color-text-muted)" }}>
-                  Tap a category chip above, or search, to pick a shelf.
-                </span>
-              )}
+                  pieces with no formality yet — a category chip narrows both. */}
               {shownForSelect.length > 0 && (
                 <button style={{...s.chip, padding:"6px 10px"}}
                   onClick={() => setSelectedIds(shownForSelect.map(it => it.id))}>

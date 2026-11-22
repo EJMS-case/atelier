@@ -2,6 +2,23 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — "All" shows the whole closet — 2026-11-22
+
+### Why
+
+Owner: *"I can't view my whole Arizona closet under 'all'."* The "All" chip cleared the category filter and fell back to the landing view, which shows only two shelves: pieces added in the last two weeks, and pieces with no category. A closet with no recent adds (Arizona) showed almost nothing under "All". NYC had the same problem; it only looked fuller because of recent adds.
+
+### Changed
+
+- **Under "All", the closet grid shows every piece in the closet she is in**, under an *All pieces · n* heading (`countCloset().pieces`, the same count as the nav badge). The *Recently Added* and *Needs Categorizing* shelves stay above it.
+- **Select mode's *Select all* / *Select unfiled* read the whole grid under "All"** (`shownForSelect` is now always `filtered`), so the "tap a category chip first" hint is gone.
+- **Walk step**: *Closet → All shows every piece in the closet*. It is red on the old code and green on the fix.
+
+### Downstream
+
+- *Efficiency / speed:* `filtered` was already computed for the full closet. The grid tiles are `<Thumb>` (256px, `loading="lazy"`), so a ~460-card grid fetches only what scrolls into view. No new call.
+- *Effectiveness / education:* display only. No AI path changes.
+
 ## [Unreleased] — Two looks on one day keep their own occasions — 2026-11-12
 
 ### Why
