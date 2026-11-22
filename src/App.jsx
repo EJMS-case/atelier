@@ -24,12 +24,12 @@ import {
   loadActiveClosetId, saveActiveClosetId, loadClosets, saveClosets,
   migrateLocalStorage,
 } from "./utils/storage.js";
-import { DEFAULT_CLOSET_ID, SEED_CLOSETS, closetOf } from "./features/closet/closets.js";
+import { DEFAULT_CLOSET_ID, SEED_CLOSETS } from "./features/closet/closets.js";
 import { warmThumbnails, pruneThumbnails } from "./utils/thumbnail-cache.js";
 import { runWhenIdle } from "./utils/idle.js";
 import { compareSetsByName, compareSetsByType, setMembers } from "./features/closet/setType.js";
 import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem, poolIncluding } from "./features/closet/useVisibleWardrobe.js";
-import { duplicatedSourceIds, canOfferDuplicate, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
+import { duplicatedSourceIds, canOfferDuplicate, hasTwin, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
 import { sb, wearWriteCount } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import { fetchClosetForecast } from "./lib/weather.js";
@@ -74,6 +74,7 @@ import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf, sc
 import { tagsFor } from "./lib/multitag.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 import { dueToStart } from "./features/planner/tripStatus.js";
+import { lookEcho, echoLine } from "./features/stylist/lookEcho.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
@@ -182,6 +183,8 @@ export default function App() {
   // A wish the "＋ Atelier" Safari bookmark sent (features/shopping/
   // wishCapture.js) arrives as #wish=<details>: open on the wish list with
   // the sheet filled in, and take the details out of the address bar.
+  // A wish she bought, on its way into Add Items (WishList → BulkAddView).
+  const [addSeed, setAddSeed] = useState(null);
   const [pendingWish, setPendingWish] = useState(() =>
     typeof window !== "undefined" && window.location.hash.startsWith("#wish=") ? window.location.hash : null);
   useEffect(() => {
@@ -1223,6 +1226,13 @@ export default function App() {
     () => new Set(favorites.filter(f => f.type === "piece").map(f => f.reference_id)),
     [favorites],
   );
+  // For a Style Me card's "Echoes your … look" line (lookEcho.js): hearted
+  // looks, and the wardrobe by id.
+  const heartedLookIds = useMemo(
+    () => new Set(favorites.filter(f => f.type === "outfit").map(f => f.reference_id)),
+    [favorites],
+  );
+  const wardrobeById = useMemo(() => new Map(wardrobe.map(it => [it.id, it])), [wardrobe]);
 
   // Landing-view sections, memoized: these ran inside the render JSX on every
   // App state tick (sync flash, weather chips, Style Me streaming), filtering
@@ -2276,7 +2286,21 @@ export default function App() {
 
       {/* ── ADD ── */}
       {view === "add" && (
-        <BulkAddView onAdd={addItems} onBack={() => setView("closet")} rmbgKey={rmbgKey} apiKey={apiKey}/>
+        <BulkAddView key={addSeed?.wishId || "add"} seed={addSeed} rmbgKey={rmbgKey} apiKey={apiKey}
+          onBack={() => { const back = addSeed ? "shop" : "closet"; setAddSeed(null); setView(back); }}
+          onAdd={async (newItems) => {
+            // A bought wish: check it off with the new piece named BEFORE the
+            // add's own list matcher runs, so the two never race on the list.
+            const wishId = addSeed?.wishId;
+            if (wishId && newItems[0]) {
+              try {
+                const { loadShoppingList, saveShoppingList, setDone } = await import("./features/shopping/shoppingList.js");
+                const list = await loadShoppingList();
+                await saveShoppingList(setDone(list, wishId, true, { bought: newItems[0] }));
+              } catch { /* the add itself must not fail on the list */ }
+            }
+            return addItems(newItems);
+          }}/>
       )}
 
       {/* ── INSPIRATION ── */}
@@ -2301,6 +2325,8 @@ export default function App() {
           onDelete={() => { deleteItem(editItem.id); setView(editReturnView || "closet"); }}
           onBack={() => setView(editReturnView || "closet")}
           onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}
+          onDuplicate={!hasTwin(editItem, duplicatedIds) && duplicateTargetCloset(editItem, closets.length ? closets : SEED_CLOSETS) ? duplicateItem : undefined}
+          duplicateHint={duplicateTargetCloset(editItem, closets.length ? closets : SEED_CLOSETS)?.name || ""}
           onOpenDay={(iso) => { setPlannerFocusDay(iso); setView("planner"); }}
           onOpenLook={(id) => { setSavedFocusLook(id); setView("favorites"); }}/>
       )}
@@ -2481,6 +2507,7 @@ export default function App() {
           )}
           {outfits && outfits.map((look, i) => (
             <LookCard key={look._uid || `${i}:${(look.items || []).map(it => (typeof it === "object" ? it.id : it)).join(",")}`} look={look} wardrobe={wardrobe}
+              echo={echoLine(lookEcho((look.items || []).map(it => (typeof it === "object" ? it.id : it)), wearData.logs, { byId: wardrobeById, hearted: heartedLookIds }))}
               onEditItem={handleEditItemCard}
               onEditInBuilder={(lk) => {
                 const ids = (lk.items || []).map(it => typeof it === "object" ? it.id : it);
@@ -2815,7 +2842,11 @@ export default function App() {
       {/* ── SHOPPING ── */}
       {view === "shop" && (
         <ShoppingView items={available} wardrobe={wardrobe} logs={wearData.logs || []} apiKey={apiKey} onBack={() => setView("home")}
-          pendingWish={pendingWish} onPendingWishConsumed={() => setPendingWish(null)}/>
+          pendingWish={pendingWish} onPendingWishConsumed={() => setPendingWish(null)}
+          onAddWishToCloset={(w) => {
+            setAddSeed({ wishId: w.id, name: w.text, brand: w.brand, price: w.price, category: w.category, image: w.image });
+            setView("add");
+          }}/>
       )}
 
       {/* ── SETTINGS ── */}

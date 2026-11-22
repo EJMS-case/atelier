@@ -29,11 +29,14 @@ export function duplicatedSourceIds(items) {
 // Should this card show the ⧉ button? Category-gated, and hidden on both
 // sides of an existing twin pair.
 export function canOfferDuplicate(item, duplicatedIds) {
-  return (
-    DUPLICATABLE_CATEGORIES.has(item.category) &&
-    !item.duplicate_of &&
-    !duplicatedIds.has(item.id)
-  );
+  return DUPLICATABLE_CATEGORIES.has(item.category) && !hasTwin(item, duplicatedIds);
+}
+
+// Either side of a twin pair. The Edit screen offers "I have this in both
+// closets" for ANY piece without one (owner, 2026-11-22: "I can't find the
+// duplicate button"); the closet card keeps the narrow set above.
+export function hasTwin(item, duplicatedIds) {
+  return !!item?.duplicate_of || !!duplicatedIds?.has(item?.id);
 }
 
 // Where the twin goes: the closet the item is NOT in. With today's two

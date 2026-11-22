@@ -190,7 +190,7 @@ function DroppedList({ dropped }) {
   );
 }
 
-export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, onBack, pendingWish = null, onPendingWishConsumed }) {
+export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, onBack, pendingWish = null, onPendingWishConsumed, onAddWishToCloset }) {
   const [mode, setMode] = useState("gap");
   const [selectedIds, setSelectedIds] = useState([]);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -276,7 +276,8 @@ export default function ShoppingView({ items, wardrobe = [], logs = [], apiKey, 
         <>
           <div style={s.advisorNote}>Your wish list, in your words. Style Me, the stylist chat, Evaluate and trips all read it, ✦ asks Atelier what it thinks of a piece, and a piece you add to the closet that answers a wish checks it off. Below it, two sources of ideas you can add or ignore: what the numbers say about the pieces you style, and what Atelier would look for.</div>
           <WishList list={list} onChange={updateList} wardrobe={owned} apiKey={apiKey}
-            pendingWish={listLoaded ? pendingWish : null} onPendingConsumed={onPendingWishConsumed}/>
+            pendingWish={listLoaded ? pendingWish : null} onPendingConsumed={onPendingWishConsumed}
+            onAddToCloset={onAddWishToCloset}/>
           <NumbersCard items={owned} list={list} onAdd={addToList}/>
           <BrandFindsCard finds={finds} onChange={updateFinds}/>
         </>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { s } from "../ui/styles.js";
 import { CURATED_NOTES_MAX, FORMALITY_SCALE, formalityOf } from "../utils/item-helpers.js";
 import { stripBackground } from "../lib/bgRemoval.js";
@@ -31,14 +31,56 @@ async function withPipelineSlot(fn) {
   }
 }
 
-export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
+export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey, seed = null }) {
   const [queue,      setQueue]      = useState([]);
   const [saving,     setSaving]     = useState(false);
   const [processing, setProcessing] = useState({}); // id -> "bg"|"detect"|"done"|"error"
   const [knitSuggest, setKnitSuggest] = useState({}); // id -> { weight, fit, summary } | "loading" | "dismissed"
+  // A wish she bought (owner, 2026-11-22: "make it an option to add a
+  // wishlist item as something I own when I select purchase"): its details
+  // fill the row, and the store's photo goes through the same pipeline as a
+  // photo she takes (background removal, auto-detect). A store that refuses
+  // the photo leaves the details waiting for the first photo she adds.
+  const [seedFields, setSeedFields] = useState(() => seed ? {
+    name: seed.name || "", brand: seed.brand || "", price_paid: seed.price ?? null,
+    ...(seed.category ? { category: seed.category } : {}),
+  } : null);
+  const [seedNote, setSeedNote] = useState(seed ? "Fetching the photo from the store…" : "");
+  useEffect(() => {
+    if (!seed) return;
+    let live = true;
+    (async () => {
+      try {
+        if (!seed.image) throw new Error("no photo");
+        const res = await fetch(seed.image, { referrerPolicy: "no-referrer" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (!blob.size || !String(blob.type).startsWith("image/")) throw new Error("not an image");
+        if (!live) return;
+        queueFile(blob, seedFields);
+        setSeedFields(null);
+        setSeedNote("");
+      } catch {
+        if (live) setSeedNote("The store didn't share its photo. Add a photo of it below and the details carry over.");
+      }
+    })();
+    return () => { live = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFiles = (e) => {
     Array.from(e.target.files).forEach(file => {
+      // The first photo after a wish whose store photo couldn't be fetched
+      // takes the wish's details.
+      const fields = seedFields;
+      if (fields) { setSeedFields(null); setSeedNote(""); }
+      queueFile(file, fields);
+    });
+    e.target.value = "";
+  };
+
+  function queueFile(file, fields = null) {
+    {
       const id = `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       // Row appears immediately with every field editable; the thumbnail
       // fills in when the downscale lands. The full-res photo never enters
@@ -53,6 +95,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         category: "Tops", subcategory: "", brand: "", color: "", stylist_line: "",
         material: "", pattern: "", price_paid: null, formality: null, has_bg: false,
         detected_at: null, detection_confidence: null,
+        ...(fields || {}),
       }]);
       setProcessing(p => ({...p, [id]: "bg"}));
 
@@ -113,9 +156,8 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
           setProcessing(p => ({...p, [id]: "error"}));
         }
       });
-    });
-    e.target.value = "";
-  };
+    }
+  }
 
   // Run knit classification when category changes to "Knits"
   const handleCategoryChange = async (id, cat, imgStr) => {
@@ -177,6 +219,13 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey }) {
         <h2 style={s.pageTitle}>Add Items</h2>
         {queue.length > 0 && <span style={s.queueBadge}>{queue.length}</span>}
       </div>
+
+      {seed && (
+        <div style={{...s.rmbgNotice, background:"#FFF8EC", borderColor:"#E8D5A0", color:"#5C4A1F"}}>
+          ✓ Bought: <b>{seed.name}</b>{seed.brand ? ` by ${seed.brand}` : ""}. Saving it here adds it to your closet and checks it off your wish list.
+          {seedNote && <div style={{ marginTop: 4 }}>{seedNote}</div>}
+        </div>
+      )}
 
       {/* Upload pipeline notice */}
       {apiKey && rmbgKey && (

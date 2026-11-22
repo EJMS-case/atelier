@@ -208,3 +208,27 @@ test("the look-building surfaces get the shopping block without her open wishes"
     assert.match(readFileSync(new URL(f, root), "utf8"), /personalGrounding\(\{[^}]*wishes: false/, `${f} reads her wishes`);
   }
 });
+
+// ── The link for Mike (owner, 2026-11-22) ────────────────────────────────────
+import { newShareToken, shareLink, tokenFromHash, fetchSharedWishes } from "../src/features/shopping/wishShare.js";
+
+test("a share token is long, random and round-trips through the link", () => {
+  const a = newShareToken(), b = newShareToken();
+  assert.ok(a.length >= 24 && /^[A-Za-z0-9_-]+$/.test(a), "url-safe and long enough for the database's check");
+  assert.notEqual(a, b);
+  const link = shareLink("https://atelier.example/", a);
+  assert.equal(link, `https://atelier.example/#list=${a}`);
+  assert.equal(tokenFromHash(new URL(link).hash), a);
+  assert.equal(tokenFromHash("#wish=abc"), "");
+});
+
+test("the shared page asks the one database function, signed out, and reads an off link as null", async () => {
+  const calls = [];
+  const fake = (body) => async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => body }; };
+  const wishes = await fetchSharedWishes("tok", { fetchImpl: fake({ wishes: [{ text: "Cassia Nodo" }] }) });
+  assert.deepEqual(wishes, [{ text: "Cassia Nodo" }]);
+  assert.match(calls[0].url, /\/rest\/v1\/rpc\/shared_wishlist$/);
+  assert.equal(JSON.parse(calls[0].init.body).share_token, "tok");
+  assert.match(calls[0].init.headers.Authorization, /^Bearer ey/, "the anon key, never a signed-in session");
+  assert.equal(await fetchSharedWishes("tok", { fetchImpl: fake(null) }), null);
+});

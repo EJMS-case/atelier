@@ -7,13 +7,27 @@ import AuthGate from './components/AuthGate.jsx'
 // Static: ErrorBoundary already brings it into the boot chunk, so a dynamic
 // import here split nothing (and Vite warned about it on every build).
 import { logAiError } from './lib/ai/logError.js'
+// The one reader of a share link's token (supabase.js is already in boot).
+import { tokenFromHash } from './features/shopping/wishShare.js'
+
+// A wish list she shared (#list=<token>, features/shopping/wishShare.js) is
+// a read-only page for someone with no account: it renders INSTEAD of the app,
+// before the sign-in gate, and loads only its own small chunk.
+const SharedWishList = React.lazy(() => import('./features/shopping/SharedWishList.jsx'))
+const sharedToken = tokenFromHash(window.location.hash)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <AuthGate>
-        <App />
-      </AuthGate>
+      {sharedToken ? (
+        <React.Suspense fallback={null}>
+          <SharedWishList token={sharedToken} />
+        </React.Suspense>
+      ) : (
+        <AuthGate>
+          <App />
+        </AuthGate>
+      )}
     </ErrorBoundary>
   </React.StrictMode>
 )

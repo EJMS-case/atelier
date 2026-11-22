@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · Share with Mike; Bought → closet; echoes; copy any piece
+
+**Owner:** share the wish list with Mike; *purchase* should add the piece to the closet; remind her of past looks (4+ weeks old) without changing recommendations; she couldn't find duplicate. All four are done (CHANGELOG). **Migration 0040 is applied live** (a token-checked `shared_wishlist` function, no policy change); the next migration is **0041**.
+
+**Watch-items:** (1) Share → Share a link, open it on another phone: Mike sees the open wishes only. Stop sharing, and the link should say it's off. (2) ✓ Bought → Add to my closet on a wish with a store photo: Add Items should open with the photo cut out. (3) On Style Me, a "↺ Echoes your … look" line should appear only for looks a month or more old.
+
 ### 2026-11-22 · Speed: the thumbnail flood
 
 **Owner:** "extremely slow to load since being on this trip." The cause was a thumbnail flood (about 188 MB an hour) that drained the storage origin's database pool and stalled the boot reads. Fixed: a gentle boot warm that finishes, lazy and capped tile loads, a retry before a rebuild, and deduped planner and weather fetches (CHANGELOG). The audit's harness is in the session scratchpad (`speed/measure2.mjs`); rerun it for any image or boot change.
