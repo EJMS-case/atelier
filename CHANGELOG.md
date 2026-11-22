@@ -2,6 +2,32 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Speed: the thumbnail flood — 2026-11-22
+
+### Why
+
+Owner: *"The app has been extremely slow to load since being on this trip."* The audit (live Supabase logs plus a throttled harness at live volumes) found that the data had barely grown and the boot path itself is fast: Home paints in 0.46 s warm and 3.9 s cold at 1.6 Mbps. The slowness was a **thumbnail flood**. Her phone made 4,113 thumb GETs for 582 distinct thumbs in one hour (~188 MB), in bursts of ~500. On a cold open that ran the storage origin's database pool dry (156 × 544, PostgREST timeouts), and every boot REST read waited 15–25 s behind it.
+
+### Changed
+
+- **The boot warm** (`App.jsx`) started 4 s after boot, walked both closets three at a time, and was cancelled by every wardrobe change, so it never finished and every boot started over. It now waits 20 s, warms only the closet she is in, one image at a time, and runs to the end. It reads the latest list from a ref and is cancelled only on unmount, and the prune reads the whole wardrobe.
+- **`TrimmedImage`**:
+  - Loads only when the tile is within 400 px of the screen (IntersectionObserver).
+  - Loads at most 6 images at once, app-wide.
+  - Draws an empty box, not the original, while the crop resolves; the non-CORS original was a second download of the same bytes.
+  - Its cache is bounded by pixels, not by 150 entries, so the whole closet's tiles fit and a reopened picker no longer re-downloads.
+  - A failed thumb is retried once before it is forgotten.
+  - Measured on the trip picker: images on the page fell from 660 to 126, and requests from 152 for 117 objects to 114 for 114, all CORS.
+- **`Thumb`** retries a failed thumb once (2.5 s) before forgetting it. Under load the origin answers 544 for thumbs it holds, and forgetting triggered a photo download plus a thumb re-upload.
+- **The planner's `loadMonth`** dedupes by range. A resume fires both `focus` and `visibilitychange`, and her logs showed the same plans + trips pair three times at once on every resume.
+- **Weather**: `fetchForecastAt` dedupes in-flight requests per place (App and Home both asked at boot).
+
+### Downstream
+
+- *Speed:* the boot competes with nothing for its first 20 s. A picker costs what she scrolls past. A busy minute no longer turns into rebuilds.
+- *Efficiency:* tens of MB less per session on her phone, and the storage origin no longer exhausts its pool.
+- *Not done, noted for later:* WebP thumbs (iOS Safari cannot encode WebP from a canvas), trimming the `wardrobe_items` / plans columns at boot, and a timeout on the service worker's network-first navigation.
+
 ## [Unreleased] — Wishes stay out of Style Me; a week without repeats; no more "?" tiles — 2026-11-22
 
 ### Why

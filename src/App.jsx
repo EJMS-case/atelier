@@ -966,23 +966,38 @@ export default function App() {
   // network only for photos this device has never thumbed. Warming the closet
   // she is standing in first, then the other room, a few seconds after the
   // grid has settled, means even the FIRST tap after a reload draws sheets
-  // from disk instead of pulling 200–336 photos on the tap. Once per mount;
-  // low concurrency so it never competes with the grid's own images.
+  // from disk instead of pulling 200–336 photos on the tap.
+  //
+  // Speed audit, 2026-11-22 ("extremely slow to load since being on this
+  // trip"): the old warm started 4 s after boot, walked BOTH closets three at
+  // a time, and its cleanup cancelled it on every wardrobe change, so it never
+  // finished. Every boot started over: 378 thumbs (19.5 MB) in the first 35 s,
+  // competing with the boot's own REST reads. Now it waits 20 s, warms only
+  // the closet she is in, one image at a time, and runs to the end (it reads
+  // the latest list from a ref and stops only when App unmounts), so a device
+  // that has warmed once skips it.
   const thumbWarmRan = useRef(false);
+  const warmListRef = useRef([]);
+  warmListRef.current = available;
+  const wardrobeRef = useRef([]);
+  wardrobeRef.current = wardrobe;
+  const warmHandleRef = useRef({ timer: null, handle: null });
   useEffect(() => {
-    if (thumbWarmRan.current || !wardrobe.length) return undefined;
+    if (thumbWarmRan.current || !available.length) return;
     thumbWarmRan.current = true;
-    const activeId = activeCloset.id;
-    const ordered = [...wardrobe].sort((a, b) => (closetOf(a) === activeId ? 0 : 1) - (closetOf(b) === activeId ? 0 : 1));
-    let handle = null;
-    const t = setTimeout(() => {
-      handle = warmThumbnails(ordered, { concurrency: 3 });
+    warmHandleRef.current.timer = setTimeout(() => {
+      const handle = warmThumbnails(warmListRef.current, { concurrency: 1 });
+      warmHandleRef.current.handle = handle;
       // Once warm, drop records for photos that no longer exist (replaced or
-      // deleted pieces leave a ~4 kB orphan each). Same idle slot, no UI cost.
-      handle.done?.then(() => pruneThumbnails(ordered)).catch(() => {});
-    }, 4000);
-    return () => { clearTimeout(t); handle?.cancel?.(); };
-  }, [wardrobe, activeCloset.id]);
+      // deleted pieces leave a ~4 kB orphan each). Pruned against the whole
+      // wardrobe, so the other closet's records are kept.
+      handle.done?.then(() => pruneThumbnails(wardrobeRef.current)).catch(() => {});
+    }, 20000);
+  }, [available.length]);
+  useEffect(() => () => {
+    clearTimeout(warmHandleRef.current.timer);
+    warmHandleRef.current.handle?.cancel?.();
+  }, []);
 
   // Force-sync ALL items currently in React state to Supabase — used after bulk upload failures
   // Reads from live state (has base64 images), uploads them, saves URLs back

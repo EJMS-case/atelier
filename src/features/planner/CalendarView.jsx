@@ -267,12 +267,25 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
   // of a month she is not looking at (the visible month's own pull reports).
   // Resolves to the rows it merged (the ‹ › probe reads them before the
   // store has re-rendered); null on failure.
+  // One request per range at a time: returning to the app fires both
+  // `focus` and `visibilitychange`, and her logs showed the same plans +
+  // trips pair three times at once on every resume (speed audit, 2026-11-22).
+  const monthInflightRef = useRef(new Map());
   const loadMonth = async (monthStart, { quiet = false, soft = false } = {}) => {
+    const grid = monthGridDays(monthStart);
+    const startIso = isoDate(grid[0]);
+    const endIso = isoDate(grid[grid.length - 1]);
+    const rangeKey = `${startIso}|${endIso}`;
+    const pending = monthInflightRef.current.get(rangeKey);
+    if (pending) return pending;
+    const run = loadMonthRange(monthStart, startIso, endIso, { quiet, soft });
+    monthInflightRef.current.set(rangeKey, run);
+    run.finally(() => monthInflightRef.current.delete(rangeKey));
+    return run;
+  };
+  const loadMonthRange = async (monthStart, startIso, endIso, { quiet, soft }) => {
     if (!quiet) setRefreshing(true);
     try {
-      const grid = monthGridDays(monthStart);
-      const startIso = isoDate(grid[0]);
-      const endIso = isoDate(grid[grid.length - 1]);
       const [rows, tripRows] = await Promise.all([
         fetchPlansBetween(startIso, endIso),
         fetchTripsBetween(startIso, endIso).catch(() => null),

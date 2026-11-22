@@ -134,6 +134,7 @@ export default function Thumb({ item, alt, style }) {
   // rather than start the full photo it is about to replace.
   const [src, setSrc] = useState(() => (hasThumb(item) ? thumbUrl(id, item?.image) : (seeding ? null : item?.image)));
   const [dead, setDead] = useState(false);
+  const [retried, setRetried] = useState(false);
 
   useEffect(() => {
     if (!item?.image) { setSrc(null); return; }
@@ -158,7 +159,7 @@ export default function Thumb({ item, alt, style }) {
   if (dead) return <MissingPhoto alt={alt} style={style}/>;
   return (
     <img
-      src={src || (seeding ? undefined : item?.image)}
+      src={src === "" ? undefined : (src || (seeding ? undefined : item?.image))}
       alt={alt}
       loading="lazy"
       decoding="async"
@@ -166,6 +167,16 @@ export default function Thumb({ item, alt, style }) {
       onError={() => {
         // A remembered thumb is missing (e.g. cleared on the server) — drop the
         // memory, fall back to the full image, and allow a rebuild.
+        // Once more first: under load the origin answers 544 for a thumb it
+        // holds, and forgetting it then re-downloads the photo and re-uploads
+        // the thumb (speed audit, 2026-11-22).
+        if (id && src && src !== item?.image && !retried) {
+          setRetried(true);
+          const again = src;
+          setSrc("");   // "" = waiting to retry: draw nothing, not the full photo
+          setTimeout(() => setSrc(again), 2500);
+          return;
+        }
         if (id && src && src !== item?.image) {
           known.delete(id); serverAt?.delete(id); persist();
           attempted.delete(id);

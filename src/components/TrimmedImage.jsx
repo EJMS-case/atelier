@@ -51,18 +51,44 @@ import MissingPhoto from "./MissingPhoto.jsx";
 // now keeps). MAX_CACHE drops in step so total cached pixels stay flat:
 // 300 × 720² ≈ 155M px before, 150 × 1000² = 150M px now.
 const MAX_DIM = PHOTO_MAX_DIM;
-const MAX_CACHE = 150;
+// Bounded by PIXELS, not entries (2026-11-22 speed audit). A count of 150 was
+// sized for 1000px photos, but most entries are 256px thumbs: a 583-piece
+// wardrobe overflowed it, so reopening a trip picker re-downloaded the same
+// ~500 thumbs every time. 150M px is the old budget; a thumb costs 1/15 of a
+// photo, so the cache now holds the whole closet's tiles.
+const PX_BUDGET = 150 * 1000 * 1000;
 const cache = new Map();     // src -> { url, nw, nh }
 const inflight = new Map();  // src -> Promise<{ url, nw, nh }>
+let cachedPx = 0;
+const pxOf = (v) => Math.max(1, (v?.nw || 0) * (v?.nh || 0));
 
 function put(src, val) {
-  // FIFO bound so a long session browsing a large closet can't grow unbounded.
-  if (cache.size >= MAX_CACHE) {
+  // Oldest first, until the new entry fits the pixel budget.
+  while (cache.size && cachedPx + pxOf(val) > PX_BUDGET) {
     const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
+    cachedPx -= pxOf(cache.get(oldest));
+    cache.delete(oldest);
   }
   cache.set(src, val);
+  cachedPx += pxOf(val);
   return val;
+}
+
+// At most SIX image loads at once, app-wide (speed audit, 2026-11-22). A trip
+// picker mounted 660 tiles, and new Image() ignores loading="lazy", so all of
+// them fetched at once: 21 MB in 9 s, the phone's link full for 40 s, and on a
+// cold open the storage origin's database pool ran dry (544s), which stalled
+// every REST read behind it.
+const MAX_LOADS = 6;
+let loading = 0;
+const waiting = [];
+function withSlot(start) {
+  if (loading < MAX_LOADS) { loading++; start(); } else waiting.push(start);
+}
+function freeSlot() {
+  loading = Math.max(0, loading - 1);
+  const next = waiting.shift();
+  if (next) { loading++; next(); }
 }
 
 function loadTrimmed(src) {
@@ -105,12 +131,13 @@ function loadTrimmed(src) {
       } catch { url = src; nw = img.naturalWidth; nh = img.naturalHeight; /* tainted canvas — render original */ }
       const val = put(src, { url, nw, nh });
       inflight.delete(src);
+      freeSlot();
       resolve(val);
     };
     // Not cached: a dropped connection on the phone would otherwise leave the
     // piece broken until the app reloads.
-    img.onerror = () => { inflight.delete(src); resolve({ url: src, nw: 0, nh: 0 }); };
-    img.src = src;
+    img.onerror = () => { inflight.delete(src); freeSlot(); resolve({ url: src, nw: 0, nh: 0 }); };
+    withSlot(() => { img.src = src; });
   });
   inflight.set(src, p);
   return p;
@@ -121,6 +148,10 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
   // flips once when a remembered thumb 404s, so the piece falls back to its
   // photo for this mount and the registry forgets the thumb.
   const [thumbFailed, setThumbFailed] = useState(false);
+  // Nothing loads until the tile is near the screen: a picker of 583 pieces
+  // fetches the rows she scrolls to, not the closet (speed audit, 2026-11-22).
+  const imgRef = useRef(null);
+  const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
   // The photo itself failed too (an old host dropped it): say so in words
   // rather than draw the browser's broken "?" (2026-11-22).
   const [dead, setDead] = useState(false);
@@ -130,6 +161,16 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
   // Seed from cache synchronously so a re-mount of an already-trimmed image
   // paints immediately with no flash and no recompute.
   const [url, setUrl] = useState(() => (source ? cache.get(source)?.url || null : null));
+  useEffect(() => {
+    if (near || url) return undefined;
+    const el = imgRef.current;
+    if (!el) return undefined;
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) { setNear(true); io.disconnect(); }
+    }, { rootMargin: "400px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near, url]);
   // Keep onLoad in a ref so a caller passing an inline arrow (e.g. the builder's
   // fitBoxToImage) doesn't retrigger the decode effect on every render.
   const onLoadRef = useRef(onLoad);
@@ -137,24 +178,32 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
 
   useEffect(() => {
     if (!source) { setUrl(null); return; }
+    const hit = cache.get(source);
+    if (!near && !hit) return undefined;
     // A tile whose piece has no thumb yet: paint the photo now, build the
     // thumb in the background so the next mount is cheap (Thumb.jsx's queue).
     if (item && !thumb) ensureThumb(item);
     let cancelled = false;
-    loadTrimmed(source).then(val => {
+    let retry = null;
+    const settle = (val, attempt) => {
       if (cancelled) return;
       if (thumb && val.nw === 0) {
-        // The remembered thumb is gone from the server — fall back to the
-        // photo and let the registry rebuild it.
+        // A thumb that failed once is most often a busy origin (a 544 under
+        // load), not a missing thumb: try once more before forgetting it,
+        // or every busy minute re-downloads photos and re-uploads thumbs the
+        // server already holds (speed audit, 2026-11-22).
+        if (attempt === 0) { retry = setTimeout(() => loadTrimmed(source).then(v => settle(v, 1)), 2500); return; }
         forgetThumb(item.id);
         setThumbFailed(true);
         return;
       }
       setUrl(val.url);
       onLoadRef.current?.({ naturalWidth: val.nw, naturalHeight: val.nh });
-    });
-    return () => { cancelled = true; };
-  }, [source]);
+    };
+    loadTrimmed(source).then(val => settle(val, 0));
+    return () => { cancelled = true; clearTimeout(retry); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, near]);
 
   // The trimmed copy failed to paint: forget it and draw the photo itself.
   const onError = () => {
@@ -168,11 +217,17 @@ export default function TrimmedImage({ src, item, alt, style, onLoad }) {
   };
   if (dead) return <MissingPhoto alt={alt} style={style}/>;
 
-  // Render the original immediately as a fallback while the crop resolves —
-  // keeps layout from popping in.
+  // Until the crop resolves the tile holds its box empty: drawing the original
+  // meanwhile was a SECOND request for the same bytes (an <img> without CORS
+  // does not share the crossOrigin load's cache entry on iOS), so every tile
+  // cost two downloads.
+  // An <img> with no src draws its alt text or a broken frame on some
+  // browsers, so the empty box is a plain span of the same size.
+  if (!url) return <span ref={imgRef} role="img" aria-label={alt} style={{ display: "block", ...style }}/>;
   return (
     <img
-      src={url || source}
+      ref={imgRef}
+      src={url}
       alt={alt}
       style={style}
       loading="lazy"
