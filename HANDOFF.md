@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · Edit picks adds pieces; a pick stays put
+
+**Owner:** in Arizona, "Edit picks" could only remove pieces, and each pick jumped the list. The sheet now offers every piece she could carry, read from the wardrobe (`pinPoolFor`), and a tap never reorders the grid (CHANGELOG).
+
+**Watch-item:** in Arizona, open the trip, tap Edit picks, search, and pin a NYC piece. The piece should stay where it is, and the list shouldn't move.
+
 ### 2026-11-22 · A trip you're on that never started says so
 
 **Owner:** she wanted the pieces she brought to show up while building in Arizona. Her Arizona trip (Nov 21–26) was still `planning`, so its 21 pins were out of the pool. Home now leads with a "your trip started" card that opens the trip, and the trip screen says the same beside Start trip (CHANGELOG).

@@ -24,7 +24,7 @@ import MustIncludePicker from "./MustIncludePicker.jsx";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
-import { homeClosetFor, poolForTripDay, defaultTripDayOccasion, destinationClosetFor } from "./tripPools.js";
+import { homeClosetFor, poolForTripDay, defaultTripDayOccasion, destinationClosetFor, pinPoolFor } from "./tripPools.js";
 import { OCCASIONS, normalizeOccasion, PACKING_ORDER } from "../../constants/taxonomy.js";
 import { PALETTE_STRONG } from "../../constants/palette.js";
 
@@ -781,15 +781,13 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     [wardrobe, mustIncludeIds],
   );
 
-  // Pieces the pin sheet may offer: "bringing for sure" means CARRYING it, so
-  // anything already at the destination is excluded — it needs no packing
-  // decision. Already-pinned pieces stay listed regardless so they can be
-  // un-pinned. Mirrors TripModal's pinPool.
-  const pinPool = useMemo(() => {
-    if (!destClosetId) return tripPool;
-    return tripPool.filter(it => closetOf(it) !== destClosetId || mustIncludeIds.has(it.id));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripPool, destClosetId, mustIncludeIds]);
+  // Pieces the pin sheet may offer: what she could carry, from the WARDROBE
+  // (tripPools pinPoolFor). Built from the active closet, it was empty in
+  // Arizona except for what was already pinned (owner, 2026-11-22).
+  const pinPool = useMemo(
+    () => pinPoolFor({ wardrobe, destClosetId, homeClosetId, pinnedIds: [...mustIncludeIds] }),
+    [wardrobe, destClosetId, homeClosetId, mustIncludeIds],
+  );
 
   // Persist a pin change to trips.must_include_ids. Optimistic: the local set
   // drives generation immediately and a failed write only costs the persisted
