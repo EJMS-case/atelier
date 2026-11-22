@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Completions follow the season; every photo in her storage; duplicate removed — 2026-11-22
+
+### Why
+
+Owner: *"I'd rather the style me completion step be pulling from live trends and styles than hard rules. Is that possible"* · *"Move all photos that could go missing into storage asap. Why would that happen? That should not happen."* · *"Remove the code to duplicate entirely. I'll just ask you to do it manually … Make sure nothing that's been duplicated is removed"* · *"Duplicate the 525 black Winona cardigan."*
+
+### Changed
+
+- **A completion that chooses a piece chooses what reads now.** `utils/hemShoes.js` gains `trendWordsFor`, `trendPieceScore`, `trendShoeWords`/`trendShoeScore` and `LAYER_LINE`. The bootie swap and the office layer read the researched trend brief's shoe or layer lines, and the piece that carries the most of their words wins. The old fixed orders are only the fallback when the brief is silent, and the weather gate stays fixed. The live 11-07 brief ("a sleek knee boot or low-heeled pointed pump in chocolate or black") makes a mild day's swap the Wally knee boot rather than a pump. The brief reaches Style Me (`trendText` through `generateValidatedLooks`), the whole-trip pass and a trip day's look (`loadTrendBrief`). The packer keeps the fallback order, since the trip pass replaces its drafts. `test:hem-shoes` +1.
+- **Every photo is in her storage (live data).** 53 `wardrobe_items` photos loaded from Cloudinary: the closet was imported from another app, and its photos stayed on that app's image account, so they would vanish whenever the account lapsed or pruned them. One already had (the "?" cardigan). A one-off, secret-locked edge function (`photo-rescue`, now retired and answering 410) fetched each one, and all 53 came back 200 as PNGs. It wrote them to `wardrobe-images/<id>` with the 1-year cache header, verified (53/53, smallest 21 kB). The rows now point at the bucket copies with fresh `?v=` stamps. The old URLs are in `supabase/backfills/2026-11-22-cloudinary-photos.json`. All 584 closet photos and 6 inspiration photos are now on her host. `npm run doctor` §0 flags any photo on another host.
+- **Duplicate removed from the app**: the closet card's ⧉, the Edit screen button, `App.duplicateItem`, `features/closet/duplicate.js`, `sb.copyImage` and `test:duplicate`. **No data touched:** every existing twin and its `duplicate_of` link stays. The walk now fails if a duplicate button reappears.
+- **The black Winona Button Crew Cardigan (525 America) was duplicated into Arizona** by hand, the way the app did it. Its photo was copied to its own storage object first (888 kB, cache header kept). The new row `0a6a2d38-4fd5-4b0d-bd51-1a57ad9e1f1e` copies every field, with `duplicate_of` → `1774888715539_197071`, the Arizona closet, and wear history zeroed. It is the same piece as the old "Black cardigan Top", which she had already re-photographed and renamed.
+
+### Downstream
+
+- *Effectiveness:* completions now track the season automatically each time the brief refreshes. Photos can no longer disappear with someone else's account.
+- *Efficiency / speed:* one small settings read for a trip day's look; nothing on the Style Me tap path, since the brief is already loaded. One fewer feature in the closet grid.
+- *Education:* unchanged.
+
 ## [Unreleased] — Only what she owns; no booties under a hem; an evaluator that reads the whole look — 2026-11-22
 
 ### Why

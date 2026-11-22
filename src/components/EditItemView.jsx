@@ -9,8 +9,7 @@ import { stripBackground } from "../lib/bgRemoval.js";
 import { imageToBase64, trimTransparentBorders, compressImage, PHOTO_MAX_DIM } from "../utils/images.js";
 import ItemWearHistory from "./ItemWearHistory.jsx";
 
-export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans, onOpenDay, onOpenLook, onDuplicate, duplicateHint = "" }) {
-  const [dupState, setDupState] = useState("idle");   // idle → confirm → busy → done
+export default function EditItemView({ item, wardrobe, closets, onSave, onDelete, onBack, setsMeta: setsMetaProp, rmbgKey, onStyleAround, onSaveSetMeta, logs, plans, onOpenDay, onOpenLook }) {
   const [form, setForm] = useState({
     name: item.name, category: item.category, subcategory: item.subcategory || "",
     brand: item.brand || "", color: capitalizeWords(item.color || ""), notes: item.notes || "",
@@ -422,7 +421,7 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
             // piece in THIS garment's closet (form.closet_id, so changing the
             // Closet select re-scopes the list live). Owner report 2026-08-28:
             // editing in Arizona listed every NYC set. A cross-closet twin
-            // (duplicate.js copies set_id) makes its set show in both closets,
+            // (a duplicated row keeps its set_id) makes its set show in both closets,
             // which is exactly right. The item's own set always stays listed.
             //
             // The COUNT is per-closet (owner report 2026-08-28): a split set
@@ -540,27 +539,6 @@ export default function EditItemView({ item, wardrobe, closets, onSave, onDelete
         <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}
           onClick={() => onStyleAround(item)}>
           ✦ Style around this piece
-        </button>
-      )}
-
-      {/* Any piece she owns twice (owner, 2026-11-22: "I can't find the
-          duplicate button"). The closet card offers ⧉ only on athleisure and
-          lounge, the pieces she buys in twos; this is the way for everything
-          else. Two taps, like delete: a stray tap must never mint a row in a
-          closet she isn't looking at. Hidden once a twin exists. */}
-      {onDuplicate && !isMisc && (
-        <button style={{...s.btnSecondary, width:"100%", marginBottom: 10, opacity: dupState === "busy" ? 0.6 : 1}}
-          disabled={dupState === "busy" || dupState === "done"}
-          onClick={async () => {
-            if (dupState === "idle") { setDupState("confirm"); return; }
-            if (dupState !== "confirm") return;
-            setDupState("busy");
-            try { await onDuplicate(item); setDupState("done"); } catch { setDupState("idle"); }
-          }}>
-          {dupState === "done" ? `✓ A copy is in ${duplicateHint}`
-            : dupState === "busy" ? "Copying…"
-            : dupState === "confirm" ? `Tap again to add a copy to ${duplicateHint}`
-            : `⧉ I have this in both closets: add a copy to ${duplicateHint}`}
         </button>
       )}
 

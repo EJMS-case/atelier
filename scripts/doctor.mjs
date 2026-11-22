@@ -70,7 +70,7 @@ async function load() {
     };
   }
   const [wardrobe, trips, plans] = await Promise.all([
-    get("wardrobe_items?select=id,name,category,subcategory,closet_id,set_id,duplicate_of"),
+    get("wardrobe_items?select=id,name,category,subcategory,closet_id,set_id,duplicate_of,image"),
     get("trips?select=id,destination,status,start_date,end_date,destination_closet_id,must_include_ids"),
     get("planned_outfits?select=date,items,outfits,occasion,occasions"),
   ]);
@@ -90,6 +90,18 @@ async function main() {
     process.exit(2);
   }
   console.log(`   ${wardrobe.length} garments · ${trips.length} trips · ${plans.length} planned days\n`);
+
+  // ── 0. Every photo lives in her own bucket (2026-11-22) ────────────────────
+  // 53 photos still loaded from the Cloudinary account of the app the closet
+  // was imported from; one had already vanished ("Why isn't the cardigan
+  // loading?"). They were moved into the bucket. A photo on any other host
+  // can disappear the day that host's account lapses.
+  const outside = wardrobe.filter(w => w.image && /^https?:\/\//.test(w.image) && !w.image.includes("/storage/v1/object/public/wardrobe-images/"));
+  if (outside.length) {
+    note("error", `${outside.length} photo(s) load from outside her own storage`,
+      outside.slice(0, 10).map(w => `${w.name} → ${w.image.split("/")[2]}`).join(", "),
+      "Copy each into wardrobe-images/<id> and point the row at it (see supabase/backfills/2026-11-22-cloudinary-photos.json for how it was done).");
+  }
 
   // ── 1. The active trip ─────────────────────────────────────────────────────
   const active = trips.find(t => t.status === "active");

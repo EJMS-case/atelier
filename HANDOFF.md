@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 (later) · Completions follow the season; photos home; duplicate removed
+
+**Owner:** completions should pull from live trends; move every at-risk photo into storage ("That should not happen"); remove duplicate and do it by hand; duplicate the black Winona. All done (CHANGELOG). 53 photos moved off the import app's Cloudinary account (live rows updated; old URLs in `supabase/backfills/`). The `photo-rescue` edge function is retired (it answers 410); there is no delete tool, so remove it from the dashboard if you want it gone entirely. The Winona twin is in Arizona with its own photo.
+
+**How to duplicate by hand now:** copy the storage object to a new id (a service-role storage copy), then insert the row from `to_jsonb(source)` with a new id, the other closet, the new image URL with a `?v=` stamp, `duplicate_of` = source, `created_at` now, `wear_count` 0 and `last_worn` null.
+
 ### 2026-11-22 (late) · Only what she owns; no booties under a hem; a holistic evaluator
 
 **Owner:** nothing outside the wish list may suggest an unowned piece; Evaluate should read the look against the moment, not list faults; Style Me must inspire, and "MAKE SURE booties never get shown with skirts." Done (CHANGELOG): `wishes` now defaults to false; unresolved Evaluate moves are dropped; `utils/hemShoes.js` runs in all four builders; the standard, the Style Me brief and EVAL_TASK are updated.
