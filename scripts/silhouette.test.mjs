@@ -37,7 +37,7 @@ const has = (lines, re) => lines.some(l => re.test(l));
   assert(!has(lines, /height:/), "petite height is consumed, not re-passed raw");
   // The one other line a petite frame carries: how a boot meets a hem
   // (owner, 2026-11-02). It rides after her own words so the cap drops it first.
-  assert(lines.length === 2 && has(lines, /bootie into tights/), "petite adds the hem-and-boot line, and nothing else");
+  assert(lines.length === 2 && has(lines, /never a bootie/), "petite adds the hem-and-boot line, and nothing else");
 }
 
 // ── Tall / neutral heights ───────────────────────────────────────────────────

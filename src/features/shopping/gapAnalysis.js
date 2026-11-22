@@ -47,7 +47,7 @@ export async function runShoppingAnalysis({ wardrobe = [], available = [], apiKe
   // brief — plus the shopping-only facts: what she pays, who she buys from,
   // the rooms she wears, and the verdicts that rule pieces OUT.
   const [{ blocks: learned }, verdicts] = await Promise.all([
-    personalGrounding({ wardrobe, available, fingerprintMax: 800, maxAutoPairs: 3 }).catch(() => ({ blocks: [] })),
+    personalGrounding({ wardrobe, available, fingerprintMax: 800, maxAutoPairs: 3, wishes: true }).catch(() => ({ blocks: [] })),
     loadVerdicts().catch(() => []),
   ]);
   const blocks = [

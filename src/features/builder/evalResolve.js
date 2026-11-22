@@ -39,12 +39,16 @@ export function resolveMovePiece(list, words) {
  */
 export function resolveEvalMoves(evaluation, { canvas = [], available = [] } = {}) {
   const inPieces = (m) => resolveMovePiece(available, { name: m.in, color: m.inColor, brand: m.inBrand });
+  // A move whose IN piece is not one she owns is dropped, never shown greyed
+  // out (owner, 2026-11-22: "make sure … evaluator … does NOT include or
+  // suggest anything I do not own"). The prompt already says closet-only;
+  // this is the check behind it.
   const swaps = (evaluation?.swaps || []).map(m => ({
     ...m,
     outPieces: m.out ? resolveMovePiece(canvas, { name: m.out }) : [],
     inPieces: inPieces(m),
-  }));
-  const adds = (evaluation?.adds || []).map(m => ({ ...m, inPieces: inPieces(m) }));
+  })).filter(m => m.inPieces.length > 0);
+  const adds = (evaluation?.adds || []).map(m => ({ ...m, inPieces: inPieces(m) })).filter(m => m.inPieces.length > 0);
   return { swaps, adds };
 }
 

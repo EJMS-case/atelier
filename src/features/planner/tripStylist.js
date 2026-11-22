@@ -30,6 +30,7 @@ import { MODEL_TOP, MODEL_STRONG } from "../../constants/models.js";
 import { eligibleForTripDay, ACTIVITY_NOTES, allowsSwim } from "../../lib/ai/tripAdvisor.js";
 import { formalityOf, promptNotes, NOTES_NEGATION_LEGEND } from "../../utils/item-helpers.js";
 import { outfitCoverageGaps } from "./outfits.js";
+import { fixBootiesUnderHems } from "../../utils/hemShoes.js";
 // The inventory lists in closet order (taxonomy's one order).
 import { categoryRank as catRank } from "../../constants/taxonomy.js";
 
@@ -54,7 +55,7 @@ export function tripLookSlots(days = [], pins = null) {
       const fit = eligibleForTripDay(pool, occasion, d.weather, { allowSwim: allowsSwim(d.activity), mustInclude: pins })
         .filter(it => it.category !== "Swim" || pins?.has(it.id));
       for (const it of fit) byId.set(it.id, it);
-      looks.push({ dayIdx, part, occasion, eligible: new Set(fit.map(it => it.id)) });
+      looks.push({ dayIdx, part, occasion, weather: d.weather || "", eligible: new Set(fit.map(it => it.id)) });
     }
   });
   const inventory = [...byId.values()].sort((a, b) =>
@@ -182,6 +183,9 @@ export function acceptTripStyle(input, { looks, itemOf, dayCount }) {
       // One pair of shoes on a body.
       const shoes = items.filter(it => it.category === "Shoes");
       if (shoes.length > 1) items = items.filter(it => it.category !== "Shoes" || it === shoes[0]);
+      // No bootie under a hem (utils/hemShoes.js): the swap comes from this
+      // look's own eligible pieces.
+      items = fixBootiesUnderHems(items, [...itemOf.values()].filter(it => l.eligible.has(it.id)), { weather: l.weather || "" });
       if (items.length && outfitCoverageGaps(items).length === 0) out[dayIdx][part === "day" ? "look" : "evening"] = items;
     }
   }

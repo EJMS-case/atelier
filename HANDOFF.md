@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 (late) · Only what she owns; no booties under a hem; a holistic evaluator
+
+**Owner:** nothing outside the wish list may suggest an unowned piece; Evaluate should read the look against the moment, not list faults; Style Me must inspire, and "MAKE SURE booties never get shown with skirts." Done (CHANGELOG): `wishes` now defaults to false; unresolved Evaluate moves are dropped; `utils/hemShoes.js` runs in all four builders; the standard, the Style Me brief and EVAL_TASK are updated.
+
+**Watch-items:** a Cool/Cold Style Me request with a skirt should show a knee boot or a pump, never the Hendrix/Marrgo booties. Evaluate's headline should open with the look's point of view.
+
 ### 2026-11-22 · Share with Mike; Bought → closet; echoes; copy any piece
 
 **Owner:** share the wish list with Mike; *purchase* should add the piece to the closet; remind her of past looks (4+ weeks old) without changing recommendations; she couldn't find duplicate. All four are done (CHANGELOG). **Migration 0040 is applied live** (a token-checked `shared_wishlist` function, no policy change); the next migration is **0041**.
@@ -18,7 +24,7 @@ it through.
 
 ### 2026-11-22 · Speed: the thumbnail flood
 
-**Owner:** "extremely slow to load since being on this trip." The cause was a thumbnail flood (about 188 MB an hour) that drained the storage origin's database pool and stalled the boot reads. Fixed: a gentle boot warm that finishes, lazy and capped tile loads, a retry before a rebuild, and deduped planner and weather fetches (CHANGELOG). The audit's harness is in the session scratchpad (`speed/measure2.mjs`); rerun it for any image or boot change.
+**Owner:** "extremely slow to load since being on this trip." The cause was a thumbnail flood (about 188 MB an hour) that drained the storage origin's database pool and stalled the boot reads. Fixed: a gentle boot warm that finishes, lazy and capped tile loads, a retry before a rebuild, and deduped planner and weather fetches (CHANGELOG). The audit's harness (a throttled Playwright run of `dist/` at live volumes) lived in that session's scratchpad and is not committed; rebuild it for the next image or boot change.
 
 **Watch-item:** a cold open on her phone should paint Home in a few seconds. Then check the Supabase edge logs: thumb GETs per hour should be in the hundreds, not thousands.
 

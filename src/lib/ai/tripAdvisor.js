@@ -16,6 +16,7 @@ import { isGarment, categoryRank } from "../../constants/taxonomy.js";
 import { personalGrounding, occasionBrief } from "../../features/stylist/standard.js";
 import { STANDARD_LINES } from "../../features/stylist/standardLines.js";
 import { inTheRoom } from "../../features/planner/roomKeepOuts.js";
+import { fixBootiesUnderHems } from "../../utils/hemShoes.js";
 
 // ── Destination brief ─────────────────────────────────────────────────────────
 
@@ -400,9 +401,11 @@ Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:
     const raw = input.looks[0];
     // Resolve item IDs back to item objects
     const byId = new Map(items.map(w => [w.id, w]));
-    const resolvedItems = (raw.items || [])
+    // No bootie under a hem (utils/hemShoes.js): the swap comes from the
+    // pieces this day was eligible for.
+    const resolvedItems = fixBootiesUnderHems((raw.items || [])
       .map(it => byId.get(typeof it === "object" ? it.id : String(it).replace(/^ID:/i, "").trim()))
-      .filter(Boolean);
+      .filter(Boolean), eligible, { weather });
 
     if (resolvedItems.length < 2) return null;
 

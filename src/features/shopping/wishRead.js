@@ -159,7 +159,7 @@ export function resolveWishRead(input, wardrobe, { now = new Date() } = {}) {
 /** The run behind "What do you think?" — startRun(`wish:read:<id>`, () => readWish(...)). */
 export async function readWish({ wish, wardrobe = [], apiKey, signal } = {}) {
   if (!apiKey) throw new Error("Add your Anthropic API key in Settings.");
-  const { blocks: personal } = await personalGrounding({ wardrobe, available: wardrobe, fingerprintMax: 800, maxAutoPairs: 2 })
+  const { blocks: personal } = await personalGrounding({ wardrobe, available: wardrobe, fingerprintMax: 800, maxAutoPairs: 2, wishes: true })
     .catch(() => ({ blocks: [] }));
   const { system, user } = composeWishMessages({ wish, wardrobe, personal });
   const content = (withImage) => withImage && wish?.image

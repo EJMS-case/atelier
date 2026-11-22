@@ -51,6 +51,9 @@ export const STANDING_PREFERENCES = [
   "Clean, dark, well-fit jeans are fine for Work; ripped, distressed, or shorts are not.",
   "In cool and cold weather a blazer under a coat or jacket is a move you wear — one blazer, one coat.",
   "Skirts and dresses are winter-viable with tights: opaque for daytime cold, sheer for evening.",
+  // Owner, 2026-11-22: "MAKE SURE booties never get shown with skirts." Held
+  // in every builder by completion (utils/hemShoes.js); this line is the why.
+  "Booties (ankle boots) never go with a skirt or a dress: the break at the ankle shortens your leg. Under a hem you wear a knee or over-the-knee boot, a pump or slingback, or a flat.",
   "No heels on a Travel Day — Lounge and Athleisure lead there.",
   "A color story carries real color; an all-neutral pairing isn't a story.",
   "You'd rather be challenged than flattered: a safe look should be called safe, and the braver version named.",

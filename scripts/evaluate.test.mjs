@@ -116,11 +116,16 @@ test("a swap resolves its OUT piece on the canvas and its IN piece among twins b
   assert.deepEqual(adds[1].inPieces.map(p => p.id), ["p5"], "a name alone lands when it is unique");
 });
 
-test("a name shared by twins with no colour given keeps both, for her to pick; an unknown name resolves to nothing", () => {
+test("a name shared by twins with no colour given keeps both, for her to pick; a piece she doesn't own is dropped", () => {
   const { swaps } = resolveEvalMoves({ swaps: [{ out: "Margot Jeans", in: "Wide-leg Pants", inColor: "", inBrand: "", why: "" }] }, { canvas: CANVAS, available: POOL });
   assert.deepEqual(swaps[0].inPieces.map(p => p.id).sort(), ["p1", "p2"]);
-  const { adds } = resolveEvalMoves({ adds: [{ in: "Cashmere Hoodie", inColor: "Grey", inBrand: "", why: "" }] }, { canvas: CANVAS, available: POOL });
-  assert.deepEqual(adds[0].inPieces, []);
+  // Owner, 2026-11-22: the evaluator never suggests anything she doesn't own.
+  const { adds, swaps: s2 } = resolveEvalMoves({
+    adds: [{ in: "Cashmere Hoodie", inColor: "Grey", inBrand: "", why: "" }],
+    swaps: [{ out: "Margot Jeans", in: "Gold Minaudière", why: "" }],
+  }, { canvas: CANVAS, available: POOL });
+  assert.deepEqual(adds, []);
+  assert.deepEqual(s2, []);
 });
 
 test("the card's label names the piece, then what tells it apart, without repeating the name", () => {

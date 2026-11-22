@@ -14,6 +14,7 @@ import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryIt
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
+import { fixBootiesUnderHems } from "./hemShoes.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
@@ -1379,6 +1380,50 @@ export function completeOfficeCoverage(parsed, idMap, allItems, ctx = {}) {
   return addedAny ? { ...parsed, looks } : null;
 }
 
+// ── No booties under a hem (owner, 2026-11-22) ───────────────────────────────
+// "MAKE SURE booties never get shown with skirts." Held like the office layer:
+// by completion on every look about to ship (streamed or final), never by
+// refusing the look. The swap itself is utils/hemShoes.js, the one reader the
+// packer and the trip looks use too; here it only translates W-ids. The
+// replacement is drawn from this request's inventory, vetted per item against
+// the weather / exclusion / occasion context, preferring a shoe no other look
+// in the answer wears. Returns null when nothing changed.
+export function completeHemShoes(parsed, idMap, allItems, ctx = {}) {
+  const { activeExclusions = [], occasionSlots = {}, weather = "", forceIncludeIds = [], usedShortIds: externalUsed = null } = ctx;
+  if (!parsed?.looks?.length) return null;
+  const byId = itemIdIndex(allItems);
+  const shortOf = new Map();
+  const pool = [];
+  for (const [shortId, realId] of Object.entries(idMap)) {
+    const item = byId.get(String(realId));
+    if (!item || item.category !== "Shoes") continue;
+    if (itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions, occasionSlots, forceIncludeIds })) continue;
+    shortOf.set(item.id, shortId);
+    pool.push(item);
+  }
+  const usedElsewhere = new Set(externalUsed ? [...externalUsed] : []);
+  parsed.looks.forEach(l => (l.items || []).forEach(it => usedElsewhere.add(cleanLookItemId(it))));
+  const avoidIds = new Set(pool.filter(s => usedElsewhere.has(shortOf.get(s.id))).map(s => s.id));
+  let changed = false;
+  const looks = parsed.looks.map(look => {
+    if (!Array.isArray(look.items)) return look;
+    const resolved = resolveLookItems(look, idMap, allItems);
+    const fixed = fixBootiesUnderHems(resolved, pool, { weather, avoidIds });
+    if (fixed === resolved) return look;
+    const keep = new Set(fixed.map(it => it.id));
+    const items = look.items.filter(li => {
+      const it = resolveLookItem(li, idMap, allItems);
+      return !it || keep.has(it.id);
+    });
+    for (const it of fixed) {
+      if (!resolved.some(r => r.id === it.id) && shortOf.has(it.id)) items.push({ id: shortOf.get(it.id), role: "supporting" });
+    }
+    changed = true;
+    return { ...look, items };
+  });
+  return changed ? { ...parsed, looks } : null;
+}
+
 // ── Normalize response ───────────────────────────────────────────────────────
 // Handle both old format (items as string[]) and new format (items as {id, role}[])
 
@@ -1648,10 +1693,14 @@ async function runValidatedLooks({
       console.warn("[Atelier Validator] Office-coverage completion — added a layer over a short-sleeve/sleeveless top at the office.");
       logAiError("stylist_outfit:office_layer", { occasion, weather }, "added the office layer to a look that lacked it");
     }
+    // No bootie under a skirt or dress (completeHemShoes): after the layer,
+    // so it reads the look she will actually see.
+    const hemmed = completeHemShoes(completed || p, idMap, allItems, completionCtx);
+    if (hemmed) logAiError("stylist_outfit:hem_shoe", { occasion, weather }, "swapped a bootie under a hem for a shoe that keeps the leg long");
     // #231 shipped this line as `finish(...)` — the helper calling itself —
     // so every generation that PASSED validation died in a stack overflow
     // after its looks had streamed. resolveIds is what it always meant.
-    return resolveIds(completed || p, idMap, occasion);
+    return resolveIds(hemmed || completed || p, idMap, occasion);
   };
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1819,7 +1868,8 @@ async function runValidatedLooks({
                 // A streamed look survives to the screen, so the office layer
                 // has to be added HERE, before she sees it — the final pass
                 // makes the same deterministic choice, so the two agree.
-                const toShow = completeOfficeCoverage(candidate, idMap, allItems, { ...completionCtx, usedShortIds: streamedIds }) || candidate;
+                const layered = completeOfficeCoverage(candidate, idMap, allItems, { ...completionCtx, usedShortIds: streamedIds }) || candidate;
+                const toShow = completeHemShoes(layered, idMap, allItems, { ...completionCtx, usedShortIds: streamedIds }) || layered;
                 const newIds = (toShow.looks[0]?.items || []).map(cleanLookItemId);
                 const resolved = resolveIds(toShow, idMap, occasion);
                 newIds.forEach(id => streamedIds.add(id)); // short IDs for cross-look dupe check

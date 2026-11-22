@@ -3,11 +3,13 @@
 // think the gap analysis is particularly useful. Think it might be better to
 // keep it as an area I write and check off etc myself."
 //
-// What makes a hand-written list useful in THIS app is that everything reads
-// it and one thing writes back to it:
-//   · every AI surface reads it through personalGrounding() (a look that
-//     would be finished by a piece on her list says so; Style Me never
-//     places one; Complete-a-Look shops for it first);
+// What makes a hand-written list useful in THIS app is that the shopping
+// surfaces read it and one thing writes back to it:
+//   · the SHOPPING surfaces read it through personalGrounding({ wishes: true })
+//     — the ideas run, Complete-a-Look (shops for it first), the wish read,
+//     Brand Atlas. Every surface that builds or judges a look (Style Me,
+//     trips, the chat, Evaluate) never sees an unbought wish (owner,
+//     2026-11-22); what she just bought reaches them all;
 //   · a closet add that answers an open entry checks it off, with the piece
 //     named as the evidence (answerList — category + colour family + form,
 //     the same read verifyGaps makes when it drops an owned piece);
