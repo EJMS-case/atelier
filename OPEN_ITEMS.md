@@ -27,12 +27,11 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 
 1. **The trend brief claims research it did not do.** The live `trend_brief` (season Oct) is flagged `web: true`, but its sources read "unavailable … search was down and nothing was verified." Evaluate's *current* score, Style Me and the chat all read it as researched. Fix it so a refresh that got no search results stores `web: false` and retries soon, rather than waiting 35 days. Then refresh it. The automatic refresh is otherwise about 2026-11-09.
 2. **Read the Style Me timing rows before any speed work.** There are 441 `stylist_outfit:timing` rows (09-11 → 10-23), and no session has analysed them. They decide between stabilising the inventory order (prompt-cache hits) and cutting output tokens. Also worth reading: on 10-21 one stream sat about 10 minutes (`totalMs` 622 081) before the idle watchdog gave up. Most likely the phone suspended the app mid-call.
-3. **Refresh `ATELIER_STATE.md`.** It still says "as of 2026-09-18". Bring it to #276 and drop its stale §9.
-4. **The deferred refactors (from the 08-07 audit, still open):**
+3. **The deferred refactors (from the 08-07 audit, still open):**
    - Role classifiers: `getGarmentRole` (validator), `slotForItem` (item-helpers) and the collage's own reader still disagree at the edges, for example Occasionwear non-dresses. Unify on `slotForItem` with visual checks.
    - The hosiery force-include trap: "style me with my sheer tights", if paired with trousers, could empty a look. It needs a repro first, and must be fixed together with the force-include fix.
-5. **Backlog ideas, none started:** normalise the mixed L2/L3 subcategory labels; About Me as chips plus a `prefs.direction` editor; "what changed" in the fingerprint text; shopping favourites.
-6. **Unverified:** eight pieces moved to Arizona took sixteen July NYC looks out of "Wearable now". Check whether any came home before calling it a problem.
+4. **Backlog ideas, none started:** normalise the mixed L2/L3 subcategory labels; About Me as chips plus a `prefs.direction` editor; "what changed" in the fingerprint text; shopping favourites.
+5. **Unverified:** eight pieces moved to Arizona took sixteen July NYC looks out of "Wearable now". Check whether any came home before calling it a problem.
 
 ## 3. Watch on your phone (confirms recent fixes, nothing to build)
 
