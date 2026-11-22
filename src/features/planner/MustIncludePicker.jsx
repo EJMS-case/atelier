@@ -29,6 +29,10 @@ export default function MustIncludePicker({
   preferItemIds = null,
   weather = null,
   destClosetName = "",
+  // ★ Bring next time (bringNext.js): pieces she starred on a past trip to
+  // this place. They lead the grid after what is already pinned, and one tap
+  // pins them all. A star never pins anything on its own.
+  starredIds = null,
 }) {
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState("All");
@@ -41,6 +45,12 @@ export default function MustIncludePicker({
   // jumped on each tap (owner, 2026-11-22: "when I add them, I don't want the
   // list to scroll up to the top").
   const pinnedAtOpen = useRef(selected).current;
+  const starred = starredIds instanceof Set ? starredIds : new Set(starredIds || []);
+  // Starring happens on the trip's packing list, not here, so the set only
+  // changes when it loads; key the sort on its contents, not its identity.
+  const starredKey = [...starred].sort().join(",");
+  const itemIds = useMemo(() => new Set((items || []).map(it => it.id)), [items]);
+  const starredToPin = [...starred].filter(id => itemIds.has(id) && !selected.has(id));
 
   // Pieces the trip's climate would normally rule out. Shown, not hidden — the
   // badge is the whole explanation for why a wool coat can be pinned to a
@@ -75,10 +85,11 @@ export default function MustIncludePicker({
         // visible without hunting for it through a 300-item closet. A tap
         // never reorders the grid (pinnedAtOpen).
         (pinnedAtOpen.has(b.id) ? 1 : 0) - (pinnedAtOpen.has(a.id) ? 1 : 0) ||
+        (starred.has(b.id) ? 1 : 0) - (starred.has(a.id) ? 1 : 0) ||
         catRank(a.category) - catRank(b.category) ||
         (a.name || "").localeCompare(b.name || ""));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, query, cat, sub]);
+  }, [items, query, cat, sub, starredKey]);
 
   const toggle = (id) => {
     const next = new Set(selected);
@@ -136,6 +147,11 @@ export default function MustIncludePicker({
         )}
         </div>
 
+        {starredToPin.length > 0 && (
+          <button onClick={() => onChange(new Set([...selected, ...starredToPin]))} style={starAllBtn}>
+            ★ Pin all {starredToPin.length} you starred for next time
+          </button>
+        )}
         {/* Always takes its line, so the first pin doesn't push the grid down. */}
         <button onClick={() => onChange(new Set())} disabled={selected.size === 0}
           style={{ ...clearBtn, visibility: selected.size > 0 ? "visible" : "hidden" }}>
@@ -170,6 +186,9 @@ export default function MustIncludePicker({
                     <div style={{ ...badge, color: PALETTE.soft }}>
                       {destClosetName ? `In ${destClosetName}` : "At destination"}
                     </div>
+                  )}
+                  {starred.has(it.id) && (
+                    <div style={{ ...badge, color: PALETTE.accent }}>★ Bring next time</div>
                   )}
                   {offWeatherIds.has(it.id) && (
                     <div style={{ ...badge, color: PALETTE.accent }}>Off-forecast</div>
@@ -222,6 +241,11 @@ const chipOn = { background: PALETTE.ink, color: PALETTE.bg, borderColor: PALETT
 const clearBtn = {
   background: "none", border: "none", color: PALETTE.accent,
   fontSize: 11, cursor: "pointer", padding: "0 0 8px", textDecoration: "underline",
+};
+const starAllBtn = {
+  display: "block", width: "100%", margin: "0 0 8px", padding: "8px 10px",
+  background: "#fff", border: `1px solid ${PALETTE.accent}`, borderRadius: 6,
+  color: PALETTE.accent, fontSize: 12, cursor: "pointer", textAlign: "left",
 };
 const card = {
   minWidth: 0, padding: 6, background: "#fff", border: `1px solid ${PALETTE.line}`,

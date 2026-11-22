@@ -1203,6 +1203,43 @@ await check("Trip → the header's ← Planner returns to the calendar, and Home
   await page.evaluate(() => [...document.querySelectorAll("*")].filter(e => /^View\s*→?$/.test((e.textContent || "").trim())).pop()?.click());
   await page.waitForTimeout(1200);
 });
+// ★ Bring next time (owner, 2026-11-22: "a way I can pin or bookmark or star
+// items that I'd like to bring with me next time"). A ☆ on a packing row
+// stars the piece for the next trip to this place, writes user_settings
+// bring_next, and the pin sheet leads with it and offers "Pin all ★".
+await check("Trip → Packing: ☆ stars a piece for next time; the pin sheet offers it", async () => {
+  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Packing \(\d+\)$/.test(b.textContent.trim()))?.click());
+  await page.waitForTimeout(600);
+  const before = restWrites.length;
+  const name = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button[aria-label^="Bring next time: "]')].pop();
+    if (!b) return null;
+    b.click();
+    return b.getAttribute("aria-label").replace("Bring next time: ", "");
+  });
+  if (!name) throw new Error("no ☆ on any packing row");
+  await page.waitForTimeout(500);
+  const starred = await page.evaluate((n) => !!document.querySelector(`button[aria-label="Starred to bring next time: ${n}"]`), name);
+  if (!starred) throw new Error("the ☆ did not turn into ★");
+  const wrote = restWrites.slice(before).some(w => /user_settings/.test(w.url || w.table || "") && JSON.stringify(w.row || w.body || "").includes("bring_next"));
+  if (!wrote) throw new Error("the star was not saved (no user_settings bring_next write)");
+  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Looks \(/.test(b.textContent.trim()))?.click());
+  await page.waitForTimeout(400);
+  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^(Edit picks|\+ Pick pieces)$/.test(b.textContent.trim()))?.click());
+  await page.waitForTimeout(600);
+  const sheet = await page.evaluate(() => document.body.innerText);
+  if (!/★ Bring next time/i.test(sheet)) throw new Error("the pin sheet does not mark the starred piece");
+  if (!/Pin all 1 you starred/.test(sheet)) throw new Error("the pin sheet does not offer to pin the starred piece");
+  // Unstar to leave the fixture as it was: close the sheet, back to Packing.
+  await clickText("button", "Done");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Packing \(\d+\)$/.test(b.textContent.trim()))?.click());
+  await page.waitForTimeout(400);
+  await page.evaluate((n) => document.querySelector(`button[aria-label="Starred to bring next time: ${n}"]`)?.click(), name);
+  await page.waitForTimeout(300);
+  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Looks \(/.test(b.textContent.trim()))?.click());
+  await page.waitForTimeout(400);
+});
 // ⊞ Build on a trip day hands the builder the DAY'S pool (tripPools.js:
 // destination ∪ suitcase ∪ the look's own pieces) and nothing else. The
 // canvas must still land the look — a pool that dropped the look's pieces
