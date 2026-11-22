@@ -152,7 +152,7 @@ export const LooksTool = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const KnitSchema = z.object({
-  weight: z.enum(["Chunky/Winter", "Fine/Summer"]),
+  weight: z.enum(["Chunky/Winter", "Medium/Transitional", "Fine/Summer"]),
   fit: z.enum(["Cropped", "Oversized"]),
   confidence: ConfidenceLevel,
   summary: z.string(),
@@ -164,7 +164,7 @@ export const KnitTool = {
   input_schema: {
     type: "object",
     properties: {
-      weight:     { type: "string", enum: ["Chunky/Winter", "Fine/Summer"] },
+      weight:     { type: "string", enum: ["Chunky/Winter", "Medium/Transitional", "Fine/Summer"] },
       fit:        { type: "string", enum: ["Cropped", "Oversized"] },
       confidence: { type: "string", enum: ["High", "Medium", "Low"] },
       summary:    { type: "string" },

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { s } from "../ui/styles.js";
-import { CURATED_NOTES_MAX, FORMALITY_SCALE, formalityOf } from "../utils/item-helpers.js";
+import { CURATED_NOTES_MAX, FORMALITY_SCALE, formalityOf, KNIT_WEIGHTS } from "../utils/item-helpers.js";
 import { stripBackground } from "../lib/bgRemoval.js";
 import { autoDetectItem } from "../lib/anthropic.js";
 import { applyDetection } from "../features/closet/applyDetection.js";
@@ -349,7 +349,7 @@ export default function BulkAddView({ onAdd, onBack, rmbgKey, apiKey, seed = nul
                           <select style={{...s.select,...s.queueSelect}} value={item.knit_weight || ""}
                             onChange={e=>update(item.id,"knit_weight",e.target.value)}>
                             <option value="">Weight</option>
-                            {["Chunky/Winter","Fine/Summer"].map(v=><option key={v}>{v}</option>)}
+                            {KNIT_WEIGHTS.map(v=><option key={v}>{v}</option>)}
                           </select>
                         </div>
                       );

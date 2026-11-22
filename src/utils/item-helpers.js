@@ -644,20 +644,30 @@ export const HEAVY_COAT_RE = /wool|cashmere|shearling|sherpa|puffer|parka|down|q
 // Read by: isLightCardigan (below), filterByWeather, the sampler's pool gate,
 // checkWeatherCompliance, the sort order, the AI Readiness audit, and the Edit
 // screen (which shows her what the app read when the tag is empty).
-export const KNIT_WEIGHTS = ["Chunky/Winter", "Fine/Summer"];
+// Three weights since 2026-11-22 (owner: "Knits need a medium weight"). Six
+// of her lines said "medium weight" and had been forced into Fine or Chunky.
+// Medium is the mild-to-cool knit: fine on a Warm day, out on a Hot one (only
+// a fine cardigan is the heat office layer), never the winter-only knit.
+export const KNIT_WEIGHTS = ["Fine/Summer", "Medium/Transitional", "Chunky/Winter"];
+export const MEDIUM_KNIT = "Medium/Transitional";
 const COLOUR_MODIFIER_RE = /\b(light|pale|dark|deep)\s+(blue|tan|pink|gr[ae]y|green|brown|purple|yellow|beige|camel|navy|wash|denim|olive|cream|lilac|lavender|coral|peach|mint|sage|rose|red|orange|teal|aqua|mauve|taupe|khaki|gold|silver|ivory|white|black)\b/gi;
 const FINE_KNIT_RE   = /\b(light[-\s]?knit|lightweight|light[-\s]weight|fine[-\s]?(?:knit|gauge)|summer(?:[-\s]weight)?|open[-\s]?(?:knit|stitch|weave|work)|crochet|gauze|sheer|tissue|linen|silk)\b/i;
 const CHUNKY_KNIT_RE = /\b(chunky|heavy(?:weight)?|thick|cable[-\s]?knit|winter|cold(?:er)?\s+weather|for\s+cold)\b/i;
+// Her explicit word for the middle: it outranks a construction or season word
+// beside it ("cable knit … medium weight" is a medium knit, by her words).
+const MEDIUM_KNIT_RE = /\b(medium[-\s]?(?:weight|knit|gauge)|mid[-\s]?weight)\b/i;
 export function stripColourPhrases(text) {
   return String(text || "").replace(COLOUR_MODIFIER_RE, " ");
 }
 /**
- * @returns {{ weight: ""|"Chunky/Winter"|"Fine/Summer", source: ""|"tag"|"notes"|"photo", evidence: string }}
+ * @returns {{ weight: ""|"Chunky/Winter"|"Medium/Transitional"|"Fine/Summer", source: ""|"tag"|"notes"|"photo", evidence: string }}
  */
 export function readKnitWeight(item) {
   if (!item) return { weight: "", source: "", evidence: "" };
   if (KNIT_WEIGHTS.includes(item.knit_weight)) return { weight: item.knit_weight, source: "tag", evidence: item.knit_weight };
   const text = stripColourPhrases((item.name || "") + " " + classifierNotes(item) + " " + (item.material || ""));
+  const medium = text.match(MEDIUM_KNIT_RE);
+  if (medium) return { weight: MEDIUM_KNIT, source: "notes", evidence: medium[0] };
   const fine = text.match(FINE_KNIT_RE);
   const chunky = text.match(CHUNKY_KNIT_RE);
   if (fine && chunky) return { weight: "", source: "", evidence: `conflicting: "${fine[0]}" and "${chunky[0]}"` };
@@ -667,6 +677,8 @@ export function readKnitWeight(item) {
   // The vision pass records its read of fabric + drape ("chunky cable knit",
   // "fine merino") as vision_data.fabric. Her words always come first.
   const seen = stripColourPhrases(item.vision_data?.fabric || "");
+  const seenMedium = seen.match(MEDIUM_KNIT_RE);
+  if (seenMedium) return { weight: MEDIUM_KNIT, source: "photo", evidence: seenMedium[0] };
   const seenFine = seen.match(FINE_KNIT_RE);
   const seenChunky = seen.match(CHUNKY_KNIT_RE);
   if (seenFine && !seenChunky)   return { weight: "Fine/Summer",   source: "photo", evidence: seenFine[0] };
@@ -688,7 +700,7 @@ export function isLightCardigan(item) {
   if (!item || item.category !== "Knits" || item.subcategory !== "Cardigans") return false;
   const { weight } = readKnitWeight(item);
   if (weight === "Fine/Summer") return true;
-  if (weight === "Chunky/Winter") return false;
+  if (weight === "Chunky/Winter" || weight === MEDIUM_KNIT) return false;
   if ((item.season_weight || "").toLowerCase() === "winter") return false;
   const text = stripColourPhrases((item.name || "") + " " + classifierNotes(item) + " " + (item.material || "")).toLowerCase();
   return LIGHT_FIBRE_RE.test(text) && !WEATHER_HEAVY_RE.test(text);
