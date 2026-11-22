@@ -82,8 +82,11 @@ const TRIP_ID = "11111111-1111-4111-8111-111111111111";
 // affordance" until this was fixed.) The trip starts TODAY, not in two days:
 // on the last days of a month a +2 start put the whole trip in next month's
 // grid and the walk failed on Oct 31 for a reason that wasn't the app.
+// Anchored to New York's date, like the app (nyToday): a UTC date ran a day
+// ahead every evening, so "the trip starts today" was tomorrow to the app.
+const NY_TODAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const iso = (offsetDays) => {
-  const d = new Date(); d.setUTCHours(12, 0, 0, 0); d.setUTCDate(d.getUTCDate() + offsetDays);
+  const d = new Date(NY_TODAY + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 };
 const TRIPS = [{
@@ -339,6 +342,22 @@ await check("Home (the ATELIER brand)", brandHome);
 // Most worn reads by room (owner, 2026-09-22): Work / Work Dinner / Casual /
 // Dinner strips, swim, gym and lounge never ranked. The fixture's two worn
 // looks are a Work day and a Casual day, so both rooms must be on screen.
+// A trip she is ON that never started (owner, 2026-11-22: day 2 in Arizona,
+// the trip still in planning, so what she brought was out of styling). The
+// fixture trip is planning and starts today — exactly that case. Home says so,
+// and the card opens the trip, where the line and Start trip sit together.
+await check("Home → a trip underway but never started says so, and opens the trip", async () => {
+  await page.waitForTimeout(400);
+  const card = await page.evaluate(() => document.querySelector('button[aria-label="Start your trip"]')?.innerText || "");
+  if (!/Arizona trip started today/.test(card)) throw new Error(`no "your trip started" card on Home (got "${card.slice(0, 80)}")`);
+  await page.evaluate(() => document.querySelector('button[aria-label="Start your trip"]').click());
+  await page.waitForTimeout(1200);
+  const text = await page.evaluate(() => document.body.innerText);
+  if (!/Start trip/.test(text)) throw new Error("the card did not open the trip screen");
+  if (!/pieces you brought show up/.test(text)) throw new Error("the trip screen does not say why to start it");
+  await page.evaluate(() => document.querySelector('button[aria-label="Go home"]')?.click());
+  await page.waitForTimeout(400);
+});
 await check("Home → Most worn is split by room", async () => {
   await page.waitForTimeout(900);
   const text = await page.evaluate(() => document.querySelector('[aria-label="Most worn"]')?.innerText || "");

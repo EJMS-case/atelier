@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A trip you're on that never started says so — 2026-11-22
+
+### Why
+
+Owner, on day 2 of an Arizona trip: *"When I build an outfit while I'm here in Arizona … is there a way I can select items I brought with me on this trip?"* That feature already existed: while a trip is active, the pool is the destination closet plus every piece pinned or ticked as packed. But her live trip (Nov 21–26) was still `planning`, so the 21 pieces she had pinned were out of styling. Nothing told her the trip needed starting. A trip's status never flips by date, on purpose (a wrong date must not take over her pool), so the app now says so instead.
+
+### Changed
+
+- **`dueToStart` / `dueToStartLine`** (`planner/tripStatus.js`): a `planning` trip whose dates cover today. The line reads, for example, *"Your Arizona trip started yesterday — day 2 of 6."*
+- **Home leads with a card** for that trip. It opens the trip screen, where Start trip and its checks (only one active trip, unticked pieces) live. App reads the trips covering today only when no trip is active, and `refreshActiveTrip` clears the card the moment one starts.
+- **The trip screen** shows the same line beside ✈ Start trip.
+- **`CalendarView` takes `focusTrip`**, which opens the Planner on a trip, the way `focusDay` opens it on a day.
+- **Walk:** the fixture dates are anchored to New York's date, like the app. A UTC date ran a day ahead every evening. The new step, *Home → a trip underway but never started says so, and opens the trip*, fails with the card removed. `test:tripstatus` gains 2 tests.
+
+### Downstream
+
+- *Efficiency / speed:* one small `trips` range read at mount, and only when no trip is active. No AI call.
+- *Effectiveness:* once she starts the trip, every surface that builds a look (Style Me, the builder, trip days) reads the bridged pool. Nothing in the pool path changed.
+- *Education:* a started trip's packing list and its ×N wear counts are the record she reviews when she comes home.
+
 ## [Unreleased] — "All" shows the whole closet — 2026-11-22
 
 ### Why

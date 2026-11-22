@@ -135,6 +135,30 @@ export function tripStatusActions(trip, today = nyToday()) {
   }];
 }
 
+/**
+ * A trip she is ON that still says `planning` — the dates have come and she
+ * never tapped Start trip. Nothing flips a status by date (a mis-set date must
+ * never hijack her pool), so until she starts it the pieces she brought stay
+ * out of styling. Owner, 2026-11-22, day 2 of an Arizona trip still in
+ * planning: "is there a way I can select items I brought with me?" The answer
+ * was already there behind one tap she had no reason to know about; this is
+ * what says so. The first such trip by start date, or null.
+ */
+export function dueToStart(trips, today = nyToday()) {
+  return (trips || [])
+    .filter(t => statusOf(t) === "planning" && isTripUnderway(t, today))
+    .sort((a, b) => (a.start_date < b.start_date ? -1 : 1))[0] || null;
+}
+
+/** "Your Arizona trip started yesterday — day 2 of 6." Null when not due. */
+export function dueToStartLine(trip, today = nyToday()) {
+  const pos = tripDayPosition(trip, today);
+  if (!pos || statusOf(trip) !== "planning") return null;
+  const where = trip.destination || trip.destination_city || "";
+  const when = pos.day === 1 ? "today" : pos.day === 2 ? "yesterday" : `on ${prettyDate(trip.start_date)}`;
+  return `Your ${where ? where + " " : ""}trip started ${when} — day ${pos.day} of ${pos.of}.`;
+}
+
 function prettyDate(iso) {
   if (!iso) return "its end date";
   return new Date(iso + "T12:00:00Z")

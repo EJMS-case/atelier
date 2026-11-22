@@ -142,7 +142,7 @@ let resumeTripOnMount = false;
 // activation / suitcase-close flows call it after flipping trip status.
 // `onItemsClosetChanged` patches App's local items after the trip-complete
 // flow reassigns left-behind pieces to the destination closet (B5).
-export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, isFav, toggleFav, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed, onTripOpenChange, closeTripRef }) {
+export default function CalendarView({ available, wardrobe: wardrobeProp, closets, activeCloset, onRefreshActiveTrip, onItemsClosetChanged, apiKey, isFav, toggleFav, onGoToStyleMe, onEditItem, onEditPlan, onBuildDay, focusDay, onFocusDayConsumed, focusTrip, onFocusTripConsumed, onTripOpenChange, closeTripRef }) {
   // `focusDay` (iso) opens the planner ON that day — the way in from a
   // garment's "In Your Looks" row. It wins over the remembered month and the
   // remembered trip, is consumed once on mount (so a later plain open of the
@@ -391,6 +391,16 @@ export default function CalendarView({ available, wardrobe: wardrobeProp, closet
     if (again) { resumeTripOnMount = false; setActiveTripRaw(again); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trips]);
+  // `focusTrip` (a trips row) opens the planner ON that trip — Home's "your
+  // trip started" card. Opened once on mount and consumed, so a later plain
+  // open of the Planner starts clean.
+  useEffect(() => {
+    if (!focusTrip?.id) return;
+    resumeTripOnMount = false;
+    setActiveTrip(focusTrip);
+    onFocusTripConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Any other way out of the planner (Home, another tab) forgets the trip.
   useEffect(() => () => { if (!resumeTripOnMount) { lastTripId = null; lastTripScrollY = 0; } }, []);
 

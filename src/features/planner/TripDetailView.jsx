@@ -14,7 +14,7 @@ import { analyzeTripDestination, generateTripDayLook } from "../../lib/ai/tripAd
 import { geocodeDestination } from "../../lib/geocode.js";
 import { fetchTripForecast, bucketFromHigh, isNotableCondition } from "../../lib/weather.js";
 import { SEASONAL_HIGHS, nyToday, shortDayLabel } from "../../lib/time.js";
-import { tripStatusActions, statusOf, isTripUnderway } from "./tripStatus.js";
+import { tripStatusActions, statusOf, isTripUnderway, dueToStartLine } from "./tripStatus.js";
 import EditorialCollage from "../../components/EditorialCollage.jsx";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCoverageGaps, tripCommittedIds, DAYPART_EVENING, occasionsOfLook } from "./outfits.js";
@@ -1259,6 +1259,13 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
           {trip.status === "active" && (
             <span style={{ fontSize: 10, color: PALETTE.muted }}>
               Pool = {destClosetId ? ((closets || []).find(c => c.id === destClosetId)?.name || "destination closet") : "suitcase only"} + what you're carrying
+            </span>
+          )}
+          {/* A trip she is on that never started (dueToStart): until she
+              taps Start, what she brought is out of styling. */}
+          {statusOf(trip) === "planning" && isTripUnderway(trip, nyToday()) && (
+            <span style={{ fontSize: 10, color: PALETTE.accent }}>
+              {dueToStartLine(trip, nyToday())} Start it so the pieces you brought show up when you style and build.
             </span>
           )}
           {/* A trip marked complete while she is STILL ON IT is the mis-tap

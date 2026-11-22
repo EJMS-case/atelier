@@ -73,6 +73,7 @@ import { listInspirations, vibesFor } from "./features/inspiration/inspirationAp
 import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf, scheduleSlot, editedLookTags } from "./features/planner/outfits.js";
 import { tagsFor } from "./lib/multitag.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
+import { dueToStart } from "./features/planner/tripStatus.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
 // per browser; no-op afterward. Must fire before any load*() helpers below.
@@ -166,6 +167,10 @@ export default function App() {
   // items — see the available memo below.
   const [activeTrip, setActiveTrip] = useState(null);
   const [activeTripItems, setActiveTripItems] = useState([]);
+  // A trip she is ON that still says planning (dueToStart): Home and the trip
+  // screen say so, because until she starts it what she brought is out of
+  // styling. Read only when no trip is active, cleared the moment one is.
+  const [dueTrip, setDueTrip] = useState(null);
   // Select mode on the closet grid: bulk "move to closet" and, since
   // 2026-10-07, bulk filing of formality ("is there a way to bulk edit
   // quickly?" — 376 pieces had no formality and the Edit screen files one
@@ -251,6 +256,7 @@ export default function App() {
   // opened ON that day, or Saved scrolled TO that look. Each screen consumes
   // its focus on mount so a later plain open of Planner/Saved starts clean.
   const [plannerFocusDay, setPlannerFocusDay] = useState(null); // iso date
+  const [plannerFocusTrip, setPlannerFocusTrip] = useState(null); // trips row — Home's "your trip started" card opens it
   const [savedFocusLook, setSavedFocusLook] = useState(null);   // outfit_logs id
   // Remember which view launched the EditItem flow so Save/Back/Delete
   // return the user there instead of dumping them on the closet/home.
@@ -420,6 +426,10 @@ export default function App() {
     setActiveTrip(trip);
     const rows = trip ? await sb.fetchTripItems(trip.id).catch(() => []) : [];
     setActiveTripItems(rows || []);
+    if (trip) { setDueTrip(null); return; }
+    const today = nyToday();
+    const covering = await sb.fetchTripsBetween(today, today).catch(() => []);
+    setDueTrip(dueToStart(covering, today));
   }, []);
   useEffect(() => { refreshActiveTrip().catch(() => {}); }, [refreshActiveTrip]);
 
@@ -1965,6 +1975,8 @@ export default function App() {
             wearStats={wearData.stats}
             onRefreshWearData={refreshWearData}
             onOpenPlanner={() => setView("planner")}
+            dueTrip={dueTrip}
+            onOpenTrip={(trip) => { setPlannerFocusTrip(trip); setView("planner"); }}
             onOpenDay={(iso) => { setPlannerFocusDay(iso); setView("planner"); }}
             onOpenStyle={() => { setView("style"); setStylePanelOpen(true); }}
             onStyleRequest={(req) => { setRequest(req); setView("style"); setStylePanelOpen(true); }}
@@ -2607,6 +2619,8 @@ export default function App() {
             onGoToStyleMe={() => setView("style")}
             focusDay={plannerFocusDay}
             onFocusDayConsumed={() => setPlannerFocusDay(null)}
+            focusTrip={plannerFocusTrip}
+            onFocusTripConsumed={() => setPlannerFocusTrip(null)}
             onTripOpenChange={setPlannerTripOpen}
             closeTripRef={closePlannerTripRef}
             onEditItem={(item) => { setEditItem(item); setEditReturnView(viewRef.current); setView("edit"); }}

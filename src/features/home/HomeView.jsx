@@ -19,12 +19,13 @@ import LookBackCard from "../recap/LookBackCard.jsx";
 import { isResurfaceCandidate } from "../recap/recapData.js";
 import { resolveItemIds, filterByWeather } from "../../utils/item-helpers.js";
 import { autoColorPairs, rotateDaily, hexForColorLabel, resurfaceBucket } from "../../utils/wardrobe-coverage.js";
-import { PALETTE } from "../../constants/palette.js";
+import { PALETTE, PALETTE_STRONG } from "../../constants/palette.js";
 import { countCloset } from "../../constants/taxonomy.js";
 import Thumb from "../../components/Thumb.jsx";
+import { dueToStartLine } from "../planner/tripStatus.js";
 
 
-export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, onOpenDay, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop, onNavigate }) {
+export default function HomeView({ items, wardrobe, activeCloset, favorites, apiKey, plans, wearStats, onRefreshWearData, onOpenPlanner, dueTrip, onOpenTrip, onOpenDay, onOpenStyle, onStyleRequest, onEditItem, onStyleItem, brandDiscovery, onOpenDiscovery, onOpenShop, onNavigate }) {
   // Anchor to NYC time like the rest of the app — `toISOString()` is UTC
   // which flips the date forward in the evening for users west of UTC.
   const todayIso = nyToday();
@@ -188,6 +189,22 @@ export default function HomeView({ items, wardrobe, activeCloset, favorites, api
           {closetCount.garments} garments · {closetCount.finishing} shoes, bags &amp; accessories{neglected.length > 0 && ` · ${neglected.length} resting`}
         </div>
       </div>
+
+      {/* A trip she is on that never started (owner, 2026-11-22). Until she
+          taps Start trip, what she brought is out of styling — say so first
+          thing, and open the trip where the button (and its checks) live. */}
+      {dueTrip && (
+        <button onClick={() => onOpenTrip?.(dueTrip)} aria-label="Start your trip"
+          style={{ width: "100%", textAlign: "left", padding: 14, background: `${PALETTE_STRONG.accent}12`, border: "none", borderLeft: `3px solid ${PALETTE_STRONG.accent}`, borderRadius: "0 10px 10px 0", marginBottom: 16, cursor: "pointer" }}>
+          <div style={{ fontSize: 13, color: PALETTE.ink, fontWeight: 500 }}>
+            ✈ {dueToStartLine(dueTrip, todayIso)}
+          </div>
+          <div style={{ fontSize: 12, color: PALETTE.soft, marginTop: 4, lineHeight: 1.4 }}>
+            Start it so the pieces you brought show up when you style and build.
+          </div>
+          <div style={{ fontSize: 11, color: PALETTE_STRONG.accent, marginTop: 8, letterSpacing: "0.04em" }}>Open the trip →</div>
+        </button>
+      )}
 
       {/* Today's plan or quick Style Me CTA */}
       {todayPlanItems.length > 0 ? (
