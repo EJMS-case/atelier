@@ -29,7 +29,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   TRIP_STATUSES, statusOf, isTripUnderway, tripDayPosition,
-  reopenTarget, tripStatusActions,
+  reopenTarget, tripStatusActions, dueToStart, dueToStartLine,
 } from "../src/features/planner/tripStatus.js";
 
 // Her actual trip: Arizona, Aug 29 – Sep 6, reported on Sep 2.
@@ -150,4 +150,30 @@ test("a trip with no dates is never 'underway'", () => {
   assert.equal(tripDayPosition({ status: "active" }, MIDTRIP), null);
   // …and still offers a way out.
   assert.ok(tripStatusActions({ status: "complete" }, MIDTRIP).length > 0);
+});
+
+// ── A trip she is on that never started (owner, 2026-11-22) ─────────────────
+// Her live row: Arizona, Nov 21–26, still `planning` on Nov 22 — so the 21
+// pieces she pinned were out of styling. Nothing flips a status by date; the
+// app says so instead, and only for a planning trip whose dates cover today.
+const NOV = { id: "az", destination: "Arizona", start_date: "2026-11-21", end_date: "2026-11-26" };
+test("a planning trip underway is due to start; nothing else is", () => {
+  assert.equal(dueToStart([{ ...NOV, status: "planning" }], "2026-11-22")?.id, "az");
+  assert.equal(dueToStart([{ ...NOV }], "2026-11-22")?.id, "az", "a pre-status row reads as planning");
+  assert.equal(dueToStart([{ ...NOV, status: "active" }], "2026-11-22"), null);
+  assert.equal(dueToStart([{ ...NOV, status: "complete" }], "2026-11-22"), null);
+  assert.equal(dueToStart([{ ...NOV, status: "planning" }], "2026-11-20"), null, "before it starts");
+  assert.equal(dueToStart([{ ...NOV, status: "planning" }], "2026-11-27"), null, "after it ends");
+  assert.equal(dueToStart([], "2026-11-22"), null);
+  // Two overlapping (Arizona then Vegas): the one that started first.
+  const vegas = { id: "lv", destination: "Las Vegas", status: "planning", start_date: "2026-11-22", end_date: "2026-11-29" };
+  assert.equal(dueToStart([vegas, { ...NOV, status: "planning" }], "2026-11-22")?.id, "az");
+});
+test("the due line names the trip, when it started, and the day", () => {
+  const t = { ...NOV, status: "planning" };
+  assert.equal(dueToStartLine(t, "2026-11-21"), "Your Arizona trip started today — day 1 of 6.");
+  assert.equal(dueToStartLine(t, "2026-11-22"), "Your Arizona trip started yesterday — day 2 of 6.");
+  assert.equal(dueToStartLine(t, "2026-11-24"), "Your Arizona trip started on November 21 — day 4 of 6.");
+  assert.equal(dueToStartLine({ ...t, status: "active" }, "2026-11-22"), null);
+  assert.equal(dueToStartLine(t, "2026-11-30"), null);
 });

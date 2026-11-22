@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · A trip you're on that never started says so
+
+**Owner:** she wanted the pieces she brought to show up while building in Arizona. Her Arizona trip (Nov 21–26) was still `planning`, so its 21 pins were out of the pool. Home now leads with a "your trip started" card that opens the trip, and the trip screen says the same beside Start trip (CHANGELOG).
+
+**Watch-item:** she taps ✈ Start trip on Arizona. The Home card should go, and the closet chip should read ✈ Arizona. **The Las Vegas trip (Nov 27–29, planning) overlaps nothing**, but only one trip can be active at a time, so Arizona has to be completed before Vegas starts.
+
 ### 2026-11-22 · "All" shows the whole closet
 
 **Owner:** *"I can't view my whole Arizona closet under 'all'."* "All" showed only the landing shelves (two weeks of adds and uncategorized pieces). It now shows every piece, under *All pieces · n*, with the shelves above it (CHANGELOG).
