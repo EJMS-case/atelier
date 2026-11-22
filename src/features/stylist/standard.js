@@ -51,6 +51,7 @@ import {
 } from "../../utils/item-helpers.js";
 import { NEUTRAL_PAIR_FAMILIES, matchesPairSideText } from "../../utils/wardrobe-coverage.js";
 import { learnedContext } from "./learning.js";
+import { withoutWishes } from "../shopping/shoppingList.js";
 import { STANDARD_LINES } from "./standardLines.js";
 import { matchesBrief } from "../inspiration/inspirationApi.js";
 
@@ -246,9 +247,14 @@ export function describeItem(it, { notesMax } = {}) {
 
 // Everything the app has learned about her, as prompt blocks — see
 // learning.js. Kept under this name for the surfaces that already call it.
-export async function personalGrounding({ wardrobe = [], available = [], fingerprintMax = 1200, maxAutoPairs = 3 } = {}) {
+// `wishes: false` for a surface that BUILDS a look (a trip's looks): her wish
+// list names pieces she does not own yet, and a look is what she can put on
+// (owner, 2026-11-22). The advisory surfaces keep it, labelled as not owned.
+export async function personalGrounding({ wardrobe = [], available = [], fingerprintMax = 1200, maxAutoPairs = 3, wishes = true } = {}) {
   const learned = await learnedContext({ wardrobe, available, fingerprintMax, maxAutoPairs });
-  return { blocks: learned.blocks, pairs: learned.pairs, inspirations: learned.inspirations || [] };
+  const blocks = wishes ? learned.blocks
+    : learned.blocks.map(b => b.startsWith("HER SHOPPING LIST:") ? withoutWishes(b) : b).filter(Boolean);
+  return { blocks, pairs: learned.pairs, inspirations: learned.inspirations || [] };
 }
 
 // ── The computed read of a look ──────────────────────────────────────────────

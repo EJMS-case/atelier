@@ -55,7 +55,12 @@ export async function imageToBase64(src) {
   if (!src) return null;
   if (src.startsWith("data:")) return src;
   const res = await fetch(src);
+  // A dead photo (404/403 from an old host) must fail here, not become a
+  // thumbnail: the error page's bytes made a 0-byte thumb that drew a "?"
+  // over the Black cardigan Top for five months (2026-11-22).
+  if (!res.ok) throw new Error(`Image fetch failed (HTTP ${res.status})`);
   const blob = await res.blob();
+  if (!blob.size || !String(blob.type || "image/").startsWith("image/")) throw new Error("Not an image");
   return blobToDataUrl(blob);
 }
 

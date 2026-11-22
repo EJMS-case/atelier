@@ -262,6 +262,9 @@ export const sb = {
   // but to the thumb path. Best-effort: one attempt, returns the public URL.
   async uploadThumb(itemId, base64DataUrl) {
     const { blob, mime } = dataUrlToBlob(base64DataUrl, "image/png");
+    // An empty canvas ("data:," on iOS past its canvas memory cap) is not a
+    // thumb. Refuse it rather than store a 0-byte object every device trusts.
+    if (!blob || !blob.size) throw new Error("Thumb is empty");
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/thumbs/${itemId}`, {
       method: "POST",
       headers: { ...storageHeaders(), "Content-Type": mime, "x-upsert": "true", "cache-control": PHOTO_CACHE_CONTROL },
@@ -284,7 +287,9 @@ export const sb = {
       });
       if (!res.ok) throw new Error(`Thumb list failed (HTTP ${res.status})`);
       const rows = await res.json();
-      for (const r of rows || []) if (r?.name && r.id) out.set(r.name, Date.parse(r.updated_at || r.created_at || "") || 0);
+      // A 0-byte object is a failed build, not a thumb: leave it out so the
+      // device rebuilds it (and the upload above now refuses to store one).
+      for (const r of rows || []) if (r?.name && r.id && Number(r.metadata?.size ?? 1) > 0) out.set(r.name, Date.parse(r.updated_at || r.created_at || "") || 0);
       if (!rows || rows.length < 1000) break;
     }
     return out;

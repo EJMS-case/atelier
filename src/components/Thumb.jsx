@@ -22,6 +22,7 @@ import { useEffect, useState } from "react";
 import { sb, thumbUrl } from "../lib/supabase.js";
 import { imageToBase64, compressImage } from "../utils/images.js";
 import { invalidateThumbnail } from "../utils/thumbnail-cache.js";
+import MissingPhoto from "./MissingPhoto.jsx";
 
 const KEY = "atelier_thumb_ids";
 
@@ -132,6 +133,7 @@ export default function Thumb({ item, alt, style }) {
   // While the registry seed is in flight, hold the tile empty for that beat
   // rather than start the full photo it is about to replace.
   const [src, setSrc] = useState(() => (hasThumb(item) ? thumbUrl(id, item?.image) : (seeding ? null : item?.image)));
+  const [dead, setDead] = useState(false);
 
   useEffect(() => {
     if (!item?.image) { setSrc(null); return; }
@@ -153,6 +155,7 @@ export default function Thumb({ item, alt, style }) {
     ensureThumb(item);
   }, [id, item?.image]);
 
+  if (dead) return <MissingPhoto alt={alt} style={style}/>;
   return (
     <img
       src={src || (seeding ? undefined : item?.image)}
@@ -167,7 +170,10 @@ export default function Thumb({ item, alt, style }) {
           known.delete(id); serverAt?.delete(id); persist();
           attempted.delete(id);
           setSrc(item?.image);
+          return;
         }
+        // The photo itself is gone: the piece's name, never a broken "?".
+        if (item?.image) setDead(true);
       }}
     />
   );

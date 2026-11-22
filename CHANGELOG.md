@@ -2,6 +2,24 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Wishes stay out of Style Me; a week without repeats; no more "?" tiles — 2026-11-22
+
+### Why
+
+Owner: *"Make sure style me doesn't include wishlist items that I don't own!"* · *"when I choose a day from the planner and try to generate a look from there specifically, it's important that the planner doesn't show me items I already wore that week. This excludes items I plan on wearing later in the week."* · *"Why isn't the cardigan loading?"*
+
+### Changed
+
+- **The surfaces that build a look no longer see unbought wishes.** Style Me could never place one (every id is checked against the inventory), but its rationale was allowed to mention one. Now `withoutWishes` (shoppingList.js, one prefix `WISHES_LINE`) cuts that line from Style Me's shopping block, and `personalGrounding({ wishes: false })` does the same for the trip looks (tripStylist, tripAdvisor). What she just bought and her brand finds stay. The chat, Evaluate and the wish read keep the list, labelled "NOT owned yet".
+- **A planner day's Generate leaves out the garments from the earlier days of that week** (`planner/weekRepeats.js`). The week is Monday to Sunday, and later days don't count. Outerwear, shoes, bags and jewellery repeat freely, and a category never empties (the pool keeps it). `test:week-repeats` (4).
+- **The broken "?" tile** (the Black cardigan Top, pinned to the Arizona trip). Its thumb in the bucket was **0 bytes**, built from a failed download of its photo on the old Cloudinary host. The audit found it was being rebuilt in a loop. Now: `imageToBase64` fails on a non-OK or non-image response, `uploadThumb` refuses an empty thumb (`test:storage` +1), `listThumbs` skips 0-byte objects, and `Thumb` / `TrimmedImage` fall back thumb → photo → **`MissingPhoto`** (the piece's name and "no photo") instead of the browser's "?". The photo itself is most likely gone from Cloudinary: **she needs to add a new photo for that piece.** 54 pieces still point at Cloudinary (see HANDOFF).
+
+### Downstream
+
+- *Efficiency / speed:* the cut is a string filter, and the week rule is one pass over loaded plans. The thumb guards stop a rebuild loop that downloaded and uploaded on every boot.
+- *Effectiveness:* Style Me's rationale can no longer name a piece she doesn't own. A planned week reads as a week.
+- *Education:* unchanged. The wish list still reaches every advisory surface.
+
 ## [Unreleased] — The wish list moves into Atelier — 2026-11-22
 
 ### Why

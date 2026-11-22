@@ -335,7 +335,7 @@ export async function generateTripDayLook(items, occasion, weather, destination,
   // The blocks come from features/stylist/standard.js so every AI surface
   // grounds in the same fingerprint / body & fit / colour-pair wording. Soft
   // bias by design: a missing fingerprint or empty prefs just omit their block.
-  const { blocks: personalBits } = await personalGrounding({ available: items, fingerprintMax: 800, maxAutoPairs: 2 });
+  const { blocks: personalBits } = await personalGrounding({ available: items, fingerprintMax: 800, maxAutoPairs: 2, wishes: false });
   const personalBlock = personalBits.length ? `\n${personalBits.join("\n\n")}\n` : "";
 
   // Strong preference with a stated exception — NOT an absolute rule. The old

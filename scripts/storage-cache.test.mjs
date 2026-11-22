@@ -41,6 +41,13 @@ test("uploadThumb sends the cache header", async () => {
   assert.match(calls[0].url, /\/thumbs\/item-x$/);
 });
 
+test("an empty thumb is refused, never stored (the 0-byte cardigan thumb, 2026-11-22)", async () => {
+  calls.length = 0;
+  await assert.rejects(() => sb.uploadThumb("item-x", "data:,"), /empty/);
+  await assert.rejects(() => sb.uploadThumb("item-x", "data:image/png;base64,"), /empty/);
+  assert.equal(calls.length, 0, "no upload request was sent");
+});
+
 test("uploadInspirationImage sends the cache header", async () => {
   calls.length = 0;
   await sb.uploadInspirationImage("insp-1", PNG);

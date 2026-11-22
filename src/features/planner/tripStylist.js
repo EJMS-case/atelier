@@ -195,7 +195,7 @@ export function acceptTripStyle(input, { looks, itemOf, dayCount }) {
 export async function styleTrip({ days, fixed = [], destination = "", brief = null, prefer = null, pins = null, apiKey, signal } = {}) {
   if (!apiKey) throw new Error("API key required");
   const standardMod = await import("../stylist/standard.js");
-  const { blocks: personal } = await standardMod.personalGrounding({ available: days.flatMap(d => d.pool || []) });
+  const { blocks: personal } = await standardMod.personalGrounding({ available: days.flatMap(d => d.pool || []), wishes: false });
   const { prompt, inventory, looks } = composeTripStylePrompt({
     days, fixed, destination, brief, prefer, pins, personal,
     standard: standardMod.STYLIST_STANDARD,
