@@ -57,7 +57,19 @@ const knit = (over) => ({ category: "Knits", subcategory: "Cardigans", material:
 test("readKnitWeight: the tag wins over every word", () => {
   const r = readKnitWeight(knit({ knit_weight: "Chunky/Winter", notes: "light knit cardigan" }));
   assert.deepEqual(r, { weight: "Chunky/Winter", source: "tag", evidence: "Chunky/Winter" });
-  assert.deepEqual(KNIT_WEIGHTS, ["Chunky/Winter", "Fine/Summer"]);
+  assert.deepEqual(KNIT_WEIGHTS, ["Fine/Summer", "Medium/Transitional", "Chunky/Winter"]);
+  assert.equal(readKnitWeight(knit({ knit_weight: "Medium/Transitional", notes: "chunky" })).weight, "Medium/Transitional");
+});
+
+// Owner, 2026-11-22: "Knits need a medium weight." Her lines said so on six
+// cardigans, forced into Fine or Chunky because there was no middle.
+test("readKnitWeight: her \"medium weight\" is a medium knit, even beside a construction word", async () => {
+  const { isLightCardigan } = await import("../src/utils/item-helpers.js");
+  const bailey = knit({ name: "Bailey Cardigan", stylist_line: "white cable knit cropped cardigan, long sleeve, v-neck, gold button front, medium weight", material: "Knit" });
+  assert.deepEqual(readKnitWeight(bailey), { weight: "Medium/Transitional", source: "notes", evidence: "medium weight" });
+  assert.equal(readKnitWeight(knit({ stylist_line: "navy and green argyle cardigan, cropped, medium knit" })).weight, "Medium/Transitional");
+  assert.equal(readKnitWeight(knit({ stylist_line: "grey midweight crew" })).weight, "Medium/Transitional");
+  assert.equal(isLightCardigan(knit({ knit_weight: "Medium/Transitional" })), false, "a medium cardigan is not the heat office layer");
 });
 
 test("readKnitWeight: her words decide when the tag is empty", () => {

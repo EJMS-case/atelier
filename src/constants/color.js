@@ -264,4 +264,4 @@ export const SLEEVE_SORT = {
 export const LENGTH_SORT = { "Mini":0, "Midi":1, "Maxi":2, "Sweater Dress":3 };
 
 // Tertiary: knit weight (heavy → light)
-export const WEIGHT_SORT = { "Chunky/Winter":0, "Fine/Summer":1 };
+export const WEIGHT_SORT = { "Chunky/Winter":0, "Medium/Transitional":0.5, "Fine/Summer":1 };

@@ -2,6 +2,25 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — A medium knit weight — 2026-11-22
+
+### Why
+
+Owner: *"Knits need a medium weight."* The app had only Fine/Summer and Chunky/Winter. Six of her cardigans have lines that say "medium weight" or "medium knit", and they had been forced into one of the two (two Chunky, one Fine, three untagged).
+
+### Changed
+
+- **`Medium/Transitional`** joins `KNIT_WEIGHTS` (`item-helpers`): Fine/Summer, Medium/Transitional, Chunky/Winter, in the Edit and Add Items selects (Add Items now reads the one list instead of typing its own). `readKnitWeight` reads her "medium weight" / "medium knit" / "midweight" ahead of a construction or season word beside it, so "cable knit … medium weight" is medium by her words. The photo read does the same.
+- **How it behaves:** fine on a Warm day (only Chunky, pullovers and heavy fabrics are too warm there); out on a Hot day (`isLightCardigan` is false for it: only a fine cardigan is the heat office layer); it sorts between Fine and Chunky (`WEIGHT_SORT`). The knit classifier can now answer Medium (`KnitSchema` / `KnitTool`). Prompts show it as the tag `[Medium/Transitional]`.
+- **Live data:** six rows set to Medium/Transitional, each because its own stylist line says so: Bailey Cardigan (was none), the blush pink Cardigan (was Chunky), Cher Argyle Cardigan (was Chunky), Ella Button-Up Sweater (was none), Falling for Fall Cardigan (was none), Soft Ribbed Crop Cardigan (was Fine). Left for her: the navy Cashmere Crewneck Cardigan and the Francis Cropped Pullover (neither line says a weight outright).
+- `test:audit` +1 (and the order of `KNIT_WEIGHTS`).
+
+### Downstream
+
+- *Effectiveness:* a medium cardigan stops being offered as the heat layer (it was, when tagged Fine), and stops being kept out of Warm looks (it was, when tagged Chunky).
+- *Efficiency / speed:* none.
+- *Education:* the tag reaches every prompt through `readKnitWeight`.
+
 ## [Unreleased] — Completions follow the season; every photo in her storage; duplicate removed — 2026-11-22
 
 ### Why
