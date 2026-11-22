@@ -10,6 +10,12 @@ it through.
 
 ## Session log
 
+### 2026-11-22 · Speed: the thumbnail flood
+
+**Owner:** "extremely slow to load since being on this trip." The cause was a thumbnail flood (about 188 MB an hour) that drained the storage origin's database pool and stalled the boot reads. Fixed: a gentle boot warm that finishes, lazy and capped tile loads, a retry before a rebuild, and deduped planner and weather fetches (CHANGELOG). The audit's harness is in the session scratchpad (`speed/measure2.mjs`); rerun it for any image or boot change.
+
+**Watch-item:** a cold open on her phone should paint Home in a few seconds. Then check the Supabase edge logs: thumb GETs per hour should be in the hundreds, not thousands.
+
 ### 2026-11-22 · Wishes out of Style Me; a week without repeats; no "?" tiles
 
 **Owner:** Style Me must not use wishes she doesn't own; a planner day must not repeat that week's earlier garments; the cardigan tile showed "?". All three are fixed (CHANGELOG).

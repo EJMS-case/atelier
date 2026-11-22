@@ -101,7 +101,19 @@ export async function fetchTripForecast(lat, lon, timezone) {
   return fetchForecastAt(lat, lon, timezone || "UTC", key);
 }
 
-async function fetchForecastAt(lat, lon, tz, cacheKey) {
+// One request per place at a time: App and Home both ask for today's forecast
+// at boot, before either has filled the cache (speed audit, 2026-11-22).
+const forecastInflight = new Map();
+function fetchForecastAt(lat, lon, tz, cacheKey) {
+  const pending = forecastInflight.get(cacheKey);
+  if (pending) return pending;
+  const run = fetchForecastOnce(lat, lon, tz, cacheKey);
+  forecastInflight.set(cacheKey, run);
+  run.finally(() => forecastInflight.delete(cacheKey)).catch(() => {});
+  return run;
+}
+
+async function fetchForecastOnce(lat, lon, tz, cacheKey) {
   try {
     const cached = readCache(cacheKey);
     if (cached) return cached;
