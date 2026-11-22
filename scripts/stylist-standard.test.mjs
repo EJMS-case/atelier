@@ -779,8 +779,10 @@ test("one language: Evaluate and the chat read the look's origin as their own ea
   assert.match(originBlock({ source: "chat", text: "A solid 8." }, [b]), /YOUR LAST READ OF THIS CANVAS IN THE CHAT/);
 });
 
-// ── Where the hem meets the boot (owner, 2026-11-02) ─────────────────────────
-test("a bootie under a skirt or dress is a note on how, never a violation; a knee boot is not flagged", async () => {
+// ── Where the hem meets the boot (owner, 2026-11-02; firmly 2026-11-22) ──────
+// The builders never ship one (utils/hemShoes.js, test:hem-shoes); on a canvas
+// she built, LOOK FACTS says swap it, in her terms — never "violation".
+test("a bootie under a skirt or dress is flagged to swap, never as a violation; a knee boot is not flagged", async () => {
   const { isAnkleBootItem } = await import("../src/utils/item-helpers.js");
   // Filed as she files them: a skirt under Bottoms, by its length.
   const skirt = normalizeItem({ id: "h-skirt", name: "Uma Skirt", category: "Bottoms", subcategory: "Midi", color: "Brown" });
@@ -794,13 +796,14 @@ test("a bootie under a skirt or dress is a note on how, never a violation; a kne
   assert.ok(!isAnkleBootItem(knee) && !isAnkleBootItem(tall));
 
   const r = readLook([blouse(), skirt, bootie], { occasions: ["Work"] });
-  assert.match(r.text, /An ankle boot \(.*Hendrix.*\) meets a hem/);
-  assert.match(r.text, /No tights on the canvas/);
+  assert.match(r.text, /An ankle boot \(.*Hendrix.*\) under a hem/);
+  assert.match(r.text, /keeps booties away from skirts and dresses/);
+  assert.match(r.text, /Swap it for the shoe she owns/);
   assert.ok(!r.against.some(a => /ankle boot/i.test(a)), "the hem note is never a violation");
-  assert.doesNotMatch(readLook([blouse(), skirt, knee], { occasions: ["Work"] }).text, /meets a hem/);
-  assert.doesNotMatch(readLook([blouse(), trouser(), bootie], { occasions: ["Work"] }).text, /meets a hem/);
-  assert.match(readLook([dress, bootie], { occasions: ["Dinner"] }).text, /meets a hem/);
-  assert.doesNotMatch(readLook([blouse(), shorts, bootie], { occasions: ["Casual"] }).text, /meets a hem/);
+  assert.doesNotMatch(readLook([blouse(), skirt, knee], { occasions: ["Work"] }).text, /under a hem/);
+  assert.doesNotMatch(readLook([blouse(), trouser(), bootie], { occasions: ["Work"] }).text, /under a hem/);
+  assert.match(readLook([dress, bootie], { occasions: ["Dinner"] }).text, /under a hem/);
+  assert.doesNotMatch(readLook([blouse(), shorts, bootie], { occasions: ["Casual"] }).text, /under a hem/);
 });
 
 test("her proportion directive carries how a boot meets a hem", async () => {

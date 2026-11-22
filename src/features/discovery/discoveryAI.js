@@ -102,7 +102,7 @@ export async function generateBrandDiscovery({ items, apiKey, excludeBrands = []
   const profile = tasteProfile(items);
   // The one funnel (features/stylist/learning.js): the fingerprint rides it,
   // with what she's drawn to, her finds and wants, and the last gap analysis.
-  const { blocks: learned } = await personalGrounding({ available: items, fingerprintMax: 600, maxAutoPairs: 2 }).catch(() => ({ blocks: [] }));
+  const { blocks: learned } = await personalGrounding({ available: items, fingerprintMax: 600, maxAutoPairs: 2, wishes: true }).catch(() => ({ blocks: [] }));
   const exclude = [...new Set([...profile.ownedBrands, ...excludeBrands])];
   const prompt = buildPrompt({ profileLines: profile.lines, excludeBrands: exclude, fingerprint: "", learned });
 

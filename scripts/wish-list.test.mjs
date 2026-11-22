@@ -232,3 +232,16 @@ test("the shared page asks the one database function, signed out, and reads an o
   assert.match(calls[0].init.headers.Authorization, /^Bearer ey/, "the anon key, never a signed-in session");
   assert.equal(await fetchSharedWishes("tok", { fetchImpl: fake(null) }), null);
 });
+
+// ── Only shopping surfaces read an unbought wish (owner, 2026-11-22) ─────────
+test("the chat and Evaluate never see a wish; shopping surfaces opt in", () => {
+  const root = new URL("../", import.meta.url);
+  const read = (f) => readFileSync(new URL(f, root), "utf8");
+  assert.match(read("src/features/stylist/standard.js"), /maxAutoPairs = 3, wishes = false \}/, "the default is no wishes");
+  for (const f of ["src/features/builder/builderChat.js", "src/features/builder/evaluateLook.js", "src/lib/ai/stylist.js", "src/features/recap/recapAI.js"]) {
+    assert.doesNotMatch(read(f), /wishes: true/, `${f} reads her unbought wishes`);
+  }
+  for (const f of ["src/features/shopping/gapAnalysis.js", "src/features/shopping/wishRead.js", "src/features/discovery/discoveryAI.js"]) {
+    assert.match(read(f), /wishes: true/, `${f} is a shopping surface and should read the list`);
+  }
+});

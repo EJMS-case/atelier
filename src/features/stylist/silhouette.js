@@ -55,7 +55,7 @@ const DIRECTIVES = {
   // dresses?" Not a ban — how the boot meets the hem — for the two frames
   // where an ankle-height break shortens the leg most. Its own line: every
   // line is clipped at MAX_LINE_CHARS.
-  hemBoot: "skirt or dress + boot: a knee boot the hem meets, or a bootie into tights of its colour; a bare leg into a bootie cuts the leg",
+  hemBoot: "skirt or dress + boot: a knee boot the hem meets, never a bootie (it cuts the leg)",
   bust: "fuller bust — favor open V or scoop necklines over high crews; keep extra volume and heavy detail off the top",
 };
 

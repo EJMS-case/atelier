@@ -158,8 +158,13 @@ Conventions worth knowing:
   row on Home. Don't add a pointer card to Settings again.
 - **Shopping lives in `src/features/shopping/`, and HER LIST is the centre
   of it** (owner, 2026-09-17: "an area I write and check off etc myself").
-  `shoppingList.js` is the list she writes; every AI surface reads it
-  through `personalGrounding()`, a closet add that answers an entry checks
+  `shoppingList.js` is the list she writes (since 2026-11-22 her wish list:
+  photo, brand, price, ★, Safari bookmarklet, a share link for Mike via
+  migration 0040, ✦ Atelier's read). **Only the shopping surfaces read an
+  unbought wish** — `personalGrounding({ wishes: true })` in the ideas run,
+  Complete-a-Look, the wish read and Brand Atlas; the default is `false`, so
+  Style Me, trips, the chat and Evaluate are dressed from what she owns and
+  never suggest a wish (owner, 2026-11-22). A closet add that answers an entry checks
   it off with the piece named (`answerList`, called from `App.addItems`),
   and the two idea sources — the numbers panel and Atelier's ideas — ADD to
   it, never replace it. `shoppingListStore.js` is the load/save half Home

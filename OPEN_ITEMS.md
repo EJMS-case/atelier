@@ -1,6 +1,6 @@
 # Atelier — Open Items
 
-**As of 2026-10-25, after #276.** This lists only what is still open. Items that were done are left out. Each one was checked against the code, `git log`, CHANGELOG/HANDOFF, and the live Supabase rows on this date. Gathered from HANDOFF.md, CHANGELOG.md, and the Claude sessions from 2026-08-19 to 2026-10-25.
+**As of 2026-11-22, after #310 (section 1 rows 1.13 onward, section 2 item 0, and the 11-22 watch-items are new tonight; older rows were last checked 10-25).** This lists only what is still open. Items that were done are left out. Each one was checked against the code, `git log`, CHANGELOG/HANDOFF, and the live Supabase rows on this date. Gathered from HANDOFF.md, CHANGELOG.md, and the Claude sessions from 2026-08-19 to 2026-10-25.
 
 When an item closes, delete it here and record it in CHANGELOG. When something new opens, add it here. `HANDOFF.md` keeps the history; this file is the to-do list.
 
@@ -21,10 +21,15 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 | 1.9 | **Share an empty Atelier with someone (asked 09-20, unanswered)** | Plan offered: a base-schema migration (`0000_base.sql`; migrations start at 0001 today), lift the owner-id pin, move config to env vars, and move the persona into Style Profile. Fork-per-friend is about 2–4 days. One shared deploy is weeks. | Say whether you still want it, and which model. |
 | 1.10 | **A one-in-eight packer test wobble** | "Dinner day gets an evening bag" fails about 1 run in 8 because of the packer's tie-break jitter. Steadying it changes packing you tuned by hand. | OK it, or leave it. |
 | 1.11 | **A per-piece crop editor (asked 08-03)** | Not started. All pieces are auto-cropped now. | Name the pieces whose crop looks wrong, if any. Without examples it won't be built. |
+| 1.13 | **Re-photo the Black cardigan Top** (11-22) | Its photo lived on the old Cloudinary host and is gone; the tile now says "no photo". | Closet › the piece › Edit › add a photo. |
+| 1.14 | **Move 54 photos off Cloudinary** (11-22) | 54 pieces still load their photo from the old host, and could vanish the way the cardigan's did. Moving them rewrites `image` on 54 rows. | Say "move them" and a session adds a one-tap mover. |
+| 1.15 | **Start (or finish) the Arizona trip** (11-22) | Arizona (Nov 21–26) is still *planning*, so your pinned pieces aren't in styling. Vegas (Nov 27–29) can only start once Arizona is complete. | Home's card › Start trip; mark it complete before Vegas. |
+| 1.16 | **One-time setups** (11-22) | The Safari "＋ Atelier" bookmark, and the share link for Mike. | Wish List › "Add wishes straight from Safari"; Wish List › Share › Share a link. |
 | 1.12 | **A leftover diagnostic function on the server** | The `img-audit` edge function from 08-06 is still deployed. It is read-only and needs sign-in, and nothing uses it. | Say "delete img-audit" if you want it gone. |
 
 ## 2. Work for a future session, in priority order
 
+0. **Speed, the rest of the 11-22 audit** (the audit's harness was a throttled Playwright run of `dist/` against live-sized mock data; it lived in that session's scratchpad and is not committed). Done: the thumbnail flood. Open: check whether iOS still re-downloads thumbs (CORS and non-CORS share no cache entry); a 2–3 s timeout on the service worker's network-first navigation; trim boot columns (`wardrobe_items select=*`, all 157 plans); thumbs as WebP when iOS can encode it.
 1. **The trend brief claims research it did not do.** The live `trend_brief` (season Oct) is flagged `web: true`, but its sources read "unavailable … search was down and nothing was verified." Evaluate's *current* score, Style Me and the chat all read it as researched. Fix it so a refresh that got no search results stores `web: false` and retries soon, rather than waiting 35 days. Then refresh it. The automatic refresh is otherwise about 2026-11-09.
 2. **Read the Style Me timing rows before any speed work.** There are 441 `stylist_outfit:timing` rows (09-11 → 10-23), and no session has analysed them. They decide between stabilising the inventory order (prompt-cache hits) and cutting output tokens. Also worth reading: on 10-21 one stream sat about 10 minutes (`totalMs` 622 081) before the idle watchdog gave up. Most likely the phone suspended the app mid-call.
 3. **The deferred refactors (from the 08-07 audit, still open):**
@@ -35,6 +40,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 
 ## 3. Watch on your phone (confirms recent fixes, nothing to build)
 
+- **Tonight (11-22):** "All" shows the whole closet · Home says when a trip has started but isn't started · Edit picks adds pieces and stays still · ★ on the Packing tab · the wish list (photos, ★, totals, Safari bookmark, ✦ What do you think?, Share a link, ✓ Bought → Add to my closet) · Style Me never names a wish, Evaluate never suggests a piece you don't own · a planner day skips the week's earlier garments · ↺ Echoes on Style Me · no bootie under a skirt or dress anywhere · Evaluate leads with the look as a whole · the app opens faster.
 - **A heart on a worn day (#276):** Planner › past day › *Love*. The look then appears in Saved › All › ♥ with its date, and History shows it hearted. A day you'd already saved shouldn't gain a second card, unless you edited that day's look after wearing it.
 - **"↻ Judge my month again" (#276)** sits under the most-stylish picks and says how many looks you've worn since.
 - **"?" pieces (#275):** if one ever returns, close and reopen the sheet. If it then draws, the retry worked. If not, send a screenshot.
@@ -55,7 +61,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 - A saved look reopened from Saved carries no Style Me card. Storing it would need a migration (#273).
 - A day's saved arrangement round-trips for its first look only.
 - The look-back has no week window. Judged too few looks to rank (#257).
-- The backup tables stay, by your choice (10-10). The next migration number is **0040**.
+- The backup tables stay, by your choice (10-10). The next migration number is **0041** (0040, the wish-list share link, is applied live).
 - `gn_games` / `gn_players` belong to another app on the same project and are left alone.
 
 ## 5. Closed since the last handoff, so don't reopen

@@ -25,6 +25,7 @@ import { bucketFromHigh } from "../../lib/weather.js";
 import { outfitCoverageGaps } from "./outfits.js";
 import { defaultTripDayOccasion } from "./tripPools.js";
 import { inTheRoom } from "./roomKeepOuts.js";
+import { fixBootiesUnderHems } from "../../utils/hemShoes.js";
 
 // ── Default occasion seed ──────────────────────────────────────────────────
 // We used to gate this through a "vibe" concept (Casual / Theme Park / Beach
@@ -1225,6 +1226,11 @@ export function buildDailyOutfits(items, dailyHighsF, opts = {}) {
         if (suit.length) { poolSuits[d] = suit; suitsPlaced++; }
       }
     }
+
+    // No bootie under a hem (owner, 2026-11-22; utils/hemShoes.js): the swap
+    // comes from the day's own pool, before the capsule counts the wear.
+    const hemmed = fixBootiesUnderHems(day, pool, { weather: bucketFromHigh(hi) });
+    if (hemmed !== day) day.splice(0, day.length, ...hemmed);
 
     // Bump capsule state so the next day's picks see today's wears — the
     // pool suit counts too (it drives the rebuild guard + suit #2 freshness).

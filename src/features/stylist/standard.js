@@ -247,10 +247,14 @@ export function describeItem(it, { notesMax } = {}) {
 
 // Everything the app has learned about her, as prompt blocks — see
 // learning.js. Kept under this name for the surfaces that already call it.
-// `wishes: false` for a surface that BUILDS a look (a trip's looks): her wish
-// list names pieces she does not own yet, and a look is what she can put on
-// (owner, 2026-11-22). The advisory surfaces keep it, labelled as not owned.
-export async function personalGrounding({ wardrobe = [], available = [], fingerprintMax = 1200, maxAutoPairs = 3, wishes = true } = {}) {
+// Her wish list names pieces she does NOT own. Only a shopping surface reads
+// it (`wishes: true`: the ideas run and Complete-a-Look, the wish read, Brand
+// Atlas). Every surface that builds or judges a look (Style Me, trips, the
+// chat, Evaluate) is dressed from what she owns and never sees a wish (owner,
+// 2026-11-22: "make sure Style me and evaluator and anything else outside of
+// my wishlist does NOT include or suggest anything I do not own"). What she
+// just bought and her brand finds stay in the block for everyone.
+export async function personalGrounding({ wardrobe = [], available = [], fingerprintMax = 1200, maxAutoPairs = 3, wishes = false } = {}) {
   const learned = await learnedContext({ wardrobe, available, fingerprintMax, maxAutoPairs });
   const blocks = wishes ? learned.blocks
     : learned.blocks.map(b => b.startsWith("HER SHOPPING LIST:") ? withoutWishes(b) : b).filter(Boolean);
@@ -420,19 +424,15 @@ export function readLook(items, { occasions = [], weathers = [], available = [],
     notes.push(line);
   }
 
-  // ── Where the hem meets the boot (owner, 2026-11-02: "aren't I not
-  // supposed to wear booties with skirts or dresses? They keep showing
-  // up."). Not a ban — a bootie under a hem works when the leg runs into it
-  // unbroken — so it is a note on HOW, with the two fixes she may own.
+  // ── Where the hem meets the boot. Owner, 2026-11-02 ("aren't I not
+  // supposed to wear booties with skirts or dresses?") and again 2026-11-22,
+  // firmly: "MAKE SURE booties never get shown with skirts." The builders
+  // never ship one (utils/hemShoes.js); on a canvas she built herself it is
+  // the first thing to fix, with the shoe she owns that does it.
   const booties = list.filter(isAnkleBootItem);
   const hems = list.filter(isSkirtOrDressItem);
   if (booties.length && hems.length) {
-    const tights = list.filter(isHosieryItem);
-    let line = `An ankle boot (${booties.map(shortName).join(", ")}) meets a hem (${hems.map(shortName).join(", ")}). A bootie under a skirt or dress keeps the leg long only when the leg runs into it unbroken — opaque tights in the boot's colour, or a hem that meets the shaft; a bare or contrasting leg into the bootie cuts the line at its narrowest. A knee boot under the hem does it with no help.`;
-    line += tights.length
-      ? ` Tights on the canvas (${tights.map(shortName).join(", ")}): say whether they carry the boot's colour.`
-      : " No tights on the canvas: name the knee boot or the tonal tights she owns, as taste.";
-    notes.push(line);
+    notes.push(`An ankle boot (${booties.map(shortName).join(", ")}) under a hem (${hems.map(shortName).join(", ")}). She keeps booties away from skirts and dresses: the break at the ankle shortens her leg. Swap it for the shoe she owns that keeps the line long under this hem: a knee or over-the-knee boot in the cold, otherwise a pump, a slingback or a flat. Name it.`);
   }
 
   // ── Colour story ──

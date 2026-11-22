@@ -2,6 +2,33 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Only what she owns; no booties under a hem; an evaluator that reads the whole look — 2026-11-22
+
+### Why
+
+Owner: *"make.sure. Style me and evaluator and anything else outside of my wishlist does NOT include or suggest anything I do not own. Be smart about all evaluator and chat code and the purpose of the wishlist. Make sure evaluator is looking at wholistic style trends for the moment and not just telling me my outfits are bad. Make sure the style me task is giving me chic and stylish looks … If it is not advised that booties are worn with skirts because it shortens the leg, MAKE SURE booties never get shown with skirts. Style me needs to inspire me, not make me look frumpy and ugly."*
+
+### Changed
+
+- **The wish list is a shopping tool.** `personalGrounding` now defaults to `wishes: false`. Only the ideas run, Complete-a-Look, the wish read and Brand Atlas pass `wishes: true`. Style Me (already stripped), trips, the chat, Evaluate and the recap are dressed from what she owns and never see an unbought wish. What she just bought and her brand finds still reach everyone. `test:wish-list` holds the default and the opt-ins by file.
+- **Evaluate never suggests a piece she doesn't own.** `resolveEvalMoves` drops a swap or add whose IN piece resolves to nothing in her closet; it used to render greyed out with the model's words. `test:evaluate` updated.
+- **No booties under a hem, anywhere** (`utils/hemShoes.js`, `test:hem-shoes` 6). An ankle boot (`isAnkleBootItem`) with a skirt or dress (`isSkirtOrDressItem`) is swapped for the best shoe the look's own pool allows. In the cold that is a knee or over-the-knee boot; otherwise a heel, then a flat, with a sandal in the heat. The bootie's colour family wins ties, and shoes used by other looks come last. It runs in:
+  - Style Me, via `completeHemShoes` in every `ship()` exit and on streamed looks;
+  - the trip packer, per day before the capsule counts;
+  - a trip day's AI look;
+  - Atelier's whole-trip pass.
+  
+  On her live closet that means her Hendrix and Marrgo booties never meet a skirt; the Wally Foldover or Naples boot, or a Gant or Miss Z pump, takes their place. The 11-02 "works into tights" note in LOOK FACTS, the silhouette directive and the tests now say what she asked: keep booties away from hems, and swap for the shoe she owns. A new standing-preference seed says it in her words (merged once into "How I wear things").
+- **Chic, not frumpy.** THE STANDARD's silhouette line adds that the line runs long (a defined waist or a column, a shoe that continues the leg) and that frumpy is the failure. Style Me's brief asks for looks that inspire her, "never merely correct".
+- **The evaluator reads the whole look first.** A new EVAL_TASK block asks for the look's mood and silhouette, and where it sits in fashion now (the researched brief) or the timeless direction it belongs to. The headline is that point of view, not a fault. When a look works, its moves are lifts toward a 9.
+
+### Downstream
+
+- *Efficiency:* the standard line changes the cached preamble once. Every request after that is byte-stable again. The bootie swap is pure and per look.
+- *Effectiveness:* a preference she stated twice now holds in all four builders by completion, never by refusing a look. The evaluator and chat can no longer name a piece she doesn't own.
+- *Speed:* no extra calls.
+- *Education:* the preference is a standing-preference seed, so every surface reads it through `learning.js`.
+
 ## [Unreleased] — Share with Mike; Bought → closet; a look's echo; copy any piece — 2026-11-22
 
 ### Why
