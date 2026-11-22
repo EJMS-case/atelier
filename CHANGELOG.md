@@ -2,6 +2,21 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — `ATELIER_STATE.md` brought to #308 (docs only) — 2026-11-22
+
+### Why
+
+Open item 2.3: the shareable description of the app still said "as of 2026-09-18" and its §9 described September.
+
+### Changed
+
+- **`ATELIER_STATE.md`**: facts table (about 570 pieces, about 185 PRs, 61 suites, a 55-step walk, a 512 kB boot chunk), the gentle picture loading, Home's never-started trip card, the closet's All, Style Me's office keep-outs at Casual and Dinner, evening pieces leading Dinner, Mild without sandals, Boots and Booties, the planner week without repeats, the builder's Flip, belt resize, concise chat and remembered Evaluate read, looks owning their occasions, Atelier's trip pass, Vegas, re-wear and belts, ★ Bring next time, and the pin sheet read from the wardrobe. §9 is rewritten for November and points to `OPEN_ITEMS.md`. The glossary gains *trip pass* and *wish*.
+- `OPEN_ITEMS.md` drops the item; `CLAUDE.md`'s table gives the new date.
+
+### Downstream
+
+None: docs only, no code path changes.
+
 ## [Unreleased] — Speed: the thumbnail flood — 2026-11-22
 
 ### Why
