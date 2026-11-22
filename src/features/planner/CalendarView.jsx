@@ -27,7 +27,7 @@ import { resolveItemIds } from "../../utils/item-helpers.js";
 import { restoreScroll } from "../../utils/restoreScroll.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
 import { logAiError } from "../../lib/ai/logError.js";
-import { homeClosetFor, poolForTripDay, destinationClosetFor } from "./tripPools.js";
+import { homeClosetFor, poolForTripDay, destinationClosetFor, pinPoolFor } from "./tripPools.js";
 
 // The trip screen is a second tap from the month grid, and it is half the
 // planner's bytes (TripDetailView + its packing tabs). It loads when a trip
@@ -1425,17 +1425,14 @@ function TripModal({ available, wardrobe: wardrobeProp, closets, activeCloset, a
   // Anything already pinned stays listed even if it drops out of the pool (she
   // switched the destination closet after pinning), otherwise a pin could go
   // invisible and therefore un-unpinnable while still driving the packer.
-  const pinPool = useMemo(() => {
-    const packable = destClosetId
-      ? tripPool.filter(it => closetOf(it) !== destClosetId)
-      : tripPool;
-    if (!mustIncludeIds.size) return packable;
-    const shown = new Set(packable.map(it => it.id));
-    const source = Array.isArray(wardrobe) && wardrobe.length ? wardrobe : available;
-    const strays = source.filter(it => mustIncludeIds.has(it.id) && !shown.has(it.id));
-    return strays.length ? [...packable, ...strays] : packable;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripPool, mustIncludeIds, wardrobe, available, destClosetId]);
+  // One reader with the trip screen's sheet: tripPools pinPoolFor.
+  const pinPool = useMemo(
+    () => pinPoolFor({
+      wardrobe: Array.isArray(wardrobe) && wardrobe.length ? wardrobe : available,
+      destClosetId, homeClosetId, pinnedIds: [...mustIncludeIds],
+    }),
+    [wardrobe, available, destClosetId, homeClosetId, mustIncludeIds],
+  );
 
   const pinnedItems = useMemo(
     () => tripPool.filter(it => mustIncludeIds.has(it.id)),

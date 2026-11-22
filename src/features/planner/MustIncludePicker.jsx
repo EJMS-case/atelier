@@ -13,7 +13,7 @@
 // packer honours it and the sheet flags it rather than hiding it, which is the
 // same call Style Me makes for an explicitly requested piece.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import TrimmedImage from "../../components/TrimmedImage.jsx";
 import { PALETTE_STRONG as PALETTE } from "../../constants/palette.js";
 import { filterByWeather } from "../../utils/item-helpers.js";
@@ -35,6 +35,12 @@ export default function MustIncludePicker({
   const [sub, setSub] = useState("");
 
   const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
+  // What was pinned when the sheet OPENED leads the grid, and that order holds
+  // while she taps. Sorting on the live selection moved every card she picked
+  // to the top and everything under it up a slot, so her place in the grid
+  // jumped on each tap (owner, 2026-11-22: "when I add them, I don't want the
+  // list to scroll up to the top").
+  const pinnedAtOpen = useRef(selected).current;
 
   // Pieces the trip's climate would normally rule out. Shown, not hidden — the
   // badge is the whole explanation for why a wool coat can be pinned to a
@@ -65,13 +71,14 @@ export default function MustIncludePicker({
       .filter(it => !sub || it.subcategory === sub)
       .filter(it => !q || `${it.name || ""} ${it.brand || ""} ${it.subcategory || ""} ${it.color || ""}`.toLowerCase().includes(q))
       .sort((a, b) =>
-        // Pinned pieces float to the top so the current selection is always
-        // visible without hunting for it through a 300-item closet.
-        (selected.has(b.id) ? 1 : 0) - (selected.has(a.id) ? 1 : 0) ||
+        // Pieces pinned before the sheet opened lead, so the selection is
+        // visible without hunting for it through a 300-item closet. A tap
+        // never reorders the grid (pinnedAtOpen).
+        (pinnedAtOpen.has(b.id) ? 1 : 0) - (pinnedAtOpen.has(a.id) ? 1 : 0) ||
         catRank(a.category) - catRank(b.category) ||
         (a.name || "").localeCompare(b.name || ""));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, query, cat, sub, selectedIds]);
+  }, [items, query, cat, sub]);
 
   const toggle = (id) => {
     const next = new Set(selected);
@@ -129,11 +136,11 @@ export default function MustIncludePicker({
         )}
         </div>
 
-        {selected.size > 0 && (
-          <button onClick={() => onChange(new Set())} style={clearBtn}>
-            Clear all {selected.size}
-          </button>
-        )}
+        {/* Always takes its line, so the first pin doesn't push the grid down. */}
+        <button onClick={() => onChange(new Set())} disabled={selected.size === 0}
+          style={{ ...clearBtn, visibility: selected.size > 0 ? "visible" : "hidden" }}>
+          Clear all {selected.size}
+        </button>
 
         {visible.length === 0 ? (
           <div style={{ padding: 28, textAlign: "center", color: PALETTE.muted, fontSize: 12 }}>

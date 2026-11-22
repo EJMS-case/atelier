@@ -2,6 +2,27 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Edit picks adds pieces, and a pick stays where she tapped it — 2026-11-22
+
+### Why
+
+Owner, in Arizona: *"When I click 'edit picks' on a trip planner I should be able to add more items. And when I add them, I don't want the list to scroll up to the top. I like the search bar there."*
+
+- **Nothing to add.** The trip screen's sheet was built from `available`, the closet she is standing in, minus the destination closet. In Arizona that left only what was already pinned, so the sheet could only remove pieces.
+- **The jump.** The grid sorted on the live selection, pinned first. Each tap moved the picked card to the top and every card above it down a slot, so her place moved on every pick.
+
+### Changed
+
+- **`pinPoolFor`** (`planner/tripPools.js`) is the one reader for what the "Bringing for sure" sheet offers. It reads the wardrobe, never the active closet: everything outside the destination closet, or the home closet when there is none, plus every pin (so a pin can always be undone). Misc is never offered. The trip screen and the Plan-a-trip sheet both call it.
+- **`MustIncludePicker`**: the pieces pinned when the sheet opened lead the grid, and a tap no longer reorders it. *Clear all* always takes its line, so the first pin doesn't push the grid down. Search and filters stay pinned at the top, as before.
+- Tests: `test:trippool` gains 4 assertions. New walk step, *Plan a trip → a pick deep in the grid stays where she tapped it*: with the old sort it fails (slot 78 → 0).
+
+### Downstream
+
+- *Efficiency / speed:* the same in-memory filter over the wardrobe. No call.
+- *Effectiveness:* a pin reaches the packer and the trip pool exactly as before. Only what the sheet offers changed.
+- *Education:* pins are her packing record (see the packing tab's ×N), now complete even when she adds them on the trip.
+
 ## [Unreleased] — A trip you're on that never started says so — 2026-11-22
 
 ### Why

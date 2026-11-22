@@ -1019,6 +1019,41 @@ await check("Plan a trip → + Pick pieces scrolls down only, with its filters s
   await clickText("button", "Done");
   await page.waitForTimeout(300);
 });
+// Owner, 2026-11-22: "when I add them, I don't want the list to scroll up to
+// the top." A tap re-sorted the grid (pinned first), so the card she picked
+// jumped to the top and her place moved. Scrolled down, a tapped card must
+// stay where it was, and so must the grid.
+await check("Plan a trip → a pick deep in the grid stays where she tapped it", async () => {
+  await clickText("button", "+ Pick pieces");
+  await page.waitForTimeout(600);
+  const before = await page.evaluate(() => {
+    const input = document.querySelector('input[placeholder="Search your closet…"]');
+    let sheet = input; while (sheet && getComputedStyle(sheet).overflowY !== "auto") sheet = sheet.parentElement;
+    const cards = [...sheet.querySelectorAll("button[aria-pressed]")];
+    const target = cards.filter(c => c.getAttribute("aria-pressed") === "false").pop();
+    if (!target) return null;
+    target.scrollIntoView({ block: "center" });
+    target.dataset.walk = "picked";
+    return { n: cards.length, idx: cards.indexOf(target), top: target.getBoundingClientRect().top, scroll: sheet.scrollTop };
+  });
+  if (!before) throw new Error("no unpicked card in the sheet");
+  if (before.idx < 1) throw new Error("the fixture grid is too short to prove anything");
+  await page.evaluate(() => document.querySelector('[data-walk="picked"]').click());
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => {
+    const t = document.querySelector('[data-walk="picked"]');
+    const input = document.querySelector('input[placeholder="Search your closet…"]');
+    let sheet = input; while (sheet && getComputedStyle(sheet).overflowY !== "auto") sheet = sheet.parentElement;
+    const cards = [...sheet.querySelectorAll("button[aria-pressed]")];
+    return t && { idx: cards.indexOf(t), on: t.getAttribute("aria-pressed"), top: t.getBoundingClientRect().top, scroll: sheet.scrollTop };
+  });
+  if (!after || after.on !== "true") throw new Error("the tap did not pick the piece");
+  if (after.idx !== before.idx) throw new Error(`the picked card moved from slot ${before.idx} to ${after.idx}`);
+  if (Math.abs(after.top - before.top) > 2) throw new Error(`the grid shifted ${Math.round(after.top - before.top)}px on a tap`);
+  await page.evaluate(() => document.querySelector('[data-walk="picked"]').click());   // un-pick: leave the fixture as it was
+  await clickText("button", "Done");
+  await page.waitForTimeout(300);
+});
 await check("Plan a trip → Preview looks builds every day", async () => {
   await page.fill('input[placeholder^="e.g. Disneyland"]', "Paris");
   await page.waitForTimeout(600);

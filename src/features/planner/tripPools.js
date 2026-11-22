@@ -108,3 +108,25 @@ export function poolForTripDay({
   }
   return poolIncluding(pool || [], all, keep);
 }
+
+/**
+ * What the "Bringing for sure" sheet offers: the pieces she could CARRY, read
+ * from the wardrobe, never from the active closet. Owner, 2026-11-22, in
+ * Arizona: "When I click 'edit picks' on a trip planner I should be able to
+ * add more items." The trip screen built this from `available`, which is the
+ * closet she is standing in. Standing in Arizona, that minus Arizona left
+ * nothing but what was already pinned, so the sheet could only take pieces
+ * away.
+ *
+ * With a destination closet, everything that does not live there (a piece
+ * already at the destination needs no packing decision). Without one, the
+ * home closet. Either way, every pinned piece stays listed so a pin can always
+ * be undone.
+ */
+export function pinPoolFor({ wardrobe, destClosetId = null, homeClosetId, pinnedIds = [] } = {}) {
+  const all = (wardrobe || []).filter(it => it && !isMiscItem(it));
+  const base = destClosetId
+    ? all.filter(it => closetOf(it) !== destClosetId)
+    : all.filter(it => closetOf(it) === homeClosetId);
+  return poolIncluding(base, all, [...(pinnedIds || [])]);
+}

@@ -24,6 +24,7 @@ import { tripCommittedIds, buildPlanPayload, newOutfitId } from "../src/features
 import { poolIncluding } from "../src/features/closet/useVisibleWardrobe.js";
 import { resolveItemIds } from "../src/utils/item-helpers.js";
 import { DEFAULT_CLOSET_ID, ARIZONA_CLOSET_ID } from "../src/features/closet/closets.js";
+import { pinPoolFor } from "../src/features/planner/tripPools.js";
 
 let passed = 0, failed = 0;
 function assert(cond, label) {
@@ -274,6 +275,31 @@ section("a new look on a planned day adds; a trip moves what it displaces to Sav
   assert(displacedLogRows([work], { "2026-11-14": tripDay }, [{ garment_ids: ["p", "t", "s"] }], { byTrip: true }).length === 0, "a look already in Saved is not saved twice");
   const twice = displacedLogRows([work, { ...work, date: "2026-11-15" }], {}, [], { byTrip: true });
   assert(twice.length === 1, "the same look on two days is saved once");
+}
+
+
+// ── The pin sheet offers what she could carry (owner, 2026-11-22) ────────────
+// "When I click 'edit picks' on a trip planner I should be able to add more
+// items." Standing in Arizona, the trip screen built the sheet from the
+// active closet minus Arizona, which left only what was already pinned.
+{
+  const nyTee  = { id: "ny-tee",  category: "Tops",  closet_id: DEFAULT_CLOSET_ID };
+  const nyPant = { id: "ny-pant", category: "Bottoms", closet_id: DEFAULT_CLOSET_ID };
+  const azTank = { id: "az-tank", category: "Tops",  closet_id: ARIZONA_CLOSET_ID };
+  const misc   = { id: "ny-misc", category: "Misc",  closet_id: DEFAULT_CLOSET_ID };
+  const wardrobe = [nyTee, nyPant, azTank, misc];
+  const ids = (list) => list.map(it => it.id).sort().join(",");
+
+  const az = pinPoolFor({ wardrobe, destClosetId: ARIZONA_CLOSET_ID, homeClosetId: DEFAULT_CLOSET_ID, pinnedIds: ["ny-tee"] });
+  assert(ids(az) === "ny-pant,ny-tee", "an Arizona trip offers every NYC piece, pinned or not, and nothing that lives in Arizona");
+
+  const strayPin = pinPoolFor({ wardrobe, destClosetId: ARIZONA_CLOSET_ID, homeClosetId: DEFAULT_CLOSET_ID, pinnedIds: ["az-tank"] });
+  assert(strayPin.some(it => it.id === "az-tank"), "a pin that lives at the destination stays listed, so it can be undone");
+
+  const noDest = pinPoolFor({ wardrobe, destClosetId: null, homeClosetId: DEFAULT_CLOSET_ID, pinnedIds: [] });
+  assert(ids(noDest) === "ny-pant,ny-tee", "a trip with no destination closet offers the home closet");
+
+  assert(!az.some(it => it.id === "ny-misc") && !noDest.some(it => it.id === "ny-misc"), "Misc is never offered");
 }
 
 console.log(`\ntrip-pool: ${passed} passed, ${failed} failed`);
