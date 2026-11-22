@@ -322,7 +322,12 @@ Conventions worth knowing:
   soft check with a **completion** step that fixes the look before it ships
   (`completeOfficeCoverage`, `salvageByAddingShoes`,
   `salvageByAddingIncludes`) — and run it on streamed looks too, since a
-  streamed look survives to the screen.
+  streamed look survives to the screen. **When a completion has to CHOOSE a
+  piece, it chooses what reads now** (owner, 2026-11-22: "pulling from live
+  trends and styles than hard rules"): `trendWordsFor` / `trendPieceScore` in
+  `utils/hemShoes.js` read the researched trend brief's lines for the piece's
+  vocabulary, and a fixed order is only the fallback when the brief is
+  silent. The bootie swap and the office layer both do this.
 - **Everything the app knows about her comes from
   `src/features/stylist/learning.js`** — standing preferences (Style Profile
   → How I Wear Things), lessons distilled from her chats, fingerprint, loved
@@ -513,6 +518,13 @@ reintroduce a `USING (true)` policy.
   safe only because the URL changes with the bytes: `uploadImage` stamps
   `?v=<now>`, `thumbUrl` hashes the photo URL. Never mint a photo URL without
   the stamp; `test:storage` fails an upload path without the header.
+- **Every closet photo lives in her bucket.** 53 still loaded from the
+  Cloudinary account of the app the closet was imported from until
+  2026-11-22, and one had already vanished. They were copied in
+  (`supabase/backfills/2026-11-22-cloudinary-photos.json` has the old URLs);
+  `npm run doctor` §0 flags any photo on another host. Duplicating a piece
+  into the other closet is no longer in the app (she asks a session): copy the
+  storage object to the new id first, then insert the row with `duplicate_of`.
 
 Still open, deliberately:
 

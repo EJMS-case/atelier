@@ -14,7 +14,7 @@ import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryIt
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
-import { fixBootiesUnderHems } from "./hemShoes.js";
+import { fixBootiesUnderHems, trendWordsFor, trendPieceScore, LAYER_LINE } from "./hemShoes.js";
 
 // Two retries (three total attempts). Each retry is ~5–8s, but the salvage
 // step often returned 1–2 looks instead of 3 with only one retry — paying the
@@ -1326,9 +1326,13 @@ const LAYER_RANK = (item) =>
   : 4;
 
 export function completeOfficeCoverage(parsed, idMap, allItems, ctx = {}) {
-  const { activeExclusions = [], occasionSlots = {}, occasion = "Work", weather = "", forceIncludeIds = [], onlyRescueIds = [], usedShortIds: externalUsed = null } = ctx;
+  const { activeExclusions = [], occasionSlots = {}, occasion = "Work", weather = "", forceIncludeIds = [], onlyRescueIds = [], usedShortIds: externalUsed = null, trendText = "" } = ctx;
   if (!parsed?.looks?.length) return null;
   if (!["Work", "Work Dinner"].includes(occasion)) return null;
+  // WHICH layer reads now comes from the season's research (owner,
+  // 2026-11-22: completion should pull "from live trends and styles than hard
+  // rules"); LAYER_RANK is the stylist's default when the brief is silent.
+  const layerWords = trendWordsFor(trendText, LAYER_LINE);
 
   const usedShortIds = new Set(externalUsed ? [...externalUsed] : []);
   parsed.looks.forEach(l => (l.items || []).forEach(item => usedShortIds.add(cleanLookItemId(item))));
@@ -1344,10 +1348,10 @@ export function completeOfficeCoverage(parsed, idMap, allItems, ctx = {}) {
     if (item.category !== "Outerwear" && item.category !== "Knits") continue;
     if (item.category === "Knits" && item.subcategory !== "Cardigans") continue; // a pullover is a top, not a layer over one
     if (itemViolatesContext(shortId, idMap, allItems, { weather, activeExclusions, occasionSlots, forceIncludeIds })) continue;
-    candidates.push({ shortId, rank: LAYER_RANK(item) });
+    candidates.push({ shortId, rank: LAYER_RANK(item), trend: trendPieceScore(item, layerWords) });
   }
   if (candidates.length === 0) return null;
-  candidates.sort((a, b) => a.rank - b.rank);
+  candidates.sort((a, b) => b.trend - a.trend || a.rank - b.rank);
 
   const looks = parsed.looks.map(l => ({ ...l, items: Array.isArray(l.items) ? [...l.items] : l.items }));
   let addedAny = false;
@@ -1389,7 +1393,7 @@ export function completeOfficeCoverage(parsed, idMap, allItems, ctx = {}) {
 // the weather / exclusion / occasion context, preferring a shoe no other look
 // in the answer wears. Returns null when nothing changed.
 export function completeHemShoes(parsed, idMap, allItems, ctx = {}) {
-  const { activeExclusions = [], occasionSlots = {}, weather = "", forceIncludeIds = [], usedShortIds: externalUsed = null } = ctx;
+  const { activeExclusions = [], occasionSlots = {}, weather = "", forceIncludeIds = [], usedShortIds: externalUsed = null, trendText = "" } = ctx;
   if (!parsed?.looks?.length) return null;
   const byId = itemIdIndex(allItems);
   const shortOf = new Map();
@@ -1408,7 +1412,7 @@ export function completeHemShoes(parsed, idMap, allItems, ctx = {}) {
   const looks = parsed.looks.map(look => {
     if (!Array.isArray(look.items)) return look;
     const resolved = resolveLookItems(look, idMap, allItems);
-    const fixed = fixBootiesUnderHems(resolved, pool, { weather, avoidIds });
+    const fixed = fixBootiesUnderHems(resolved, pool, { weather, avoidIds, trendText });
     if (fixed === resolved) return look;
     const keep = new Set(fixed.map(it => it.id));
     const items = look.items.filter(li => {
@@ -1671,6 +1675,9 @@ async function runValidatedLooks({
   onLook,
   onProgress,
   watchdog = {},
+  // The researched trend brief's text: what a completion step reaches for
+  // when it has to choose a piece (completeHemShoes).
+  trendText = "",
 }, trace) {
   let lastFailures = [];
   let lastParsed = null;
@@ -1685,7 +1692,7 @@ async function runValidatedLooks({
   // gets honored — by adding the layer, never by refusing the look.
   // `how` names the exit for the timing row: "ok" for a clean pass, or the
   // salvage step that made the looks shippable.
-  const completionCtx = { activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds };
+  const completionCtx = { activeExclusions, occasionSlots, occasion, weather, forceIncludeIds, onlyRescueIds, trendText };
   const ship = (p, how = "ok") => {
     trace.outcome = how;
     const completed = completeOfficeCoverage(p, idMap, allItems, completionCtx);

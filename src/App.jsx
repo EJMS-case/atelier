@@ -29,7 +29,6 @@ import { warmThumbnails, pruneThumbnails } from "./utils/thumbnail-cache.js";
 import { runWhenIdle } from "./utils/idle.js";
 import { compareSetsByName, compareSetsByType, setMembers } from "./features/closet/setType.js";
 import { resolveVisibleWardrobe, packedItemIds, miscItemsForCloset, withoutMisc, isMiscItem, poolIncluding } from "./features/closet/useVisibleWardrobe.js";
-import { duplicatedSourceIds, canOfferDuplicate, hasTwin, duplicateTargetCloset, buildDuplicate } from "./features/closet/duplicate.js";
 import { sb, wearWriteCount } from "./lib/supabase.js";
 import { migrateImages, migrateAndSync } from "./lib/migrate.js";
 import { fetchClosetForecast } from "./lib/weather.js";
@@ -1056,26 +1055,6 @@ export default function App() {
     return { done, failed, skipped: items.length - toSync.length };
   }, [items]);
 
-  // ── Duplicate into the other closet (athleisure/lounge twins) ──
-  // Sources that already have a twin, so the grid hides their ⧉ button.
-  const duplicatedIds = useMemo(() => duplicatedSourceIds(items), [items]);
-
-  const duplicateItem = useCallback(async (item) => {
-    const target = duplicateTargetCloset(item, closets.length ? closets : SEED_CLOSETS);
-    if (!target) return;
-    const newId = crypto.randomUUID();
-    let image = item.image || "";
-    if (image && !image.startsWith("data:")) {
-      // Give the twin its own storage object; on failure fall back to sharing
-      // the source's URL — a photo that vanishes only if the source item is
-      // ever deleted beats no photo at all. (A base64 image skips this: the
-      // addItems upload path stores it under the new id anyway.)
-      try { image = await sb.copyImage(item.id, newId); } catch { /* keep source URL */ }
-    }
-    // addItems handles optimistic state, upsert, pending_sync, and sync flash.
-    await addItems([buildDuplicate(item, target.id, newId, image)]);
-  }, [closets, addItems]);
-
   const deleteItem = useCallback(async (id) => {
     const updated = items.filter(it => it.id !== id);
     persistItems(updated);
@@ -1798,11 +1777,6 @@ export default function App() {
   // action buttons are suppressed; otherwise it's the normal ItemCard.
   const renderClosetGridItem = (item) => {
     if (!selectMode) {
-      // ⧉ Duplicate-into-the-other-closet, athleisure/lounge only (she buys
-      // those in twos — one NYC, one Arizona). Hidden once a twin exists.
-      const dupTarget = canOfferDuplicate(item, duplicatedIds)
-        ? duplicateTargetCloset(item, closets.length ? closets : SEED_CLOSETS)
-        : null;
       // A holding-room card is inert: no "style around this piece" (it would
       // put a pyjama name into a stylist prompt for a piece the pool doesn't
       // even contain) and no favouriting (loved pieces bias generation). Edit
@@ -1813,8 +1787,6 @@ export default function App() {
         <ItemCard key={item.id} item={item} wardrobe={wardrobe}
           onDelete={deleteItem}
           onEdit={handleEditItemCard}
-          onDuplicate={dupTarget ? duplicateItem : undefined}
-          duplicateHint={dupTarget?.name}
           isFavorited={favPieceIds.has(item.id)}
           isPacked={!!packedIds?.has(item.id)}
           onToggleFav={misc ? undefined : handleToggleFavPiece}
@@ -2325,8 +2297,6 @@ export default function App() {
           onDelete={() => { deleteItem(editItem.id); setView(editReturnView || "closet"); }}
           onBack={() => setView(editReturnView || "closet")}
           onStyleAround={(it) => { styleWithItem(it); setEditItem(null); }}
-          onDuplicate={!hasTwin(editItem, duplicatedIds) && duplicateTargetCloset(editItem, closets.length ? closets : SEED_CLOSETS) ? duplicateItem : undefined}
-          duplicateHint={duplicateTargetCloset(editItem, closets.length ? closets : SEED_CLOSETS)?.name || ""}
           onOpenDay={(iso) => { setPlannerFocusDay(iso); setView("planner"); }}
           onOpenLook={(id) => { setSavedFocusLook(id); setView("favorites"); }}/>
       )}

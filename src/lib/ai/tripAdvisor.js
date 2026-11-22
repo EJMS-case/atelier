@@ -402,10 +402,12 @@ Return via the return_looks tool with exactly 1 look. Use the real item IDs (ID:
     // Resolve item IDs back to item objects
     const byId = new Map(items.map(w => [w.id, w]));
     // No bootie under a hem (utils/hemShoes.js): the swap comes from the
-    // pieces this day was eligible for.
+    // pieces this day was eligible for, led by what the season's research
+    // speaks for.
+    const trend = await import("../../features/stylist/trendBrief.js").then(m => m.loadTrendBrief()).catch(() => null);
     const resolvedItems = fixBootiesUnderHems((raw.items || [])
       .map(it => byId.get(typeof it === "object" ? it.id : String(it).replace(/^ID:/i, "").trim()))
-      .filter(Boolean), eligible, { weather });
+      .filter(Boolean), eligible, { weather, trendText: trend?.text || "" });
 
     if (resolvedItems.length < 2) return null;
 

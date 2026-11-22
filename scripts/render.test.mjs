@@ -495,9 +495,10 @@ await check("Closet → a garment's Edit screen: one stylist-line field, no Note
   const tiles = await page.evaluate(() => [...document.querySelectorAll('button[aria-label$="in the Planner"]')]
     .filter(b => b.querySelector("img")).length);
   if (tiles === 0) throw new Error("no worn-look tile draws the outfit as a collage");
-  // Any piece without a twin can be copied to the other closet from here
-  // (owner, 2026-11-22: "I can't find the duplicate button").
-  if (!/I have this in both closets: add a copy to Arizona/.test(text)) throw new Error("the Edit screen does not offer the copy to the other closet");
+  // Duplicating is gone from the app (owner, 2026-11-22: "Remove the code to
+  // duplicate entirely. I'll just ask you to do it manually").
+  if (/I have this in both closets|Duplicate into/.test(text)) throw new Error("the Edit screen still offers a duplicate");
+  if (await page.evaluate(() => !!document.querySelector('[aria-label^="Duplicate into"]'))) throw new Error("a duplicate button is still on screen");
 });
 await check("Edit → a worn date opens that day in the Planner", async () => {
   const clicked = await page.evaluate(() => {

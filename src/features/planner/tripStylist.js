@@ -166,7 +166,7 @@ Answer with the style_trip tool: the colour story in one line, then one entry pe
  *
  * @returns {{ story: string, days: Array<{ look: Object[]|null, evening: Object[]|null, note: string }> }}
  */
-export function acceptTripStyle(input, { looks, itemOf, dayCount }) {
+export function acceptTripStyle(input, { looks, itemOf, dayCount, trendText = "" }) {
   const out = Array.from({ length: dayCount }, () => ({ look: null, evening: null, note: "" }));
   const slot = new Map(looks.map(l => [`${l.dayIdx}:${l.part}`, l]));
   for (const entry of input?.days || []) {
@@ -185,7 +185,7 @@ export function acceptTripStyle(input, { looks, itemOf, dayCount }) {
       if (shoes.length > 1) items = items.filter(it => it.category !== "Shoes" || it === shoes[0]);
       // No bootie under a hem (utils/hemShoes.js): the swap comes from this
       // look's own eligible pieces.
-      items = fixBootiesUnderHems(items, [...itemOf.values()].filter(it => l.eligible.has(it.id)), { weather: l.weather || "" });
+      items = fixBootiesUnderHems(items, [...itemOf.values()].filter(it => l.eligible.has(it.id)), { weather: l.weather || "", trendText });
       if (items.length && outfitCoverageGaps(items).length === 0) out[dayIdx][part === "day" ? "look" : "evening"] = items;
     }
   }
@@ -229,5 +229,7 @@ export async function styleTrip({ days, fixed = [], destination = "", brief = nu
     if (e?.status === 401 || e?.status === 429 || e?.name === "AbortError") throw e;
     input = await request(MODEL_STRONG);
   }
-  return acceptTripStyle(input, { looks, itemOf, dayCount: days.length });
+  // The season's research, for the one completion that has to choose a piece.
+  const trend = await import("../stylist/trendBrief.js").then(m => m.loadTrendBrief()).catch(() => null);
+  return acceptTripStyle(input, { looks, itemOf, dayCount: days.length, trendText: trend?.text || "" });
 }

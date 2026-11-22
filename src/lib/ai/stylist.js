@@ -352,6 +352,8 @@ export async function generateOutfit(items, occasion, weather, request, apiKey, 
       onLook: wrappedOnLook,
       onProgress,
       sheetMs,
+      // A completion that must choose a piece reaches for what reads now.
+      trendText: trendBrief?.text || "",
     });
   } catch (e) {
     // Streamed looks were already recorded live at stream time — nothing
