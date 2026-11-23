@@ -10,7 +10,7 @@ import { invokeToolRaw, invokeToolStream } from "../lib/ai/toolUse.js";
 import { LooksResponseSchema, LooksTool } from "../lib/ai/schemas.js";
 import { logAiError } from "../lib/ai/logError.js";
 import { coerceLooksShape as coerceLooksShapeCore, unescapeJsonStringPrefix } from "./coerce-shapes.js";
-import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, leavesLegBare, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight } from "./item-helpers.js";
+import { getSleeveType, isBootItem, isBlazerItem, isCompleteSetItem, isHosieryItem, leavesLegBare, isSandalFormItem, isStatementPiece, classifierNotes, itemIdIndex, WEATHER_HEAVY_RE, WEATHER_WINTER_ONLY_RE, LIGHT_OUTER_RE, HEAVY_OUTER_RE, HEAVY_COAT_RE, isLightCardigan, readKnitWeight, isSkirtOrDressItem } from "./item-helpers.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { explainFilterViolation, matchesActiveInclude, activeIncludeTypes } from "./style-filters.js";
 import { MODEL_TOP, MODEL_STRONG } from "../constants/models.js";
@@ -892,6 +892,10 @@ function checkIncludeToggles(response, idMap, allItems, activeExclusions, occasi
   for (const t of types) {
     const candidates = eligibleIncludeShortIds(t, idMap, allItems, { occasionSlots, weather, activeExclusions });
     if (candidates.length === 0) continue; // nothing to include — never fail over it
+    // Stockings need a skirt or a dress to go under (checkHosieryPairing).
+    // With none in the inventory the toggle cannot be met, and demanding it
+    // loops every retry into the hosiery check — never fail over that.
+    if (t.group === "legwear" && !inventoryHasSkirtOrDress(idMap, allItems)) continue;
 
     const lacking = [];
     let satisfied = 0;
@@ -907,10 +911,18 @@ function checkIncludeToggles(response, idMap, allItems, activeExclusions, occasi
     // Can't demand more distinct pieces than exist (HC4 forbids reuse).
     const required = Math.min(response.looks.length, candidates.length);
     for (const i of lacking.slice(0, Math.max(0, required - satisfied))) {
-      failures.push(`Look ${i + 1} must include a ${t.label.replace(/s$/, "")} — her "Include ${t.label}" toggle is ON (a direct instruction, not a suggestion). Eligible: ${candidates.slice(0, 8).join(", ")}. In heat, pick the lightest and style it worn open or over the shoulders.`);
+      const how = t.group === "legwear"
+        ? "Build the look on a skirt or a dress (hosiery never goes with full-length trousers) and add one pair"
+        : "In heat, pick the lightest and style it worn open or over the shoulders";
+      failures.push(`Look ${i + 1} must include a ${t.label.replace(/s$/, "")} — her "Include ${t.label}" toggle is ON (a direct instruction, not a suggestion). Eligible: ${candidates.slice(0, 8).join(", ")}. ${how}.`);
     }
   }
   return failures;
+}
+
+function inventoryHasSkirtOrDress(idMap, allItems) {
+  const byId = itemIdIndex(allItems);
+  return Object.values(idMap).some(realId => isSkirtOrDressItem(byId.get(String(realId))));
 }
 
 // Candidate short-IDs for an include type: in the sampled inventory, matching

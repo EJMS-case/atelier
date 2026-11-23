@@ -2,6 +2,36 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Efficiency audit: Include Stockings no longer loops to nothing — 2026-11-23
+
+### Why
+
+Owner: *"Please run an audit for efficiency."* Measured from the live `stylist_outfit:timing` rows (30 days, 212 taps), the boot bundle and the boot REST reads.
+
+### Fixed
+
+- **Include Stockings at Dinner returned nothing, twice tonight: 6 calls, about 55 s.** The include line the model read was written for a layer ("on a hot day … draped over the shoulders") and never said stockings need a skirt. So the model built trousers, `checkHosieryPairing` stripped the tights, `checkIncludeToggles` failed, and every retry repeated it.
+  - The prompt line for legwear now asks for a skirt- or dress-built look with one pair chosen to the hem and shoe (`describeStyleFilters`).
+  - The retry message says the same.
+  - With no skirt or dress in the inventory, the legwear toggle stands down (`inventoryHasSkirtOrDress`) instead of making retries it can't win.
+  - Tests: `test:filters` +2, `test:validator` +2.
+
+### Measured, not changed (in OPEN_ITEMS)
+
+- **Style Me tokens:**
+  - About 31k uncached input per tap, about 6k cached, about 1k out.
+  - First token 7.2 s at the median; a whole tap 12.6 s (p90 19 s).
+  - 92% of taps are one call (1.08 attempts on average).
+  - 174 of 212 taps followed a same-occasion, same-weather tap within 5 minutes. Caching the inventory is the big lever, but it moves variety off list order, so it waits on her (OPEN_ITEMS §2.2).
+- **Boot bundle:** 518 kB (156 kB gzip). `@supabase/auth-js` is about 101 kB of that (24 kB gzip), including the admin API and WebAuthn it never uses. It stays: `lib/auth.js` records why it was chosen (token-lifecycle bugs), and 24 kB gzip doesn't justify a hand-rolled auth.
+- **Boot reads:** 14 parallel requests, about 670 kB raw. `wardrobe_items` (333 kB) and `planned_outfits` (190 kB, including 100 kB of `layout_data` that Home's worn tiles draw) are the bulk. Both are read by what boots, so neither was trimmed. `outfit_logs` already leaves out the 4.2 MB of base64 `collage_url` (OPEN_ITEMS 1.2 is hers to clear).
+
+### Downstream
+
+- *Efficiency / speed:* an Include Stockings tap is one call again, not three that fail.
+- *Effectiveness:* she gets a skirt or dress look with hosiery, which is what the toggle means.
+- *Education:* none.
+
 ## [Unreleased] — Her formality scale, in her words, once; ★ Bring next time from the Select bar — 2026-11-23
 
 ### Why
