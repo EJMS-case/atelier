@@ -73,6 +73,7 @@ import { unionTags, outfitsOf, planRowOver, newOutfitId, appendOutfit, sigOf, sc
 import { tagsFor } from "./lib/multitag.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 import { dueToStart } from "./features/planner/tripStatus.js";
+import { browsedClosetId, closetGridPool, moveTargets } from "./features/closet/browseCloset.js";
 import { lookEcho, echoLine } from "./features/stylist/lookEcho.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -167,6 +168,10 @@ export default function App() {
   // items — see the available memo below.
   const [activeTrip, setActiveTrip] = useState(null);
   const [activeTripItems, setActiveTripItems] = useState([]);
+  // During a trip, the closet she is LOOKING INTO from the ▼ switcher (owner,
+  // 2026-11-23: "Can I view my nyc closet?"). The grid only, never the pool;
+  // see features/closet/browseCloset.js. null = the trip grid.
+  const [browseClosetId, setBrowseClosetId] = useState(null);
   // A trip she is ON that still says planning (dueToStart): Home and the trip
   // screen say so, because until she starts it what she brought is out of
   // styling. Read only when no trip is active, cleared the moment one is.
@@ -466,6 +471,24 @@ export default function App() {
       : f));
   }, []);
 
+  // During a trip the ▼ switcher looks into a closet instead of switching to
+  // it (owner, 2026-11-23). The destination closet is the trip grid itself.
+  const browseCloset = useCallback((id) => {
+    setBrowseClosetId(id);
+    setClosetMenuOpen(false);
+    setSelectMode(false);
+    setSelectedIds([]);
+    setActiveFilters(f => (f.category?.includes(MISC_CATEGORY)
+      ? { ...f, category: [], subcategory: [], sleeveLength: "" }
+      : f));
+    setView("closet");
+  }, []);
+  // Browsing ends when she leaves the closet (Edit is part of it: she opens a
+  // piece and comes back to the same grid) or the trip ends.
+  useEffect(() => {
+    if (browseClosetId && (!activeTrip || (view !== "closet" && view !== "edit"))) setBrowseClosetId(null);
+  }, [browseClosetId, activeTrip, view]);
+
   // ── THE THREE ARRAYS ───────────────────────────────────────────────────────
   // The whole app's garment vocabulary is defined here, and it is only three
   // things. The full statement of the rule lives in the header of
@@ -505,6 +528,17 @@ export default function App() {
   // The one count of the closet she is in — header badge and Home read it
   // (countCloset: pieces / garments / finishing, the same words everywhere).
   const availableCount = useMemo(() => countCloset(available), [available]);
+
+  // The closet GRID's pieces: `available`, or during a trip the closet she is
+  // browsing from the ▼ switcher. Only the grid's own surfaces read this
+  // (FilterBar, shelves, Sets, Select); every stylist keeps `available`.
+  const browsedId = browsedClosetId({ activeTrip, browseClosetId });
+  const browsedCloset = browsedId ? closets.find(c => c.id === browsedId) : null;
+  const closetGrid = useMemo(
+    () => closetGridPool({ wardrobe: items, available, browsedId }),
+    [items, available, browsedId],
+  );
+  const closetGridCount = useMemo(() => countCloset(closetGrid), [closetGrid]);
   const availableWithWear = useMemo(() => applyWearStats(available, wearData.stats || {}), [available, wearData.stats]);
 
   // ── MISC — the holding room ────────────────────────────────────────────────
@@ -512,8 +546,8 @@ export default function App() {
   // the single door back in, and it leads to the closet GRID only, and only
   // while the Misc chip is selected. Never to a stylist.
   const miscItems = useMemo(
-    () => miscItemsForCloset(items, activeCloset.id),
-    [items, activeCloset.id],
+    () => miscItemsForCloset(items, browsedId || activeCloset.id),
+    [items, browsedId, activeCloset.id],
   );
 
   // ── builderPool — `available`, widened for one surface ─────────────────────
@@ -1220,7 +1254,7 @@ export default function App() {
   const { recentItems, uncategorized } = useMemo(() => {
     const now = Date.now();
     const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
-    const stamped = available
+    const stamped = closetGrid
       .map(it => ({ it, t: it.created_at ? Date.parse(it.created_at) : NaN }))
       .filter(x => Number.isFinite(x.t) && now - x.t < TWO_WEEKS)
       .sort((a, b) => b.t - a.t);
@@ -1229,9 +1263,9 @@ export default function App() {
       // True uncategorized = missing top-level category. Subcategory is not
       // always available (Belts/Jumpsuits have no subcategory list in
       // taxonomy.js, so checking !it.subcategory left them stranded).
-      uncategorized: available.filter(it => !it.category),
+      uncategorized: closetGrid.filter(it => !it.category),
     };
-  }, [available]);
+  }, [closetGrid]);
 
   const toggleFav = useCallback(async (type, refId) => {
     const existing = favorites.find(f => f.type === type && f.reference_id === refId);
@@ -1493,7 +1527,7 @@ export default function App() {
   }, [selectMode, isSetView, view]);
   const setGroupsRaw = isSetView ? (() => {
     const groups = {};
-    available.filter(it => it.set_id).forEach(it => {
+    closetGrid.filter(it => it.set_id).forEach(it => {
       if (!groups[it.set_id]) groups[it.set_id] = [];
       groups[it.set_id].push(it);
     });
@@ -1551,7 +1585,7 @@ export default function App() {
     // nothing to say about them — the view is simply the closet's Misc items,
     // A→Z by name (miscItemsForCloset already sorts).
     if (isMiscView) return miscItems;
-    let base = available;
+    let base = closetGrid;
     const cats = activeFilters.category?.filter(c => c !== "Sets") || [];
     if (cats.length)  base = base.filter(it => cats.includes(it.category));
     // subcatMatches is L2-aware (2026-08-13): selecting "Hosiery"/"Skirts"
@@ -1607,7 +1641,7 @@ export default function App() {
       });
     }
     return isSetView ? [] : [...base].sort(defaultSortComparator);
-  }, [available, activeFilters, deferredSearch, isSetView, isMiscView, miscItems]);
+  }, [closetGrid, activeFilters, deferredSearch, isSetView, isMiscView, miscItems]);
 
   // Sync status indicator
   const syncLabel = syncStatus === "syncing" ? "⟳ syncing"
@@ -1904,23 +1938,31 @@ export default function App() {
                   {activeTrip && (
                     <div style={{ ...s.closetMenuItem, cursor:"default", borderBottom:"1px solid var(--color-border)", borderRadius:0, marginBottom:4 }}>
                       <span style={{ fontWeight:600 }}>
-                        ✈ Trip mode — pool = {closets.find(c => c.id === activeTrip.destination_closet_id)?.name || "suitcase only"} + packed items
+                        ✈ Styling from {closets.find(c => c.id === activeTrip.destination_closet_id)?.name || "your suitcase"}{activeTrip.destination_closet_id ? " + what you packed" : ""}
                       </span>
-                      <span style={s.closetMenuCity}>Closet switches take effect after the trip.</span>
+                      <span style={s.closetMenuCity}>Tap a closet to look through it. What you style from stays the same until the trip ends.</span>
                     </div>
                   )}
-                  {closets.map(c => (
-                    <button
-                      key={c.id}
-                      role="option"
-                      aria-selected={c.id === activeCloset.id}
-                      style={c.id === activeCloset.id ? {...s.closetMenuItem, ...s.closetMenuItemActive} : s.closetMenuItem}
-                      onClick={() => switchCloset(c.id)}
-                    >
-                      <span>{c.id === activeCloset.id ? "✓ " : ""}{c.name}</span>
-                      {c.city && <span style={s.closetMenuCity}>{c.city}</span>}
-                    </button>
-                  ))}
+                  {/* During a trip a tap BROWSES (the grid only — browseCloset.js);
+                      the ✓ marks the closet the grid is showing. Out of a trip it
+                      switches the active closet, as it always has. */}
+                  {closets.map(c => {
+                    const shown = activeTrip
+                      ? (browsedId ? c.id === browsedId : c.id === activeTrip.destination_closet_id)
+                      : c.id === activeCloset.id;
+                    return (
+                      <button
+                        key={c.id}
+                        role="option"
+                        aria-selected={shown}
+                        style={shown ? {...s.closetMenuItem, ...s.closetMenuItemActive} : s.closetMenuItem}
+                        onClick={() => (activeTrip ? browseCloset(c.id) : switchCloset(c.id))}
+                      >
+                        <span>{shown ? "✓ " : ""}{c.name}{activeTrip && c.id === activeTrip.destination_closet_id ? " · trip" : ""}</span>
+                        {c.city && <span style={s.closetMenuCity}>{c.city}</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -2002,7 +2044,20 @@ export default function App() {
 
       {view === "closet" && (
         <div style={s.page}>
-          <FilterBar items={available} activeFilters={activeFilters} onChange={setActiveFilters}
+          {browsedCloset && (
+            <div role="status" style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", marginBottom:12, background:"var(--color-surface-2, #F4EFEA)", borderLeft:"3px solid var(--color-accent)", borderRadius:"0 8px 8px 0" }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text)" }}>Looking through {browsedCloset.name}</div>
+                <div style={{ fontSize:12, color:"var(--color-text-2)", marginTop:2, lineHeight:1.4 }}>
+                  You’re still styling from {closets.find(c => c.id === activeTrip?.destination_closet_id)?.name || "your suitcase"}{activeTrip?.destination_closet_id ? " and what you packed" : ""}. Select › Move to files a piece where it is now.
+                </div>
+              </div>
+              <button style={{...s.chip, flexShrink:0}} onClick={() => setBrowseClosetId(null)}>
+                ← Trip closet
+              </button>
+            </div>
+          )}
+          <FilterBar items={closetGrid} activeFilters={activeFilters} onChange={setActiveFilters}
             showMisc={miscItems.length > 0}/>
 
           {/* Global search bar */}
@@ -2042,7 +2097,7 @@ export default function App() {
               sticky bottom bar files a formality across the selection and,
               with a second closet, moves pieces to it. Shown for any closet
               with a grid — filing needs no second closet. */}
-          {!isSetView && available.length > 0 && (
+          {!isSetView && closetGrid.length > 0 && (
             <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
               <button
                 style={selectMode ? {...s.chip, ...s.chipActive} : s.chip}
@@ -2113,7 +2168,7 @@ export default function App() {
               <SetEditModal
                 setId={editingSet}
                 meta={setsMeta[editingSet] || { name: "", tags: [] }}
-                groupItems={setMembers(wardrobe, editingSet, activeCloset.id)}
+                groupItems={setMembers(wardrobe, editingSet, browsedId || activeCloset.id)}
                 wardrobe={available}
                 onSave={(data) => { updateSetMeta(editingSet, data); setEditingSet(null); }}
                 onDelete={() => { deleteSetMeta(editingSet); setEditingSet(null); }}
@@ -2161,7 +2216,7 @@ export default function App() {
               shelves, so a closet with nothing added in two weeks read as
               empty under "All" (owner, 2026-11-22: "I can't view my whole
               Arizona closet under all"). */}
-          {!isSetView && (available.length > 0 || isMiscView) && (filtered.length === 0 ? (
+          {!isSetView && (closetGrid.length > 0 || isMiscView) && (filtered.length === 0 ? (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
               <p style={s.emptyText}>No items match your filters.</p>
@@ -2169,7 +2224,7 @@ export default function App() {
           ) : (<>
             {!closetFilterActive && !isMiscView && (
               <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.06em", color: "var(--color-text-2)", marginBottom: 10, textTransform: "uppercase" }}>
-                All pieces · {availableCount.pieces}
+                All pieces · {closetGridCount.pieces}
               </div>
             )}
             <div style={s.grid}>
@@ -2179,7 +2234,7 @@ export default function App() {
 
           {/* Empty closet state — a closet holding nothing but Misc items is
               not "empty" while she's standing in the holding room. */}
-          {available.length === 0 && !isMiscView && (
+          {closetGrid.length === 0 && !isMiscView && (
             <div style={s.empty}>
               <div style={s.emptyMark}>✦</div>
               <p style={s.emptyText}>This closet is empty — add your first piece.</p>
@@ -2231,7 +2286,7 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {closets.filter(c => c.id !== activeCloset.id).map(c => (
+              {moveTargets({ closets, activeTrip, browsedId, activeClosetId: activeCloset.id }).map(c => (
                 <button key={c.id}
                   style={{...s.btnPrimary, padding:"8px 14px", opacity: selectedIds.length === 0 || moveBusy ? 0.5 : 1}}
                   disabled={selectedIds.length === 0 || moveBusy}

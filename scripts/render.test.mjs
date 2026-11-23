@@ -1395,6 +1395,35 @@ await check("Wish → ✓ Bought → Add to my closet opens Add Items carrying t
 // A wish list shared with Mike (owner, 2026-11-22): #list=<token> renders a
 // read-only page INSTEAD of the app, before the sign-in gate; a token that is
 // off shows that the link is off and nothing else. Last: it leaves the app.
+// Looking into the closet she left, mid-trip (owner, 2026-11-23, in Arizona:
+// "Can I view my nyc closet?"). With the trip ACTIVE, ▼ › NYC browses NYC in
+// the grid — banner, every NYC piece — and ← Trip closet goes back. The pool
+// is untouched (browse-closet.test.mjs holds that half). The trip goes back to
+// planning afterwards so nothing after this step runs in trip mode.
+await check("Trip active → ▼ › NYC browses the NYC closet; ← Trip closet returns", async () => {
+  TRIPS[0].status = "active";
+  try {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => document.querySelector('button[aria-label="Switch closet"]')?.click());
+    await page.waitForTimeout(300);
+    await clickText('[role="listbox"] button', "NYC");
+    await page.waitForTimeout(500);
+    const nycCount = wardrobe.filter(it => it.closet_id === NYC_CLOSET && it.category !== "Misc").length;
+    let text = await page.evaluate(() => document.body.innerText);
+    if (!/Looking through NYC/.test(text)) throw new Error("the browsing banner did not render");
+    if (!/still styling from Arizona/.test(text)) throw new Error("the banner does not say what she styles from");
+    const shown = Number((text.match(/All pieces · (\d+)/i) || [])[1]);
+    if (shown !== nycCount) throw new Error(`the NYC grid counts ${shown} pieces, NYC holds ${nycCount}`);
+    await clickText("button", "← Trip closet");
+    await page.waitForTimeout(400);
+    text = await page.evaluate(() => document.body.innerText);
+    if (/Looking through NYC/.test(text)) throw new Error("← Trip closet left the banner up");
+  } finally {
+    TRIPS[0].status = "planning";
+  }
+});
+
 await check("Shared wish list → #list= opens read-only, signed out; a dead link says so", async () => {
   await page.goto("http://localhost:4322/#list=walk-share-token-0123456789abcdef", { waitUntil: "domcontentloaded" });
   await page.reload({ waitUntil: "domcontentloaded" });

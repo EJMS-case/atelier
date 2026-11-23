@@ -2,6 +2,26 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Look through the closet you left, mid-trip; the Winona twin, again — 2026-11-23
+
+### Why
+
+Owner, in Arizona on an active trip: *"Can I view my nyc closet?"* · *"There are some things here that exist in my nyc closet and I want to move them. Can you also duplicate the Winona cardigan in my nyc closet please"* (the black one, a copy for Arizona). During a trip the ▼ switcher listed NYC, but a tap only queued a switch for after the trip, so she could neither see NYC nor file a piece she found in Arizona.
+
+### Changed
+
+- **▼ › NYC during a trip browses NYC in the closet grid** (`features/closet/browseCloset.js`). A banner reads "Looking through NYC — you're still styling from Arizona and what you packed", with **← Trip closet** to go back. The ✓ marks the closet the grid shows, and the destination is labelled "· trip". Browsing ends when she leaves the closet (Edit keeps it) or the trip ends. Out of a trip, ▼ switches closets as before.
+- **It is a view, never a pool.** Only the grid's own surfaces read `closetGrid` (FilterBar, the shelves, Sets, Select, the Misc chip). Style Me, the builder, the planner and the trip pools keep `available`. `test:browse` holds that browsing never moves `available`.
+- **Select › Move to** now offers every closet other than the one the grid shows. The trip grid (destination plus what she carried) offers every closet, so a packed NYC piece that lives in Arizona now can be filed there with **Move to Arizona**. Before, the bar offered only the closet that was not the device's active one, which during a trip could be the destination itself.
+- **Live data: the black Winona Button Crew Cardigan has its Arizona twin.** #312 recorded one (`0a6a2d38…`), but neither that row nor its photo object exists. Nothing in the app could have created or deleted it, so it most likely never landed. The new row `eaa90abc-b92f-468a-a5f7-7ec2eec60a05` copies every field, with the Arizona closet, `duplicate_of` → `1774888715539_197071`, `created_at` now, and wear history zeroed. **It shares the NYC original's photo URL**: the service-role storage copy was not permitted from this session. Sharing is safe because `removeImage` deletes by item id and a re-photograph uploads under the twin's own id. The twin gets its own photo the first time she replaces it, or when a session runs the storage copy.
+- New `npm run test:browse` (5); one new walk step (an active trip, ▼ › NYC, the banner and count, ← Trip closet).
+
+### Downstream
+
+- *Effectiveness:* she can see and file what she owns in either room mid-trip. No stylist surface can reach a piece she left behind.
+- *Efficiency / speed:* one more memo over `items` when browsing; no fetch, nothing new in boot.
+- *Education:* moving a piece into the room it is actually in corrects what every trip pool and Style Me reads for that closet.
+
 ## [Unreleased] — A medium knit weight — 2026-11-22
 
 ### Why
