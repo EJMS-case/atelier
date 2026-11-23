@@ -10,6 +10,10 @@ it through.
 
 ## Session log
 
+### 2026-11-23 (later) · Formality in her words; ★ from the Select bar
+
+**Owner** defined each formality step (CHANGELOG has her words) and moved the "bring next time" ☆ off the Packing tab. **The scale lives in `constants/formality.js` only**: labels, the names a prompt reads, and the bands. Don't type a step name or a band anywhere else. Travel Day is 1–3, from her worn travel days. The ★ is on the Select bar while browsing another closet mid-trip. The Fringe gown (f7): asked whether it is floor-length (→ 8), no answer yet.
+
 ### 2026-11-23 · Look through NYC from Arizona; the Winona twin
 
 **Owner:** on day 3 of the Arizona trip (started 11-22 after the "still planning" report), asked to view her NYC closet and move pieces she found in Arizona; asked again for the black Winona's Arizona copy. Both done (CHANGELOG). **Correction to the 11-22 entry below:** the twin it reports (`0a6a2d38…`) was never in the live data, and neither was its photo. The twin is now `eaa90abc-b92f-468a-a5f7-7ec2eec60a05`, and it **shares the original's photo URL** because the storage copy was not permitted this session. To give it its own photo, run the service-role copy `1774888715539_197071` → `eaa90abc-…` and repoint `image` with a fresh `?v=`. **Verify a hand-made row with a SELECT before writing "done".**

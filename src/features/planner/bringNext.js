@@ -1,9 +1,13 @@
 // ── BRING NEXT TIME ─────────────────────────────────────────────────────────
 // Owner, 2026-11-22, in Arizona: "a way I can pin or bookmark or star items
 // that I'd like to bring with me next time without it hindering too much or
-// being too invasive."
+// being too invasive." And 2026-11-23: "I want to bring more to Arizona to
+// keep here next time I come, and I don't want to have to keep a list
+// elsewhere." So the ★ moved off the Packing tab (it could only star what she
+// had already carried) to the closet's Select bar while she looks through
+// the closet she left: ▼ › NYC › Select › "★ Bring to Arizona next time".
 //
-// A ★ on a packing row says "this earned its place on a trip HERE". It pins
+// A ★ says "bring this to HERE next time". It pins
 // nothing and changes no look: it waits, keyed by where she went, until she
 // plans the next trip there. Then the "Bringing for sure" sheet leads with the
 // starred pieces and offers one "Pin all ★" tap. She decides; the star only
@@ -42,12 +46,15 @@ export function starredFor(map, key) {
   return new Set(key ? (cleanStars(map)[key] || []) : []);
 }
 
-/** Pure: star or unstar one piece under one key. */
-export function toggleStar(map, key, id) {
+/** Pure: star (on) or unstar (off) several pieces under one key. */
+export function setStars(map, key, ids, on) {
   const next = cleanStars(map);
-  if (!key || !id) return next;
+  if (!key) return next;
   const list = new Set(next[key] || []);
-  if (list.has(String(id))) list.delete(String(id)); else list.add(String(id));
+  for (const id of ids || []) {
+    if (id == null || id === "") continue;
+    if (on) list.add(String(id)); else list.delete(String(id));
+  }
   next[key] = [...list];
   return cleanStars(next);
 }

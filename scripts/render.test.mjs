@@ -1219,40 +1219,14 @@ await check("Trip → the header's ← Planner returns to the calendar, and Home
   await page.evaluate(() => [...document.querySelectorAll("*")].filter(e => /^View\s*→?$/.test((e.textContent || "").trim())).pop()?.click());
   await page.waitForTimeout(1200);
 });
-// ★ Bring next time (owner, 2026-11-22: "a way I can pin or bookmark or star
-// items that I'd like to bring with me next time"). A ☆ on a packing row
-// stars the piece for the next trip to this place, writes user_settings
-// bring_next, and the pin sheet leads with it and offers "Pin all ★".
-await check("Trip → Packing: ☆ stars a piece for next time; the pin sheet offers it", async () => {
+// ★ Bring next time moved off the Packing tab to the closet's Select bar
+// (owner, 2026-11-23: "I don't want it there"). The row must carry no ☆; the
+// browse step below stars from the bar.
+await check("Trip → Packing: rows carry no ☆", async () => {
   await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Packing \(\d+\)$/.test(b.textContent.trim()))?.click());
   await page.waitForTimeout(600);
-  const before = restWrites.length;
-  const name = await page.evaluate(() => {
-    const b = [...document.querySelectorAll('button[aria-label^="Bring next time: "]')].pop();
-    if (!b) return null;
-    b.click();
-    return b.getAttribute("aria-label").replace("Bring next time: ", "");
-  });
-  if (!name) throw new Error("no ☆ on any packing row");
-  await page.waitForTimeout(500);
-  const starred = await page.evaluate((n) => !!document.querySelector(`button[aria-label="Starred to bring next time: ${n}"]`), name);
-  if (!starred) throw new Error("the ☆ did not turn into ★");
-  const wrote = restWrites.slice(before).some(w => /user_settings/.test(w.url || w.table || "") && JSON.stringify(w.row || w.body || "").includes("bring_next"));
-  if (!wrote) throw new Error("the star was not saved (no user_settings bring_next write)");
-  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Looks \(/.test(b.textContent.trim()))?.click());
-  await page.waitForTimeout(400);
-  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^(Edit picks|\+ Pick pieces)$/.test(b.textContent.trim()))?.click());
-  await page.waitForTimeout(600);
-  const sheet = await page.evaluate(() => document.body.innerText);
-  if (!/★ Bring next time/i.test(sheet)) throw new Error("the pin sheet does not mark the starred piece");
-  if (!/Pin all 1 you starred/.test(sheet)) throw new Error("the pin sheet does not offer to pin the starred piece");
-  // Unstar to leave the fixture as it was: close the sheet, back to Packing.
-  await clickText("button", "Done");
-  await page.waitForTimeout(300);
-  await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Packing \(\d+\)$/.test(b.textContent.trim()))?.click());
-  await page.waitForTimeout(400);
-  await page.evaluate((n) => document.querySelector(`button[aria-label="Starred to bring next time: ${n}"]`)?.click(), name);
-  await page.waitForTimeout(300);
+  const stars = await page.evaluate(() => document.querySelectorAll('button[aria-label^="Bring next time: "], button[aria-label^="Starred to bring next time: "]').length);
+  if (stars) throw new Error(`${stars} ☆ still on the Packing tab`);
   await page.evaluate(() => [...document.querySelectorAll("button")].find(b => /^Looks \(/.test(b.textContent.trim()))?.click());
   await page.waitForTimeout(400);
 });
@@ -1415,6 +1389,24 @@ await check("Trip active → ▼ › NYC browses the NYC closet; ← Trip closet
     if (!/still styling from Arizona/.test(text)) throw new Error("the banner does not say what she styles from");
     const shown = Number((text.match(/All pieces · (\d+)/i) || [])[1]);
     if (shown !== nycCount) throw new Error(`the NYC grid counts ${shown} pieces, NYC holds ${nycCount}`);
+    // ★ from the Select bar: pick a piece, star it for Arizona, and it saves.
+    await clickText("button", "Select");
+    await page.waitForTimeout(500);
+    const before = restWrites.length;
+    const picked = await page.evaluate(() => { const c = document.querySelector('[role="button"][aria-pressed][aria-label^="Select "]'); c?.click(); return !!c; });
+    if (!picked) throw new Error("no selectable card in the NYC grid");
+    await page.waitForTimeout(200);
+    await clickText("button", "★ Bring to Arizona next time");
+    await page.waitForTimeout(500);
+    const wrote = restWrites.slice(before).some(w => /user_settings/.test(w.url || w.table || "") && JSON.stringify(w.row || w.body || "").includes("bring_next"));
+    if (!wrote) throw new Error("the ★ was not saved (no user_settings bring_next write)");
+    text = await page.evaluate(() => document.body.innerText);
+    if (!/☆ Unstar for Arizona/.test(text)) throw new Error("the bar does not offer to unstar what it just starred");
+    if (!/Select ★ \(1\)/.test(text)) throw new Error('"Select ★ (1)" did not appear');
+    await clickText("button", "☆ Unstar for Arizona");
+    await page.waitForTimeout(300);
+    await clickText("button", "✕ Cancel select");
+    await page.waitForTimeout(300);
     await clickText("button", "← Trip closet");
     await page.waitForTimeout(400);
     text = await page.evaluate(() => document.body.innerText);

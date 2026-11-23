@@ -26,6 +26,7 @@ import { outfitCoverageGaps } from "./outfits.js";
 import { defaultTripDayOccasion } from "./tripPools.js";
 import { inTheRoom } from "./roomKeepOuts.js";
 import { fixBootiesUnderHems } from "../../utils/hemShoes.js";
+import { FORMALITY_BANDS } from "../../constants/formality.js";
 
 // ── Default occasion seed ──────────────────────────────────────────────────
 // We used to gate this through a "vibe" concept (Casual / Theme Park / Beach
@@ -214,14 +215,21 @@ function occasionPriorityRegex(occasion) {
 // 1 Active … 8 Black Tie) for each occasion the packer knows. Follows the
 // same occasion-string matching as occasionPriorityRegex above. Unknown or
 // missing occasion → null → no formality term at all.
+// The bands themselves are constants/formality.js (one table with THE
+// STANDARD's LOOK FACTS); this maps the packer's free-text activity onto a
+// room. A Travel Day reads 1–3 (owner, 2026-11-23: lounge sets and leggings
+// "are also good for travel") — it used to share Casual's 3–4.
 function formalityBand(occasion) {
   const o = (occasion || "").toLowerCase();
   if (!o) return null;
-  if (/work\s*dinner|date|dinner|occasion/.test(o)) return [4, 6];
-  if (/work/.test(o)) return [5, 6];
-  if (/lounge|sleep/.test(o)) return [1, 2];
-  if (/active|gym|athletic/.test(o)) return [1, 2];
-  if (/casual|travel/.test(o)) return [3, 4];
+  if (/work\s*dinner/.test(o)) return FORMALITY_BANDS["Work Dinner"];
+  if (/date|dinner/.test(o)) return FORMALITY_BANDS.Dinner;
+  if (/occasion/.test(o)) return FORMALITY_BANDS.Occasion;
+  if (/work/.test(o)) return FORMALITY_BANDS.Work;
+  if (/lounge|sleep/.test(o)) return FORMALITY_BANDS.Lounge;
+  if (/active|gym|athletic/.test(o)) return FORMALITY_BANDS.Active;
+  if (/travel/.test(o)) return FORMALITY_BANDS["Travel Day"];
+  if (/casual/.test(o)) return FORMALITY_BANDS.Casual;
   return null;
 }
 

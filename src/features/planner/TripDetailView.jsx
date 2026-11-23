@@ -21,7 +21,7 @@ import { outfitsOf, newOutfitId, buildPlanPayload, flattenPlanItemIds, outfitCov
 import { resolveItemIds } from "../../utils/item-helpers.js";
 import { TRIP_ACTIVITIES, buildDailyOutfits, eveningForDay } from "./tripPacker.js";
 import MustIncludePicker from "./MustIncludePicker.jsx";
-import { bringNextKey, starredFor, toggleStar, loadBringNext, saveBringNext } from "./bringNext.js";
+import { bringNextKey, starredFor, loadBringNext } from "./bringNext.js";
 import { RUN_KEYS, startRun, useRun } from "../../lib/backgroundRun.js";
 import { closetOf } from "../closet/closets.js";
 import { poolIncluding } from "../closet/useVisibleWardrobe.js";
@@ -129,8 +129,8 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
     () => new Set(initialTrip.must_include_ids || []),
   );
   const [showPinPicker, setShowPinPicker] = useState(false);
-  // ★ Bring next time (bringNext.js): the pieces she starred on a trip to this
-  // place. Read once; a tap writes the whole small map back.
+  // ★ Bring next time (bringNext.js): the pieces she starred for this place,
+  // from the closet's Select bar. Read once; they lead the pin sheet.
   const [bringNextMap, setBringNextMap] = useState({});
   useEffect(() => { loadBringNext().then(setBringNextMap).catch(() => {}); }, []);
   useEffect(() => {
@@ -265,11 +265,6 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
   const destClosetId = destinationClosetFor(closets, trip.destination_closet_id);
   const starKey = bringNextKey({ destClosetId, destination: trip.destination_city || trip.destination });
   const starredIds = useMemo(() => starredFor(bringNextMap, starKey), [bringNextMap, starKey]);
-  const toggleBringNext = (id) => {
-    const next = toggleStar(bringNextMap, starKey, id);
-    setBringNextMap(next);
-    saveBringNext(next);
-  };
   // Home = the closet that is not the destination (tripPools.js): a Travel
   // Day on the first or last day builds from it.
   const homeClosetId = useMemo(() => homeClosetFor(closets, destClosetId), [closets, destClosetId]);
@@ -1794,18 +1789,6 @@ export default function TripDetailView({ trip: initialTrip, available, wardrobe:
                       <div style={{ fontSize: 11, fontWeight: 600, color: wornDays.length > 1 ? PALETTE.accent : PALETTE.muted, flexShrink: 0 }}>
                         ×{wornDays.length}
                       </div>
-                    )}
-                    {/* ★ Bring next time — a piece she carried, remembered for
-                        the next trip here. Pins nothing now. Not offered on a
-                        piece that lives at the destination: it is already there. */}
-                    {!atDest && starKey && (
-                      <button onClick={() => toggleBringNext(item.id)}
-                        aria-pressed={starredIds.has(item.id)}
-                        aria-label={starredIds.has(item.id) ? `Starred to bring next time: ${item.name}` : `Bring next time: ${item.name}`}
-                        title={starredIds.has(item.id) ? "Starred — it leads the pin sheet on your next trip here" : "Bring next time"}
-                        style={{ background: "none", border: "none", padding: "2px 2px 2px 4px", fontSize: 17, lineHeight: 1, cursor: "pointer", flexShrink: 0, color: starredIds.has(item.id) ? PALETTE.accent : PALETTE.line }}>
-                        {starredIds.has(item.id) ? "★" : "☆"}
-                      </button>
                     )}
                   </div>
                   );
