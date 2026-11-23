@@ -21,7 +21,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 | 1.9 | **Share an empty Atelier with someone (asked 09-20, unanswered)** | Plan offered: a base-schema migration (`0000_base.sql`; migrations start at 0001 today), lift the owner-id pin, move config to env vars, and move the persona into Style Profile. Fork-per-friend is about 2–4 days. One shared deploy is weeks. | Say whether you still want it, and which model. |
 | 1.10 | **A one-in-eight packer test wobble** | "Dinner day gets an evening bag" fails about 1 run in 8 because of the packer's tie-break jitter. Steadying it changes packing you tuned by hand. | OK it, or leave it. |
 | 1.11 | **A per-piece crop editor (asked 08-03)** | Not started. All pieces are auto-cropped now. | Name the pieces whose crop looks wrong, if any. Without examples it won't be built. |
-| 1.15 | **Start (or finish) the Arizona trip** (11-22) | Arizona (Nov 21–26) is still *planning*, so your pinned pieces aren't in styling. Vegas (Nov 27–29) can only start once Arizona is complete. | Home's card › Start trip; mark it complete before Vegas. |
+| 1.15 | **Finish the Arizona trip before Vegas** (11-23) | Arizona (Nov 21–26) is active. Vegas (Nov 27–29) can only start once Arizona is complete. | Planner › Arizona › Mark trip complete, then start Vegas. |
 | 1.16 | **One-time setups** (11-22) | The Safari "＋ Atelier" bookmark, and the share link for Mike. | Wish List › "Add wishes straight from Safari"; Wish List › Share › Share a link. |
 | 1.12 | **A leftover diagnostic function on the server** | The `img-audit` edge function from 08-06 is still deployed. It is read-only and needs sign-in, and nothing uses it. | Say "delete img-audit" if you want it gone. |
 
@@ -38,6 +38,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 
 ## 3. Watch on your phone (confirms recent fixes, nothing to build)
 
+- **11-23:** in the closet, ▼ › NYC shows NYC with a banner, and ← Trip closet goes back. Style Me still offers only Arizona plus what you packed. Select › Move to Arizona files a piece where it is now. The Arizona Winona shows the same photo as the NYC one.
 - **Tonight (11-22):** "All" shows the whole closet · Home says when a trip has started but isn't started · Edit picks adds pieces and stays still · ★ on the Packing tab · the wish list (photos, ★, totals, Safari bookmark, ✦ What do you think?, Share a link, ✓ Bought → Add to my closet) · Style Me never names a wish, Evaluate never suggests a piece you don't own · a planner day skips the week's earlier garments · ↺ Echoes on Style Me · no bootie under a skirt or dress anywhere · Evaluate leads with the look as a whole · the app opens faster.
 - **A heart on a worn day (#276):** Planner › past day › *Love*. The look then appears in Saved › All › ♥ with its date, and History shows it hearted. A day you'd already saved shouldn't gain a second card, unless you edited that day's look after wearing it.
 - **"↻ Judge my month again" (#276)** sits under the most-stylish picks and says how many looks you've worn since.

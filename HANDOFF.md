@@ -10,6 +10,10 @@ it through.
 
 ## Session log
 
+### 2026-11-23 · Look through NYC from Arizona; the Winona twin
+
+**Owner:** on day 3 of the Arizona trip (started 11-22 after the "still planning" report), asked to view her NYC closet and move pieces she found in Arizona; asked again for the black Winona's Arizona copy. Both done (CHANGELOG). **Correction to the 11-22 entry below:** the twin it reports (`0a6a2d38…`) was never in the live data, and neither was its photo. The twin is now `eaa90abc-b92f-468a-a5f7-7ec2eec60a05`, and it **shares the original's photo URL** because the storage copy was not permitted this session. To give it its own photo, run the service-role copy `1774888715539_197071` → `eaa90abc-…` and repoint `image` with a fresh `?v=`. **Verify a hand-made row with a SELECT before writing "done".**
+
 ### 2026-11-22 (later) · Completions follow the season; photos home; duplicate removed
 
 **Owner:** completions should pull from live trends; move every at-risk photo into storage ("That should not happen"); remove duplicate and do it by hand; duplicate the black Winona. All done (CHANGELOG). 53 photos moved off the import app's Cloudinary account (live rows updated; old URLs in `supabase/backfills/`). The `photo-rescue` edge function is retired (it answers 410); there is no delete tool, so remove it from the dashboard if you want it gone entirely. The Winona twin is in Arizona with its own photo.
