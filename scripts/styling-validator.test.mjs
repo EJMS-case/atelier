@@ -557,6 +557,26 @@ test("include salvage: adds an eligible blazer to a look that lacks one, recheck
   assert.ok(!recheck.some(f => f.hard), `recheck must be clean, got: ${recheck.filter(f => f.hard).map(f => f.message)}`);
 });
 
+// ── Include Stockings needs a skirt or a dress (2026-11-23) ─────────────────
+// A Dinner tap with Include Stockings built trousers; the hosiery check
+// stripped the tights, the include check failed, and three calls returned
+// nothing — twice. The retry now asks for a skirt or a dress, and with none in
+// the inventory the toggle stands down instead of looping.
+const TROUSER = { id: "r9", name: "Wide-leg trouser", category: "Bottoms", subcategory: "Trousers" };
+test("include stockings: the failure asks for a skirt or dress, never a drape", () => {
+  const parsed = lookOf("W001", "W002", "W003"); // skirt look, no tights
+  const failures = runAllChecks(parsed, ID_MAP, ALL_ITEMS, ["only-stockings"], {}, "Dinner", "Cool (40-54°F)");
+  const inc = failures.find(f => f.type === "include_toggle");
+  assert.ok(inc, "a skirt look without tights still owes the toggle");
+  assert.ok(/skirt or a dress/.test(inc.message) && !/over the shoulders/.test(inc.message), inc.message);
+});
+test("include stockings: no skirt or dress in the inventory → no include failure", () => {
+  const items = [ALL_ITEMS[0], TROUSER, ALL_ITEMS[2], ALL_ITEMS[3]];
+  const map = { W001: "r1", W002: "r9", W003: "r3", W004: "r4" };
+  const failures = runAllChecks(lookOf("W001", "W002", "W003"), map, items, ["only-stockings"], {}, "Dinner", "Cool (40-54°F)");
+  assert.ok(!failures.some(f => f.type === "include_toggle"), "an unwinnable toggle must not loop the retries");
+});
+
 // ── Form-aware sandal ban (owner screenshot 2026-08-19) ─────────────────────
 // Her heeled thong is FILED under Kitten, so the literal "Sandals" subcategory
 // ban never saw it. Work/Work Dinner set banned.sandalForms — checkOccasion

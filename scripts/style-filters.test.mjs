@@ -364,7 +364,14 @@ test("describeStyleFilters renders every group's Only line without throwing (out
   const lines = describeStyleFilters(["only-blazers", "only-stockings", "only-heels", "no-jeans"]);
   assert.equal(lines.length, 4);
   assert.ok(lines.some(l => /INCLUDE Blazers/.test(l) && /DIRECT INSTRUCTION/.test(l) && /EVERY look/.test(l)), "outer group renders the include line as a firm per-look instruction (owner 2026-08-19)");
-  assert.ok(lines.some(l => /INCLUDE Stockings/.test(l) && /bans no other/i.test(l)), "include line stays a positive ask, never a ban");
+  const legwear = lines.find(l => /INCLUDE Stockings/.test(l));
+  assert.ok(legwear && /DIRECT INSTRUCTION/.test(legwear), "stockings stay a direct instruction");
+  // 2026-11-23: the layer wording ("draped over the shoulders") reached the
+  // model for stockings and nothing said the look needs a skirt, so a Dinner
+  // tap built trousers, the hosiery check stripped the tights and three calls
+  // returned nothing. Legwear asks for a skirt or a dress, and never for a drape.
+  assert.ok(/SKIRT or a DRESS/.test(legwear), "Include Stockings asks for a skirt or dress look");
+  assert.ok(!/over the shoulders|worn open/i.test(legwear), "no layer wording on legwear");
 });
 
 test("stockings chip renders when hosiery is owned, hides otherwise", () => {

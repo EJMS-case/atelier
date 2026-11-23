@@ -399,10 +399,18 @@ export function describeStyleFilters(filterKeys) {
   // guarantees eligible candidates are in the inventory.
   const includeLine = (names, group) =>
     `INCLUDE ${names.join(" or ")} — A DIRECT INSTRUCTION, NOT A SUGGESTION: she toggled this on deliberately, so EVERY look must work ${names.length > 1 ? "one of them" : `a ${names[0].replace(/s$/, "").toLowerCase()}`} in. For this one layer, this instruction OUTRANKS the weather guidance: on a hot day pick the LIGHTEST option in the inventory and style FOR the heat — worn open over a bare base, sleeves pushed, or draped over the shoulders (she needs the covered-shoulders layer indoors and sheds it outside). It bans no other ${GROUP_NOUN[group] || "pieces"} — layering under/over it stays welcome (a tank under a knit, a knit under a blazer, a coat over everything in the cold) — and you must NEVER error over it: only if the inventory truly contains none may you build the look without it.`;
+  // Legwear is not a layer: hosiery goes under a skirt or a dress, never with
+  // full-length trousers (checkHosieryPairing). The layer wording above told
+  // the model to drape stockings "over the shoulders" in heat, and nothing
+  // said the look needed a skirt — so a Dinner tap with Include Stockings built
+  // trousers, the hosiery check stripped the tights, the include check failed,
+  // and three calls returned nothing (2026-11-23, 26 s).
+  const legwearLine = (names) =>
+    `INCLUDE ${names.join(" or ")} — A DIRECT INSTRUCTION, NOT A SUGGESTION: she toggled this on deliberately, so EVERY look is built on a SKIRT or a DRESS (hosiery never goes with full-length trousers or jeans) and carries one pair from the inventory, chosen to the hem and the shoe (tonal with the shoe or hem lengthens the leg; sheer reads evening). Only if the inventory truly has no skirt or dress may you build the look without it.`;
   for (const [group, types] of Object.entries(onlyByGroup)) {
     const names = types.map((t) => t.label);
     if (GROUP_MODES[group] === "include") {
-      lines.push(includeLine(names, group));
+      lines.push(group === "legwear" ? legwearLine(names) : includeLine(names, group));
       continue;
     }
     const render = GROUP_ONLY_LINES[group]
