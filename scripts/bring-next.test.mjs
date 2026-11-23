@@ -1,9 +1,10 @@
 // ── BRING NEXT TIME (owner, 2026-11-22) ─────────────────────────────────────
-// A ★ on a packing row remembers a piece for the next trip to the same place.
+// A ★ (the closet's Select bar while she looks through the closet she left,
+// since 2026-11-23) remembers pieces for the next trip to the same place.
 // Run: npm run test:bring-next
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bringNextKey, cleanStars, starredFor, toggleStar } from "../src/features/planner/bringNext.js";
+import { bringNextKey, cleanStars, starredFor, setStars } from "../src/features/planner/bringNext.js";
 
 const AZ = "c0000000-0000-4000-8000-000000000002";
 
@@ -20,18 +21,20 @@ test("every Arizona trip shares one set of stars, whatever it was called", () =>
   assert.equal(a, b);
 });
 
-test("a star toggles, and lists stay clean", () => {
+test("a selection stars and unstars together, and lists stay clean", () => {
   const k = `closet:${AZ}`;
-  let m = toggleStar({}, k, "tee");
-  assert.deepEqual([...starredFor(m, k)], ["tee"]);
-  m = toggleStar(m, k, "pant");
-  assert.equal(starredFor(m, k).size, 2);
-  m = toggleStar(m, k, "tee");
-  assert.deepEqual([...starredFor(m, k)], ["pant"]);
-  m = toggleStar(m, k, "pant");
+  let m = setStars({}, k, ["tee", "pant"], true);
+  assert.deepEqual([...starredFor(m, k)].sort(), ["pant", "tee"]);
+  m = setStars(m, k, ["pant", "coat", "", null], true);
+  assert.equal(starredFor(m, k).size, 3, "re-starring adds nothing twice");
+  m = setStars(m, k, ["tee"], false);
+  assert.deepEqual([...starredFor(m, k)].sort(), ["coat", "pant"]);
+  m = setStars(m, k, ["coat", "pant"], false);
   assert.deepEqual(m, {}, "an emptied key is dropped");
   assert.equal(starredFor(m, "place:paris").size, 0);
-  assert.deepEqual(toggleStar({}, "", "tee"), {}, "no key, no star");
+  assert.deepEqual(setStars({}, "", ["tee"], true), {}, "no key, no star");
+  const other = setStars({ "place:las vegas": ["heel"] }, k, ["tee"], true);
+  assert.deepEqual(other["place:las vegas"], ["heel"], "another place's stars are untouched");
 });
 
 test("a stored map is cleaned on read", () => {

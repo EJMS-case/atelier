@@ -74,6 +74,7 @@ import { tagsFor } from "./lib/multitag.js";
 import { fetchPlansBetween } from "./features/planner/plannerApi.js";
 import { dueToStart } from "./features/planner/tripStatus.js";
 import { browsedClosetId, closetGridPool, moveTargets } from "./features/closet/browseCloset.js";
+import { bringNextKey, starredFor, setStars, loadBringNext, saveBringNext } from "./features/planner/bringNext.js";
 import { lookEcho, echoLine } from "./features/stylist/lookEcho.js";
 
 // Rename any pre-namespace localStorage keys from older app builds. Runs once
@@ -539,6 +540,31 @@ export default function App() {
     [items, available, browsedId],
   );
   const closetGridCount = useMemo(() => countCloset(closetGrid), [closetGrid]);
+
+  // ★ Bring next time, from the Select bar while she looks through the closet
+  // she left (owner, 2026-11-23: "I want to bring more to Arizona to keep
+  // here next time I come"). Keyed like every trip to this place
+  // (bringNextKey), so the next trip's "Bringing for sure" sheet leads with
+  // them. The small map loads the first time she selects while browsing.
+  const [bringNextMap, setBringNextMap] = useState(null);
+  const starKey = browsedId
+    ? bringNextKey({ destClosetId: activeTrip?.destination_closet_id || null, destination: activeTrip?.destination_city || activeTrip?.destination })
+    : "";
+  const starredHere = useMemo(() => starredFor(bringNextMap || {}, starKey), [bringNextMap, starKey]);
+  const tripPlaceName = activeTrip
+    ? (closets.find(c => c.id === activeTrip.destination_closet_id)?.name || activeTrip.destination || activeTrip.destination_city || "this trip")
+    : "";
+  useEffect(() => {
+    if (!selectMode || !browseClosetId || bringNextMap) return;
+    loadBringNext().then(setBringNextMap).catch(() => setBringNextMap({}));
+  }, [selectMode, browseClosetId, bringNextMap]);
+  const starSelected = useCallback(() => {
+    if (!starKey || selectedIds.length === 0) return;
+    const allStarred = selectedIds.every(id => starredHere.has(id));
+    const next = setStars(bringNextMap || {}, starKey, selectedIds, !allStarred);
+    setBringNextMap(next);
+    saveBringNext(next).catch(() => {});
+  }, [starKey, selectedIds, starredHere, bringNextMap]);
   const availableWithWear = useMemo(() => applyWearStats(available, wearData.stats || {}), [available, wearData.stats]);
 
   // ── MISC — the holding room ────────────────────────────────────────────────
@@ -1829,7 +1855,7 @@ export default function App() {
     }
     const isSelected = selectedIds.includes(item.id);
     return (
-      <div key={item.id}
+      <div key={item.id} role="button" aria-pressed={isSelected} aria-label={`Select ${item.name}`}
         style={{...s.card, border: isSelected ? "2px solid var(--color-ink)" : "1px solid var(--color-border)", cursor:"pointer"}}
         onClick={() => toggleSelected(item.id)}>
         <div style={s.cardImg}>
@@ -1837,6 +1863,10 @@ export default function App() {
             ? <Thumb item={item} alt={item.name} style={s.cardPhoto}/>
             : <div style={s.cardPlaceholder}>{item.category?.[0] || "?"}</div>}
           {isSelected && <div style={s.selectBadge}>✓</div>}
+          {starKey && starredHere.has(item.id) && (
+            <div title={`Bringing to ${tripPlaceName} next time`} aria-label={`Starred for ${tripPlaceName}: ${item.name}`}
+              style={{ position:"absolute", top:6, left:6, fontSize:15, lineHeight:1, color:"var(--color-accent)", textShadow:"0 0 3px #fff" }}>★</div>
+          )}
         </div>
         <div style={s.cardBody}>
           <div style={s.cardCat}>{item.category}{item.subcategory ? ` · ${item.subcategory}` : ""}</div>
@@ -1857,6 +1887,7 @@ export default function App() {
   const closetFilterActive = !!(closetSearch.trim() || activeFilters.category?.length || activeFilters.subcategory?.length || activeFilters.color?.length || activeFilters.brand?.length || activeFilters.sets || activeFilters.lastWorn);
   const shownForSelect = isSetView ? [] : filtered;
   const unfiledShown = shownForSelect.filter(it => formalityOf(it) == null);
+  const starredShown = starKey ? shownForSelect.filter(it => starredHere.has(it.id)) : [];
 
   return (
     <div style={s.app}>
@@ -2261,6 +2292,12 @@ export default function App() {
                   Select all ({shownForSelect.length})
                 </button>
               )}
+              {starredShown.length > 0 && (
+                <button style={{...s.chip, padding:"6px 10px"}}
+                  onClick={() => setSelectedIds(starredShown.map(it => it.id))}>
+                  Select ★ ({starredShown.length})
+                </button>
+              )}
               {unfiledShown.length > 0 && !isMiscView && (
                 <button style={{...s.chip, padding:"6px 10px"}}
                   onClick={() => setSelectedIds(unfiledShown.map(it => it.id))}>
@@ -2294,6 +2331,19 @@ export default function App() {
                   {moveBusy ? <><span style={s.spinnerSmLight}/> Moving…</> : `Move to ${c.name}`}
                 </button>
               ))}
+              {/* ★ Bring next time — only while looking through the closet
+                  she left; the next trip here leads its pin sheet with these. */}
+              {starKey && !isMiscView && (() => {
+                const allStarred = selectedIds.length > 0 && selectedIds.every(id => starredHere.has(id));
+                return (
+                  <button
+                    style={{...s.btnSecondary, padding:"8px 14px", opacity: selectedIds.length === 0 || !bringNextMap ? 0.5 : 1}}
+                    disabled={selectedIds.length === 0 || !bringNextMap}
+                    onClick={starSelected}>
+                    {allStarred ? `☆ Unstar for ${tripPlaceName}` : `★ Bring to ${tripPlaceName} next time`}
+                  </button>
+                );
+              })()}
               <button
                 style={{...s.btnSecondary, padding:"8px 14px", marginLeft:"auto"}}
                 onClick={() => { setSelectMode(false); setSelectedIds([]); }}>

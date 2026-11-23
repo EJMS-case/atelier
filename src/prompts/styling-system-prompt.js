@@ -12,6 +12,7 @@
 import { VIBE_VOCABULARY } from "../features/stylist/moods.js";
 import { weatherMatches } from "../constants/taxonomy.js";
 import { STANDARD_LINES } from "../features/stylist/standardLines.js";
+import { FORMALITY_LEGEND, FORMALITY_BAND_LEGEND } from "../constants/formality.js";
 
 // ── Static preamble (cacheable) ──────────────────────────────────────────────
 // This block is sent as a prompt-cache content block, so length costs us once
@@ -64,7 +65,7 @@ VIBE: pick ONE per look from this list, matching what the look actually feels li
 VISUAL REFERENCE: contact-sheet images (W001, W002…) are attached when available. Trust photos over text when they conflict.
 
 INVENTORY FORMAT (in REQUEST): each line leads with \`W### [Color, pattern?]\` — the color name is the user's own description, use it for color reasoning. Then category>subcategory (with an optional formality token \`f1\`–\`f8\`), name, optional knit/sleeve tags (knit \`[weight,fit]\`; sleeve \`[L]\`/\`[S]\`/\`[3Q]\`/\`[N]\`), optional brand, optional notes, optional \`RESTING\` tag, optional \`seen:\` note. Notes are the primary styling description — they take precedence over the item name. A \`seen: …\` segment is a Visual-AI read of the garment's photo (fabric/drape, formality, vibe) — trust it for texture and formality pairing; her colour tag still rules colour.
-FORMALITY (\`f#\`): her curated register — 1 Active, 2 Lounge, 3 Casual, 4 Smart Casual, 5 Business Casual, 6 Business Professional, 7 Cocktail, 8 Black Tie. Soft guidance, never a hard filter: keep a look's pieces within about 2 steps of each other and matched to the occasion (Casual ≈ 3–4, Lounge ≈ 2, Work ≈ 5–6, Dinner ≈ 4–6); missing \`f\` = unknown — judge from the piece itself.
+FORMALITY (\`f#\`): how dressy she filed a piece — ${FORMALITY_LEGEND}. Soft guidance, never a hard filter: keep a look's pieces within about 2 steps of each other and matched to the occasion (${FORMALITY_BAND_LEGEND}); missing \`f\` = unknown — judge from the piece itself.
 
 ★ NOTES — TWO LAYERS OF MEANING ★
 Notes do TWO jobs and you must read them for both:

@@ -53,6 +53,7 @@ import { NEUTRAL_PAIR_FAMILIES, matchesPairSideText } from "../../utils/wardrobe
 import { learnedContext } from "./learning.js";
 import { withoutWishes } from "../shopping/shoppingList.js";
 import { STANDARD_LINES } from "./standardLines.js";
+import { FORMALITY_BANDS } from "../../constants/formality.js";
 import { matchesBrief } from "../inspiration/inspirationApi.js";
 
 // ── The prose ────────────────────────────────────────────────────────────────
@@ -276,10 +277,6 @@ const GAP_TYPES = new Set(["lower_half", "upper_half", "shoes", "bag"]);
 // Types whose verdict depends on which occasion they ran under.
 const OCCASION_DEPENDENT = new Set(["occasion", "tank_layering", "shoulder_coverage", "shoes", "bag"]);
 
-const FORMALITY_BANDS = {
-  Active: [1, 1], Lounge: [2, 2], "Travel Day": [2, 3], Casual: [3, 4], Vacation: [3, 4],
-  Work: [5, 6], "Work Dinner": [5, 6], Dinner: [4, 6], Occasion: [7, 8],
-};
 
 const FABRIC_RE = /\b(silk|satin|leather|suede|wool|cashmere|cotton|linen|denim|knit|ponte|jersey|crepe|tweed|velvet|sequin|lace|chiffon|boucl[eé]|poplin|twill|viscose|nylon|patent|shearling|mohair|alpaca|corduroy)\b/gi;
 const SHEEN_RE = /silk|satin|sequin|patent|metallic|velvet|lam[eé]/i;

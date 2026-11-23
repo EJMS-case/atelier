@@ -2,6 +2,42 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — Her formality scale, in her words, once; ★ Bring next time from the Select bar — 2026-11-23
+
+### Why
+
+Owner, in Arizona: *"I want to bring more to Arizona to keep here next time I come, and I don't want to have to keep a list elsewhere"* (the ☆ lived on the Packing tab, so it could only star what she had already carried; "Remove it"). And on the Formality dropdown: *"Lounge should also include sports bras and leggings. Sweats, lounge sets, sweats sets. These are also good for travel. Review what I've worn on travel days. No sleep. Casual could be any daytime activity including lunches and brunch. … All work is polished. Formal should read 'cocktail'."*
+
+### Changed
+
+- **One formality scale: `constants/formality.js`** (a leaf). It holds her words for each step (`FORMALITY_SCALE`, re-exported from `item-helpers`), the names a prompt reads (`FORMALITY_NAMES`), and one band table (`FORMALITY_BANDS`). Before this the scale was written four ways:
+  - The dropdowns said "lounge, sleep", "casual, travel", "work, dinner, an event" and "formal".
+  - The Style Me prompt and THE STANDARD named 4–6 "Smart Casual / Business Casual / Business Professional", which told the model her everyday office pieces were business casual.
+  - Two band tables disagreed (below).
+
+  The steps now read: 1 active, gym · 2 lounge: sweat sets, leggings, sports bras · travel · 3 casual: daytime, lunch, brunch · 4 elevated casual, an easy dinner · 5 work · 6 dressier work, a work dinner · 7 cocktail · 8 black tie. The model reads them as f1 Active, f2 Lounge, f3 Casual, f4 Elevated Casual, f5 Work, f6 Dressier Work, f7 Cocktail, f8 Black Tie. **No row was refiled.**
+- **Bands, one table**, read by the trip packer (`formalityBand`), LOOK FACTS (`standard.js`), the Style Me prompt and THE STANDARD (`FORMALITY_LEGEND` / `FORMALITY_BAND_LEGEND`):
+  - **Travel Day 1–3** (the packer had 3–4, LOOK FACTS 2–3). This comes from what she has flown in: Never Better sets (f1), lounge zip-ups and pants (f2–f3), a leather jacket over. It matches the Travel Day prompt, which already led with lounge and athleisure.
+  - **Lounge 1–2** (LOOK FACTS had 2 alone). Her leggings and bras are f1.
+  - **Active 1–2.**
+  - **Occasion 7–8** (the packer had 4–6, lumped with Dinner).
+  - **Work Dinner 5–6** (the packer had 4–6).
+  - Casual 3–4, Dinner 4–6 and Work 5–6 are unchanged.
+- **"cocktail" in a stylist line names the Occasion room** (`ROOM_WORDS`), beside "black tie". That's how a shoe or bag that goes to both is filed: the dressier step, both named in the line.
+- **★ Bring next time moved to the closet's Select bar**, shown while she looks through the closet she left: ▼ › NYC › Select › **★ Bring to Arizona next time** (and **☆ Unstar** when the whole selection is starred).
+  - A ★ marks starred tiles in Select mode only; the cards stay as they were. **Select ★ (n)** reselects them.
+  - The stars keep their key (`bringNextKey`), so the next Arizona trip's "Bringing for sure" sheet still leads with them and offers "Pin all ★".
+  - The Packing tab's ☆ is gone. `toggleStar` became `setStars` (a selection at once).
+  - Select-mode tiles are now `role="button"` with `aria-pressed`.
+
+### Downstream
+
+- *Effectiveness:* a Travel Day draft from the packer now reaches for the lounge sets she actually flies in, not jeans and a knit. The model stops reading f5 as business casual, which sat against her office preference (business professional in every weather). An Occasion trip day reaches for cocktail and black tie, not an easy-dinner piece.
+- *Efficiency:* the cached Style Me preamble and THE STANDARD change once, so the first call after deploy writes a new cache. Both stay byte-stable after that, since they're built from constants.
+- *Speed:* none. The stars load only when she selects while browsing.
+- *Education:* every surface now reads one scale, so a step she files means the same thing to the packer, Style Me, Evaluate and the chat.
+- Tests: `test:bring-next` (setStars), walk: no ☆ on Packing, and ★ from the Select bar writes `bring_next`.
+
 ## [Unreleased] — Look through the closet you left, mid-trip; the Winona twin, again — 2026-11-23
 
 ### Why
