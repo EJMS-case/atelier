@@ -2080,8 +2080,18 @@ export default function App() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text)" }}>Looking through {browsedCloset.name}</div>
                 <div style={{ fontSize:12, color:"var(--color-text-2)", marginTop:2, lineHeight:1.4 }}>
-                  You’re still styling from {closets.find(c => c.id === activeTrip?.destination_closet_id)?.name || "your suitcase"}{activeTrip?.destination_closet_id ? " and what you packed" : ""}. Select › Move to files a piece where it is now.
+                  You’re still styling from {closets.find(c => c.id === activeTrip?.destination_closet_id)?.name || "your suitcase"}{activeTrip?.destination_closet_id ? " and what you packed" : ""}. Star what to bring to {tripPlaceName} next time, or move a piece to where it is now.
                 </div>
+                {/* ★ is the reason she browses the closet she left (owner,
+                    2026-11-25: "still not seeing where to flag items to bring
+                    to Arizona"), so the banner opens it in one tap rather than
+                    leaving it at the end of the Select bar. */}
+                {!selectMode && starKey && (
+                  <button style={{...s.chip, ...s.chipActive, marginTop:8}}
+                    onClick={() => { setSelectMode(true); setSelectedIds([]); setBulkFormality(""); }}>
+                    ★ Pick pieces to bring to {tripPlaceName}
+                  </button>
+                )}
               </div>
               <button style={{...s.chip, flexShrink:0}} onClick={() => setBrowseClosetId(null)}>
                 ← Trip closet
@@ -2284,6 +2294,20 @@ export default function App() {
               <span style={{ fontSize:12, color:"var(--color-text-2)", flexShrink:0 }}>
                 {selectedIds.length} selected
               </span>
+              {/* ★ Bring next time — only while looking through the closet
+                  she left; the next trip here leads its pin sheet with these.
+                  First in the bar while browsing: it is what she came for. */}
+              {starKey && !isMiscView && (() => {
+                const allStarred = selectedIds.length > 0 && selectedIds.every(id => starredHere.has(id));
+                return (
+                  <button
+                    style={{...s.btnPrimary, padding:"8px 14px", flex:"1 1 100%", opacity: selectedIds.length === 0 || !bringNextMap ? 0.5 : 1}}
+                    disabled={selectedIds.length === 0 || !bringNextMap}
+                    onClick={starSelected}>
+                    {allStarred ? `☆ Unstar for ${tripPlaceName}` : `★ Bring to ${tripPlaceName} next time`}
+                  </button>
+                );
+              })()}
               {/* Whole-shelf selection: everything the grid shows, or just the
                   pieces with no formality yet — a category chip narrows both. */}
               {shownForSelect.length > 0 && (
@@ -2331,19 +2355,6 @@ export default function App() {
                   {moveBusy ? <><span style={s.spinnerSmLight}/> Moving…</> : `Move to ${c.name}`}
                 </button>
               ))}
-              {/* ★ Bring next time — only while looking through the closet
-                  she left; the next trip here leads its pin sheet with these. */}
-              {starKey && !isMiscView && (() => {
-                const allStarred = selectedIds.length > 0 && selectedIds.every(id => starredHere.has(id));
-                return (
-                  <button
-                    style={{...s.btnSecondary, padding:"8px 14px", opacity: selectedIds.length === 0 || !bringNextMap ? 0.5 : 1}}
-                    disabled={selectedIds.length === 0 || !bringNextMap}
-                    onClick={starSelected}>
-                    {allStarred ? `☆ Unstar for ${tripPlaceName}` : `★ Bring to ${tripPlaceName} next time`}
-                  </button>
-                );
-              })()}
               <button
                 style={{...s.btnSecondary, padding:"8px 14px", marginLeft:"auto"}}
                 onClick={() => { setSelectMode(false); setSelectedIds([]); }}>

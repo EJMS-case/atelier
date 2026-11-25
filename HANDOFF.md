@@ -10,6 +10,10 @@ it through.
 
 ## Session log
 
+### 2026-11-25 · ★ from the NYC banner
+
+**Owner** couldn't find the ★ (it was the last button on the Select bar). The browsing banner now opens Select with **★ Pick pieces to bring to Arizona**, and the ★ leads the bar (CHANGELOG).
+
 ### 2026-11-23 (later) · Formality in her words; ★ from the Select bar
 
 **Owner** defined each formality step (CHANGELOG has her words) and moved the "bring next time" ☆ off the Packing tab. **The scale lives in `constants/formality.js` only**: labels, the names a prompt reads, and the bands. Don't type a step name or a band anywhere else. Travel Day is 1–3, from her worn travel days. The ★ is on the Select bar while browsing another closet mid-trip. The Fringe gown (f7): asked whether it is floor-length (→ 8), no answer yet.
