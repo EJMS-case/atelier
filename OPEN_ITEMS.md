@@ -38,6 +38,7 @@ When an item closes, delete it here and record it in CHANGELOG. When something n
 
 ## 3. Watch on your phone (confirms recent fixes, nothing to build)
 
+- **11-25:** ▼ › NYC: the banner shows **★ Pick pieces to bring to Arizona**. Tap it, tap pieces, then tap **★ Bring to Arizona next time** (now first on the bar).
 - **11-23 (later):** the Formality dropdown shows your words (2 lounge: sweat sets, leggings, sports bras · travel … 7 cocktail). ▼ › NYC › Select › pick pieces › **★ Bring to Arizona next time**; they lead the next Arizona trip's "Bringing for sure". The Packing tab no longer has a ☆. Travel Day drafts should lean on lounge sets.
 - **11-23:** in the closet, ▼ › NYC shows NYC with a banner, and ← Trip closet goes back. Style Me still offers only Arizona plus what you packed. Select › Move to Arizona files a piece where it is now. The Arizona Winona shows the same photo as the NYC one.
 - **Tonight (11-22):** "All" shows the whole closet · Home says when a trip has started but isn't started · Edit picks adds pieces and stays still · ★ on the Packing tab · the wish list (photos, ★, totals, Safari bookmark, ✦ What do you think?, Share a link, ✓ Bought → Add to my closet) · Style Me never names a wish, Evaluate never suggests a piece you don't own · a planner day skips the week's earlier garments · ↺ Echoes on Style Me · no bootie under a skirt or dress anywhere · Evaluate leads with the look as a whole · the app opens faster.

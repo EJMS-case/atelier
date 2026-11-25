@@ -1389,8 +1389,10 @@ await check("Trip active → ▼ › NYC browses the NYC closet; ← Trip closet
     if (!/still styling from Arizona/.test(text)) throw new Error("the banner does not say what she styles from");
     const shown = Number((text.match(/All pieces · (\d+)/i) || [])[1]);
     if (shown !== nycCount) throw new Error(`the NYC grid counts ${shown} pieces, NYC holds ${nycCount}`);
-    // ★ from the Select bar: pick a piece, star it for Arizona, and it saves.
-    await clickText("button", "Select");
+    // ★ from the banner (owner, 2026-11-25: "still not seeing where to flag
+    // items"): one tap opens Select, pick a piece, star it, and it saves.
+    if (!/★ Pick pieces to bring to Arizona/.test(text)) throw new Error("the banner does not offer ★ Pick pieces to bring to Arizona");
+    await clickText("button", "★ Pick pieces to bring to Arizona");
     await page.waitForTimeout(500);
     const before = restWrites.length;
     const picked = await page.evaluate(() => { const c = document.querySelector('[role="button"][aria-pressed][aria-label^="Select "]'); c?.click(); return !!c; });

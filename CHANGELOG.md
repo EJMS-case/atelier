@@ -2,6 +2,22 @@
 
 Tracks per-feature work toward Fits-parity. Dates are YYYY-MM-DD.
 
+## [Unreleased] — ★ Bring to Arizona, from the banner — 2026-11-25
+
+### Why
+
+Owner, in Arizona: *"Still not seeing where to flag items to bring to Arizona in my ny closet?"* #315 put the ★ on the Select bar, but you only saw it after tapping **Select**, and then it was the last button, under the Formality row and Move. The NYC banner named Move and nothing else. Live rows: the Arizona trip is `active`, so the button was there, just hard to find.
+
+### Changed
+
+- The "Looking through NYC" banner offers **★ Pick pieces to bring to Arizona**. One tap opens Select. The banner copy names the ★ first.
+- While browsing, **★ Bring to Arizona next time** is the first action on the Select bar, full width and primary. Formality and Move follow it.
+- The render walk now takes the banner route and fails if the banner stops offering the ★.
+
+### Downstream
+
+Efficiency, speed: no new reads; the bring-next map still loads on the first select. Effectiveness, education: unchanged. A ★ still leads the next Arizona trip's "Bringing for sure" sheet.
+
 ## [Unreleased] — Efficiency audit: Include Stockings no longer loops to nothing — 2026-11-23
 
 ### Why
